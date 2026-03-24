@@ -1679,6 +1679,8 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string& filename, bool async
 
     destroyModel(model);
 
+    model.filename = filename;
+
     std::string modelName;
     uint64_t buildId = 0;
     if (asyncLoad) {
@@ -2384,6 +2386,8 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string& filename, bool asyncL
 
     destroyModel(model);
 
+    model.filename = filename;
+
     std::string modelName;
     uint64_t buildId = 0;
     if (asyncLoad) {
@@ -2683,6 +2687,8 @@ void MeshSystem::destroyModel(ModelComponent& model){
     model.morphNameMapping.clear();
 
     model.skeleton = NULL_ENTITY;
+
+    model.filename = "";
 }
 
 bool MeshSystem::createOrUpdateSprite(SpriteComponent& sprite, MeshComponent& mesh){
@@ -2771,10 +2777,10 @@ bool MeshSystem::createOrUpdateModel(Entity entity, ModelComponent& model, MeshC
     if (model.needUpdateModel){
         if (!model.filename.empty()){
             std::string ext = FileData::getFilePathExtension(model.filename);
-            bool skipEntities = !model.bonesIdMapping.empty() || !model.animations.empty();
+            bool skipEntities = !model.filename.empty() && (!model.bonesIdMapping.empty() || !model.animations.empty());
             bool ret = false;
             if (ext == "obj"){
-                ret = loadOBJ(entity, model.filename);
+                ret = loadOBJ(entity, model.filename, false);
             }else{
                 ret = loadGLTF(entity, model.filename, false, skipEntities);
             }
