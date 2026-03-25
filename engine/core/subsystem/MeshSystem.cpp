@@ -2669,6 +2669,8 @@ void MeshSystem::clearBoneMapping(ModelComponent& model){
     }
     model.bonesIdMapping.clear();
     model.bonesNameMapping.clear();
+
+    model.skeleton = NULL_ENTITY;
 }
 
 void MeshSystem::clearAnimationMapping(ModelComponent& model){
@@ -2685,8 +2687,6 @@ void MeshSystem::destroyModel(ModelComponent& model){
     }
 
     model.morphNameMapping.clear();
-
-    model.skeleton = NULL_ENTITY;
 
     model.filename = "";
 }
