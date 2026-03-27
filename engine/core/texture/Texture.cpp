@@ -107,22 +107,25 @@ Texture::Texture(const Texture& rhs){
 }
 
 Texture& Texture::operator=(const Texture& rhs){
-    render = rhs.render;
-    framebuffer = rhs.framebuffer;
-    type = rhs.type;
-    id = rhs.id;
-    for (int i = 0; i < 6; i++){
-        paths[i] = rhs.paths[i];
+    if (this != &rhs) {
+        destroy();
+        render = rhs.render;
+        framebuffer = rhs.framebuffer;
+        type = rhs.type;
+        id = rhs.id;
+        for (int i = 0; i < 6; i++){
+            paths[i] = rhs.paths[i];
+        }
+        data = rhs.data;
+        numFaces = rhs.numFaces;
+        loadFromPath = rhs.loadFromPath;
+        releaseDataAfterLoad = rhs.releaseDataAfterLoad;
+        needLoad = rhs.needLoad;
+        minFilter = rhs.minFilter;
+        magFilter = rhs.magFilter;
+        wrapU = rhs.wrapU;
+        wrapV = rhs.wrapV;
     }
-    data = rhs.data;
-    numFaces = rhs.numFaces;
-    loadFromPath = rhs.loadFromPath;
-    releaseDataAfterLoad = rhs.releaseDataAfterLoad;
-    needLoad = rhs.needLoad;
-    minFilter = rhs.minFilter;
-    magFilter = rhs.magFilter;
-    wrapU = rhs.wrapU;
-    wrapV = rhs.wrapV;
 
     return *this; 
 }
@@ -184,6 +187,8 @@ void Texture::setPath(const std::string& path){
     this->loadFromPath = true;
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
+
+    this->render = TexturePool::get(id);
 }
 
 void Texture::setData(const std::string& id, TextureData data){
@@ -200,10 +205,16 @@ void Texture::setData(const std::string& id, TextureData data){
     this->data = std::make_shared<std::array<TextureData,6>>();
     this->data->at(0) = data;
     this->data = TextureDataPool::get(id, *this->data.get());
+
+    this->render = TexturePool::get(id);
 }
 
 void Texture::setId(const std::string& id){
     this->id = id;
+    if (!id.empty()) {
+        this->render = TexturePool::get(id);
+        this->data = TextureDataPool::get(id);
+    }
 }
 
 void Texture::setCubeMap(const std::string& path){
@@ -225,6 +236,7 @@ void Texture::setCubeMap(const std::string& path){
     this->needLoad = true;
 
     this->id = "cube|" + path;
+    this->render = TexturePool::get(id);
 }
 
 void Texture::setCubePath(size_t index, const std::string& path){
@@ -252,6 +264,7 @@ void Texture::setCubePath(size_t index, const std::string& path){
         id = id + "|" + paths[f];
     }
     this->id = id;
+    this->render = TexturePool::get(id);
 }
 
 void Texture::setCubePaths(const std::string& front, const std::string& back,
@@ -282,6 +295,7 @@ void Texture::setCubePaths(const std::string& front, const std::string& back,
         id = id + "|" + paths[f];
     }
     this->id = id;
+    this->render = TexturePool::get(id);
 }
 
 void Texture::setCubeDatas(const std::string& id, TextureData front, TextureData back, TextureData left, TextureData right, TextureData up, TextureData down){
@@ -306,6 +320,8 @@ void Texture::setCubeDatas(const std::string& id, TextureData front, TextureData
     this->data->at(2) = up;
     this->data->at(3) = down;
     this->data = TextureDataPool::get(id, *this->data.get());
+
+    this->render = TexturePool::get(id);
 }
 
 void Texture::setFramebuffer(Framebuffer* framebuffer){
