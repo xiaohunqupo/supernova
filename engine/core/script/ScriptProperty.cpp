@@ -122,8 +122,8 @@ namespace Supernova {
                     }
                     break;
                 case ScriptPropertyType::EntityPointer:
-                    if (std::holds_alternative<Entity>(value)) {
-                        lua_pushinteger(L, static_cast<lua_Integer>(std::get<Entity>(value)));
+                    if (std::holds_alternative<EntityReference>(value)) {
+                        lua_pushinteger(L, static_cast<lua_Integer>(std::get<EntityReference>(value).entity));
                     } else {
                         lua_pushnil(L);
                     }
@@ -226,13 +226,15 @@ namespace Supernova {
                         }
                     }
                     break;
-                case ScriptPropertyType::EntityPointer:
+                case ScriptPropertyType::EntityPointer: {
+                    uint32_t sid = std::holds_alternative<EntityReference>(value) ? std::get<EntityReference>(value).sceneId : 0;
                     if (lua_isinteger(L, -1)) {
-                        value = static_cast<Entity>(lua_tointeger(L, -1));
+                        value = EntityReference{static_cast<Entity>(lua_tointeger(L, -1)), sid};
                     } else if (lua_isnumber(L, -1)) {
-                        value = static_cast<Entity>(lua_tonumber(L, -1));
+                        value = EntityReference{static_cast<Entity>(lua_tonumber(L, -1)), sid};
                     }
                     break;
+                }
             }
 
             lua_pop(L, 2); // Pop value and instance table

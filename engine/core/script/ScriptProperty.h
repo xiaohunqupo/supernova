@@ -37,6 +37,11 @@ namespace Supernova {
         EntityPointer
     };
 
+    struct EntityReference {
+        Entity entity = NULL_ENTITY;
+        uint32_t sceneId = 0;
+    };
+
     using ScriptPropertyValue = std::variant<
         std::monostate,  // For empty/uninitialized state
         bool,
@@ -46,7 +51,7 @@ namespace Supernova {
         Vector2,
         Vector3,
         Vector4,
-        Entity
+        EntityReference
     >;
 
     struct SUPERNOVA_API ScriptProperty {
@@ -61,9 +66,6 @@ namespace Supernova {
 
         // Optional: Store the actual type name for editor UI/debugging
         std::string ptrTypeName; // e.g., "Mesh*", "Object*", "EntityHandle*"
-
-        // For cross-scene entity references (0 = same scene)
-        uint32_t sceneId = 0;
 
         // Helper template to get typed value
         template<typename T>

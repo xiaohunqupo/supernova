@@ -560,19 +560,20 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
             for (auto& prop : scriptEntry.properties) {
                 if (prop.type != ScriptPropertyType::EntityPointer) continue;
 
-                if (!std::holds_alternative<Entity>(prop.value)) {
+                if (!std::holds_alternative<EntityReference>(prop.value)) {
                     lua_pushnil(L);
                     lua_setfield(L, -2, prop.name.c_str());
                     continue;
                 }
 
-                Entity targetEntity = std::get<Entity>(prop.value);
+                const auto& entRef = std::get<EntityReference>(prop.value);
+                Entity targetEntity = entRef.entity;
                 bool foundScript = false;
 
                 if (targetEntity != NULL_ENTITY) {
                     Scene* targetScene = scene;
-                    if (prop.sceneId != 0) {
-                        targetScene = SceneManager::getScenePtr(prop.sceneId);
+                    if (entRef.sceneId != 0) {
+                        targetScene = SceneManager::getScenePtr(entRef.sceneId);
                     }
                     if (targetScene) {
                         ScriptComponent* targetScriptComp = targetScene->findComponent<ScriptComponent>(targetEntity);
