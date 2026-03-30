@@ -1672,7 +1672,7 @@ void MeshSystem::createTorus(MeshComponent& mesh, float radius, float ringRadius
         mesh.needReload = true;
 }
 
-bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncLoad, bool skipEntities){
+bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncLoad, bool skipEntities, bool changeRootTransform){
     MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
     ModelComponent& model = scene->getComponent<ModelComponent>(entity);
     Transform& transform = scene->getComponent<Transform>(entity);
@@ -1764,13 +1764,27 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
     }
 
-    // Only apply the GLTF root transform when the entity still has the default transform.
     Matrix4 matrix = getGLTFMeshGlobalMatrix(meshNode, model, nodesParent);
-    bool hasDefaultTransform = (transform.position == Vector3::ZERO)
-        && (transform.rotation == Quaternion::IDENTITY)
-        && (transform.scale == Vector3::UNIT_SCALE);
-    if (hasDefaultTransform) {
-        matrix.decompose(transform.position, transform.scale, transform.rotation);
+
+    if (changeRootTransform) {
+        bool hasDefaultPosition = (transform.position == Vector3::ZERO);
+        bool hasDefaultRotation = (transform.rotation == Quaternion::IDENTITY);
+        bool hasDefaultScale = (transform.scale == Vector3::UNIT_SCALE);
+
+        Vector3 newPosition;
+        Vector3 newScale;
+        Quaternion newRotation;
+        matrix.decompose(newPosition, newScale, newRotation);
+
+        if (hasDefaultPosition) {
+            transform.position = newPosition;
+        }
+        if (hasDefaultRotation) {
+            transform.rotation = newRotation;
+        }
+        if (hasDefaultScale) {
+            transform.scale = newScale;
+        }
         transform.needUpdate = true;
     }
 
@@ -2786,7 +2800,7 @@ bool MeshSystem::createOrUpdateModel(Entity entity, ModelComponent& model, MeshC
             if (ext == "obj"){
                 ret = loadOBJ(entity, model.filename, false);
             }else{
-                ret = loadGLTF(entity, model.filename, false, skipEntities);
+                ret = loadGLTF(entity, model.filename, false, skipEntities, false);
             }
 
             if (ret){
