@@ -185,3 +185,8 @@ void Model::setMorphWeight(int id, float value){
         Log::error("Retrieving non-existent morph weight '%i'", id);
     }
 }
+
+void Model::resetToBindPose(){
+    ModelComponent& model = getComponent<ModelComponent>();
+    scene->getSystem<MeshSystem>()->resetModelToBindPose(model);
+}

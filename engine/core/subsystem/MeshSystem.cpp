@@ -2709,6 +2709,22 @@ void MeshSystem::destroyModel(ModelComponent& model){
     model.filename = "";
 }
 
+void MeshSystem::resetModelToBindPose(ModelComponent& model){
+    for (auto const& bone : model.bonesIdMapping){
+        Entity boneEntity = bone.second;
+        BoneComponent* boneComp = scene->findComponent<BoneComponent>(boneEntity);
+        Transform* transform = scene->findComponent<Transform>(boneEntity);
+        if (!boneComp || !transform){
+            continue;
+        }
+
+        transform->position = boneComp->bindPosition;
+        transform->rotation = boneComp->bindRotation;
+        transform->scale = boneComp->bindScale;
+        transform->needUpdate = true;
+    }
+}
+
 bool MeshSystem::createOrUpdateSprite(SpriteComponent& sprite, MeshComponent& mesh){
     if (sprite.needUpdateSprite){
         CameraComponent& camera =  scene->getComponent<CameraComponent>(scene->getCamera());

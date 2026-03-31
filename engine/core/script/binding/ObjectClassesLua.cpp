@@ -486,6 +486,7 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("setMorphWeight", 
             luabridge::overload<int, float>(&Model::setMorphWeight),
             luabridge::overload<const std::string&, float>(&Model::setMorphWeight))
+        .addFunction("resetToBindPose", &Model::resetToBindPose)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

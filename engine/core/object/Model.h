@@ -33,6 +33,8 @@ namespace Supernova{
         float getMorphWeight(int id);
         void setMorphWeight(const std::string& name, float value);
         void setMorphWeight(int id, float value);
+
+        void resetToBindPose();
     };
 }
 

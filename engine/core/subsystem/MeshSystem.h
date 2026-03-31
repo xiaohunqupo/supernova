@@ -77,6 +77,8 @@ namespace Supernova{
         void clearAnimationMapping(ModelComponent& model);
         void destroyModel(ModelComponent& model);
 
+        void resetModelToBindPose(ModelComponent& model);
+
         bool createOrUpdateSprite(SpriteComponent& sprite, MeshComponent& mesh);
         bool createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent& mesh);
         bool createOrUpdateMeshPolygon(MeshPolygonComponent& polygon, MeshComponent& mesh);
