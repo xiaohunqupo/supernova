@@ -242,8 +242,12 @@ void ActionSystem::spriteActionUpdate(double dt, Entity entity, ActionComponent&
             }
         }
 
-        if (spriteanim.frameIndex >= spriteanim.framesSize)
+        if (spriteanim.frameIndex >= spriteanim.framesSize){
             spriteanim.frameIndex = 0;
+            if (spriteanim.loop){
+                action.timecount = 0;
+            }
+        }
         
         if (spriteanim.frameTimeIndex >= spriteanim.framesTimeSize)
             spriteanim.frameTimeIndex = 0;
