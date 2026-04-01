@@ -300,7 +300,7 @@ bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
 
         TileRectData& rectData = tilemap.tilesRect[tilemap.tiles[i].rectId];
         int submeshId = (rectData.submeshId >= 0 && (unsigned int)rectData.submeshId < mesh.numSubmeshes) ? rectData.submeshId : 0;
-        Rect& tileRect = rectData.rect;
+        Rect tileRect = rectData.rect;
 
         Texture& texture = mesh.submeshes[submeshId].material.baseColorTexture;
         Texture& mainTexture = mesh.submeshes[0].material.baseColorTexture;
