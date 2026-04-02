@@ -287,6 +287,10 @@ bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
 
         numTiles++;
 
+        // Clamp tile position to non-negative — negative local coords are not supported
+        if (tilemap.tiles[i].position.x < 0) tilemap.tiles[i].position.x = 0;
+        if (tilemap.tiles[i].position.y < 0) tilemap.tiles[i].position.y = 0;
+
         Attribute* attVertex = mesh.buffer.getAttribute(AttributeType::POSITION);
         mesh.buffer.addVector3(attVertex, Vector3(tilemap.tiles[i].position.x, tilemap.tiles[i].position.y, 0));
         mesh.buffer.addVector3(attVertex, Vector3(tilemap.tiles[i].position.x + tilemap.tiles[i].width, tilemap.tiles[i].position.y, 0));
