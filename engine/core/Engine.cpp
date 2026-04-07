@@ -265,7 +265,9 @@ void Engine::setCanvasSize(int canvasWidth, int canvasHeight){
     Engine::preferredCanvasWidth = canvasWidth;
     Engine::preferredCanvasHeight = canvasHeight;
 
-    calculateCanvas();
+    if (viewLoaded){
+        calculateCanvas();
+    }
 }
 
 int Engine::getPreferredCanvasWidth(){
@@ -282,6 +284,10 @@ Rect Engine::getViewRect(){
 
 void Engine::setScalingMode(Scaling scalingMode){
     Engine::scalingMode = scalingMode;
+
+    if (viewLoaded){
+        calculateCanvas();
+    }
 }
 
 Scaling Engine::getScalingMode(){
