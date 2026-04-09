@@ -89,11 +89,11 @@ namespace Supernova{
         HybridArray<Submesh, MAX_SUBMESHES> submeshes;
         unsigned int numSubmeshes = 0;
 
-        HybridArray<Matrix4, MAX_BONES> bonesMatrix;
+        Matrix4 bonesMatrix[MAX_BONES];
         float normAdjustJoint = 1;
         float normAdjustWeight = 1;
 
-        HybridArray<float, MAX_MORPHTARGETS> morphWeights;
+        float morphWeights[MAX_MORPHTARGETS];
 
         AABB aabb = AABB::ZERO;
         AABB verticesAABB = AABB::ZERO; // is not influenced by instances
