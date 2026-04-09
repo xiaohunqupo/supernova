@@ -3,7 +3,7 @@
 // ---------------------------------------
 
 //
-// (c) 2024 Eduardo Doria.
+// (c) 2026 Eduardo Doria.
 //
 
 // not using 'semaphore.h' file name to avoid errors when building Android with Mac

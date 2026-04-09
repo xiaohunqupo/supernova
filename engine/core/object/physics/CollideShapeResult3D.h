@@ -1,5 +1,5 @@
 //
-// (c) 2025 Eduardo Doria.
+// (c) 2026 Eduardo Doria.
 //
 
 #ifndef CollideShapeResult3D_H

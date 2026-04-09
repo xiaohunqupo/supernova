@@ -1,5 +1,5 @@
 // ---------------------------------------
-// (c) 2024 Eduardo Doria.
+// (c) 2026 Eduardo Doria.
 // Based on: https://github.com/oviano/sokol-multithread
 // ---------------------------------------
 

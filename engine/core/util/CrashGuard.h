@@ -1,5 +1,5 @@
 //
-// (c) 2025 Eduardo Doria.
+// (c) 2026 Eduardo Doria.
 // Guard execution of untrusted/user code to prevent process termination on crashes.
 // POSIX: catches SIGSEGV/SIGBUS/SIGFPE/SIGILL/SIGABRT via sigaction + sigsetjmp/siglongjmp
 // Windows: uses SEH (__try/__except) to catch access violations.

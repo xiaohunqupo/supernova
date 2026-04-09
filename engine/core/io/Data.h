@@ -5,7 +5,7 @@
 //
 
 //
-// (c) 2024 Eduardo Doria.
+// (c) 2026 Eduardo Doria.
 //
 
 #ifndef DATA_H

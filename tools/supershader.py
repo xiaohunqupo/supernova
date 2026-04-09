@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # /*
-# (c) 2025 Eduardo Doria.
+# (c) 2026 Eduardo Doria.
 # */
 
 import os

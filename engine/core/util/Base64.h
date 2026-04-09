@@ -1,5 +1,5 @@
 //
-// (c) 2024 Eduardo Doria.
+// (c) 2026 Eduardo Doria.
 // Based on LihO implementation:
 // https://stackoverflow.com/questions/180947/base64-decode-snippet-in-c
 //
