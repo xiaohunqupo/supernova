@@ -108,7 +108,6 @@ Texture::Texture(const Texture& rhs){
 
 Texture& Texture::operator=(const Texture& rhs){
     if (this != &rhs) {
-        destroy();
         render = rhs.render;
         framebuffer = rhs.framebuffer;
         type = rhs.type;
