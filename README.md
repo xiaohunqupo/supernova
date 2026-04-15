@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/logo/doriax_logo_transparent.png" alt="Doriax Engine" width="300">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/logo/doriax_logo_transparent.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/logo/doriax_logo_dark.png">
+    <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/logo/doriax_logo_dark.png" alt="Doriax Engine" width="300">
+  </picture>
 </p>
 
 <p align="center">
