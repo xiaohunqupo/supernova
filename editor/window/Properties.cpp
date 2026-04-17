@@ -24,12 +24,18 @@
 #include "App.h"
 #include "Backend.h"
 #include "component/ActionComponent.h"
+#include "component/AlphaActionComponent.h"
 #include "component/AnimationComponent.h"
 #include "component/BoneComponent.h"
+#include "component/ColorActionComponent.h"
 #include "component/KeyframeTracksComponent.h"
-#include "component/TranslateTracksComponent.h"
+#include "component/PositionActionComponent.h"
 #include "component/RotateTracksComponent.h"
+#include "component/RotationActionComponent.h"
+#include "component/ScaleActionComponent.h"
 #include "component/ScaleTracksComponent.h"
+#include "component/TimedActionComponent.h"
+#include "component/TranslateTracksComponent.h"
 #include "component/MorphTracksComponent.h"
 #include "util/SHA1.h"
 #include "util/ProjectUtils.h"
@@ -7071,6 +7077,31 @@ void editor::Properties::startActionPreview(Entity entity, Scene* scene, ScenePr
 
 void editor::Properties::stopActionPreview(Scene* scene, SceneProject* sceneProject) {
     if (!actionPreviewing) return;
+
+    // Update snapshots with current user-editable config values before restoring
+    for (ActionPreviewState& state : actionPreviewStates) {
+        if (state.entity == NULL_ENTITY || !scene->isEntityCreated(state.entity) || !state.components || state.components.IsNull()) {
+            continue;
+        }
+        if (auto* comp = scene->findComponent<TimedActionComponent>(state.entity)) {
+            state.components[Catalog::getComponentName(ComponentType::TimedActionComponent, true)] = Stream::encodeTimedActionComponent(*comp);
+        }
+        if (auto* comp = scene->findComponent<PositionActionComponent>(state.entity)) {
+            state.components[Catalog::getComponentName(ComponentType::PositionActionComponent, true)] = Stream::encodePositionActionComponent(*comp);
+        }
+        if (auto* comp = scene->findComponent<RotationActionComponent>(state.entity)) {
+            state.components[Catalog::getComponentName(ComponentType::RotationActionComponent, true)] = Stream::encodeRotationActionComponent(*comp);
+        }
+        if (auto* comp = scene->findComponent<ScaleActionComponent>(state.entity)) {
+            state.components[Catalog::getComponentName(ComponentType::ScaleActionComponent, true)] = Stream::encodeScaleActionComponent(*comp);
+        }
+        if (auto* comp = scene->findComponent<ColorActionComponent>(state.entity)) {
+            state.components[Catalog::getComponentName(ComponentType::ColorActionComponent, true)] = Stream::encodeColorActionComponent(*comp);
+        }
+        if (auto* comp = scene->findComponent<AlphaActionComponent>(state.entity)) {
+            state.components[Catalog::getComponentName(ComponentType::AlphaActionComponent, true)] = Stream::encodeAlphaActionComponent(*comp);
+        }
+    }
 
     for (const ActionPreviewState& state : actionPreviewStates) {
         if (state.entity == NULL_ENTITY || !scene->isEntityCreated(state.entity) || !state.components || state.components.IsNull()) {
