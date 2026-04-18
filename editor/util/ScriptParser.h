@@ -15,6 +15,7 @@ namespace doriax::editor {
 
     public:
         static std::vector<doriax::ScriptProperty> parseScriptProperties(const std::filesystem::path& scriptPath);
+        static std::vector<doriax::ScriptProperty> parseScriptPropertiesFromString(const std::string& content, const std::string& sourceName = "memory");
     };
 
 }

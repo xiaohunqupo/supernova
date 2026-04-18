@@ -2987,7 +2987,7 @@ void editor::Project::updateAllScriptsProperties(uint32_t sceneId){
     }
 }
 
-void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity entity, std::vector<ScriptEntry>& scripts){
+void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity entity, std::vector<ScriptEntry>& scripts, const std::string& inMemoryContent, const std::string& inMemoryPath) {
     bool hasChanges = false;
 
     // Update properties for each script in the component
@@ -3001,7 +3001,12 @@ void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity 
                 fullPath = getProjectPath() / fullPath;
             }
 
-            std::vector<ScriptProperty> parsedProperties = ScriptParser::parseScriptProperties(fullPath);
+            std::vector<ScriptProperty> parsedProperties;
+            if (!inMemoryContent.empty() && fullPath.string() == fs::path(inMemoryPath).string()) {
+                parsedProperties = ScriptParser::parseScriptPropertiesFromString(inMemoryContent, fullPath.string());
+            } else {
+                parsedProperties = ScriptParser::parseScriptProperties(fullPath);
+            }
             if (parsedProperties.empty()) {
                 continue;
             }
@@ -3058,7 +3063,12 @@ void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity 
 
             // Keep previous properties to preserve current values
             std::vector<ScriptProperty> oldProps = scriptEntry.properties;
-            ProjectUtils::loadLuaScriptProperties(scriptEntry, fullPath.string());
+
+            if (!inMemoryContent.empty() && fullPath.string() == fs::path(inMemoryPath).string()) {
+                ProjectUtils::loadLuaScriptPropertiesFromString(scriptEntry, inMemoryContent, fullPath.string());
+            } else {
+                ProjectUtils::loadLuaScriptProperties(scriptEntry, fullPath.string());
+            }
 
             // Merge: keep old values if names match
             for (auto& newProp : scriptEntry.properties) {

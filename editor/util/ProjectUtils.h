@@ -43,7 +43,12 @@ public:
     // --- Lua script utilities ---
     static ScriptPropertyValue luaValueToScriptPropertyValue(lua_State* L, int idx, ScriptPropertyType type);
     static void loadLuaScriptProperties(ScriptEntry& entry, const std::string& luaPath);
+    static void loadLuaScriptPropertiesFromString(ScriptEntry& entry, const std::string& scriptContent, const std::string& chunkName);
 
+private:
+    static void parseLuaPropertiesTable(lua_State* L, ScriptEntry& entry);
+
+public:
     static void collectModelEntities(Scene* scene, const ModelComponent& model, std::vector<Entity>& out);
 
     static void collectEntities(const YAML::Node& entityNode, std::vector<Entity>& allEntities);

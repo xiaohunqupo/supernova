@@ -197,7 +197,12 @@ std::vector<ScriptProperty> editor::ScriptParser::parseScriptProperties(const st
     std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     file.close();
 
-    content = removeComments(content);
+    return parseScriptPropertiesFromString(content, scriptPath.string());
+}
+
+std::vector<ScriptProperty> editor::ScriptParser::parseScriptPropertiesFromString(const std::string& sourceContent, const std::string& sourceName) {
+    std::vector<ScriptProperty> properties;
+    std::string content = removeComments(sourceContent);
 
     // Updated pattern to capture optional type parameter and type annotation comment
     // Pattern: SPROPERTY("Display Name") or SPROPERTY("Display Name", Type) followed by Type varName = defaultValue;
@@ -448,7 +453,7 @@ std::vector<ScriptProperty> editor::ScriptParser::parseScriptProperties(const st
     for (const auto& prop : properties) {
         if (!seenNames.insert(prop.name).second) {
             Out::warning("Duplicate property name '%s' in %s", 
-                         prop.name.c_str(), scriptPath.string().c_str());
+                         prop.name.c_str(), sourceName.c_str());
         }
     }
 

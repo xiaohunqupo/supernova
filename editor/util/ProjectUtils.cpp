@@ -1,5 +1,7 @@
 #include "ProjectUtils.h"
 
+#include <fstream>
+
 #include "Out.h"
 #include "Catalog.h"
 #include "Stream.h"
@@ -1104,18 +1106,39 @@ void editor::ProjectUtils::loadLuaScriptProperties(ScriptEntry& entry, const std
     lua_State* L = LuaBinding::getLuaState();
     if (!L) return;
 
-    // Load script file as a chunk (returns the script table on the stack)
     if (luaL_dofile(L, luaPath.c_str()) != LUA_OK) {
         Out::error("Failed to load Lua script \"%s\": %s", luaPath.c_str(), lua_tostring(L, -1));
-        lua_pop(L, 1); // pop error message
+        lua_pop(L, 1);
         return;
     }
 
-    // Stack: script_table
     if (!lua_istable(L, -1)) {
         lua_pop(L, 1);
         return;
     }
+
+    parseLuaPropertiesTable(L, entry);
+}
+
+void editor::ProjectUtils::loadLuaScriptPropertiesFromString(ScriptEntry& entry, const std::string& scriptContent, const std::string& chunkName) {
+    lua_State* L = LuaBinding::getLuaState();
+    if (!L) return;
+
+    if (luaL_dostring(L, scriptContent.c_str()) != LUA_OK) {
+        // Silently ignore parse errors for in-memory content (code may be mid-edit)
+        lua_pop(L, 1);
+        return;
+    }
+
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        return;
+    }
+
+    parseLuaPropertiesTable(L, entry);
+}
+
+void editor::ProjectUtils::parseLuaPropertiesTable(lua_State* L, ScriptEntry& entry) {
 
     lua_getfield(L, -1, "properties");  // Stack: script_table, properties_table
 

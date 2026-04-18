@@ -2829,6 +2829,10 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
     if (contentSize.y == 0) contentSize.y = ImGui::GetContentRegionAvail().y;
     
     if (ImGui::BeginChild(title, contentSize, border ? ImGuiChildFlags_Borders : ImGuiChildFlags_None, flags)) {
+        if (pendingFocus) {
+            ImGui::SetWindowFocus();
+            pendingFocus = false;
+        }
         // Calculate metrics first
         ImFont* font = ImGui::GetFont();
         float fontSize = ImGui::GetFontSize();

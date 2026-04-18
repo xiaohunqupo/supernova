@@ -192,6 +192,7 @@ namespace doriax::editor {
         void SetHighlightCurrentLine(bool enable) { highlightCurrentLine = enable; }
         void SetMatchBrackets(bool enable) { matchBrackets = enable; }
         void SetShowMinimap(bool show) { showMinimap = show; }
+        void RequestFocus() { pendingFocus = true; }
 
         // Auto-complete
         void SetAutoComplete(bool enable) { autoComplete = enable; }
@@ -275,6 +276,7 @@ namespace doriax::editor {
         bool findWholeWord;
         bool pendingScrollToCursor = false;
         bool findRefocusInput = false;
+        bool pendingFocus = false;
         bool findLastCaseSensitive = false;
 
         // Visual settings

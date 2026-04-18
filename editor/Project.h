@@ -367,7 +367,7 @@ namespace doriax::editor{
         bool hasUnsavedEntityBundles() const;
 
         void updateAllScriptsProperties(uint32_t sceneId);
-        void updateScriptProperties(SceneProject* sceneProject, Entity entity, std::vector<ScriptEntry>& scripts);
+        void updateScriptProperties(SceneProject* sceneProject, Entity entity, std::vector<ScriptEntry>& scripts, const std::string& inMemoryContent = "", const std::string& inMemoryPath = "");
 
         static std::vector<Entity> getTopLevelEntities(const EntityRegistry* registry, const std::vector<Entity>& orderedEntities);
         static void remapEntityProperties(EntityRegistry* registry, const std::vector<Entity>& entities, const std::unordered_map<Entity, Entity>& entityMap);

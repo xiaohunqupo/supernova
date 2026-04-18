@@ -183,7 +183,7 @@ std::string editor::CodeEditor::getWindowTitle(const EditorInstance& instance) c
     return filename + (instance.isModified ? " *" : "") + "###" + instance.filepath.string();
 }
 
-void editor::CodeEditor::updateScriptProperties(const EditorInstance& instance){
+void editor::CodeEditor::updateScriptProperties(const EditorInstance& instance, const std::string& inMemoryContent){
     // Update script properties if this is a script file
     for (auto& sceneProject : project->getScenes()) {
         if (!sceneProject.scene)
@@ -216,7 +216,8 @@ void editor::CodeEditor::updateScriptProperties(const EditorInstance& instance){
                 if (matchesFile) {
                     std::vector<ScriptEntry> newScripts = scriptComponent->scripts;
 
-                    project->updateScriptProperties(&sceneProject, entity, newScripts);
+                    fs::path fullPath = resolveFilepath(instance.filepath);
+                    project->updateScriptProperties(&sceneProject, entity, newScripts, inMemoryContent, fullPath.string());
                     PropertyCmd<std::vector<ScriptEntry>> propertyCmd(project, sceneProject.id, entity, ComponentType::ScriptComponent, "scripts", newScripts);
                     propertyCmd.execute();
 
@@ -349,14 +350,19 @@ void editor::CodeEditor::insertLuaEntityProperty(EditorInstance& instance, Entit
         insertion = "\n" + propEntry + "\n    ";
     }
 
-    // Insert before the closing brace of properties table
-    std::string newText = text.substr(0, closePos) + insertion + text.substr(closePos);
+    // Insert before the closing brace of properties table using cursor-based insert (preserves undo)
+    int insertLine = 0, insertCol = 0;
+    for (size_t i = 0; i < closePos; i++) {
+        if (text[i] == '\n') { insertLine++; insertCol = 0; }
+        else { insertCol++; }
+    }
+    instance.editor->SetCursorPosition(insertLine, insertCol);
+    instance.editor->InsertText(insertion, false);
 
-    // Update editor content
-    instance.editor->SetText(newText);
-
-    // Save the file (triggers updateScriptProperties which re-parses the Lua file)
-    save(instance);
+    // Update the properties dynamically parsing the current text, without overwriting the file
+    instance.isModified = true;
+    instance.propertyInsertUndoIndex = instance.editor->GetUndoIndex();
+    updateScriptProperties(instance, instance.editor->GetText());
 
     // Now link the entity to the newly created property
     SceneProject* selectedScene = project->getSelectedScene();
@@ -504,11 +510,15 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         "    SPROPERTY(\"" + displayName + "\")\n"
         "    " + typeDecl + "* " + varName + " = nullptr;\n";
 
-    // If using a subclass type, ensure the header includes it
+    // If using a subclass type, check if we need to add an #include
+    bool needsInclude = false;
+    size_t includeInsertPos = std::string::npos;
+    std::string includeDirective;
     if (isSubclassType && !subclassHeaderFile.empty()) {
-        std::string includeDirective = "#include \"" + subclassHeaderFile + "\"";
+        includeDirective = "#include \"" + subclassHeaderFile + "\"";
         if (headerText.find(includeDirective) == std::string::npos) {
-            // Find the last #include line and insert after it
+            needsInclude = true;
+            // Find the last #include line to insert after it
             size_t lastInclude = std::string::npos;
             size_t searchPos = 0;
             while (true) {
@@ -520,15 +530,14 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
             if (lastInclude != std::string::npos) {
                 size_t endOfLine = headerText.find('\n', lastInclude);
                 if (endOfLine != std::string::npos) {
-                    headerText.insert(endOfLine + 1, includeDirective + "\n");
+                    includeInsertPos = endOfLine + 1;
                 }
             }
         }
     }
 
-    // Find where to insert: before the constructor declaration
-    // Look for "ClassName(" that is a constructor (preceded by spaces, on its own line)
-    // Strategy: find the last SPROPERTY block, insert after it. If none, insert before constructor.
+    // Find where to insert SPROPERTY on the ORIGINAL headerText (before #include modification)
+    // This way cursor positions match the editor content
     size_t insertPos = std::string::npos;
 
     // Find last SPROPERTY declaration (the variable line after it ends with ";")
@@ -565,15 +574,52 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         return;
     }
 
-    // Ensure there's a blank line before the new property if needed
-    std::string newHeaderText = headerText.substr(0, insertPos) + propCode + headerText.substr(insertPos);
-
-    // Update header: either editor or disk
+    // Apply changes via editor (preserves undo) or write to disk
     if (headerInstance) {
-        headerInstance->editor->SetText(newHeaderText);
-        save(*headerInstance);
+        // Insert #include first (if needed), then SPROPERTY
+        // Must do #include first so it doesn't shift SPROPERTY position calculation
+        int includeLineShift = 0;
+        if (needsInclude && includeInsertPos != std::string::npos) {
+            int incLine = 0, incCol = 0;
+            for (size_t i = 0; i < includeInsertPos; i++) {
+                if (headerText[i] == '\n') { incLine++; incCol = 0; }
+                else { incCol++; }
+            }
+            headerInstance->editor->SetCursorPosition(incLine, incCol);
+            headerInstance->editor->InsertText(includeDirective + "\n", false);
+            includeLineShift = 1; // One extra line added
+        }
+
+        // Now insert SPROPERTY at the adjusted position
+        int insertLine = 0, insertCol = 0;
+        for (size_t i = 0; i < insertPos; i++) {
+            if (headerText[i] == '\n') { insertLine++; insertCol = 0; }
+            else { insertCol++; }
+        }
+        // Shift if #include was inserted before this position
+        if (needsInclude && includeInsertPos != std::string::npos && includeInsertPos <= insertPos) {
+            insertLine += includeLineShift;
+        }
+        headerInstance->editor->SetCursorPosition(insertLine, insertCol);
+        headerInstance->editor->InsertText(propCode, false);
+
+        // Update the properties dynamically parsing the current text, without overwriting the file
+        headerInstance->isModified = true;
+        headerInstance->propertyInsertUndoIndex = headerInstance->editor->GetUndoIndex();
+        std::string finalHeaderText = headerInstance->editor->GetText();
+        updateScriptProperties(*headerInstance, finalHeaderText);
     } else {
-        // Write directly to disk
+        // Header not open in editor — build full text and write to disk
+        // Apply #include first (modifies headerText), then insert SPROPERTY
+        if (needsInclude && includeInsertPos != std::string::npos) {
+            std::string incText = includeDirective + "\n";
+            headerText.insert(includeInsertPos, incText);
+            // Shift insertPos if it's after the #include insertion
+            if (includeInsertPos <= insertPos) {
+                insertPos += incText.size();
+            }
+        }
+        std::string newHeaderText = headerText.substr(0, insertPos) + propCode + headerText.substr(insertPos);
         fs::path fullHeaderPath = resolveFilepath(headerPath);
         std::ofstream file(fullHeaderPath, std::ios::trunc);
         if (!file.is_open()) {
@@ -582,16 +628,6 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         }
         file << newHeaderText;
         file.close();
-
-        // Trigger property update by notifying the project
-        // We need to create a temporary instance-like context for updateScriptProperties
-        // Instead, just call project->updateScriptProperties for matching scripts
-    }
-
-    // If we're viewing the source file, also reload it if it changed externally
-    if (isSource && headerInstance == nullptr) {
-        // The header was written to disk; if there's an open editor for it, reload
-        // (already handled above since we checked editors.find)
     }
 
     // Now link the entity to the newly created property
@@ -599,6 +635,13 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
     if (!selectedScene || !selectedScene->scene) return;
 
     uint32_t storedSceneId = (entitySceneId != selectedScene->id) ? entitySceneId : 0;
+
+    std::string inMemoryContent = "";
+    if (headerInstance) {
+        inMemoryContent = headerInstance->editor->GetText();
+    } else {
+        // We already wrote it to disk, but we also can fallback to reading from disk because inMemoryContent is empty
+    }
 
     // First, trigger updateScriptProperties for all entities referencing this header
     for (auto& sceneProject : project->getScenes()) {
@@ -615,7 +658,9 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
 
                 // Update properties from the modified header
                 std::vector<ScriptEntry> newScripts = scriptComp->scripts;
-                project->updateScriptProperties(&sceneProject, sceneEntity, newScripts);
+                fs::path fullPath = resolveFilepath(headerPath);
+
+                project->updateScriptProperties(&sceneProject, sceneEntity, newScripts, inMemoryContent, fullPath.string());
 
                 // Find the newly added property by name and set EntityReference
                 for (size_t nsi = 0; nsi < newScripts.size(); nsi++) {
@@ -666,6 +711,7 @@ bool editor::CodeEditor::save(EditorInstance& instance) {
 
         instance.savedUndoIndex = instance.editor->GetUndoIndex();
         instance.isModified = false;
+        instance.propertyInsertUndoIndex = -1;
         instance.lastWriteTime = fs::last_write_time(fullPath);
 
         updateScriptProperties(instance);
@@ -909,6 +955,13 @@ void editor::CodeEditor::show() {
 
             instance.isModified = instance.editor->GetUndoIndex() != instance.savedUndoIndex;
 
+            // If user undid past a drag-drop property insertion, re-parse from current content
+            if (instance.propertyInsertUndoIndex >= 0 &&
+                instance.editor->GetUndoIndex() < instance.propertyInsertUndoIndex) {
+                instance.propertyInsertUndoIndex = -1;
+                updateScriptProperties(instance, instance.editor->GetText());
+            }
+
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
                 windowFocused = true;
 
@@ -972,6 +1025,8 @@ void editor::CodeEditor::show() {
                     }
                 }
                 ImGui::EndDragDropTarget();
+                ImGui::SetWindowFocus();
+                instance.editor->RequestFocus();
             }
         }
         ImGui::End();
@@ -980,6 +1035,12 @@ void editor::CodeEditor::show() {
         if (!instance.isOpen) {
             if (lastFocused == &instance) {
                 lastFocused = nullptr;
+            }
+
+            if (instance.isModified) {
+                // Window closed with unsaved changes.
+                // Re-read properties from disk to revert any in-memory only properties (like drag-and-drop entity updates)
+                updateScriptProperties(instance);
             }
 
             project->removeTab(TabType::CODE_EDITOR, instance.filepath.string());

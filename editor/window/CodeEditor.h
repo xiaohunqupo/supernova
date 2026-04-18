@@ -22,8 +22,9 @@ namespace doriax::editor {
         double lastCheckTime;
         bool hasExternalChanges;
         int savedUndoIndex;
+        int propertyInsertUndoIndex; // undo index after drag-drop insertion, -1 if none pending
 
-        EditorInstance() : isOpen(true), languageType(SyntaxLanguage::None), isModified(false), lastCheckTime(0.0), hasExternalChanges(false), savedUndoIndex(0) {}
+        EditorInstance() : isOpen(true), languageType(SyntaxLanguage::None), isModified(false), lastCheckTime(0.0), hasExternalChanges(false), savedUndoIndex(0), propertyInsertUndoIndex(-1) {}
     };
 
     class CodeEditor {
@@ -44,7 +45,7 @@ namespace doriax::editor {
         bool loadFileContent(EditorInstance& instance);
         void handleFileChangePopup();
         std::string getWindowTitle(const EditorInstance& instance) const;
-        void updateScriptProperties(const EditorInstance& instance);
+        void updateScriptProperties(const EditorInstance& instance, const std::string& inMemoryContent = "");
         fs::path resolveFilepath(const fs::path& relPath) const;
         std::string toRelativePath(const std::string& filepath) const;
         void insertLuaEntityProperty(EditorInstance& instance, Entity entity, uint32_t entitySceneId);
