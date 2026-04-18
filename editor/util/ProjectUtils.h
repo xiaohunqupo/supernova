@@ -19,22 +19,6 @@
 namespace doriax::editor {
 
 class ProjectUtils {
-private:
-    template <typename T>
-    static bool pushEntityHandleTyped(lua_State* L, Scene* scene, Entity entity, const char* typeNameForLog) {
-        T* handle = new T(scene, entity);
-        printf("[DEBUG]   No Lua script instance found, creating '%s' type\n", typeNameForLog);
-
-        if (!luabridge::push<T*>(L, handle)) {
-            delete handle;
-            Out::error("Failed to push %s for EntityRef property", typeNameForLog);
-            lua_pushnil(L);
-            return false;
-        }
-
-        return true;
-    }
-
 public:
 
     static Entity getLockedEntityParent(Scene* scene, Entity entity);

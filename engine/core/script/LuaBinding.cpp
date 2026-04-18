@@ -12,15 +12,35 @@
 #include "component/ScriptComponent.h"
 #include "ScriptProperty.h"
 #include "object/EntityHandle.h"
-#include "object/Mesh.h"
 #include "object/Object.h"
+#include "object/Mesh.h"
 #include "object/Shape.h"
 #include "object/Model.h"
+#include "object/MeshPolygon.h"
 #include "object/Points.h"
+#include "object/Lines.h"
 #include "object/Sprite.h"
 #include "object/Terrain.h"
+#include "object/Tilemap.h"
 #include "object/Light.h"
 #include "object/Camera.h"
+#include "object/Bone.h"
+#include "object/environment/Fog.h"
+#include "object/environment/SkyBox.h"
+#include "object/audio/Audio.h"
+#include "object/ui/UILayout.h"
+#include "object/ui/Container.h"
+#include "object/ui/Polygon.h"
+#include "object/ui/Text.h"
+#include "object/ui/Image.h"
+#include "object/ui/Button.h"
+#include "object/ui/Panel.h"
+#include "object/ui/Scrollbar.h"
+#include "object/ui/TextEdit.h"
+#include "object/physics/Body2D.h"
+#include "object/physics/Body3D.h"
+#include "action/Action.h"
+#include "action/Animation.h"
 
 #include "lua.hpp"
 
@@ -29,7 +49,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <map>
 #include <locale>
 #include <vector>
 #include <memory>
@@ -419,9 +438,8 @@ std::string LuaBinding::normalizePtrTypeName(std::string value) {
 
 template <typename T>
 bool LuaBinding::pushEntityHandleTyped(lua_State* L, doriax::Scene* scene, doriax::Entity entity) {
-    T* handle = new T(scene, entity);
-    if (!luabridge::push<T*>(L, handle)) {
-        delete handle;
+    T handle(scene, entity);
+    if (!luabridge::push<T>(L, handle)) {
         lua_pushnil(L);
         return false;
     }
@@ -430,16 +448,45 @@ bool LuaBinding::pushEntityHandleTyped(lua_State* L, doriax::Scene* scene, doria
 
 bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, doriax::Entity entity, const std::string& ptrTypeName) {
     const std::string key = normalizePtrTypeName(ptrTypeName);
-    using namespace doriax;
-    if (key == "mesh")    return pushEntityHandleTyped<Mesh>(L, scene, entity);
-    if (key == "object")  return pushEntityHandleTyped<Object>(L, scene, entity);
-    if (key == "shape")   return pushEntityHandleTyped<Shape>(L, scene, entity);
-    if (key == "model")   return pushEntityHandleTyped<Model>(L, scene, entity);
-    if (key == "points")  return pushEntityHandleTyped<Points>(L, scene, entity);
-    if (key == "sprite")  return pushEntityHandleTyped<Sprite>(L, scene, entity);
-    if (key == "terrain") return pushEntityHandleTyped<Terrain>(L, scene, entity);
-    if (key == "light")   return pushEntityHandleTyped<Light>(L, scene, entity);
-    if (key == "camera")  return pushEntityHandleTyped<Camera>(L, scene, entity);
+
+    #define DISPATCH_TYPE(Type, KeyName) \
+        if (key == KeyName) return pushEntityHandleTyped<Type>(L, scene, entity)
+
+    DISPATCH_TYPE(Fog, "fog");
+    DISPATCH_TYPE(SkyBox, "skybox");
+    DISPATCH_TYPE(Object, "object");
+    DISPATCH_TYPE(Camera, "camera");
+    DISPATCH_TYPE(Light, "light");
+    DISPATCH_TYPE(Mesh, "mesh");
+    DISPATCH_TYPE(Shape, "shape");
+    DISPATCH_TYPE(Terrain, "terrain");
+    DISPATCH_TYPE(Tilemap, "tilemap");
+    DISPATCH_TYPE(Model, "model");
+    DISPATCH_TYPE(MeshPolygon, "meshpolygon");
+    DISPATCH_TYPE(Points, "points");
+    DISPATCH_TYPE(Lines, "lines");
+    DISPATCH_TYPE(Sprite, "sprite");
+    DISPATCH_TYPE(Audio, "audio");
+    DISPATCH_TYPE(UILayout, "uilayout");
+    DISPATCH_TYPE(Container, "container");
+    DISPATCH_TYPE(Polygon, "polygon");
+    DISPATCH_TYPE(Text, "text");
+    DISPATCH_TYPE(Image, "image");
+    DISPATCH_TYPE(Button, "button");
+    DISPATCH_TYPE(Panel, "panel");
+    DISPATCH_TYPE(Scrollbar, "scrollbar");
+    DISPATCH_TYPE(TextEdit, "textedit");
+    DISPATCH_TYPE(Bone, "bone");
+    DISPATCH_TYPE(Body2D, "body2d");
+    DISPATCH_TYPE(Body3D, "body3d");
+    DISPATCH_TYPE(Action, "action");
+    DISPATCH_TYPE(Animation, "animation");
+
+    #undef DISPATCH_TYPE
+
+    if (!key.empty() && key != "entityhandle") {
+        Log::warn("pushEntityHandleByType: unknown type '%s', falling back to EntityHandle", ptrTypeName.c_str());
+    }
     return pushEntityHandleTyped<EntityHandle>(L, scene, entity);
 }
 
