@@ -2,6 +2,7 @@
 #include "imgui.h"
 #include "widget/CustomTextEditor.h"
 #include "Project.h"
+#include "util/EntityPayload.h"
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -46,6 +47,8 @@ namespace doriax::editor {
         void updateScriptProperties(const EditorInstance& instance);
         fs::path resolveFilepath(const fs::path& relPath) const;
         std::string toRelativePath(const std::string& filepath) const;
+        void insertLuaEntityProperty(EditorInstance& instance, Entity entity, uint32_t entitySceneId);
+        void insertCppEntityProperty(EditorInstance& instance, Entity entity, uint32_t entitySceneId);
 
     public:
         CodeEditor(Project* project);

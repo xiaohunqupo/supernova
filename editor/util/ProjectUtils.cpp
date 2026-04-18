@@ -10,6 +10,28 @@
 #include "component/ButtonComponent.h"
 #include "component/ModelComponent.h"
 #include "component/Transform.h"
+#include "component/MeshComponent.h"
+#include "component/SkyComponent.h"
+#include "component/FogComponent.h"
+#include "component/LightComponent.h"
+#include "component/CameraComponent.h"
+#include "component/SpriteComponent.h"
+#include "component/PointsComponent.h"
+#include "component/LinesComponent.h"
+#include "component/TerrainComponent.h"
+#include "component/AudioComponent.h"
+#include "component/UIContainerComponent.h"
+#include "component/UIComponent.h"
+#include "component/TextComponent.h"
+#include "component/TextEditComponent.h"
+#include "component/ImageComponent.h"
+#include "component/PanelComponent.h"
+#include "component/ScrollbarComponent.h"
+#include "component/PolygonComponent.h"
+#include "component/Body2DComponent.h"
+#include "component/Body3DComponent.h"
+#include "component/Joint2DComponent.h"
+#include "component/Joint3DComponent.h"
 
 #include "component/TilemapComponent.h"
 #include "command/type/MultiPropertyCmd.h"
@@ -1259,4 +1281,38 @@ editor::Command* editor::ProjectUtils::buildDeleteTileCmd(Project* project, uint
 
     multiCmd->setNoMerge();
     return multiCmd;
+}
+
+std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity) {
+    Signature signature = scene->getSignature(entity);
+
+    if (signature.test(scene->getComponentId<ModelComponent>()))       return "Model";
+    if (signature.test(scene->getComponentId<BoneComponent>()))        return "Bone";
+    if (signature.test(scene->getComponentId<TilemapComponent>()))     return "Tilemap";
+    if (signature.test(scene->getComponentId<TerrainComponent>()))     return "Terrain";
+    if (signature.test(scene->getComponentId<SpriteComponent>()))      return "Sprite";
+    if (signature.test(scene->getComponentId<PointsComponent>()))      return "Points";
+    if (signature.test(scene->getComponentId<LinesComponent>()))       return "Lines";
+    if (signature.test(scene->getComponentId<PolygonComponent>()))     return "Polygon";
+    if (signature.test(scene->getComponentId<MeshComponent>()))        return "Mesh";
+    if (signature.test(scene->getComponentId<SkyComponent>()))         return "SkyBox";
+    if (signature.test(scene->getComponentId<FogComponent>()))         return "Fog";
+    if (signature.test(scene->getComponentId<AudioComponent>()))       return "Audio";
+    if (signature.test(scene->getComponentId<ButtonComponent>()))      return "Button";
+    if (signature.test(scene->getComponentId<TextEditComponent>()))    return "TextEdit";
+    if (signature.test(scene->getComponentId<TextComponent>()))        return "Text";
+    if (signature.test(scene->getComponentId<ImageComponent>()))       return "Image";
+    if (signature.test(scene->getComponentId<PanelComponent>()))       return "Panel";
+    if (signature.test(scene->getComponentId<ScrollbarComponent>()))   return "Scrollbar";
+    if (signature.test(scene->getComponentId<UIContainerComponent>())) return "Container";
+    if (signature.test(scene->getComponentId<UIComponent>()))          return "UILayout";
+    if (signature.test(scene->getComponentId<LightComponent>()))       return "Light";
+    if (signature.test(scene->getComponentId<CameraComponent>()))      return "Camera";
+    if (signature.test(scene->getComponentId<Body2DComponent>()))      return "Body2D";
+    if (signature.test(scene->getComponentId<Body3DComponent>()))      return "Body3D";
+    if (signature.test(scene->getComponentId<AnimationComponent>()))   return "Animation";
+    if (signature.test(scene->getComponentId<ActionComponent>()))      return "Action";
+    if (signature.test(scene->getComponentId<Transform>()))            return "Object";
+
+    return "entity";
 }

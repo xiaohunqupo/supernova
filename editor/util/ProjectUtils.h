@@ -48,6 +48,9 @@ public:
 
     static void collectEntities(const YAML::Node& entityNode, std::vector<Entity>& allEntities);
 
+    // Returns entity type name (e.g. "Mesh", "Camera", "Light") based on its components
+    static std::string getEntityTypeName(Scene* scene, Entity entity);
+
     // Fills a Texture with the editor built-in default skybox cubemap.
     static void setDefaultSkyTexture(Texture& outTexture);
 
