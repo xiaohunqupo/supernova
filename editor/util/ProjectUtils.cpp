@@ -1,7 +1,5 @@
 #include "ProjectUtils.h"
 
-#include <fstream>
-
 #include "Out.h"
 #include "Catalog.h"
 #include "Stream.h"
@@ -60,6 +58,8 @@
 #include "resources/sky/Daylight_Box_Top_png.h"
 
 using namespace doriax;
+
+static void parseLuaPropertiesTable(lua_State* L, ScriptEntry& entry);
 
 void editor::ProjectUtils::setDefaultSkyTexture(Texture& outTexture) {
     TextureData skyBack;
@@ -1138,7 +1138,7 @@ void editor::ProjectUtils::loadLuaScriptPropertiesFromString(ScriptEntry& entry,
     parseLuaPropertiesTable(L, entry);
 }
 
-void editor::ProjectUtils::parseLuaPropertiesTable(lua_State* L, ScriptEntry& entry) {
+static void parseLuaPropertiesTable(lua_State* L, ScriptEntry& entry) {
 
     lua_getfield(L, -1, "properties");  // Stack: script_table, properties_table
 
@@ -1195,7 +1195,7 @@ void editor::ProjectUtils::parseLuaPropertiesTable(lua_State* L, ScriptEntry& en
                 lua_pop(L, 1);
 
                 lua_getfield(L, -1, "default");
-                prop.defaultValue = ProjectUtils::luaValueToScriptPropertyValue(L, -1, prop.type);
+                prop.defaultValue = editor::ProjectUtils::luaValueToScriptPropertyValue(L, -1, prop.type);
                 prop.value = prop.defaultValue;
                 lua_pop(L, 1);
 

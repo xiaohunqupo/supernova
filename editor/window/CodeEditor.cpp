@@ -231,6 +231,50 @@ void editor::CodeEditor::updateScriptProperties(const EditorInstance& instance, 
     }
 }
 
+std::string editor::CodeEditor::toCamelCase(const std::string& name) {
+    std::string result;
+    bool nextUpper = false;
+    for (char c : name) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            if (result.empty()) {
+                result += (char)std::tolower(static_cast<unsigned char>(c));
+            } else if (nextUpper) {
+                result += (char)std::toupper(static_cast<unsigned char>(c));
+                nextUpper = false;
+            } else {
+                result += c;
+            }
+        } else {
+            if (!result.empty()) nextUpper = true;
+        }
+    }
+    return result.empty() ? "entity" : result;
+}
+
+std::string editor::CodeEditor::toDisplayName(const std::string& camelCase) {
+    std::string result;
+    for (size_t i = 0; i < camelCase.size(); i++) {
+        if (i == 0) {
+            result += (char)std::toupper(static_cast<unsigned char>(camelCase[i]));
+        } else if (std::isupper(static_cast<unsigned char>(camelCase[i]))) {
+            result += ' ';
+            result += camelCase[i];
+        } else {
+            result += camelCase[i];
+        }
+    }
+    return result;
+}
+
+void editor::CodeEditor::offsetToLineCol(const std::string& text, size_t offset, int& line, int& col) {
+    line = 0;
+    col = 0;
+    for (size_t i = 0; i < offset && i < text.size(); i++) {
+        if (text[i] == '\n') { line++; col = 0; }
+        else { col++; }
+    }
+}
+
 void editor::CodeEditor::insertLuaEntityProperty(EditorInstance& instance, Entity entity, uint32_t entitySceneId) {
     // Resolve the source scene
     SceneProject* sourceSceneProject = project->getScene(entitySceneId);
@@ -243,7 +287,6 @@ void editor::CodeEditor::insertLuaEntityProperty(EditorInstance& instance, Entit
     if (!scene->isEntityCreated(entity)) return;
 
     // Get entity info
-    std::string entityName = scene->getEntityName(entity);
     std::string entityType = editor::ProjectUtils::getEntityTypeName(scene, entity);
 
     // Check if the entity has a Lua script — use its className as a more specific type
@@ -257,26 +300,9 @@ void editor::CodeEditor::insertLuaEntityProperty(EditorInstance& instance, Entit
         }
     }
 
-    // Generate variable name: sanitize entity name to camelCase
-    std::string varName;
-    bool nextUpper = false;
-    for (char c : entityName) {
-        if (std::isalnum(static_cast<unsigned char>(c))) {
-            if (varName.empty()) {
-                varName += (char)std::tolower(static_cast<unsigned char>(c));
-            } else if (nextUpper) {
-                varName += (char)std::toupper(static_cast<unsigned char>(c));
-                nextUpper = false;
-            } else {
-                varName += c;
-            }
-        } else {
-            if (!varName.empty()) nextUpper = true;
-        }
-    }
-    if (varName.empty()) varName = "entity";
+    std::string varName = toCamelCase(scene->getEntityName(entity));
 
-    // Avoid duplicate property names: check existing text for same variable name
+    // Avoid duplicate property names
     std::string text = instance.editor->GetText();
     {
         std::string baseName = varName;
@@ -286,18 +312,7 @@ void editor::CodeEditor::insertLuaEntityProperty(EditorInstance& instance, Entit
         }
     }
 
-    // Generate display name from varName
-    std::string displayName;
-    for (size_t i = 0; i < varName.size(); i++) {
-        if (i == 0) {
-            displayName += (char)std::toupper(static_cast<unsigned char>(varName[i]));
-        } else if (std::isupper(static_cast<unsigned char>(varName[i]))) {
-            displayName += ' ';
-            displayName += varName[i];
-        } else {
-            displayName += varName[i];
-        }
-    }
+    std::string displayName = toDisplayName(varName);
 
     // Build the Lua property entry text
     std::string propEntry =
@@ -351,11 +366,8 @@ void editor::CodeEditor::insertLuaEntityProperty(EditorInstance& instance, Entit
     }
 
     // Insert before the closing brace of properties table using cursor-based insert (preserves undo)
-    int insertLine = 0, insertCol = 0;
-    for (size_t i = 0; i < closePos; i++) {
-        if (text[i] == '\n') { insertLine++; insertCol = 0; }
-        else { insertCol++; }
-    }
+    int insertLine, insertCol;
+    offsetToLineCol(text, closePos, insertLine, insertCol);
     instance.editor->SetCursorPosition(insertLine, insertCol);
     instance.editor->InsertText(insertion, false);
 
@@ -409,7 +421,6 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
     if (!scene->isEntityCreated(entity)) return;
 
     // Get entity info
-    std::string entityName = scene->getEntityName(entity);
     std::string entityType = editor::ProjectUtils::getEntityTypeName(scene, entity);
 
     // Check if the entity has a C++ SUBCLASS script — use its class name as a more specific type
@@ -429,24 +440,7 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         }
     }
 
-    // Generate variable name: sanitize entity name to camelCase
-    std::string varName;
-    bool nextUpper = false;
-    for (char c : entityName) {
-        if (std::isalnum(static_cast<unsigned char>(c))) {
-            if (varName.empty()) {
-                varName += (char)std::tolower(static_cast<unsigned char>(c));
-            } else if (nextUpper) {
-                varName += (char)std::toupper(static_cast<unsigned char>(c));
-                nextUpper = false;
-            } else {
-                varName += c;
-            }
-        } else {
-            if (!varName.empty()) nextUpper = true;
-        }
-    }
-    if (varName.empty()) varName = "entity";
+    std::string varName = toCamelCase(scene->getEntityName(entity));
 
     // Determine header path: if currently viewing .cpp, derive .h path
     fs::path headerPath = instance.filepath;
@@ -490,18 +484,7 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         }
     }
 
-    // Generate display name from varName (camelCase -> "Camel Case")
-    std::string displayName;
-    for (size_t i = 0; i < varName.size(); i++) {
-        if (i == 0) {
-            displayName += (char)std::toupper(static_cast<unsigned char>(varName[i]));
-        } else if (std::isupper(static_cast<unsigned char>(varName[i]))) {
-            displayName += ' ';
-            displayName += varName[i];
-        } else {
-            displayName += varName[i];
-        }
-    }
+    std::string displayName = toDisplayName(varName);
 
     // Build the SPROPERTY + member declaration
     std::string typeDecl = isSubclassType ? entityType : ("doriax::" + entityType);
@@ -580,22 +563,16 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         // Must do #include first so it doesn't shift SPROPERTY position calculation
         int includeLineShift = 0;
         if (needsInclude && includeInsertPos != std::string::npos) {
-            int incLine = 0, incCol = 0;
-            for (size_t i = 0; i < includeInsertPos; i++) {
-                if (headerText[i] == '\n') { incLine++; incCol = 0; }
-                else { incCol++; }
-            }
+            int incLine, incCol;
+            offsetToLineCol(headerText, includeInsertPos, incLine, incCol);
             headerInstance->editor->SetCursorPosition(incLine, incCol);
             headerInstance->editor->InsertText(includeDirective + "\n", false);
             includeLineShift = 1; // One extra line added
         }
 
         // Now insert SPROPERTY at the adjusted position
-        int insertLine = 0, insertCol = 0;
-        for (size_t i = 0; i < insertPos; i++) {
-            if (headerText[i] == '\n') { insertLine++; insertCol = 0; }
-            else { insertCol++; }
-        }
+        int insertLine, insertCol;
+        offsetToLineCol(headerText, insertPos, insertLine, insertCol);
         // Shift if #include was inserted before this position
         if (needsInclude && includeInsertPos != std::string::npos && includeInsertPos <= insertPos) {
             insertLine += includeLineShift;
@@ -606,8 +583,6 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         // Update the properties dynamically parsing the current text, without overwriting the file
         headerInstance->isModified = true;
         headerInstance->propertyInsertUndoIndex = headerInstance->editor->GetUndoIndex();
-        std::string finalHeaderText = headerInstance->editor->GetText();
-        updateScriptProperties(*headerInstance, finalHeaderText);
     } else {
         // Header not open in editor — build full text and write to disk
         // Apply #include first (modifies headerText), then insert SPROPERTY
@@ -636,14 +611,9 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
 
     uint32_t storedSceneId = (entitySceneId != selectedScene->id) ? entitySceneId : 0;
 
-    std::string inMemoryContent = "";
-    if (headerInstance) {
-        inMemoryContent = headerInstance->editor->GetText();
-    } else {
-        // We already wrote it to disk, but we also can fallback to reading from disk because inMemoryContent is empty
-    }
+    std::string inMemoryContent = headerInstance ? headerInstance->editor->GetText() : "";
 
-    // First, trigger updateScriptProperties for all entities referencing this header
+    // Update script properties and link the dropped entity for all entities referencing this header
     for (auto& sceneProject : project->getScenes()) {
         if (!sceneProject.scene) continue;
 

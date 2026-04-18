@@ -51,6 +51,10 @@ namespace doriax::editor {
         void insertLuaEntityProperty(EditorInstance& instance, Entity entity, uint32_t entitySceneId);
         void insertCppEntityProperty(EditorInstance& instance, Entity entity, uint32_t entitySceneId);
 
+        static std::string toCamelCase(const std::string& name);
+        static std::string toDisplayName(const std::string& camelCase);
+        static void offsetToLineCol(const std::string& text, size_t offset, int& line, int& col);
+
     public:
         CodeEditor(Project* project);
         ~CodeEditor();
