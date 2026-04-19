@@ -222,13 +222,45 @@ def _extract_class_body(text, start):
     return ''
 
 
+def _simplify_param(param):
+    """Simplify a C++ parameter to 'Type name' form, stripping const/ref/ptr qualifiers."""
+    p = param.strip()
+    if not p:
+        return ''
+    # Remove 'const' prefix
+    p = re.sub(r'\bconst\s+', '', p)
+    # Remove trailing const
+    p = re.sub(r'\s+const$', '', p)
+    # Remove std:: prefix
+    p = re.sub(r'\bstd::', '', p)
+    # Remove reference/pointer from type: 'string&' -> 'string'
+    p = re.sub(r'\s*[&*]+\s*', ' ', p)
+    # Collapse whitespace
+    p = re.sub(r'\s+', ' ', p).strip()
+    return p
+
+
+def _simplify_params(params_str):
+    """Simplify a full parameter list string."""
+    if not params_str.strip():
+        return ''
+    params = params_str.split(',')
+    simplified = []
+    for p in params:
+        s = _simplify_param(p)
+        if s:
+            simplified.append(s)
+    return ', '.join(simplified)
+
+
 def parse_cpp_headers(base_dir):
-    """Parse C++ headers to extract public method declarations from classes."""
+    """Parse C++ headers to extract public method declarations with parameter info."""
+    # class_methods[class_name] = { method_name: [(params_str, return_type), ...] }
     class_methods = {}
-    method_pattern = re.compile(
+    sig_pattern = re.compile(
         r'(?:virtual\s+|inline\s+|static\s+)*'
-        r'[A-Za-z0-9_:<>&*\s]+\s+'
-        r'([A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:const)?\s*(?:override|final)?\s*[;{]'
+        r'([A-Za-z0-9_:<>&*\s]+)\s+'
+        r'([A-Za-z0-9_]+)\s*\(([^)]*)\)\s*(?:const)?\s*(?:override|final)?\s*[;{]'
     )
     class_start = re.compile(
         r'(?:class|struct)\s+(?:[A-Z0-9_]+\s+)?([A-Za-z0-9_]+)\s*(?::[^{]+)?\{'
@@ -269,12 +301,18 @@ def parse_cpp_headers(base_dir):
                 public_body = body[public_idx:end_idx]
 
                 if class_name not in class_methods:
-                    class_methods[class_name] = []
+                    class_methods[class_name] = {}
 
-                for m in method_pattern.finditer(public_body):
-                    method_name = m.group(1)
-                    if method_name != class_name and not method_name.startswith('~'):
-                        class_methods[class_name].append(method_name)
+                for m in sig_pattern.finditer(public_body):
+                    ret_type = m.group(1).strip()
+                    method_name = m.group(2)
+                    params_raw = m.group(3).strip()
+                    if method_name == class_name or method_name.startswith('~'):
+                        continue
+                    params = _simplify_params(params_raw)
+                    if method_name not in class_methods[class_name]:
+                        class_methods[class_name][method_name] = []
+                    class_methods[class_name][method_name].append(params)
 
     return class_methods
 
@@ -413,16 +451,35 @@ def main():
 
     cpp_methods = parse_cpp_headers(engine_core_dir)
 
-    # find all classes generated and append their C++ methods to all_symbols
+    # Build a lookup of all method param signatures: (class, method) -> params_str
+    cpp_signatures = {}  # (class_name, method_name) -> shortest params string
+    for cls, methods_dict in cpp_methods.items():
+        for method_name, overloads in methods_dict.items():
+            # Pick the shortest overload as primary detail (most common / simplest)
+            shortest = min(overloads, key=len) if overloads else ''
+            cpp_signatures[(cls, method_name)] = shortest
+
+    # Update existing LuaBridge method symbols with param info from C++ headers
+    for s in all_symbols:
+        if s.kind in ('Method', 'StaticMethod') and s.parent:
+            sig = cpp_signatures.get((s.parent, s.name))
+            if sig is not None:
+                sep = '.' if s.kind == 'StaticMethod' else ':'
+                s.detail = f'{s.parent}{sep}{s.name}({sig})'
+
+    # Find all classes from LuaBridge and append C++ methods not already present
     lua_classes = {s.name for s in all_symbols if s.kind == 'Class'}
+    existing_methods = {(s.name, s.parent) for s in all_symbols if s.kind == 'Method'}
     cpp_symbols = []
     for cls in lua_classes:
-        methods = cpp_methods.get(cls, [])
-        for m in methods:
-            cpp_symbols.append(APISymbol(
-                m, 'Method',
-                f'{cls}:{m}()', cls
-            ))
+        methods_dict = cpp_methods.get(cls, {})
+        for method_name, overloads in methods_dict.items():
+            if (method_name, cls) not in existing_methods:
+                shortest = min(overloads, key=len) if overloads else ''
+                cpp_symbols.append(APISymbol(
+                    method_name, 'Method',
+                    f'{cls}:{method_name}({shortest})', cls
+                ))
     all_symbols.extend(cpp_symbols)
 
     generate_header(all_symbols, output_path)

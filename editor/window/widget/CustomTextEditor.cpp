@@ -44,6 +44,9 @@ CustomTextEditor::CustomTextEditor()
     , autoCompleteIndex(0)
     , suggestionIndex(0)
     , suggestionsHovered(false)
+    , showParamHint(false)
+    , paramHintActiveParam(0)
+    , paramHintOverloadIndex(0)
     , showTooltipFlag(false)
     , currentSearchResult(-1)
     , showFindDialog(false)
@@ -756,6 +759,9 @@ void CustomTextEditor::InsertText(const std::string& text, bool allowAutoIndent)
         for (size_t j = idx + 1; j < order.size(); ++j) {
             adjustCursorAfterInsert(cursors[order[j]], insertPos, afterPos);
         }
+        if (showParamHint) {
+            paramHintAnchor = adjustPosAfterInsert(paramHintAnchor, insertPos, afterPos);
+        }
     }
 
     mergeCursors();
@@ -899,6 +905,9 @@ void CustomTextEditor::Backspace() {
             for (size_t j = idx + 1; j < order.size(); ++j) {
                 adjustCursorAfterDelete(cursors[order[j]], delStart, delEnd);
             }
+            if (showParamHint && cursor.selection.isEmpty()) {
+                paramHintAnchor = adjustPosAfterDelete(paramHintAnchor, delStart, delEnd);
+            }
         }
     }
 
@@ -957,6 +966,9 @@ void CustomTextEditor::Delete() {
             for (size_t j = idx + 1; j < order.size(); ++j) {
                 adjustCursorAfterDelete(cursors[order[j]], delStart, delEnd);
             }
+            if (showParamHint && cursor.selection.isEmpty()) {
+                paramHintAnchor = adjustPosAfterDelete(paramHintAnchor, delStart, delEnd);
+            }
         }
     }
 
@@ -992,6 +1004,9 @@ void CustomTextEditor::deleteRange(const TextPosition& start, const TextPosition
         lines.erase(lines.begin() + minPos.line + 1, lines.begin() + maxPos.line + 1);
     }
 
+    if (showParamHint) {
+        paramHintAnchor = adjustPosAfterDelete(paramHintAnchor, minPos, maxPos);
+    }
 }
 
 std::string CustomTextEditor::getRange(const TextPosition& start, const TextPosition& end) const {
@@ -1024,6 +1039,8 @@ std::string CustomTextEditor::getRange(const TextPosition& start, const TextPosi
 void CustomTextEditor::Undo(int steps) {
     if (!CanUndo()) return;
 
+    if (showParamHint) closeParamHint();
+
     for (int i = 0; i < steps && undoIndex > 0; ++i) {
         --undoIndex;
         if (undoIndex < static_cast<int>(undoBuffer.size())) {
@@ -1055,6 +1072,8 @@ void CustomTextEditor::Undo(int steps) {
 
 void CustomTextEditor::Redo(int steps) {
     if (!CanRedo()) return;
+
+    if (showParamHint) closeParamHint();
 
     for (int i = 0; i < steps && undoIndex < static_cast<int>(undoBuffer.size()); ++i) {
         if (!undoBuffer[undoIndex].afterText.empty()) {
@@ -1950,6 +1969,358 @@ void CustomTextEditor::CloseAutoComplete() {
     autoCompleteItems.clear();
 }
 
+void CustomTextEditor::triggerParamHint() {
+    if (!suggestions || cursors.empty()) return;
+
+    const TextPosition& pos = cursors[primaryCursor].position;
+    if (pos.line < 0 || pos.line >= static_cast<int>(lines.size())) return;
+
+    const std::string& line = lines[pos.line];
+
+    // Find the matching '(' by scanning backwards from cursor, handling nesting
+    int parenDepth = 0;
+    int openParenCol = -1;
+    int searchLine = pos.line;
+    int searchCol = pos.column - 1;
+
+    while (searchLine >= 0) {
+        const std::string& sLine = lines[searchLine];
+        for (int c = searchCol; c >= 0; --c) {
+            char ch = sLine[c];
+            if (ch == ')') parenDepth++;
+            else if (ch == '(') {
+                if (parenDepth == 0) {
+                    openParenCol = c;
+                    break;
+                }
+                parenDepth--;
+            }
+        }
+        if (openParenCol >= 0) break;
+        searchLine--;
+        if (searchLine >= 0) searchCol = static_cast<int>(lines[searchLine].size()) - 1;
+    }
+
+    if (openParenCol < 0 || searchLine < 0) {
+        closeParamHint();
+        return;
+    }
+
+    // Extract function name before the '('
+    const std::string& funcLine = lines[searchLine];
+    int nameEnd = openParenCol;
+    // Skip whitespace before '('
+    while (nameEnd > 0 && std::isspace(funcLine[nameEnd - 1])) nameEnd--;
+    int nameStart = nameEnd;
+    while (nameStart > 0 && (std::isalnum(funcLine[nameStart - 1]) || funcLine[nameStart - 1] == '_')) nameStart--;
+    std::string funcName = funcLine.substr(nameStart, nameEnd - nameStart);
+
+    if (funcName.empty()) {
+        closeParamHint();
+        return;
+    }
+
+    // Try to find the parent type (check for . or : or -> before funcName)
+    std::string parentType;
+    int beforeFunc = nameStart - 1;
+    // Skip whitespace
+    while (beforeFunc >= 0 && std::isspace(funcLine[beforeFunc])) beforeFunc--;
+    if (beforeFunc >= 0) {
+        char accessor = funcLine[beforeFunc];
+        if (accessor == '.' || accessor == ':') {
+            int varEnd = beforeFunc;
+            if (accessor == ':' && beforeFunc > 0 && funcLine[beforeFunc - 1] == ':') {
+                // :: static call - the thing before is the type itself
+                varEnd = beforeFunc - 2;
+                while (varEnd >= 0 && std::isspace(funcLine[varEnd])) varEnd--;
+                int varStart = varEnd + 1;
+                while (varStart > 0 && (std::isalnum(funcLine[varStart - 1]) || funcLine[varStart - 1] == '_')) varStart--;
+                parentType = funcLine.substr(varStart, varEnd - varStart + 1);
+            } else {
+                // . or single : (Lua method call)
+                varEnd = beforeFunc - 1;
+                while (varEnd >= 0 && std::isspace(funcLine[varEnd])) varEnd--;
+                int varStart = varEnd + 1;
+                while (varStart > 0 && (std::isalnum(funcLine[varStart - 1]) || funcLine[varStart - 1] == '_')) varStart--;
+                std::string varName = funcLine.substr(varStart, varEnd - varStart + 1);
+                parentType = inferTypeOfVariable(varName, searchLine);
+                if (parentType.empty() && suggestions) {
+                    parentType = suggestions->FindSymbolType(varName);
+                }
+                // Strip namespace
+                size_t lastColon = parentType.rfind(':');
+                if (lastColon != std::string::npos) {
+                    parentType = parentType.substr(lastColon + 1);
+                }
+            }
+        } else if (accessor == '>' && beforeFunc > 0 && funcLine[beforeFunc - 1] == '-') {
+            // -> operator
+            int varEnd = beforeFunc - 2;
+            while (varEnd >= 0 && std::isspace(funcLine[varEnd])) varEnd--;
+            int varStart = varEnd + 1;
+            while (varStart > 0 && (std::isalnum(funcLine[varStart - 1]) || funcLine[varStart - 1] == '_')) varStart--;
+            std::string varName = funcLine.substr(varStart, varEnd - varStart + 1);
+            parentType = inferTypeOfVariable(varName, searchLine);
+            if (parentType.empty() && suggestions) {
+                parentType = suggestions->FindSymbolType(varName);
+            }
+            size_t lastColon = parentType.rfind(':');
+            if (lastColon != std::string::npos) {
+                parentType = parentType.substr(lastColon + 1);
+            }
+        }
+    }
+
+    auto signatures = suggestions->FindSignatures(funcName, parentType);
+    if (signatures.empty()) {
+        closeParamHint();
+        return;
+    }
+
+    paramHintFuncName = funcName;
+    paramHintSignatures = signatures;
+    paramHintOverloadIndex = 0;
+    paramHintAnchor = TextPosition(searchLine, openParenCol);
+    showParamHint = true;
+
+    updateParamHint();
+}
+
+void CustomTextEditor::updateParamHint() {
+    if (!showParamHint || cursors.empty()) return;
+
+    const TextPosition& pos = cursors[primaryCursor].position;
+
+    // Validate anchor: the '(' must still exist at the anchor position
+    if (paramHintAnchor.line < 0 || paramHintAnchor.line >= static_cast<int>(lines.size())) {
+        closeParamHint();
+        return;
+    }
+    const std::string& anchorLine = lines[paramHintAnchor.line];
+    if (paramHintAnchor.column < 0 || paramHintAnchor.column >= static_cast<int>(anchorLine.size()) || anchorLine[paramHintAnchor.column] != '(') {
+        closeParamHint();
+        return;
+    }
+
+    // Verify the function name before the anchor is still the same
+    int nameEnd = paramHintAnchor.column;
+    while (nameEnd > 0 && std::isspace(anchorLine[nameEnd - 1])) nameEnd--;
+    int nameStart = nameEnd;
+    while (nameStart > 0 && (std::isalnum(anchorLine[nameStart - 1]) || anchorLine[nameStart - 1] == '_')) nameStart--;
+    std::string currentFuncName = anchorLine.substr(nameStart, nameEnd - nameStart);
+
+    if (currentFuncName != paramHintFuncName) {
+        closeParamHint();
+        return;
+    }
+
+    // Cursor must be after the '(' anchor
+    if (pos < paramHintAnchor || (pos.line == paramHintAnchor.line && pos.column <= paramHintAnchor.column)) {
+        closeParamHint();
+        return;
+    }
+
+    // Count commas between paramHintAnchor '(' and cursor, respecting nesting
+    int commaCount = 0;
+    int parenDepth = 0;
+    int startLine = paramHintAnchor.line;
+    int startCol = paramHintAnchor.column + 1; // after '('
+    bool inString = false;
+    char stringQuote = '\0';
+
+    for (int ln = startLine; ln <= pos.line && ln < static_cast<int>(lines.size()); ++ln) {
+        const std::string& line = lines[ln];
+        int colStart = (ln == startLine) ? startCol : 0;
+        int colEnd = (ln == pos.line) ? pos.column : static_cast<int>(line.size());
+        for (int c = colStart; c < colEnd && c < static_cast<int>(line.size()); ++c) {
+            char ch = line[c];
+
+            // Handle string literals
+            if (inString) {
+                if (ch == stringQuote) {
+                    // Check if it's escaped (simple check, doesn't handle \\" correctly but usually fine for args)
+                    if (c == 0 || line[c - 1] != '\\') {
+                        inString = false;
+                    }
+                }
+                continue;
+            } else if (ch == '"' || ch == '\'') {
+                inString = true;
+                stringQuote = ch;
+                continue;
+            }
+
+            if (ch == '(' || ch == '[' || ch == '{') parenDepth++;
+            else if (ch == ')' || ch == ']' || ch == '}') {
+                if (parenDepth > 0) parenDepth--;
+                else {
+                    closeParamHint();
+                    return;
+                }
+            }
+            else if (ch == ',' && parenDepth == 0) commaCount++;
+        }
+    }
+
+    paramHintActiveParam = commaCount;
+}
+
+void CustomTextEditor::closeParamHint() {
+    showParamHint = false;
+    paramHintSignatures.clear();
+    paramHintFuncName.clear();
+    paramHintActiveParam = 0;
+    paramHintOverloadIndex = 0;
+}
+
+void CustomTextEditor::renderParamHint(const ImVec2& origin) {
+    if (!showParamHint || paramHintSignatures.empty()) return;
+
+    // Bounds-check overload index
+    if (paramHintOverloadIndex >= static_cast<int>(paramHintSignatures.size())) {
+        paramHintOverloadIndex = 0;
+    }
+
+    const std::string& sig = paramHintSignatures[paramHintOverloadIndex];
+
+    // Extract params from "ClassName:funcName(Type1 param1, Type2 param2)"
+    size_t openParen = sig.find('(');
+    size_t closeParen = sig.rfind(')');
+    if (openParen == std::string::npos || closeParen == std::string::npos || closeParen <= openParen) return;
+
+    std::string funcPrefix = sig.substr(0, openParen + 1); // "ClassName:funcName("
+    std::string paramStr = sig.substr(openParen + 1, closeParen - openParen - 1);
+
+    // Split params by comma, respecting nested angle brackets
+    std::vector<std::string> params;
+    int depth = 0;
+    std::string current;
+    for (char ch : paramStr) {
+        if (ch == '<') depth++;
+        else if (ch == '>') depth--;
+        else if (ch == ',' && depth == 0) {
+            params.push_back(current);
+            current.clear();
+            continue;
+        }
+        current += ch;
+    }
+    if (!current.empty() || !paramStr.empty()) {
+        params.push_back(current);
+    }
+
+    // Trim leading/trailing whitespace from each param
+    for (auto& p : params) {
+        size_t start = p.find_first_not_of(' ');
+        size_t end = p.find_last_not_of(' ');
+        if (start != std::string::npos) p = p.substr(start, end - start + 1);
+    }
+
+    // Position above the '(' anchor
+    ImVec2 screenPos = textToScreen(paramHintAnchor, origin);
+    screenPos.y -= lineHeight + 4.0f;
+
+    // Calculate size
+    ImFont* font = ImGui::GetFont();
+    float fontSize = ImGui::GetFontSize();
+
+    // Build text measurement
+    std::string fullText = funcPrefix;
+    for (size_t i = 0; i < params.size(); i++) {
+        if (i > 0) fullText += ", ";
+        fullText += params[i];
+    }
+    fullText += ")";
+
+    // Overload indicator
+    std::string overloadText;
+    if (paramHintSignatures.size() > 1) {
+        overloadText = std::to_string(paramHintOverloadIndex + 1) + "/" + std::to_string(paramHintSignatures.size());
+    }
+
+    float textWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0, fullText.c_str()).x;
+    float overloadWidth = overloadText.empty() ? 0 : font->CalcTextSizeA(fontSize, FLT_MAX, 0, overloadText.c_str()).x + 16.0f;
+    float padding = 8.0f;
+    float popupWidth = textWidth + overloadWidth + padding * 2;
+    float popupHeight = lineHeight + padding;
+
+    // Ensure popup doesn't go off-screen
+    ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    if (screenPos.x + popupWidth > displaySize.x) {
+        screenPos.x = displaySize.x - popupWidth - 10;
+    }
+    if (screenPos.x < 0) screenPos.x = 10;
+    if (screenPos.y < 0) {
+        screenPos.y = textToScreen(paramHintAnchor, origin).y + lineHeight + 2.0f;
+    }
+
+    ImGui::SetNextWindowPos(screenPos);
+    ImGui::SetNextWindowSize(ImVec2(popupWidth, popupHeight));
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoScrollbar |
+                             ImGuiWindowFlags_AlwaysAutoResize;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding, padding * 0.5f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.3f, 0.3f, 0.8f));
+
+    if (ImGui::Begin("##ParamHint", nullptr, flags)) {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImVec2 textPos = ImGui::GetCursorScreenPos();
+
+        ImU32 normalColor = ImGui::ColorConvertFloat4ToU32(ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+        ImU32 activeColor = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        ImU32 activeUnderline = ImGui::ColorConvertFloat4ToU32(ImVec4(0.35f, 0.65f, 0.95f, 1.0f));
+
+        float x = textPos.x;
+
+        // Draw function prefix
+        drawList->AddText(font, fontSize, ImVec2(x, textPos.y), normalColor, funcPrefix.c_str());
+        x += font->CalcTextSizeA(fontSize, FLT_MAX, 0, funcPrefix.c_str()).x;
+
+        // Draw each parameter
+        for (size_t i = 0; i < params.size(); i++) {
+            if (i > 0) {
+                drawList->AddText(font, fontSize, ImVec2(x, textPos.y), normalColor, ", ");
+                x += font->CalcTextSizeA(fontSize, FLT_MAX, 0, ", ").x;
+            }
+
+            const std::string& param = params[i];
+            bool isActive = (static_cast<int>(i) == paramHintActiveParam);
+            ImU32 color = isActive ? activeColor : normalColor;
+
+            drawList->AddText(font, fontSize, ImVec2(x, textPos.y), color, param.c_str());
+            float paramWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0, param.c_str()).x;
+
+            if (isActive) {
+                // Draw underline for active param
+                float underlineY = textPos.y + fontSize + 1.0f;
+                drawList->AddLine(ImVec2(x, underlineY), ImVec2(x + paramWidth, underlineY), activeUnderline, 2.0f);
+            }
+
+            x += paramWidth;
+        }
+
+        // Draw closing paren
+        drawList->AddText(font, fontSize, ImVec2(x, textPos.y), normalColor, ")");
+        x += font->CalcTextSizeA(fontSize, FLT_MAX, 0, ")").x;
+
+        // Draw overload indicator
+        if (!overloadText.empty()) {
+            x += 12.0f;
+            ImU32 dimColor = ImGui::ColorConvertFloat4ToU32(ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+            drawList->AddText(font, fontSize, ImVec2(x, textPos.y), dimColor, overloadText.c_str());
+        }
+    }
+    ImGui::End();
+
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+}
+
 void CustomTextEditor::UpdateProjectSymbols(const std::vector<ProjectSymbol>& symbols) {
     if (!suggestions) return;
 
@@ -2193,6 +2564,25 @@ void CustomTextEditor::handleKeyboardInput() {
             suggestionIndex = std::min(static_cast<int>(currentSuggestions.size()) - 1, suggestionIndex + 5);
             scrollToSuggestion = true;
             return;
+        }
+    }
+
+    // Handle param hint Escape and overload cycling
+    if (showParamHint && !showAutoComplete) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            closeParamHint();
+            return;
+        }
+        // Ctrl+Up/Down to cycle overloads when multiple exist
+        if (paramHintSignatures.size() > 1 && ctrl) {
+            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
+                paramHintOverloadIndex = (paramHintOverloadIndex + static_cast<int>(paramHintSignatures.size()) - 1) % static_cast<int>(paramHintSignatures.size());
+                return;
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
+                paramHintOverloadIndex = (paramHintOverloadIndex + 1) % static_cast<int>(paramHintSignatures.size());
+                return;
+            }
         }
     }
 
@@ -2594,6 +2984,7 @@ void CustomTextEditor::handleKeyboardInput() {
                                     for (auto& c : cursors) {
                                         adjustCursorAfterDelete(c, delStart, delEnd);
                                     }
+                                    if (showParamHint) paramHintAnchor = adjustPosAfterDelete(paramHintAnchor, delStart, delEnd);
                                     changed = true;
                                 }
                             }
@@ -2605,6 +2996,7 @@ void CustomTextEditor::handleKeyboardInput() {
                             for (auto& c : cursors) {
                                 adjustCursorAfterInsert(c, insStart, insEnd);
                             }
+                            if (showParamHint) paramHintAnchor = adjustPosAfterInsert(paramHintAnchor, insStart, insEnd);
                             changed = true;
                         }
                     }
@@ -2623,6 +3015,11 @@ void CustomTextEditor::handleKeyboardInput() {
     // Trigger auto-complete with Ctrl+Space
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Space)) {
         TriggerAutoComplete();
+    }
+
+    // Update param hint after any cursor movement
+    if (showParamHint) {
+        updateParamHint();
     }
 }
 
@@ -2792,6 +3189,11 @@ void CustomTextEditor::handleMouseInput() {
     }
 
     // Mouse wheel scrolling is handled by ImGui automatically
+
+    // Update param hint after mouse clicks may move cursor
+    if (showParamHint && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        updateParamHint();
+    }
 }
 
 void CustomTextEditor::handleTextInput() {
@@ -2827,6 +3229,11 @@ void CustomTextEditor::handleTextInput() {
                     }
                     mergeCursors();
                     handled = true;
+
+                    // Update param hint after ')' overtype
+                    if (ch == ')' && showParamHint) {
+                        updateParamHint();
+                    }
                 }
             }
 
@@ -2858,6 +3265,14 @@ void CustomTextEditor::handleTextInput() {
                     for (size_t j = 0; j < cursors.size() && j < positions.size(); ++j) {
                         cursors[j] = positions[j];
                     }
+
+                    // Trigger parameter hints after '('
+                    if (c == '(') {
+                        triggerParamHint();
+                    }
+                } else if (showParamHint) {
+                    // Update param hint when typing inside a function call
+                    updateParamHint();
                 }
 
                 // Update auto-complete
@@ -3181,6 +3596,7 @@ void CustomTextEditor::renderSuggestions(const ImVec2& origin) {
 
 void CustomTextEditor::renderAutoComplete(const ImVec2& origin) {
     renderSuggestions(origin);
+    renderParamHint(origin);
 }
 
 void CustomTextEditor::renderTooltip() {

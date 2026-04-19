@@ -111,6 +111,22 @@ std::string SemanticSuggestions::FindSymbolType(const std::string& name) const {
     return "";
 }
 
+std::vector<std::string> SemanticSuggestions::FindSignatures(const std::string& functionName, const std::string& parentType) const {
+    std::vector<std::string> results;
+    for (const auto& symbol : symbols) {
+        if (symbol.label != functionName) continue;
+        if (symbol.kind != SuggestionKind::Method && symbol.kind != SuggestionKind::Function) continue;
+        // If parentType specified, match it (including ancestors)
+        if (!parentType.empty() && !symbol.parentType.empty()) {
+            if (!isTypeOrAncestor(parentType, symbol.parentType)) continue;
+        }
+        if (!symbol.detail.empty()) {
+            results.push_back(symbol.detail);
+        }
+    }
+    return results;
+}
+
 std::vector<SuggestionItem> SemanticSuggestions::GetSuggestions(const SuggestionContext& context) {
     std::vector<SuggestionItem> results;
     

@@ -85,6 +85,10 @@ namespace doriax::editor {
         // Type lookup: find the declared type of a symbol by name (searches fields/properties/variables)
         std::string FindSymbolType(const std::string& name) const;
 
+        // Signature help: find parameter signatures for a function/method
+        // Returns list of detail strings like "Mesh:setColor(Vector4 color)"
+        std::vector<std::string> FindSignatures(const std::string& functionName, const std::string& parentType = "") const;
+
         // Core functionality
         std::vector<SuggestionItem> GetSuggestions(const SuggestionContext& context);
 

@@ -271,6 +271,14 @@ namespace doriax::editor {
         std::string autoCompleteFilter;
         bool suggestionsHovered;  // Track if suggestions popup is hovered
 
+        // Parameter hint state
+        bool showParamHint;
+        std::vector<std::string> paramHintSignatures;  // All overload signatures
+        int paramHintActiveParam;                       // Which param is active (0-based)
+        int paramHintOverloadIndex;                     // Which overload is shown
+        TextPosition paramHintAnchor;                   // Where the '(' is
+        std::string paramHintFuncName;                  // Name of the function that triggered it
+
         // Tooltip state
         bool showTooltipFlag;
         std::string tooltipText;
@@ -324,6 +332,10 @@ namespace doriax::editor {
         void updateSuggestions();
         void applySuggestion();
         void renderSuggestions(const ImVec2& origin);
+        void triggerParamHint();
+        void updateParamHint();
+        void closeParamHint();
+        void renderParamHint(const ImVec2& origin);
         SuggestionContext buildSuggestionContext() const;
         std::string inferTypeOfVariable(const std::string& varName, int currentLine) const;
         void tokenizeLine(int lineIndex);
