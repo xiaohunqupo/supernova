@@ -1097,6 +1097,7 @@ void editor::CodeEditor::openFile(const std::string& filepath) {
     }
 
     project->addTab(TabType::CODE_EDITOR, key);
+    project->saveProjectFile();
 
     Backend::getApp().addNewCodeWindowToDock(instance.filepath);
 
@@ -1111,6 +1112,7 @@ void editor::CodeEditor::closeFile(const std::string& filepath) {
         }
 
         project->removeTab(TabType::CODE_EDITOR, key);
+        project->saveProjectFile();
 
         editors.erase(it);
     }
@@ -1187,6 +1189,7 @@ bool editor::CodeEditor::handleFileRename(const fs::path& oldPath, const fs::pat
 
     project->removeTab(TabType::CODE_EDITOR, oldKey);
     project->addTab(TabType::CODE_EDITOR, newKey);
+    project->saveProjectFile();
 
     Backend::getApp().addNewCodeWindowToDock(fs::path(newKey));
 
@@ -1313,6 +1316,7 @@ void editor::CodeEditor::show() {
                             save(fit->second);
                             if (lastFocused == &fit->second) lastFocused = nullptr;
                             project->removeTab(TabType::CODE_EDITOR, fit->second.filepath.string());
+                            project->saveProjectFile();
                             editors.erase(fit);
                         }
                     },
@@ -1322,6 +1326,7 @@ void editor::CodeEditor::show() {
                             updateScriptProperties(fit->second);
                             if (lastFocused == &fit->second) lastFocused = nullptr;
                             project->removeTab(TabType::CODE_EDITOR, fit->second.filepath.string());
+                            project->saveProjectFile();
                             editors.erase(fit);
                         }
                     },
@@ -1336,6 +1341,7 @@ void editor::CodeEditor::show() {
                     lastFocused = nullptr;
                 }
                 project->removeTab(TabType::CODE_EDITOR, instance.filepath.string());
+                project->saveProjectFile();
                 it = editors.erase(it);
             }
         } else {

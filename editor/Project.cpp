@@ -1530,7 +1530,7 @@ void editor::Project::openSceneInternal(fs::path filepath, uint32_t sceneToClose
             closeScene(sceneToClose, true);
         }
         loadScene(filepath, true, false, true);
-        saveProject();
+        saveProjectFile();
         return;
     }
 
@@ -1543,7 +1543,7 @@ void editor::Project::openSceneInternal(fs::path filepath, uint32_t sceneToClose
                 closeScene(sceneToClose, true);
             }
             loadScene(filepath, true, true, true);
-            saveProject();
+            saveProjectFile();
         },
         []() {
             // Do nothing
@@ -1598,7 +1598,7 @@ void editor::Project::closeScene(uint32_t sceneId, bool systemClose) {
     }
 
     if (!systemClose){
-        saveProject();
+        saveProjectFile();
     }
 }
 
@@ -2145,6 +2145,31 @@ bool editor::Project::saveProject(bool userCalled, std::function<void()> callbac
     return saveret;
 }
 
+bool editor::Project::saveProjectFile() {
+    if (projectPath.empty()) {
+        return false;
+    }
+
+    try {
+        YAML::Node root = Stream::encodeProject(this);
+
+        std::filesystem::path projectFile = projectPath / "project.yaml";
+        std::ofstream fout(projectFile.string());
+        if (!fout) {
+            Out::error("Failed to open project file for writing: %s", projectFile.string().c_str());
+            return false;
+        }
+
+        fout << YAML::Dump(root);
+        fout.close();
+
+        return true;
+    } catch (const std::exception& e) {
+        Out::error("Failed to save project file: \"%s\"", e.what());
+        return false;
+    }
+}
+
 void editor::Project::clearTrash() {
     if (projectPath.empty())
         return;
@@ -2212,32 +2237,16 @@ bool editor::Project::saveProjectToPath(const std::filesystem::path& path) {
         }
     }
 
-    // Now save the project file
-    try {
-        YAML::Node root = Stream::encodeProject(this);
-
-        std::filesystem::path projectFile = path / "project.yaml";
-        std::ofstream fout(projectFile.string());
-        if (!fout) {
-            Out::error("Failed to open project file for writing: %s", projectFile.string().c_str());
-            return false;
-        }
-
-        fout << YAML::Dump(root);
-        fout.close();
-
-        // Update the app settings
-        if (!isTempProject()){
-            AppSettings::setLastProjectPath(path);
-        }
-        Backend::getApp().updateResourcesPath();
-
-        return true;
-    } catch (const std::exception& e) {
-        Out::error("Failed to save project: \"%s\"", e.what());
-        Backend::getApp().registerAlert("Error", "Failed to save project!");
+    if (!saveProjectFile()) {
         return false;
     }
+
+    if (!isTempProject()){
+        AppSettings::setLastProjectPath(path);
+    }
+    Backend::getApp().updateResourcesPath();
+
+    return true;
 }
 
 bool editor::Project::loadProject(const std::filesystem::path path) {

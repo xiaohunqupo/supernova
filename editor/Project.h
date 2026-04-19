@@ -263,6 +263,7 @@ namespace doriax::editor{
         void deleteSceneProject(SceneProject* sceneProject);
         void loadSceneProjectData(SceneProject* sceneProject, const YAML::Node& sceneNode);
         bool saveProject(bool userCalled = false, std::function<void()> callback = nullptr);
+        bool saveProjectFile();
         bool openProject();
 
         bool loadProject(const std::filesystem::path path);
