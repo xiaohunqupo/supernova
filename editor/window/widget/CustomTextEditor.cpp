@@ -1,5 +1,6 @@
 #include "CustomTextEditor.h"
 #include "SemanticSuggestions.h"
+#include "engine_api_suggestions.h"
 #include "external/IconsFontAwesome6.h"
 #include "util/UIUtils.h"
 #include "App.h"
@@ -10,6 +11,7 @@
 #include <numeric>
 #include <sstream>
 #include <cstring>
+#include <regex>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -118,10 +120,10 @@ void CustomTextEditor::initializeLanguage() {
                 "string", "vector", "map", "unordered_map", "set", "unordered_set",
                 "array", "list", "deque", "queue", "stack", "pair", "tuple",
                 "unique_ptr", "shared_ptr", "weak_ptr",
-                "function", "optional", "variant", "any",
-                "Entity", "Scene", "Transform", "Vector2", "Vector3", "Vector4",
-                "Matrix4", "Quaternion", "Color", "Rect"
+                "function", "optional", "variant", "any"
             };
+            // Add engine types from auto-generated header
+            for (const auto& t : getEngineTypeNames()) languageDef.types.insert(t);
             languageDef.singleLineComment = "//";
             languageDef.multiLineCommentStart = "/*";
             languageDef.multiLineCommentEnd = "*/";
@@ -138,6 +140,8 @@ void CustomTextEditor::initializeLanguage() {
                 "string", "number", "boolean", "table", "function", "thread",
                 "userdata"
             };
+            // Add engine types from auto-generated header
+            for (const auto& t : getEngineTypeNames()) languageDef.types.insert(t);
             languageDef.builtinFunctions = {
                 "assert", "collectgarbage", "dofile", "error", "getmetatable",
                 "ipairs", "load", "loadfile", "next", "pairs", "pcall", "print",
@@ -145,6 +149,9 @@ void CustomTextEditor::initializeLanguage() {
                 "setmetatable", "tonumber", "tostring", "type", "xpcall",
                 "coroutine", "debug", "io", "math", "os", "package", "string", "table", "utf8"
             };
+            // Add engine builtins (static classes + enums) from auto-generated header
+            for (const auto& b : getEngineBuiltinNames()) languageDef.builtinFunctions.insert(b);
+            for (const auto& e : getEngineEnumNames()) languageDef.builtinFunctions.insert(e);
             languageDef.singleLineComment = "--";
             languageDef.multiLineCommentStart = "--[[";
             languageDef.multiLineCommentEnd = "]]";
@@ -276,6 +283,48 @@ void CustomTextEditor::initializeSuggestions() {
         suggestions->AddSnippet("option", "option(${1:OPTION_NAME} \"${2:description}\" ${3:OFF})", "option definition");
         suggestions->AddSnippet("cmake_min", "cmake_minimum_required(VERSION ${1:3.16})", "cmake minimum version");
         suggestions->AddSnippet("project", "project(${1:name}\n\tVERSION ${2:1.0.0}\n\tLANGUAGES ${3:CXX}\n)", "project definition");
+    }
+
+    // Add engine API suggestions for Lua and C++
+    if (language == SyntaxLanguage::Lua || language == SyntaxLanguage::Cpp) {
+        addEngineAPISuggestions();
+    }
+}
+
+void CustomTextEditor::addEngineAPISuggestions() {
+    if (!suggestions) return;
+
+    static const auto& apiSymbols = getEngineAPISymbols();
+
+    static const std::unordered_map<std::string, SuggestionKind> kindMap = {
+        {"Class", SuggestionKind::Class},
+        {"Enum", SuggestionKind::Enum},
+        {"EnumMember", SuggestionKind::EnumMember},
+        {"Method", SuggestionKind::Method},
+        {"Function", SuggestionKind::Function},
+        {"Property", SuggestionKind::Property},
+        {"Constant", SuggestionKind::Constant},
+        {"Variable", SuggestionKind::Variable},
+    };
+
+    for (const auto& sym : apiSymbols) {
+        SuggestionKind sk = SuggestionKind::Variable;
+        auto it = kindMap.find(sym.kind);
+        if (it != kindMap.end()) sk = it->second;
+        suggestions->AddSymbol(sym.name, sk, sym.detail, sym.parent ? sym.parent : "");
+
+        // Build inheritance map from class detail strings like "class Mesh : Object"
+        if (sk == SuggestionKind::Class && sym.detail) {
+            std::string detail = sym.detail;
+            size_t colonPos = detail.find(" : ");
+            if (colonPos != std::string::npos) {
+                std::string className = sym.name;
+                std::string parentName = detail.substr(colonPos + 3);
+                // Trim any trailing whitespace
+                while (!parentName.empty() && parentName.back() == ' ') parentName.pop_back();
+                suggestions->SetClassParent(className, parentName);
+            }
+        }
     }
 }
 
@@ -1756,10 +1805,60 @@ char CustomTextEditor::findMatchingBracket(const TextPosition& pos, TextPosition
     return target;
 }
 
+std::string CustomTextEditor::inferTypeOfVariable(const std::string& varName, int currentLine) const {
+    if (varName.empty()) return "";
+
+    // C++ patterns:
+    // 1. Standard declaration: [const] Type [*&] varName
+    std::regex cppDeclRegex("(?:const\\s+)?([A-Za-z0-9_:]+)(?:<[^>]*>)?\\s*(?:[*&]+\\s*)?" + varName + "\\b");
+    // 2. auto varName = new Type(...)
+    std::regex cppNewRegex("\\bauto\\s*[*&]*\\s*" + varName + "\\s*=\\s*new\\s+([A-Za-z0-9_:]+)");
+    // 3. auto varName = Type(...)  or  auto varName = Type{...}
+    std::regex cppAutoCtorRegex("\\bauto\\s*[*&]*\\s*" + varName + "\\s*=\\s*([A-Z][A-Za-z0-9_:]*)\\s*[({]");
+
+    std::regex luaVarRegex("\\b" + varName + "\\s*=\\s*([A-Za-z0-9_\\.:]+)(?:\\(|\\{)");
+    std::regex luaLocalVarRegex("\\blocal\\s+" + varName + "\\s*=\\s*([A-Za-z0-9_\\.:]+)(?:\\(|\\{)");
+
+    // Search backwards from the current line
+    for (int i = currentLine; i >= 0; --i) {
+        if (i >= static_cast<int>(lines.size())) continue;
+        const std::string& line = lines[i];
+        std::smatch match;
+
+        if (language == SyntaxLanguage::Cpp) {
+            // Try auto = new Type first (most specific)
+            if (std::regex_search(line, match, cppNewRegex)) {
+                return match[1].str();
+            }
+            // Try auto = Type() / Type{}
+            if (std::regex_search(line, match, cppAutoCtorRegex)) {
+                return match[1].str();
+            }
+            // Try standard declaration
+            if (std::regex_search(line, match, cppDeclRegex)) {
+                std::string typeMatch = match[1].str();
+                if (typeMatch != "return" && typeMatch != "new" && typeMatch != "delete" && typeMatch != "auto") {
+                    return typeMatch;
+                }
+            }
+        } else if (language == SyntaxLanguage::Lua) {
+            if (std::regex_search(line, match, luaLocalVarRegex)) {
+                return match[1].str();
+            }
+            if (std::regex_search(line, match, luaVarRegex)) {
+                return match[1].str();
+            }
+        }
+    }
+    return "";
+}
+
 SuggestionContext CustomTextEditor::buildSuggestionContext() const {
     SuggestionContext ctx;
 
     if (cursors.empty()) return ctx;
+
+    ctx.isCpp = (language == SyntaxLanguage::Cpp);
 
     const TextPosition& pos = cursors[primaryCursor].position;
 
@@ -1784,22 +1883,52 @@ SuggestionContext CustomTextEditor::buildSuggestionContext() const {
                 ctx.afterDot = true;
             } else if (c == '>' && checkCol > 0 && ctx.lineContent[checkCol - 1] == '-') {
                 ctx.afterArrow = true;
+                checkCol--; // move past '-'
             } else if (c == ':' && checkCol > 0 && ctx.lineContent[checkCol - 1] == ':') {
                 ctx.afterDoubleColon = true;
+                checkCol--; // move past first ':'
+            } else if (c == ':') {
+                if (language == SyntaxLanguage::Lua) {
+                    ctx.afterColon = true;
+                }
             }
         }
     }
 
-    // Get previous word for context
-    if (wordStart.column > 1) {
-        TextPosition prevEnd(pos.line, wordStart.column - 1);
-        // Skip whitespace
-        while (prevEnd.column > 0 && std::isspace(ctx.lineContent[prevEnd.column - 1])) {
+    // Get previous word for context (e.g. before the dot)
+    if (checkCol > 0) {
+        TextPosition prevEnd(pos.line, checkCol - 1);
+        // Skip whitespace if any
+        while (prevEnd.column > 0 && std::isspace(ctx.lineContent[prevEnd.column])) {
             prevEnd.column--;
         }
-        if (prevEnd.column > 0) {
-            TextPosition prevStart = findWordStart(prevEnd);
-            ctx.previousWord = getRange(prevStart, prevEnd);
+        if (prevEnd.column >= 0 && (std::isalnum(ctx.lineContent[prevEnd.column]) || ctx.lineContent[prevEnd.column] == '_')) {
+            TextPosition prevStart = findWordStart(TextPosition(pos.line, prevEnd.column + 1));
+            // getRange uses end column generically as exclusive bound, so we use prevEnd.column+1
+            ctx.previousWord = getRange(prevStart, TextPosition(pos.line, prevEnd.column + 1));
+        }
+    }
+
+    // Infer the type of the previous word for semantic suggestions
+    if (ctx.afterDot || ctx.afterArrow || ctx.afterDoubleColon || ctx.afterColon) {
+        if (!ctx.previousWord.empty()) {
+            if (ctx.afterDoubleColon) {
+                // For ::, the previousWord IS the type name (e.g. Vector3::ZERO)
+                ctx.targetType = ctx.previousWord;
+            } else {
+                ctx.targetType = inferTypeOfVariable(ctx.previousWord, pos.line);
+                // Fallback: look up the variable in project symbols (e.g. header member variables)
+                if (ctx.targetType.empty() && suggestions) {
+                    ctx.targetType = suggestions->FindSymbolType(ctx.previousWord);
+                }
+            }
+            // Strip namespace prefix for matching engine API parent types (e.g. "doriax::Mesh" -> "Mesh")
+            if (!ctx.targetType.empty()) {
+                size_t lastColon = ctx.targetType.rfind(':');
+                if (lastColon != std::string::npos) {
+                    ctx.targetType = ctx.targetType.substr(lastColon + 1);
+                }
+            }
         }
     }
 
@@ -1819,6 +1948,23 @@ void CustomTextEditor::CloseAutoComplete() {
     showAutoComplete = false;
     currentSuggestions.clear();
     autoCompleteItems.clear();
+}
+
+void CustomTextEditor::UpdateProjectSymbols(const std::vector<ProjectSymbol>& symbols) {
+    if (!suggestions) return;
+
+    suggestions->ClearSymbols();
+    suggestions->ClearInheritance();
+
+    // Re-add engine API symbols
+    if (language == SyntaxLanguage::Lua || language == SyntaxLanguage::Cpp) {
+        addEngineAPISuggestions();
+    }
+
+    // Add pre-parsed project symbols
+    for (const auto& sym : symbols) {
+        suggestions->AddSymbol(sym.name, static_cast<SuggestionKind>(sym.kind), sym.detail, sym.parentType, sym.typeInfo);
+    }
 }
 
 void CustomTextEditor::updateSuggestions() {
@@ -2715,7 +2861,21 @@ void CustomTextEditor::handleTextInput() {
                 }
 
                 // Update auto-complete
-                if (autoComplete && std::isalnum(c)) {
+                bool shouldTrigger = false;
+                if (autoComplete) {
+                    if (std::isalnum(c) || c == '_' || c == '.' || c == ':') {
+                        shouldTrigger = true;
+                    } else if (c == '>' && language == SyntaxLanguage::Cpp) {
+                        // Trigger for '->' operator
+                        const auto& pos = cursors[primaryCursor].position;
+                        if (pos.column >= 2 && pos.line < static_cast<int>(lines.size())) {
+                            if (lines[pos.line][pos.column - 2] == '-') {
+                                shouldTrigger = true;
+                            }
+                        }
+                    }
+                }
+                if (shouldTrigger) {
                     TriggerAutoComplete();
                 } else if (showAutoComplete) {
                     // Close autocomplete when typing non-identifier characters
@@ -3172,6 +3332,12 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
     if (contentSize.y == 0) contentSize.y = ImGui::GetContentRegionAvail().y;
 
     if (ImGui::BeginChild(title, contentSize, border ? ImGuiChildFlags_Borders : ImGuiChildFlags_None, flags)) {
+        // Auto-focus editor child when parent window is focused but child is not
+        // (e.g., user clicked the window tab/title bar)
+        if (!ImGui::IsWindowFocused() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+            ImGui::SetWindowFocus();
+        }
+
         if (pendingFocus) {
             ImGui::SetWindowFocus();
             pendingFocus = false;

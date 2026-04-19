@@ -200,6 +200,17 @@ namespace doriax::editor {
         void CloseAutoComplete();
         bool IsAutoCompleteOpen() const { return showAutoComplete; }
 
+        struct ProjectSymbol {
+            std::string name;
+            int kind; // SuggestionKind cast to int
+            std::string detail;
+            std::string parentType; // Class/type this belongs to (if any)
+            std::string typeInfo;   // Declared type (for member variables, e.g. "Mesh" for "Mesh* box4")
+        };
+
+        // Project symbols (scanned from sibling files at runtime)
+        void UpdateProjectSymbols(const std::vector<ProjectSymbol>& symbols);
+
         // Tooltip
         void ShowTooltip(const std::string& text, const ImVec2& pos);
         void HideTooltip();
@@ -309,10 +320,12 @@ namespace doriax::editor {
         void initializeLanguage();
         void initializePalette();
         void initializeSuggestions();
+        void addEngineAPISuggestions();
         void updateSuggestions();
         void applySuggestion();
         void renderSuggestions(const ImVec2& origin);
         SuggestionContext buildSuggestionContext() const;
+        std::string inferTypeOfVariable(const std::string& varName, int currentLine) const;
         void tokenizeLine(int lineIndex);
         void tokenizeAll();
         TokenType classifyWord(const std::string& word) const;

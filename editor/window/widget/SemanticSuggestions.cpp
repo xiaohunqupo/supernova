@@ -62,11 +62,13 @@ void SemanticSuggestions::UpdateDocumentWords(const std::vector<std::string>& li
     }
 }
 
-void SemanticSuggestions::AddSymbol(const std::string& name, SuggestionKind kind, const std::string& detail) {
+void SemanticSuggestions::AddSymbol(const std::string& name, SuggestionKind kind, const std::string& detail, const std::string& parentType, const std::string& typeInfo) {
     SuggestionItem item;
     item.label = name;
     item.insertText = name;
     item.detail = detail;
+    item.parentType = parentType;
+    item.typeInfo = typeInfo;
     item.kind = kind;
     symbols.push_back(item);
 }
@@ -75,17 +77,38 @@ void SemanticSuggestions::ClearSymbols() {
     symbols.clear();
 }
 
-bool SemanticSuggestions::ShouldTrigger(char typedChar, const SuggestionContext& context) const {
-    // Trigger on alphanumeric characters
-    if (std::isalnum(static_cast<unsigned char>(typedChar))) {
-        return context.currentWord.length() >= static_cast<size_t>(minPrefixLength);
+void SemanticSuggestions::SetClassParent(const std::string& className, const std::string& parentClass) {
+    if (!className.empty() && !parentClass.empty()) {
+        classParentMap[className] = parentClass;
     }
-    
-    // Trigger on member access operators
-    if (typedChar == '.') return true;
-    if (context.afterArrow || context.afterDoubleColon) return true;
-    
+}
+
+void SemanticSuggestions::ClearInheritance() {
+    classParentMap.clear();
+}
+
+bool SemanticSuggestions::isTypeOrAncestor(const std::string& targetType, const std::string& symbolParent) const {
+    if (symbolParent == targetType) return true;
+    // Walk up the inheritance chain from targetType
+    std::string current = targetType;
+    int depth = 0;
+    while (depth < 20) { // prevent infinite loops
+        auto it = classParentMap.find(current);
+        if (it == classParentMap.end()) break;
+        current = it->second;
+        if (current == symbolParent) return true;
+        depth++;
+    }
     return false;
+}
+
+std::string SemanticSuggestions::FindSymbolType(const std::string& name) const {
+    for (const auto& symbol : symbols) {
+        if (symbol.label == name && !symbol.typeInfo.empty()) {
+            return symbol.typeInfo;
+        }
+    }
+    return "";
 }
 
 std::vector<SuggestionItem> SemanticSuggestions::GetSuggestions(const SuggestionContext& context) {
@@ -95,32 +118,61 @@ std::vector<SuggestionItem> SemanticSuggestions::GetSuggestions(const Suggestion
     
     // Don't suggest if query is too short (unless after special operators)
     if (query.length() < static_cast<size_t>(minPrefixLength) && 
-        !context.afterDot && !context.afterArrow && !context.afterDoubleColon) {
+        !context.afterDot && !context.afterArrow && !context.afterDoubleColon && !context.afterColon) {
         return results;
     }
     
-    // Add candidates from all sources
-    addCandidates(results, keywords, SuggestionKind::Keyword, query);
-    addCandidates(results, types, SuggestionKind::Type, query);
-    addCandidates(results, builtinFunctions, SuggestionKind::Function, query);
-    addCandidates(results, documentWords, SuggestionKind::Variable, query);
-    
-    // Add snippets
-    for (const auto& snippet : snippets) {
-        if (matchesQuery(snippet.label, query)) {
-            SuggestionItem item = snippet;
-            item.score = calculateMatchScore(snippet.label, query);
-            // Boost snippet score slightly
-            item.score += 5;
-            results.push_back(item);
+    // If we have a target type, we strictly filter for members of that type (and don't add keywords/globals)
+    bool isMemberAccess = (context.afterDot || context.afterArrow || context.afterDoubleColon || context.afterColon);
+    bool restrictToType = isMemberAccess && !context.targetType.empty();
+
+    if (!restrictToType) {
+        // Add candidates from all sources only if we are not restricting to a specific class type
+        if (!isMemberAccess) {
+            addCandidates(results, keywords, SuggestionKind::Keyword, query);
+            addCandidates(results, types, SuggestionKind::Type, query);
+            addCandidates(results, builtinFunctions, SuggestionKind::Function, query);
+            addCandidates(results, documentWords, SuggestionKind::Variable, query);
+
+            // Add snippets
+            for (const auto& snippet : snippets) {
+                if (matchesQuery(snippet.label, query)) {
+                    SuggestionItem item = snippet;
+                    item.score = calculateMatchScore(snippet.label, query);
+                    // Boost snippet score slightly
+                    item.score += 5;
+                    results.push_back(item);
+                }
+            }
         }
     }
     
-    // Add custom symbols
+    // Add custom symbols (this includes our engine API methods & properties)
     for (const auto& symbol : symbols) {
+        // In C++, skip Lua-only properties (e.g. "alpha", "color") — use getter/setter methods instead
+        if (context.isCpp && symbol.kind == SuggestionKind::Property && !symbol.parentType.empty()) {
+            continue;
+        }
+
+        if (restrictToType) {
+            // If restricting, only match symbols belonging to this type or its ancestors
+            if (!isTypeOrAncestor(context.targetType, symbol.parentType)) {
+                continue;
+            }
+        } else if (isMemberAccess) {
+            // Member access but unknown type — don't show random members from all classes
+            continue;
+        }
+
         if (matchesQuery(symbol.label, query)) {
             SuggestionItem item = symbol;
             item.score = calculateMatchScore(symbol.label, query);
+
+            // Boost exact parentType match (direct members over inherited)
+            if (restrictToType && symbol.parentType == context.targetType) {
+                item.score += 50; 
+            }
+
             results.push_back(item);
         }
     }
@@ -190,7 +242,7 @@ void SemanticSuggestions::addCandidates(std::vector<SuggestionItem>& results,
 }
 
 bool SemanticSuggestions::matchesQuery(const std::string& candidate, const std::string& query) const {
-    if (query.empty()) return true;
+    if (query.empty()) return true; // Show all candidates when no filter typed yet
     
     if (fuzzyMatching) {
         int score;

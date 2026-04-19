@@ -11,14 +11,21 @@
 #include <algorithm>
 #include <regex>
 #include <cctype>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <unordered_set>
 
 using namespace doriax;
 
-editor::CodeEditor::CodeEditor(Project* project) : isFileChangePopupOpen(false), windowFocused(false), lastFocused(nullptr) {
+editor::CodeEditor::CodeEditor(Project* project) : isFileChangePopupOpen(false), windowFocused(false), lastFocused(nullptr), isParsingSymbols(false), newSymbolsReady(false) {
     this->project = project;
 }
 
 editor::CodeEditor::~CodeEditor() {
+    if (symbolParseThread.joinable()) {
+        symbolParseThread.join();
+    }
 }
 
 fs::path editor::CodeEditor::resolveFilepath(const fs::path& relPath) const {
@@ -60,6 +67,287 @@ bool editor::CodeEditor::loadFileContent(EditorInstance& instance) {
         // Handle file access errors
     }
     return false;
+}
+
+void editor::CodeEditor::updateAllProjectSymbols() {
+    if (isParsingSymbols) return; // Already parsing
+
+    // We make a copy of everything we need to parse off-thread to avoid locking editors
+    std::vector<std::string> luaContents;
+    std::vector<std::string> cppContents;
+
+    for (const auto& [key, instance] : editors) {
+        if (!instance.editor) continue;
+        std::string content = instance.editor->GetText();
+        if (instance.languageType == SyntaxLanguage::Lua) {
+            luaContents.push_back(std::move(content));
+        } else if (instance.languageType == SyntaxLanguage::Cpp) {
+            cppContents.push_back(std::move(content));
+        }
+    }
+
+    std::vector<std::string> openFiles;
+    for (const auto& [key, _] : editors) {
+        openFiles.push_back(key);
+    }
+
+    fs::path projectPath = project->getProjectPath();
+
+    isParsingSymbols = true;
+    if (symbolParseThread.joinable()) {
+        symbolParseThread.join();
+    }
+
+    symbolParseThread = std::thread([this, projectPath, luaContents = std::move(luaContents), cppContents = std::move(cppContents), openFiles]() mutable {
+        if (!projectPath.empty() && fs::exists(projectPath)) {
+            std::error_code ec;
+            std::unordered_set<std::string> openSet(openFiles.begin(), openFiles.end());
+
+            for (auto& entry : fs::recursive_directory_iterator(projectPath, fs::directory_options::skip_permission_denied, ec)) {
+                if (!entry.is_regular_file()) continue;
+                std::string ext = entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                bool isLua = (ext == ".lua");
+                bool isCpp = (ext == ".cpp" || ext == ".cc" || ext == ".h" || ext == ".hpp");
+                if (!isLua && !isCpp) continue;
+
+                // Skip if already open
+                std::error_code relEc;
+                fs::path relPathFs = fs::relative(entry.path(), projectPath, relEc);
+                if (relEc || relPathFs.empty()) continue;
+                if (openSet.find(relPathFs.string()) != openSet.end()) continue;
+
+                std::ifstream file(entry.path());
+                if (!file.is_open()) continue;
+                std::stringstream buf;
+                buf << file.rdbuf();
+
+                if (isLua) {
+                    luaContents.push_back(buf.str());
+                } else {
+                    cppContents.push_back(buf.str());
+                }
+            }
+        }
+
+        std::vector<CustomTextEditor::ProjectSymbol> parsedLua;
+        std::vector<CustomTextEditor::ProjectSymbol> parsedCpp;
+        std::unordered_set<std::string> seenLua;
+        std::unordered_set<std::string> seenCpp;
+
+        // Parse Lua
+        for (const auto& content : luaContents) {
+            std::istringstream stream(content);
+            std::string line;
+            while (std::getline(stream, line)) {
+                // function name(
+                size_t pos = line.find("function ");
+                if (pos != std::string::npos) {
+                    size_t start = pos + 9;
+                    while (start < line.size() && (line[start] == ' ' || line[start] == '\t')) start++;
+                    size_t end = start;
+                    while (end < line.size() && (std::isalnum(line[end]) || line[end] == '_' || line[end] == '.' || line[end] == ':')) end++;
+                    if (end > start) {
+                        std::string fname = line.substr(start, end - start);
+                        if (fname != "(" && !fname.empty() && seenLua.insert(fname).second) {
+                            parsedLua.push_back({fname, 2, "project function", "", ""});
+                        }
+                    }
+                }
+                // local name = 
+                pos = line.find("local ");
+                if (pos != std::string::npos && line.find("function", pos) == std::string::npos) {
+                    size_t start = pos + 6;
+                    while (start < line.size() && (line[start] == ' ' || line[start] == '\t')) start++;
+                    size_t end = start;
+                    while (end < line.size() && (std::isalnum(line[end]) || line[end] == '_')) end++;
+                    if (end > start) {
+                        std::string vname = line.substr(start, end - start);
+                        if (seenLua.insert(vname).second) {
+                            parsedLua.push_back({vname, 3, "local variable", ""});
+                        }
+                    }
+                }
+            }
+        }
+
+        // Parse Cpp
+        for (const auto& content : cppContents) {
+            std::istringstream stream(content);
+            std::string line;
+            std::string currentClass;
+            int braceDepth = 0;
+            int classStartDepth = -1;
+            while (std::getline(stream, line)) {
+                // Track brace depth for class scope
+                for (char ch : line) {
+                    if (ch == '{') braceDepth++;
+                    else if (ch == '}') {
+                        braceDepth--;
+                        if (classStartDepth >= 0 && braceDepth <= classStartDepth) {
+                            currentClass.clear();
+                            classStartDepth = -1;
+                        }
+                    }
+                }
+
+                for (const char* keyword : {"class ", "struct "}) {
+                    size_t pos = line.find(keyword);
+                    if (pos != std::string::npos) {
+                        size_t start = pos + std::strlen(keyword);
+                        while (start < line.size() && line[start] == ' ') start++;
+                        size_t end = start;
+                        while (end < line.size() && (std::isalnum(line[end]) || line[end] == '_')) end++;
+                        if (end > start) {
+                            std::string name = line.substr(start, end - start);
+                            if (name != "{" && !name.empty() && seenCpp.insert(name).second) {
+                                parsedCpp.push_back({name, 5, "project type", "", ""});
+                            }
+                            // Track class scope if line contains '{'
+                            if (line.find('{') != std::string::npos) {
+                                currentClass = name;
+                                classStartDepth = braceDepth - 1;
+                            } else {
+                                currentClass = name;
+                                classStartDepth = braceDepth;
+                            }
+                        }
+                    }
+                }
+
+                // Parse member variables inside class bodies: [const] [namespace::]Type [*&] varName [= ...];
+                if (!currentClass.empty() && braceDepth > classStartDepth) {
+                    // Skip lines with ( which are function declarations, and skip access specifiers
+                    if (line.find('(') == std::string::npos && line.find("public") == std::string::npos &&
+                        line.find("private") == std::string::npos && line.find("protected") == std::string::npos &&
+                        line.find("friend") == std::string::npos && line.find("#") == std::string::npos &&
+                        line.find("SPROPERTY") == std::string::npos && line.find("REGISTER") == std::string::npos) {
+                        // Try to match: [const] Type [*&] varName [= ...];
+                        // Trim leading whitespace
+                        size_t ls = 0;
+                        while (ls < line.size() && (line[ls] == ' ' || line[ls] == '\t')) ls++;
+                        std::string trimmed = line.substr(ls);
+
+                        // Skip empty lines, closing braces, using/typedef
+                        if (!trimmed.empty() && trimmed[0] != '}' && trimmed[0] != '{' &&
+                            trimmed.find("using ") == std::string::npos &&
+                            trimmed.find("typedef ") == std::string::npos &&
+                            trimmed.find("//") != 0 && trimmed.find("virtual") == std::string::npos &&
+                            trimmed.find("static") == std::string::npos) {
+
+                            // Skip optional 'const'
+                            std::string work = trimmed;
+                            if (work.substr(0, 6) == "const ") work = work.substr(6);
+
+                            // Extract type name (possibly with namespace::)
+                            size_t ts = 0;
+                            while (ts < work.size() && (std::isalnum(work[ts]) || work[ts] == '_' || work[ts] == ':')) ts++;
+                            if (ts > 0 && ts < work.size()) {
+                                std::string typeName = work.substr(0, ts);
+                                // Skip if type starts with digit or is a keyword
+                                if (!typeName.empty() && (std::isalpha(typeName[0]) || typeName[0] == '_') &&
+                                    typeName != "return" && typeName != "void" && typeName != "bool" &&
+                                    typeName != "int" && typeName != "float" && typeName != "double" &&
+                                    typeName != "char" && typeName != "unsigned" && typeName != "signed") {
+
+                                    // Skip template args if present
+                                    size_t afterType = ts;
+                                    if (afterType < work.size() && work[afterType] == '<') {
+                                        int depth = 1;
+                                        afterType++;
+                                        while (afterType < work.size() && depth > 0) {
+                                            if (work[afterType] == '<') depth++;
+                                            else if (work[afterType] == '>') depth--;
+                                            afterType++;
+                                        }
+                                    }
+
+                                    // Skip * & and whitespace
+                                    while (afterType < work.size() && (work[afterType] == '*' || work[afterType] == '&' || work[afterType] == ' ')) afterType++;
+
+                                    // Extract variable name
+                                    size_t vs = afterType;
+                                    size_t ve = vs;
+                                    while (ve < work.size() && (std::isalnum(work[ve]) || work[ve] == '_')) ve++;
+                                    if (ve > vs) {
+                                        std::string varName = work.substr(vs, ve - vs);
+                                        // Check it ends with ; or = (a variable decl, not random text)
+                                        size_t rest = ve;
+                                        while (rest < work.size() && work[rest] == ' ') rest++;
+                                        if (rest < work.size() && (work[rest] == '=' || work[rest] == ';')) {
+                                            // Strip namespace from type for matching engine API parentTypes
+                                            std::string strippedType = typeName;
+                                            size_t lastColon = strippedType.rfind(':');
+                                            if (lastColon != std::string::npos) {
+                                                strippedType = strippedType.substr(lastColon + 1);
+                                            }
+
+                                            std::string dedupKey = currentClass + "::" + varName;
+                                            if (!varName.empty() && seenCpp.insert(dedupKey).second) {
+                                                parsedCpp.push_back({varName, 10, typeName, currentClass, strippedType}); // SuggestionKind::Field = 10
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Parse function names (word before '(')
+                size_t paren = line.find('(');
+                if (paren != std::string::npos && paren > 0) {
+                    size_t end = paren;
+                    while (end > 0 && line[end - 1] == ' ') end--;
+                    size_t start = end;
+                    while (start > 0 && (std::isalnum(line[start - 1]) || line[start - 1] == '_')) start--;
+                    if (end > start) {
+                        std::string fname = line.substr(start, end - start);
+                        // Reject names starting with a digit
+                        if (!fname.empty() && (std::isalpha(fname[0]) || fname[0] == '_') &&
+                            fname != "if" && fname != "for" &&
+                            fname != "while" && fname != "switch" && fname != "catch" &&
+                            fname != "return" && fname != "sizeof" && fname != "new" &&
+                            fname != "delete" && seenCpp.insert(fname).second) {
+                            parsedCpp.push_back({fname, 2, "project function", currentClass, ""});
+                        }
+                    }
+                }
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(parsedSymbolsMutex);
+            newLuaSymbols = std::move(parsedLua);
+            newCppSymbols = std::move(parsedCpp);
+            newSymbolsReady = true;
+        }
+        isParsingSymbols = false;
+    });
+}
+
+void editor::CodeEditor::applyParsedProjectSymbols() {
+    if (!newSymbolsReady) return;
+
+    std::vector<CustomTextEditor::ProjectSymbol> luaSyms;
+    std::vector<CustomTextEditor::ProjectSymbol> cppSyms;
+
+    {
+        std::lock_guard<std::mutex> lock(parsedSymbolsMutex);
+        luaSyms = newLuaSymbols;
+        cppSyms = newCppSymbols;
+        newSymbolsReady = false;
+    }
+
+    for (auto& [key, instance] : editors) {
+        if (!instance.editor) continue;
+        if (instance.languageType == SyntaxLanguage::Lua) {
+            instance.editor->UpdateProjectSymbols(luaSyms);
+        } else if (instance.languageType == SyntaxLanguage::Cpp) {
+            instance.editor->UpdateProjectSymbols(cppSyms);
+        }
+    }
 }
 
 void editor::CodeEditor::checkFileChanges(EditorInstance& instance) {
@@ -686,6 +974,8 @@ bool editor::CodeEditor::save(EditorInstance& instance) {
 
         updateScriptProperties(instance);
 
+        updateAllProjectSymbols();
+
         return true;
     } catch (const std::exception& e) {
         // Handle file save errors
@@ -809,6 +1099,8 @@ void editor::CodeEditor::openFile(const std::string& filepath) {
     project->addTab(TabType::CODE_EDITOR, key);
 
     Backend::getApp().addNewCodeWindowToDock(instance.filepath);
+
+    updateAllProjectSymbols();
 }
 
 void editor::CodeEditor::closeFile(const std::string& filepath) {
@@ -902,6 +1194,8 @@ bool editor::CodeEditor::handleFileRename(const fs::path& oldPath, const fs::pat
 }
 
 void editor::CodeEditor::show() {
+    applyParsedProjectSymbols();
+
     // Get current time
     double currentTime = ImGui::GetTime();
 

@@ -35,11 +35,10 @@ namespace doriax::editor {
         std::string insertText;      // Text to insert
         std::string detail;          // Additional info (e.g., type signature)
         std::string documentation;   // Full documentation
-        SuggestionKind kind;
-        int score;                   // Match score for ranking
-        bool deprecated;             // Strike-through if deprecated
-        
-        SuggestionItem() : kind(SuggestionKind::Text), score(0), deprecated(false) {}
+        std::string parentType;      // The class/type this belongs to (if any)
+        std::string typeInfo;        // Declared type (for variables/fields)
+        SuggestionKind kind;         // Target kind
+        int score = 0;               // Resulting score
     };
 
     struct SuggestionContext {
@@ -48,9 +47,12 @@ namespace doriax::editor {
         int cursorColumn;            // Cursor position in line
         int lineNumber;              // Current line number
         std::string previousWord;    // Word before current (for context)
-        bool afterDot;               // Is cursor after a '.' (member access)
-        bool afterArrow;             // Is cursor after '->' (pointer member access)
-        bool afterDoubleColon;       // Is cursor after '::' (scope resolution)
+        bool afterDot = false;               // Is cursor after a '.' (member access)
+        bool afterArrow = false;             // Is cursor after '->' (pointer member access)
+        bool afterDoubleColon = false;       // Is cursor after '::' (scope resolution)
+        bool afterColon = false;             // Is cursor after ':' (Lua method access)
+        std::string targetType;      // Inferred type for member completion filtering
+        bool isCpp = false;          // True if editing C++ (filters out Lua-only properties)
     };
 
     class SemanticSuggestions {
@@ -73,12 +75,18 @@ namespace doriax::editor {
 
         // Document context
         void UpdateDocumentWords(const std::vector<std::string>& lines);
-        void AddSymbol(const std::string& name, SuggestionKind kind, const std::string& detail = "");
+        void AddSymbol(const std::string& name, SuggestionKind kind, const std::string& detail = "", const std::string& parentType = "", const std::string& typeInfo = "");
         void ClearSymbols();
+
+        // Inheritance
+        void SetClassParent(const std::string& className, const std::string& parentClass);
+        void ClearInheritance();
+
+        // Type lookup: find the declared type of a symbol by name (searches fields/properties/variables)
+        std::string FindSymbolType(const std::string& name) const;
 
         // Core functionality
         std::vector<SuggestionItem> GetSuggestions(const SuggestionContext& context);
-        bool ShouldTrigger(char typedChar, const SuggestionContext& context) const;
 
         // UI helpers
         static const char* GetKindIcon(SuggestionKind kind);
@@ -99,6 +107,12 @@ namespace doriax::editor {
         std::unordered_set<std::string> documentWords;
         std::vector<SuggestionItem> snippets;
         std::vector<SuggestionItem> symbols;
+
+        // Inheritance map: className -> parentClassName
+        std::unordered_map<std::string, std::string> classParentMap;
+
+        // Check if targetType equals typeName or is a descendant of it
+        bool isTypeOrAncestor(const std::string& targetType, const std::string& symbolParent) const;
 
         // Matching
         int calculateMatchScore(const std::string& candidate, const std::string& query) const;

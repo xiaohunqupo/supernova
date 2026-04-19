@@ -41,6 +41,7 @@ set(EDITOR_DIR editor)
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(BACKEND_SOURCES)
 set(BACKEND_LIBS)
@@ -106,6 +107,24 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+# Generate engine API suggestions header from Lua bindings and C++ headers
+set(BINDING_DIR "${CMAKE_SOURCE_DIR}/engine/core/script/binding")
+set(ENGINE_CORE_DIR "${CMAKE_SOURCE_DIR}/engine/core")
+set(API_SUGGESTIONS_HEADER "${GENERATED_DIR}/engine_api_suggestions.h")
+set(GENERATE_API_SCRIPT "${CMAKE_SOURCE_DIR}/generate_api_suggestions.py")
+
+file(GLOB BINDING_FILES "${BINDING_DIR}/*.cpp")
+file(GLOB_RECURSE ENGINE_HEADERS "${ENGINE_CORE_DIR}/*.h")
+
+add_custom_command(
+    OUTPUT ${API_SUGGESTIONS_HEADER}
+    COMMAND ${Python3_EXECUTABLE} ${GENERATE_API_SCRIPT}
+            ${BINDING_DIR} ${API_SUGGESTIONS_HEADER} ${ENGINE_CORE_DIR}
+    DEPENDS ${GENERATE_API_SCRIPT} ${BINDING_FILES} ${ENGINE_HEADERS}
+    COMMENT "Generating engine_api_suggestions.h from Lua bindings and C++ headers"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 include_directories (${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories (${DORIAX_ROOT}/libs/sokol)
@@ -164,6 +183,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 add_custom_target(generate_shaders DEPENDS ${SHADERS_HEADER})
+add_custom_target(generate_api_suggestions DEPENDS ${API_SUGGESTIONS_HEADER})
 
 add_executable(
     doriax-editor
@@ -259,7 +279,7 @@ add_executable(
     ${BACKEND_SOURCES}
 )
 
-add_dependencies(doriax-editor generate_shaders)
+add_dependencies(doriax-editor generate_shaders generate_api_suggestions)
 
 # Include directories
 target_include_directories(doriax-editor PRIVATE

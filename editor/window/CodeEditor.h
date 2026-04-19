@@ -41,11 +41,23 @@ namespace doriax::editor {
         bool windowFocused;
         EditorInstance* lastFocused;
 
+        std::thread symbolParseThread;
+        std::atomic<bool> isParsingSymbols{false};
+        std::mutex parsedSymbolsMutex;
+        std::vector<CustomTextEditor::ProjectSymbol> newLuaSymbols;
+        std::vector<CustomTextEditor::ProjectSymbol> newCppSymbols;
+        std::atomic<bool> newSymbolsReady{false};
+
         void checkFileChanges(EditorInstance& instance);
         bool loadFileContent(EditorInstance& instance);
         void handleFileChangePopup();
         std::string getWindowTitle(const EditorInstance& instance) const;
         void updateScriptProperties(const EditorInstance& instance, const std::string& inMemoryContent = "");
+
+        // Background parsing for project symbols
+        void updateAllProjectSymbols();
+        void applyParsedProjectSymbols();
+
         fs::path resolveFilepath(const fs::path& relPath) const;
         std::string toRelativePath(const std::string& filepath) const;
         void insertLuaEntityProperty(EditorInstance& instance, Entity entity, uint32_t entitySceneId);
