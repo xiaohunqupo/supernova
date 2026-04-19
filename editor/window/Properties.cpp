@@ -7359,39 +7359,368 @@ void editor::Properties::drawTimedActionComponent(ComponentType cpType, ScenePro
 }
 
 void editor::Properties::drawPositionActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    Scene* scene = sceneProject->scene;
+
     beginTable(cpType, getLabelSize("Start position"));
-    propertyRow(RowPropertyType::Vector3, cpType, "startPosition", "Start position", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "endPosition", "End position", sceneProject, entities);
+
+    // We compute a width that offsets the button
+    float buttonSize = ImGui::GetFrameHeight();
+    float reservedWidth = -(buttonSize + ImGui::GetStyle().ItemSpacing.x);
+    RowSettings vectorSettings;
+    vectorSettings.secondColSize = reservedWidth;
+
+    // Start Position Row
+    propertyRow(RowPropertyType::Vector3, cpType, "startPosition", "Start position", sceneProject, entities, vectorSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+        Transform* targetTransform = (target != NULL_ENTITY) ? scene->findComponent<Transform>(target) : nullptr;
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!targetTransform);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_start_pos")) {
+            Vector3 pos = targetTransform->position;
+            auto* cmd = new PropertyCmd<Vector3>(project, sceneProject->id, entity, cpType, "startPosition", pos);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current position from target");
+        }
+    }
+
+    // End Position Row
+    propertyRow(RowPropertyType::Vector3, cpType, "endPosition", "End position", sceneProject, entities, vectorSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+        Transform* targetTransform = (target != NULL_ENTITY) ? scene->findComponent<Transform>(target) : nullptr;
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!targetTransform);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_end_pos")) {
+            Vector3 pos = targetTransform->position;
+            auto* cmd = new PropertyCmd<Vector3>(project, sceneProject->id, entity, cpType, "endPosition", pos);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current position from target");
+        }
+    }
+
     endTable();
 }
 
 void editor::Properties::drawRotationActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    Scene* scene = sceneProject->scene;
+
     beginTable(cpType, getLabelSize("Start rotation"));
-    propertyRow(RowPropertyType::Quat, cpType, "startRotation", "Start rotation", sceneProject, entities);
-    propertyRow(RowPropertyType::Quat, cpType, "endRotation", "End rotation", sceneProject, entities);
+
+    float buttonSize = ImGui::GetFrameHeight();
+    float reservedWidth = -(buttonSize + ImGui::GetStyle().ItemSpacing.x);
+    RowSettings quatSettings;
+    quatSettings.secondColSize = reservedWidth;
+
+    propertyRow(RowPropertyType::Quat, cpType, "startRotation", "Start rotation", sceneProject, entities, quatSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+        Transform* targetTransform = (target != NULL_ENTITY) ? scene->findComponent<Transform>(target) : nullptr;
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!targetTransform);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_start_rot")) {
+            Quaternion rot = targetTransform->rotation;
+            auto* cmd = new PropertyCmd<Quaternion>(project, sceneProject->id, entity, cpType, "startRotation", rot);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current rotation from target");
+        }
+    }
+
+    propertyRow(RowPropertyType::Quat, cpType, "endRotation", "End rotation", sceneProject, entities, quatSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+        Transform* targetTransform = (target != NULL_ENTITY) ? scene->findComponent<Transform>(target) : nullptr;
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!targetTransform);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_end_rot")) {
+            Quaternion rot = targetTransform->rotation;
+            auto* cmd = new PropertyCmd<Quaternion>(project, sceneProject->id, entity, cpType, "endRotation", rot);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current rotation from target");
+        }
+    }
+
     propertyRow(RowPropertyType::Bool, cpType, "shortestPath", "Shortest path", sceneProject, entities);
     endTable();
 }
 
 void editor::Properties::drawScaleActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    Scene* scene = sceneProject->scene;
+
     beginTable(cpType, getLabelSize("Start scale"));
-    propertyRow(RowPropertyType::Vector3, cpType, "startScale", "Start scale", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "endScale", "End scale", sceneProject, entities);
+
+    float buttonSize = ImGui::GetFrameHeight();
+    float reservedWidth = -(buttonSize + ImGui::GetStyle().ItemSpacing.x);
+    RowSettings vectorSettings;
+    vectorSettings.secondColSize = reservedWidth;
+
+    propertyRow(RowPropertyType::Vector3, cpType, "startScale", "Start scale", sceneProject, entities, vectorSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+        Transform* targetTransform = (target != NULL_ENTITY) ? scene->findComponent<Transform>(target) : nullptr;
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!targetTransform);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_start_scale")) {
+            Vector3 scl = targetTransform->scale;
+            auto* cmd = new PropertyCmd<Vector3>(project, sceneProject->id, entity, cpType, "startScale", scl);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current scale from target");
+        }
+    }
+
+    propertyRow(RowPropertyType::Vector3, cpType, "endScale", "End scale", sceneProject, entities, vectorSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+        Transform* targetTransform = (target != NULL_ENTITY) ? scene->findComponent<Transform>(target) : nullptr;
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!targetTransform);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_end_scale")) {
+            Vector3 scl = targetTransform->scale;
+            auto* cmd = new PropertyCmd<Vector3>(project, sceneProject->id, entity, cpType, "endScale", scl);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current scale from target");
+        }
+    }
+
     endTable();
 }
 
 void editor::Properties::drawColorActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    Scene* scene = sceneProject->scene;
+
     beginTable(cpType, getLabelSize("Start color"));
-    propertyRow(RowPropertyType::Color3L, cpType, "startColor", "Start color", sceneProject, entities);
-    propertyRow(RowPropertyType::Color3L, cpType, "endColor", "End color", sceneProject, entities);
+
+    float buttonSize = ImGui::GetFrameHeight();
+    float reservedWidth = -(buttonSize + ImGui::GetStyle().ItemSpacing.x);
+    RowSettings colorSettings;
+    colorSettings.secondColSize = reservedWidth;
+
+    propertyRow(RowPropertyType::Color3L, cpType, "startColor", "Start color", sceneProject, entities, colorSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+
+        Vector3 targetColor;
+        bool hasColor = false;
+        if (target != NULL_ENTITY) {
+            UIComponent* ui = scene->findComponent<UIComponent>(target);
+            if (ui) { targetColor = Vector3(ui->color.x, ui->color.y, ui->color.z); hasColor = true; }
+            else {
+                MeshComponent* mesh = scene->findComponent<MeshComponent>(target);
+                if (mesh) { targetColor = Vector3(mesh->submeshes[0].material.baseColorFactor.x, mesh->submeshes[0].material.baseColorFactor.y, mesh->submeshes[0].material.baseColorFactor.z); hasColor = true; }
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!hasColor);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_start_color")) {
+            auto* cmd = new PropertyCmd<Vector3>(project, sceneProject->id, entity, cpType, "startColor", targetColor);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current color from target");
+        }
+    }
+
+    propertyRow(RowPropertyType::Color3L, cpType, "endColor", "End color", sceneProject, entities, colorSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+
+        Vector3 targetColor;
+        bool hasColor = false;
+        if (target != NULL_ENTITY) {
+            UIComponent* ui = scene->findComponent<UIComponent>(target);
+            if (ui) { targetColor = Vector3(ui->color.x, ui->color.y, ui->color.z); hasColor = true; }
+            else {
+                MeshComponent* mesh = scene->findComponent<MeshComponent>(target);
+                if (mesh) { targetColor = Vector3(mesh->submeshes[0].material.baseColorFactor.x, mesh->submeshes[0].material.baseColorFactor.y, mesh->submeshes[0].material.baseColorFactor.z); hasColor = true; }
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!hasColor);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_end_color")) {
+            auto* cmd = new PropertyCmd<Vector3>(project, sceneProject->id, entity, cpType, "endColor", targetColor);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current color from target");
+        }
+    }
+
     propertyRow(RowPropertyType::Bool, cpType, "useSRGB", "Use sRGB", sceneProject, entities);
     endTable();
 }
 
 void editor::Properties::drawAlphaActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    Scene* scene = sceneProject->scene;
+
     beginTable(cpType, getLabelSize("Start alpha"));
-    propertyRow(RowPropertyType::Float, cpType, "startAlpha", "Start alpha", sceneProject, entities);
-    propertyRow(RowPropertyType::Float, cpType, "endAlpha", "End alpha", sceneProject, entities);
+
+    float buttonSize = ImGui::GetFrameHeight();
+    float reservedWidth = -(buttonSize + ImGui::GetStyle().ItemSpacing.x);
+    RowSettings alphaSettings;
+    alphaSettings.secondColSize = reservedWidth;
+
+    propertyRow(RowPropertyType::Float, cpType, "startAlpha", "Start alpha", sceneProject, entities, alphaSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+
+        float targetAlpha = 1.0f;
+        bool hasAlpha = false;
+        if (target != NULL_ENTITY) {
+            UIComponent* ui = scene->findComponent<UIComponent>(target);
+            if (ui) { targetAlpha = ui->color.w; hasAlpha = true; }
+            else {
+                MeshComponent* mesh = scene->findComponent<MeshComponent>(target);
+                if (mesh) { targetAlpha = mesh->submeshes[0].material.baseColorFactor.w; hasAlpha = true; }
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!hasAlpha);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_start_alpha")) {
+            auto* cmd = new PropertyCmd<float>(project, sceneProject->id, entity, cpType, "startAlpha", targetAlpha);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current alpha from target");
+        }
+    }
+
+    propertyRow(RowPropertyType::Float, cpType, "endAlpha", "End alpha", sceneProject, entities, alphaSettings);
+
+    if (entities.size() == 1) {
+        Entity entity = entities[0];
+        ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+        Entity target = (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) ? actionComp->target : NULL_ENTITY;
+
+        float targetAlpha = 1.0f;
+        bool hasAlpha = false;
+        if (target != NULL_ENTITY) {
+            UIComponent* ui = scene->findComponent<UIComponent>(target);
+            if (ui) { targetAlpha = ui->color.w; hasAlpha = true; }
+            else {
+                MeshComponent* mesh = scene->findComponent<MeshComponent>(target);
+                if (mesh) { targetAlpha = mesh->submeshes[0].material.baseColorFactor.w; hasAlpha = true; }
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!hasAlpha);
+        ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_LOCATION_CROSSHAIRS);
+        float padX = std::max(0.0f, (buttonSize - iconSize.x) / 2.0f);
+        float padY = std::max(0.0f, (buttonSize - iconSize.y) / 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
+        if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS "##get_end_alpha")) {
+            auto* cmd = new PropertyCmd<float>(project, sceneProject->id, entity, cpType, "endAlpha", targetAlpha);
+            CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        }
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Get current alpha from target");
+        }
+    }
+
     endTable();
 }
 
