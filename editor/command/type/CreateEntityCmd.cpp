@@ -383,6 +383,12 @@ bool editor::CreateEntityCmd::execute(){
         scene->addComponent<MeshComponent>(entity, {});
         scene->addComponent<ModelComponent>(entity, {});
 
+    }else if (type == EntityCreationType::PARTICLES){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<ActionComponent>(entity, {});
+        scene->addComponent<ParticlesComponent>(entity, {});
+
     }
 
     scene->setEntityName(entity, entityName);

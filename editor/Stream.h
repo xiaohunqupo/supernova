@@ -274,5 +274,8 @@ namespace doriax::editor {
 
         static YAML::Node encodeMorphTracksComponent(const MorphTracksComponent& tracks);
         static MorphTracksComponent decodeMorphTracksComponent(const YAML::Node& node, const MorphTracksComponent* oldTracks = nullptr);
+
+        static YAML::Node encodeParticlesComponent(const ParticlesComponent& particles);
+        static ParticlesComponent decodeParticlesComponent(const YAML::Node& node, const ParticlesComponent* oldParticles = nullptr);
     };
 }

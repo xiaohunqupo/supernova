@@ -177,6 +177,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         ImGui::EndMenu();
     }
 
+    if (ImGui::MenuItem(ICON_FA_FIRE"  Particles")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Particles", EntityCreationType::PARTICLES, parent, addToBundle));
+        openParent = parent;
+    }
+
     if (ImGui::BeginMenu(ICON_FA_FILM"  Animation")){
         if (ImGui::MenuItem(ICON_FA_FILM"  Animation")){
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Animation", EntityCreationType::ANIMATION, parent, addToBundle));
@@ -296,6 +301,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_LINK;
     }else if (signature.test(scene->getComponentId<AnimationComponent>())){
         return ICON_FA_FILM;
+    }else if (signature.test(scene->getComponentId<ParticlesComponent>())){
+        return ICON_FA_FIRE;
     }else if (signature.test(scene->getComponentId<ActionComponent>())){
         return ICON_FA_PLAY;
     }else if (signature.test(scene->getComponentId<Transform>())){

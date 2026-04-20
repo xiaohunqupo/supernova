@@ -1564,6 +1564,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::RotateTracksComponent: return createRotateTracksComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ScaleTracksComponent: return createScaleTracksComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::MorphTracksComponent: return createMorphTracksComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::ParticlesComponent: return createParticlesComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         default: return "";
     }
 }
@@ -2001,4 +2002,96 @@ std::string editor::Factory::createBundle(const fs::path& bundlePath, EntityRegi
     out << "}\n";
 
     return out.str();
+}
+
+std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<ParticlesComponent>(entity)) return "";
+    ParticlesComponent& p = scene->getComponent<ParticlesComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "ParticlesComponent particles;\n";
+    code << ind << "particles.maxParticles = " << formatUInt(p.maxParticles) << ";\n";
+    code << ind << "particles.emitter = " << formatBool(p.emitter) << ";\n";
+    code << ind << "particles.loop = " << formatBool(p.loop) << ";\n";
+    code << ind << "particles.rate = " << formatInt(p.rate) << ";\n";
+    code << ind << "particles.maxPerUpdate = " << formatInt(p.maxPerUpdate) << ";\n";
+
+    code << ind << "particles.lifeInitializer.minLife = " << formatFloat(p.lifeInitializer.minLife) << ";\n";
+    code << ind << "particles.lifeInitializer.maxLife = " << formatFloat(p.lifeInitializer.maxLife) << ";\n";
+
+    code << ind << "particles.positionInitializer.minPosition = " << formatVector3(p.positionInitializer.minPosition) << ";\n";
+    code << ind << "particles.positionInitializer.maxPosition = " << formatVector3(p.positionInitializer.maxPosition) << ";\n";
+    code << ind << "particles.positionModifier.fromTime = " << formatFloat(p.positionModifier.fromTime) << ";\n";
+    code << ind << "particles.positionModifier.toTime = " << formatFloat(p.positionModifier.toTime) << ";\n";
+    code << ind << "particles.positionModifier.fromPosition = " << formatVector3(p.positionModifier.fromPosition) << ";\n";
+    code << ind << "particles.positionModifier.toPosition = " << formatVector3(p.positionModifier.toPosition) << ";\n";
+
+    code << ind << "particles.velocityInitializer.minVelocity = " << formatVector3(p.velocityInitializer.minVelocity) << ";\n";
+    code << ind << "particles.velocityInitializer.maxVelocity = " << formatVector3(p.velocityInitializer.maxVelocity) << ";\n";
+    code << ind << "particles.velocityModifier.fromTime = " << formatFloat(p.velocityModifier.fromTime) << ";\n";
+    code << ind << "particles.velocityModifier.toTime = " << formatFloat(p.velocityModifier.toTime) << ";\n";
+    code << ind << "particles.velocityModifier.fromVelocity = " << formatVector3(p.velocityModifier.fromVelocity) << ";\n";
+    code << ind << "particles.velocityModifier.toVelocity = " << formatVector3(p.velocityModifier.toVelocity) << ";\n";
+
+    code << ind << "particles.accelerationInitializer.minAcceleration = " << formatVector3(p.accelerationInitializer.minAcceleration) << ";\n";
+    code << ind << "particles.accelerationInitializer.maxAcceleration = " << formatVector3(p.accelerationInitializer.maxAcceleration) << ";\n";
+    code << ind << "particles.accelerationModifier.fromTime = " << formatFloat(p.accelerationModifier.fromTime) << ";\n";
+    code << ind << "particles.accelerationModifier.toTime = " << formatFloat(p.accelerationModifier.toTime) << ";\n";
+    code << ind << "particles.accelerationModifier.fromAcceleration = " << formatVector3(p.accelerationModifier.fromAcceleration) << ";\n";
+    code << ind << "particles.accelerationModifier.toAcceleration = " << formatVector3(p.accelerationModifier.toAcceleration) << ";\n";
+
+    code << ind << "particles.colorInitializer.minColor = " << formatVector3(p.colorInitializer.minColor) << ";\n";
+    code << ind << "particles.colorInitializer.maxColor = " << formatVector3(p.colorInitializer.maxColor) << ";\n";
+    code << ind << "particles.colorInitializer.useSRGB = " << formatBool(p.colorInitializer.useSRGB) << ";\n";
+    code << ind << "particles.colorModifier.fromTime = " << formatFloat(p.colorModifier.fromTime) << ";\n";
+    code << ind << "particles.colorModifier.toTime = " << formatFloat(p.colorModifier.toTime) << ";\n";
+    code << ind << "particles.colorModifier.fromColor = " << formatVector3(p.colorModifier.fromColor) << ";\n";
+    code << ind << "particles.colorModifier.toColor = " << formatVector3(p.colorModifier.toColor) << ";\n";
+    code << ind << "particles.colorModifier.useSRGB = " << formatBool(p.colorModifier.useSRGB) << ";\n";
+
+    code << ind << "particles.alphaInitializer.minAlpha = " << formatFloat(p.alphaInitializer.minAlpha) << ";\n";
+    code << ind << "particles.alphaInitializer.maxAlpha = " << formatFloat(p.alphaInitializer.maxAlpha) << ";\n";
+    code << ind << "particles.alphaModifier.fromTime = " << formatFloat(p.alphaModifier.fromTime) << ";\n";
+    code << ind << "particles.alphaModifier.toTime = " << formatFloat(p.alphaModifier.toTime) << ";\n";
+    code << ind << "particles.alphaModifier.fromAlpha = " << formatFloat(p.alphaModifier.fromAlpha) << ";\n";
+    code << ind << "particles.alphaModifier.toAlpha = " << formatFloat(p.alphaModifier.toAlpha) << ";\n";
+
+    code << ind << "particles.sizeInitializer.minSize = " << formatFloat(p.sizeInitializer.minSize) << ";\n";
+    code << ind << "particles.sizeInitializer.maxSize = " << formatFloat(p.sizeInitializer.maxSize) << ";\n";
+    code << ind << "particles.sizeModifier.fromTime = " << formatFloat(p.sizeModifier.fromTime) << ";\n";
+    code << ind << "particles.sizeModifier.toTime = " << formatFloat(p.sizeModifier.toTime) << ";\n";
+    code << ind << "particles.sizeModifier.fromSize = " << formatFloat(p.sizeModifier.fromSize) << ";\n";
+    code << ind << "particles.sizeModifier.toSize = " << formatFloat(p.sizeModifier.toSize) << ";\n";
+
+    if (!p.spriteInitializer.frames.empty()) {
+        for (size_t i = 0; i < p.spriteInitializer.frames.size(); i++) {
+            code << ind << "particles.spriteInitializer.frames.push_back(" << formatInt(p.spriteInitializer.frames[i]) << ");\n";
+        }
+    }
+    code << ind << "particles.spriteModifier.fromTime = " << formatFloat(p.spriteModifier.fromTime) << ";\n";
+    code << ind << "particles.spriteModifier.toTime = " << formatFloat(p.spriteModifier.toTime) << ";\n";
+    if (!p.spriteModifier.frames.empty()) {
+        for (size_t i = 0; i < p.spriteModifier.frames.size(); i++) {
+            code << ind << "particles.spriteModifier.frames.push_back(" << formatInt(p.spriteModifier.frames[i]) << ");\n";
+        }
+    }
+
+    code << ind << "particles.rotationInitializer.minRotation = " << formatQuaternion(p.rotationInitializer.minRotation) << ";\n";
+    code << ind << "particles.rotationInitializer.maxRotation = " << formatQuaternion(p.rotationInitializer.maxRotation) << ";\n";
+    code << ind << "particles.rotationInitializer.shortestPath = " << formatBool(p.rotationInitializer.shortestPath) << ";\n";
+    code << ind << "particles.rotationModifier.fromTime = " << formatFloat(p.rotationModifier.fromTime) << ";\n";
+    code << ind << "particles.rotationModifier.toTime = " << formatFloat(p.rotationModifier.toTime) << ";\n";
+    code << ind << "particles.rotationModifier.fromRotation = " << formatQuaternion(p.rotationModifier.fromRotation) << ";\n";
+    code << ind << "particles.rotationModifier.toRotation = " << formatQuaternion(p.rotationModifier.toRotation) << ";\n";
+    code << ind << "particles.rotationModifier.shortestPath = " << formatBool(p.rotationModifier.shortestPath) << ";\n";
+
+    code << ind << "particles.scaleInitializer.minScale = " << formatVector3(p.scaleInitializer.minScale) << ";\n";
+    code << ind << "particles.scaleInitializer.maxScale = " << formatVector3(p.scaleInitializer.maxScale) << ";\n";
+    code << ind << "particles.scaleModifier.fromTime = " << formatFloat(p.scaleModifier.fromTime) << ";\n";
+    code << ind << "particles.scaleModifier.toTime = " << formatFloat(p.scaleModifier.toTime) << ";\n";
+    code << ind << "particles.scaleModifier.fromScale = " << formatVector3(p.scaleModifier.fromScale) << ";\n";
+    code << ind << "particles.scaleModifier.toScale = " << formatVector3(p.scaleModifier.toScale) << ";\n";
+
+    addComponentCode(code, ind, sceneName, entityName, entity, "ParticlesComponent", "particles", assignExisting);
+    return code.str();
 }

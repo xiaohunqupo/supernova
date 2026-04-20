@@ -2088,6 +2088,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::MorphTracksComponent, true)] = encodeMorphTracksComponent(tracks);
     }
 
+    if (signature.test(registry->getComponentId<ParticlesComponent>())) {
+        ParticlesComponent particles = registry->getComponent<ParticlesComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::ParticlesComponent, true)] = encodeParticlesComponent(particles);
+    }
+
     if (signature.test(registry->getComponentId<BundleComponent>())) {
         BundleComponent bundle = registry->getComponent<BundleComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::BundleComponent, true)] = encodeBundleComponent(bundle);
@@ -2530,6 +2535,17 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
             registry->addComponent<MorphTracksComponent>(entity, tracks);
         }else{
             registry->getComponent<MorphTracksComponent>(entity) = tracks;
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::ParticlesComponent, true);
+    if (compNode[compName]) {
+        ParticlesComponent* existing = registry->findComponent<ParticlesComponent>(entity);
+        ParticlesComponent particles = decodeParticlesComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<ParticlesComponent>())){
+            registry->addComponent<ParticlesComponent>(entity, particles);
+        }else{
+            registry->getComponent<ParticlesComponent>(entity) = particles;
         }
     }
 
@@ -4466,4 +4482,275 @@ MorphTracksComponent editor::Stream::decodeMorphTracksComponent(const YAML::Node
     }
 
     return tracks;
+}
+
+YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& particles) {
+    YAML::Node node;
+
+    node["maxParticles"] = particles.maxParticles;
+    node["emitter"] = particles.emitter;
+    node["loop"] = particles.loop;
+    node["rate"] = particles.rate;
+    node["maxPerUpdate"] = particles.maxPerUpdate;
+
+    YAML::Node lifeInit;
+    lifeInit["minLife"] = particles.lifeInitializer.minLife;
+    lifeInit["maxLife"] = particles.lifeInitializer.maxLife;
+    node["lifeInitializer"] = lifeInit;
+
+    YAML::Node posInit;
+    posInit["minPosition"] = encodeVector3(particles.positionInitializer.minPosition);
+    posInit["maxPosition"] = encodeVector3(particles.positionInitializer.maxPosition);
+    node["positionInitializer"] = posInit;
+
+    YAML::Node posMod;
+    posMod["fromTime"] = particles.positionModifier.fromTime;
+    posMod["toTime"] = particles.positionModifier.toTime;
+    posMod["fromPosition"] = encodeVector3(particles.positionModifier.fromPosition);
+    posMod["toPosition"] = encodeVector3(particles.positionModifier.toPosition);
+    node["positionModifier"] = posMod;
+
+    YAML::Node velInit;
+    velInit["minVelocity"] = encodeVector3(particles.velocityInitializer.minVelocity);
+    velInit["maxVelocity"] = encodeVector3(particles.velocityInitializer.maxVelocity);
+    node["velocityInitializer"] = velInit;
+
+    YAML::Node velMod;
+    velMod["fromTime"] = particles.velocityModifier.fromTime;
+    velMod["toTime"] = particles.velocityModifier.toTime;
+    velMod["fromVelocity"] = encodeVector3(particles.velocityModifier.fromVelocity);
+    velMod["toVelocity"] = encodeVector3(particles.velocityModifier.toVelocity);
+    node["velocityModifier"] = velMod;
+
+    YAML::Node accelInit;
+    accelInit["minAcceleration"] = encodeVector3(particles.accelerationInitializer.minAcceleration);
+    accelInit["maxAcceleration"] = encodeVector3(particles.accelerationInitializer.maxAcceleration);
+    node["accelerationInitializer"] = accelInit;
+
+    YAML::Node accelMod;
+    accelMod["fromTime"] = particles.accelerationModifier.fromTime;
+    accelMod["toTime"] = particles.accelerationModifier.toTime;
+    accelMod["fromAcceleration"] = encodeVector3(particles.accelerationModifier.fromAcceleration);
+    accelMod["toAcceleration"] = encodeVector3(particles.accelerationModifier.toAcceleration);
+    node["accelerationModifier"] = accelMod;
+
+    YAML::Node colorInit;
+    colorInit["minColor"] = encodeVector3(particles.colorInitializer.minColor);
+    colorInit["maxColor"] = encodeVector3(particles.colorInitializer.maxColor);
+    colorInit["useSRGB"] = particles.colorInitializer.useSRGB;
+    node["colorInitializer"] = colorInit;
+
+    YAML::Node colorMod;
+    colorMod["fromTime"] = particles.colorModifier.fromTime;
+    colorMod["toTime"] = particles.colorModifier.toTime;
+    colorMod["fromColor"] = encodeVector3(particles.colorModifier.fromColor);
+    colorMod["toColor"] = encodeVector3(particles.colorModifier.toColor);
+    colorMod["useSRGB"] = particles.colorModifier.useSRGB;
+    node["colorModifier"] = colorMod;
+
+    YAML::Node alphaInit;
+    alphaInit["minAlpha"] = particles.alphaInitializer.minAlpha;
+    alphaInit["maxAlpha"] = particles.alphaInitializer.maxAlpha;
+    node["alphaInitializer"] = alphaInit;
+
+    YAML::Node alphaMod;
+    alphaMod["fromTime"] = particles.alphaModifier.fromTime;
+    alphaMod["toTime"] = particles.alphaModifier.toTime;
+    alphaMod["fromAlpha"] = particles.alphaModifier.fromAlpha;
+    alphaMod["toAlpha"] = particles.alphaModifier.toAlpha;
+    node["alphaModifier"] = alphaMod;
+
+    YAML::Node sizeInit;
+    sizeInit["minSize"] = particles.sizeInitializer.minSize;
+    sizeInit["maxSize"] = particles.sizeInitializer.maxSize;
+    node["sizeInitializer"] = sizeInit;
+
+    YAML::Node sizeMod;
+    sizeMod["fromTime"] = particles.sizeModifier.fromTime;
+    sizeMod["toTime"] = particles.sizeModifier.toTime;
+    sizeMod["fromSize"] = particles.sizeModifier.fromSize;
+    sizeMod["toSize"] = particles.sizeModifier.toSize;
+    node["sizeModifier"] = sizeMod;
+
+    YAML::Node spriteInit;
+    YAML::Node spriteInitFrames;
+    for (int f : particles.spriteInitializer.frames) spriteInitFrames.push_back(f);
+    spriteInit["frames"] = spriteInitFrames;
+    node["spriteInitializer"] = spriteInit;
+
+    YAML::Node spriteMod;
+    spriteMod["fromTime"] = particles.spriteModifier.fromTime;
+    spriteMod["toTime"] = particles.spriteModifier.toTime;
+    YAML::Node spriteModFrames;
+    for (int f : particles.spriteModifier.frames) spriteModFrames.push_back(f);
+    spriteMod["frames"] = spriteModFrames;
+    node["spriteModifier"] = spriteMod;
+
+    YAML::Node rotInit;
+    rotInit["minRotation"] = encodeQuaternion(particles.rotationInitializer.minRotation);
+    rotInit["maxRotation"] = encodeQuaternion(particles.rotationInitializer.maxRotation);
+    rotInit["shortestPath"] = particles.rotationInitializer.shortestPath;
+    node["rotationInitializer"] = rotInit;
+
+    YAML::Node rotMod;
+    rotMod["fromTime"] = particles.rotationModifier.fromTime;
+    rotMod["toTime"] = particles.rotationModifier.toTime;
+    rotMod["fromRotation"] = encodeQuaternion(particles.rotationModifier.fromRotation);
+    rotMod["toRotation"] = encodeQuaternion(particles.rotationModifier.toRotation);
+    rotMod["shortestPath"] = particles.rotationModifier.shortestPath;
+    node["rotationModifier"] = rotMod;
+
+    YAML::Node scaleInit;
+    scaleInit["minScale"] = encodeVector3(particles.scaleInitializer.minScale);
+    scaleInit["maxScale"] = encodeVector3(particles.scaleInitializer.maxScale);
+    node["scaleInitializer"] = scaleInit;
+
+    YAML::Node scaleMod;
+    scaleMod["fromTime"] = particles.scaleModifier.fromTime;
+    scaleMod["toTime"] = particles.scaleModifier.toTime;
+    scaleMod["fromScale"] = encodeVector3(particles.scaleModifier.fromScale);
+    scaleMod["toScale"] = encodeVector3(particles.scaleModifier.toScale);
+    node["scaleModifier"] = scaleMod;
+
+    return node;
+}
+
+ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& node, const ParticlesComponent* oldParticles) {
+    ParticlesComponent particles;
+    if (oldParticles) { particles = *oldParticles; }
+
+    if (node["maxParticles"]) particles.maxParticles = node["maxParticles"].as<unsigned int>();
+    if (node["emitter"]) particles.emitter = node["emitter"].as<bool>();
+    if (node["loop"]) particles.loop = node["loop"].as<bool>();
+    if (node["rate"]) particles.rate = node["rate"].as<int>();
+    if (node["maxPerUpdate"]) particles.maxPerUpdate = node["maxPerUpdate"].as<int>();
+
+    if (node["lifeInitializer"]) {
+        const YAML::Node& n = node["lifeInitializer"];
+        if (n["minLife"]) particles.lifeInitializer.minLife = n["minLife"].as<float>();
+        if (n["maxLife"]) particles.lifeInitializer.maxLife = n["maxLife"].as<float>();
+    }
+    if (node["positionInitializer"]) {
+        const YAML::Node& n = node["positionInitializer"];
+        if (n["minPosition"]) particles.positionInitializer.minPosition = decodeVector3(n["minPosition"]);
+        if (n["maxPosition"]) particles.positionInitializer.maxPosition = decodeVector3(n["maxPosition"]);
+    }
+    if (node["positionModifier"]) {
+        const YAML::Node& n = node["positionModifier"];
+        if (n["fromTime"]) particles.positionModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.positionModifier.toTime = n["toTime"].as<float>();
+        if (n["fromPosition"]) particles.positionModifier.fromPosition = decodeVector3(n["fromPosition"]);
+        if (n["toPosition"]) particles.positionModifier.toPosition = decodeVector3(n["toPosition"]);
+    }
+    if (node["velocityInitializer"]) {
+        const YAML::Node& n = node["velocityInitializer"];
+        if (n["minVelocity"]) particles.velocityInitializer.minVelocity = decodeVector3(n["minVelocity"]);
+        if (n["maxVelocity"]) particles.velocityInitializer.maxVelocity = decodeVector3(n["maxVelocity"]);
+    }
+    if (node["velocityModifier"]) {
+        const YAML::Node& n = node["velocityModifier"];
+        if (n["fromTime"]) particles.velocityModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.velocityModifier.toTime = n["toTime"].as<float>();
+        if (n["fromVelocity"]) particles.velocityModifier.fromVelocity = decodeVector3(n["fromVelocity"]);
+        if (n["toVelocity"]) particles.velocityModifier.toVelocity = decodeVector3(n["toVelocity"]);
+    }
+    if (node["accelerationInitializer"]) {
+        const YAML::Node& n = node["accelerationInitializer"];
+        if (n["minAcceleration"]) particles.accelerationInitializer.minAcceleration = decodeVector3(n["minAcceleration"]);
+        if (n["maxAcceleration"]) particles.accelerationInitializer.maxAcceleration = decodeVector3(n["maxAcceleration"]);
+    }
+    if (node["accelerationModifier"]) {
+        const YAML::Node& n = node["accelerationModifier"];
+        if (n["fromTime"]) particles.accelerationModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.accelerationModifier.toTime = n["toTime"].as<float>();
+        if (n["fromAcceleration"]) particles.accelerationModifier.fromAcceleration = decodeVector3(n["fromAcceleration"]);
+        if (n["toAcceleration"]) particles.accelerationModifier.toAcceleration = decodeVector3(n["toAcceleration"]);
+    }
+    if (node["colorInitializer"]) {
+        const YAML::Node& n = node["colorInitializer"];
+        if (n["minColor"]) particles.colorInitializer.minColor = decodeVector3(n["minColor"]);
+        if (n["maxColor"]) particles.colorInitializer.maxColor = decodeVector3(n["maxColor"]);
+        if (n["useSRGB"]) particles.colorInitializer.useSRGB = n["useSRGB"].as<bool>();
+    }
+    if (node["colorModifier"]) {
+        const YAML::Node& n = node["colorModifier"];
+        if (n["fromTime"]) particles.colorModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.colorModifier.toTime = n["toTime"].as<float>();
+        if (n["fromColor"]) particles.colorModifier.fromColor = decodeVector3(n["fromColor"]);
+        if (n["toColor"]) particles.colorModifier.toColor = decodeVector3(n["toColor"]);
+        if (n["useSRGB"]) particles.colorModifier.useSRGB = n["useSRGB"].as<bool>();
+    }
+    if (node["alphaInitializer"]) {
+        const YAML::Node& n = node["alphaInitializer"];
+        if (n["minAlpha"]) particles.alphaInitializer.minAlpha = n["minAlpha"].as<float>();
+        if (n["maxAlpha"]) particles.alphaInitializer.maxAlpha = n["maxAlpha"].as<float>();
+    }
+    if (node["alphaModifier"]) {
+        const YAML::Node& n = node["alphaModifier"];
+        if (n["fromTime"]) particles.alphaModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.alphaModifier.toTime = n["toTime"].as<float>();
+        if (n["fromAlpha"]) particles.alphaModifier.fromAlpha = n["fromAlpha"].as<float>();
+        if (n["toAlpha"]) particles.alphaModifier.toAlpha = n["toAlpha"].as<float>();
+    }
+    if (node["sizeInitializer"]) {
+        const YAML::Node& n = node["sizeInitializer"];
+        if (n["minSize"]) particles.sizeInitializer.minSize = n["minSize"].as<float>();
+        if (n["maxSize"]) particles.sizeInitializer.maxSize = n["maxSize"].as<float>();
+    }
+    if (node["sizeModifier"]) {
+        const YAML::Node& n = node["sizeModifier"];
+        if (n["fromTime"]) particles.sizeModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.sizeModifier.toTime = n["toTime"].as<float>();
+        if (n["fromSize"]) particles.sizeModifier.fromSize = n["fromSize"].as<float>();
+        if (n["toSize"]) particles.sizeModifier.toSize = n["toSize"].as<float>();
+    }
+    if (node["spriteInitializer"]) {
+        const YAML::Node& n = node["spriteInitializer"];
+        if (n["frames"]) {
+            particles.spriteInitializer.frames.clear();
+            for (const YAML::Node& f : n["frames"]) particles.spriteInitializer.frames.push_back(f.as<int>());
+        }
+    }
+    if (node["spriteModifier"]) {
+        const YAML::Node& n = node["spriteModifier"];
+        if (n["fromTime"]) particles.spriteModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.spriteModifier.toTime = n["toTime"].as<float>();
+        if (n["frames"]) {
+            particles.spriteModifier.frames.clear();
+            for (const YAML::Node& f : n["frames"]) particles.spriteModifier.frames.push_back(f.as<int>());
+        }
+    }
+    if (node["rotationInitializer"]) {
+        const YAML::Node& n = node["rotationInitializer"];
+        if (n["minRotation"]) particles.rotationInitializer.minRotation = decodeQuaternion(n["minRotation"]);
+        if (n["maxRotation"]) particles.rotationInitializer.maxRotation = decodeQuaternion(n["maxRotation"]);
+        if (n["shortestPath"]) particles.rotationInitializer.shortestPath = n["shortestPath"].as<bool>();
+    }
+    if (node["rotationModifier"]) {
+        const YAML::Node& n = node["rotationModifier"];
+        if (n["fromTime"]) particles.rotationModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.rotationModifier.toTime = n["toTime"].as<float>();
+        if (n["fromRotation"]) particles.rotationModifier.fromRotation = decodeQuaternion(n["fromRotation"]);
+        if (n["toRotation"]) particles.rotationModifier.toRotation = decodeQuaternion(n["toRotation"]);
+        if (n["shortestPath"]) particles.rotationModifier.shortestPath = n["shortestPath"].as<bool>();
+    }
+    if (node["scaleInitializer"]) {
+        const YAML::Node& n = node["scaleInitializer"];
+        if (n["minScale"]) particles.scaleInitializer.minScale = decodeVector3(n["minScale"]);
+        if (n["maxScale"]) particles.scaleInitializer.maxScale = decodeVector3(n["maxScale"]);
+    }
+    if (node["scaleModifier"]) {
+        const YAML::Node& n = node["scaleModifier"];
+        if (n["fromTime"]) particles.scaleModifier.fromTime = n["fromTime"].as<float>();
+        if (n["toTime"]) particles.scaleModifier.toTime = n["toTime"].as<float>();
+        if (n["fromScale"]) particles.scaleModifier.fromScale = decodeVector3(n["fromScale"]);
+        if (n["toScale"]) particles.scaleModifier.toScale = decodeVector3(n["toScale"]);
+    }
+
+    // Reset runtime fields
+    particles.particles.clear();
+    particles.newParticlesCount = 0;
+    particles.lastUsedParticle = 0;
+
+    return particles;
 }

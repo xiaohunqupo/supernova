@@ -5779,6 +5779,112 @@ void editor::Properties::drawSkyComponent(ComponentType cpType, SceneProject* sc
     endTable();
 }
 
+void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    RowSettings settingsFloat;
+    settingsFloat.secondColSize = 6 * ImGui::GetFontSize();
+
+    RowSettings settingsInt;
+    settingsInt.secondColSize = 6 * ImGui::GetFontSize();
+
+    beginTable(cpType, getLabelSize("Max Per Update"));
+    propertyRow(RowPropertyType::UInt, cpType, "maxParticles", "Max Particles", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Bool, cpType, "emitter", "Emitter", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
+    propertyRow(RowPropertyType::Int, cpType, "rate", "Rate", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "maxPerUpdate", "Max Per Update", sceneProject, entities, settingsInt);
+    endTable();
+
+    ImGui::SeparatorText("Life");
+    beginTable(cpType, getLabelSize("Max Life"), "life_table");
+    propertyRow(RowPropertyType::Float, cpType, "lifeInitializer.minLife", "Min Life", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "lifeInitializer.maxLife", "Max Life", sceneProject, entities, settingsFloat);
+    endTable();
+
+    ImGui::SeparatorText("Position");
+    beginTable(cpType, getLabelSize("To Position"), "position_table");
+    propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.minPosition", "Min Position", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.maxPosition", "Max Position", sceneProject, entities);
+    propertyRow(RowPropertyType::Float, cpType, "positionModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "positionModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.fromPosition", "From Position", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.toPosition", "To Position", sceneProject, entities);
+    endTable();
+
+    ImGui::SeparatorText("Velocity");
+    beginTable(cpType, getLabelSize("To Velocity"), "velocity_table");
+    propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.minVelocity", "Min Velocity", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.maxVelocity", "Max Velocity", sceneProject, entities);
+    propertyRow(RowPropertyType::Float, cpType, "velocityModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "velocityModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.fromVelocity", "From Velocity", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.toVelocity", "To Velocity", sceneProject, entities);
+    endTable();
+
+    ImGui::SeparatorText("Acceleration");
+    beginTable(cpType, getLabelSize("To Acceleration"), "acceleration_table");
+    propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.minAcceleration", "Min Acceleration", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.maxAcceleration", "Max Acceleration", sceneProject, entities);
+    propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.fromAcceleration", "From Acceleration", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.toAcceleration", "To Acceleration", sceneProject, entities);
+    endTable();
+
+    ImGui::SeparatorText("Color");
+    beginTable(cpType, getLabelSize("Use sRGB"), "color_table");
+    propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.minColor", "Min Color", sceneProject, entities);
+    propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.maxColor", "Max Color", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "colorInitializer.useSRGB", "Use sRGB", sceneProject, entities);
+    propertyRow(RowPropertyType::Float, cpType, "colorModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "colorModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.fromColor", "From Color", sceneProject, entities);
+    propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.toColor", "To Color", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "colorModifier.useSRGB", "Mod sRGB", sceneProject, entities);
+    endTable();
+
+    ImGui::SeparatorText("Alpha");
+    beginTable(cpType, getLabelSize("To Alpha"), "alpha_table");
+    propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.minAlpha", "Min Alpha", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.maxAlpha", "Max Alpha", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromAlpha", "From Alpha", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toAlpha", "To Alpha", sceneProject, entities, settingsFloat);
+    endTable();
+
+    ImGui::SeparatorText("Size");
+    beginTable(cpType, getLabelSize("To Size"), "size_table");
+    propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.minSize", "Min Size", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.maxSize", "Max Size", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromSize", "From Size", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toSize", "To Size", sceneProject, entities, settingsFloat);
+    endTable();
+
+    ImGui::SeparatorText("Rotation");
+    beginTable(cpType, getLabelSize("Shortest Path"), "rotation_table");
+    propertyRow(RowPropertyType::Quat, cpType, "rotationInitializer.minRotation", "Min Rotation", sceneProject, entities);
+    propertyRow(RowPropertyType::Quat, cpType, "rotationInitializer.maxRotation", "Max Rotation", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "rotationInitializer.shortestPath", "Shortest Path", sceneProject, entities);
+    propertyRow(RowPropertyType::Float, cpType, "rotationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "rotationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.fromRotation", "From Rotation", sceneProject, entities);
+    propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.toRotation", "To Rotation", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "rotationModifier.shortestPath", "Mod Shortest", sceneProject, entities);
+    endTable();
+
+    ImGui::SeparatorText("Scale");
+    beginTable(cpType, getLabelSize("To Scale"), "scale_table");
+    propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.minScale", "Min Scale", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.maxScale", "Max Scale", sceneProject, entities);
+    propertyRow(RowPropertyType::Float, cpType, "scaleModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "scaleModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.fromScale", "From Scale", sceneProject, entities);
+    propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.toScale", "To Scale", sceneProject, entities);
+    endTable();
+}
+
 void editor::Properties::drawBody2DComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     Body2DComponent& body = sceneProject->scene->getComponent<Body2DComponent>(entities[0]);
 
@@ -8683,6 +8789,8 @@ void editor::Properties::show(){
                     drawScaleTracksComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::MorphTracksComponent){
                     drawMorphTracksComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::ParticlesComponent){
+                    drawParticlesComponent(cpType, sceneProject, entities);
                 }
 
                 if (compReadOnly) ImGui::EndDisabled();
