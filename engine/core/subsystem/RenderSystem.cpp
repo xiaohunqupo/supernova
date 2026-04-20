@@ -1005,8 +1005,10 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
 
             if (instmesh->needUpdateBuffer){
                 // setData here because component can change order and lose reference
-                instmesh->buffer.setData((unsigned char*)(&instmesh->renderInstances[0]), sizeof(InstanceRenderData)*instmesh->numVisible);
-                instmesh->buffer.getRender()->updateBuffer(instmesh->buffer.getSize(), instmesh->buffer.getData());
+                if (instmesh->numVisible > 0 && !instmesh->renderInstances.empty()){
+                    instmesh->buffer.setData((unsigned char*)(&instmesh->renderInstances[0]), sizeof(InstanceRenderData)*instmesh->numVisible);
+                    instmesh->buffer.getRender()->updateBuffer(instmesh->buffer.getSize(), instmesh->buffer.getData());
+                }
 
                 instmesh->needUpdateBuffer = false;
             }

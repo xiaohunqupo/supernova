@@ -73,7 +73,9 @@ in vec3 a_position;
     in vec4 i_matrix_col3;
     in vec4 i_matrix_col4;
     in vec4 i_color;
-    in vec4 i_textureRect;
+    #if defined(HAS_UV_SET1) || defined(HAS_UV_SET2)
+        in vec4 i_textureRect;
+    #endif
 #endif
 
 #include "includes/skinning.glsl"

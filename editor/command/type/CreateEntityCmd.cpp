@@ -385,7 +385,6 @@ bool editor::CreateEntityCmd::execute(){
 
     }else if (type == EntityCreationType::PARTICLES){
 
-        scene->addComponent<Transform>(entity, {});
         scene->addComponent<ActionComponent>(entity, {});
         scene->addComponent<ParticlesComponent>(entity, {});
 
