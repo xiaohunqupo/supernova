@@ -109,6 +109,8 @@ namespace doriax{
 
 		void updateAnimationPreview(double dt, Entity entity);
 		void updateActionPreview(double dt, Entity entity);
+
+		float getDuration(Entity entity);
 	
 		void load() override;
 		void resetRunningActions();

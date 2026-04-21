@@ -290,13 +290,20 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     applyPreviewModelBindPose(scene);
 
     ActionComponent& action = scene->getComponent<ActionComponent>(selectedEntity);
-    action.timecount = currentTime;
+    action.state = ActionState::Stopped;
+    action.timecount = 0.0f;
     action.stopTrigger = false;
     action.pauseTrigger = false;
     action.startTrigger = true;
 
-    scene->getSystem<ActionSystem>()->updateAnimationPreview(0.0, selectedEntity);
-    sceneProject->needUpdateRender = true;
+    // Simulate to the seek time incrementally for components that require integration (like particles)
+    float remainingTime = currentTime;
+    float stepSize = 1.0f / 60.0f;
+    while (remainingTime > 0.0f) {
+        float currentStep = std::min(stepSize, remainingTime);
+        scene->getSystem<ActionSystem>()->updateAnimationPreview(currentStep, selectedEntity);
+        remainingTime -= currentStep;
+    }
 }
 
 void editor::AnimationWindow::startPreview(Scene* scene, SceneProject* sceneProject) {

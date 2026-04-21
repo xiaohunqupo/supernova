@@ -779,6 +779,11 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
     if (!existParticles && !particles.emitter){
         actionStop(entity);
         //onFinish.call(object);
+    } else if (particles.loop && particles.rate > 0) {
+        float cycleDuration = (float)particles.maxParticles / (float)particles.rate;
+        while (action.timecount >= cycleDuration) {
+            action.timecount -= cycleDuration;
+        }
     }
 }
 
@@ -841,6 +846,11 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
     if (!existParticles && !particles.emitter){
         actionStop(entity);
         //onFinish.call(object);
+    } else if (particles.loop && particles.rate > 0) {
+        float cycleDuration = (float)particles.maxParticles / (float)particles.rate;
+        while (action.timecount >= cycleDuration) {
+            action.timecount -= cycleDuration;
+        }
     }
 }
 
@@ -916,6 +926,43 @@ void ActionSystem::morphTracksUpdate(KeyframeTracksComponent& keyframe, MorphTra
     }else{
         Log::error("MorphTrack of index %i is different size than index %i", keyframe.index, keyframe.index-1);
     }
+}
+
+float ActionSystem::getDuration(Entity entity) {
+    float duration = 0;
+    if (TimedActionComponent* timed = scene->findComponent<TimedActionComponent>(entity)) {
+        duration = timed->duration;
+    } else if (AnimationComponent* anim = scene->findComponent<AnimationComponent>(entity)) {
+        if (anim->duration > 0) {
+            duration = anim->duration;
+        } else {
+            for (const ActionFrame& frame : anim->actions) {
+                duration = std::max(duration, frame.startTime + frame.duration);
+            }
+        }
+    } else if (KeyframeTracksComponent* kf = scene->findComponent<KeyframeTracksComponent>(entity)) {
+        if (!kf->times.empty()) {
+            duration = kf->times.back();
+        }
+    } else if (SpriteAnimationComponent* spriteanim = scene->findComponent<SpriteAnimationComponent>(entity)) {
+        float totalMs = 0;
+        for (unsigned int i = 0; i < spriteanim->framesTimeSize; i++) {
+            totalMs += spriteanim->framesTime[i];
+        }
+        duration = totalMs / 1000.0f;
+    } else if (ParticlesComponent* parts = scene->findComponent<ParticlesComponent>(entity)) {
+        if (parts->rate > 0) {
+            float emitDuration = (float)parts->maxParticles / (float)parts->rate;
+            if (parts->loop) {
+                // One emission cycle: used for timeline wrapping
+                duration = emitDuration;
+            } else {
+                // Full system lifetime: emit phase + last particle dies
+                duration = emitDuration + parts->lifeInitializer.maxLife;
+            }
+        }
+    }
+    return duration;
 }
 
 void ActionSystem::load(){

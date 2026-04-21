@@ -37,6 +37,7 @@
 #include "component/TimedActionComponent.h"
 #include "component/TranslateTracksComponent.h"
 #include "component/MorphTracksComponent.h"
+#include "component/ParticlesComponent.h"
 #include "util/SHA1.h"
 #include "util/ProjectUtils.h"
 #include "Stream.h"
@@ -7378,28 +7379,7 @@ void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject*
     ImGui::SameLine();
 
     // Timeline progress strip
-    float duration = 0;
-    if (TimedActionComponent* timed = scene->findComponent<TimedActionComponent>(entity)) {
-        duration = timed->duration;
-    } else if (AnimationComponent* anim = scene->findComponent<AnimationComponent>(entity)) {
-        if (anim->duration > 0) {
-            duration = anim->duration;
-        } else {
-            for (const ActionFrame& frame : anim->actions) {
-                duration = std::max(duration, frame.startTime + frame.duration);
-            }
-        }
-    } else if (KeyframeTracksComponent* kf = scene->findComponent<KeyframeTracksComponent>(entity)) {
-        if (!kf->times.empty()) {
-            duration = kf->times.back();
-        }
-    } else if (SpriteAnimationComponent* sa = scene->findComponent<SpriteAnimationComponent>(entity)) {
-        float totalMs = 0;
-        for (unsigned int i = 0; i < sa->framesTimeSize; i++) {
-            totalMs += sa->framesTime[i];
-        }
-        duration = totalMs / 1000.0f;
-    }
+    float duration = scene->getSystem<ActionSystem>()->getDuration(entity);
 
     float fraction = (duration > 0) ? std::clamp(actionComp->timecount / duration, 0.0f, 1.0f) : 0.0f;
 
@@ -7437,13 +7417,24 @@ void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject*
                     Stream::decodeComponents(state.entity, state.parent, scene, state.components);
                 }
 
-                actionComp->timecount = seekTime;
-                actionComp->stopTrigger = false;
-                actionComp->pauseTrigger = false;
-                actionComp->startTrigger = true;
+                actionComp = scene->findComponent<ActionComponent>(entity);
+                if (actionComp) {
+                    actionComp->state = ActionState::Stopped;
+                    actionComp->timecount = 0;
+                    actionComp->stopTrigger = false;
+                    actionComp->pauseTrigger = false;
+                    actionComp->startTrigger = true;
+                }
 
-                scene->getSystem<ActionSystem>()->updateActionPreview(0.0, entity);
-                sceneProject->needUpdateRender = true;
+                // Simulate to the seek time so particles and integrations match the state exactly
+                float remainingTime = seekTime;
+                float stepSize = 1.0f / 60.0f;
+                while (remainingTime > 0.0f) {
+                    float currentStep = std::min(stepSize, remainingTime);
+                    scene->getSystem<ActionSystem>()->updateActionPreview(currentStep, entity);
+                    remainingTime -= currentStep;
+                }
+
                 actionPreviewPlaying = false;
 
                 actionComp = scene->findComponent<ActionComponent>(entity);
