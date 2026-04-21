@@ -7194,7 +7194,7 @@ void editor::Properties::startActionPreview(Entity entity, Scene* scene, ScenePr
 
     collectEntities(entity);
 
-    // Trigger the action start
+    actionComp->state = ActionState::Stopped;
     actionComp->timecount = 0;
     actionComp->stopTrigger = false;
     actionComp->pauseTrigger = false;
@@ -7236,6 +7236,11 @@ void editor::Properties::stopActionPreview(Scene* scene, SceneProject* sceneProj
             continue;
         }
         Stream::decodeComponents(state.entity, state.parent, scene, state.components);
+    }
+
+    // Remove InstancedMeshComponent dynamically added during preview (e.g. particle targets).
+    for (const ActionPreviewState& state : actionPreviewStates) {
+        ProjectUtils::removeDynamicInstmesh(state.entity, state.components, scene);
     }
 
     actionPreviewStates.clear();

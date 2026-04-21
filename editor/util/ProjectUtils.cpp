@@ -1304,6 +1304,15 @@ editor::Command* editor::ProjectUtils::buildDeleteTileCmd(Project* project, uint
     return multiCmd;
 }
 
+void editor::ProjectUtils::removeDynamicInstmesh(Entity entity, const YAML::Node& savedComponents, EntityRegistry* registry) {
+    if (!savedComponents || savedComponents.IsNull()) return;
+    if (savedComponents[Catalog::getComponentName(ComponentType::InstancedMeshComponent, true)]) return;
+    if (entity == NULL_ENTITY || !registry->isEntityCreated(entity)) return;
+    if (registry->getSignature(entity).test(registry->getComponentId<InstancedMeshComponent>())) {
+        registry->removeComponent<InstancedMeshComponent>(entity);
+    }
+}
+
 std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity) {
     Signature signature = scene->getSignature(entity);
 

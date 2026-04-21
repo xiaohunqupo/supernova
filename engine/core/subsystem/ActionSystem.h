@@ -111,6 +111,7 @@ namespace doriax{
 		void updateActionPreview(double dt, Entity entity);
 	
 		void load() override;
+		void resetRunningActions();
 		void draw() override;
 		void destroy() override;
 		void update(double dt) override;

@@ -1193,9 +1193,9 @@ namespace {
 
     PropertyData getInstancedMeshPropertyFast(InstancedMeshComponent* comp, const std::string& propertyName) {
         InstancedMeshComponent& def = getDefaultComponent<InstancedMeshComponent>();
-        if (propertyName == "maxInstances") return {PropertyType::UInt, UpdateFlags_None, &def.maxInstances, &comp->maxInstances};
-        if (propertyName == "instancedBillboard") return {PropertyType::Bool, UpdateFlags_None, &def.instancedBillboard, &comp->instancedBillboard};
-        if (propertyName == "instancedCylindricalBillboard") return {PropertyType::Bool, UpdateFlags_None, &def.instancedCylindricalBillboard, &comp->instancedCylindricalBillboard};
+        if (propertyName == "maxInstances") return {PropertyType::UInt, UpdateFlags_Mesh_Reload, &def.maxInstances, &comp->maxInstances};
+        if (propertyName == "instancedBillboard") return {PropertyType::Bool, UpdateFlags_Mesh_Reload, &def.instancedBillboard, &comp->instancedBillboard};
+        if (propertyName == "instancedCylindricalBillboard") return {PropertyType::Bool, UpdateFlags_Mesh_Reload, &def.instancedCylindricalBillboard, &comp->instancedCylindricalBillboard};
         return PropertyData();
     }
 
@@ -1206,9 +1206,9 @@ namespace {
     void enumerateInstancedMeshProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
         InstancedMeshComponent* comp = static_cast<InstancedMeshComponent*>(compRef);
         InstancedMeshComponent& def = getDefaultComponent<InstancedMeshComponent>();
-        ps["maxInstances"] = {PropertyType::UInt, UpdateFlags_None, &def.maxInstances, comp ? &comp->maxInstances : nullptr};
-        ps["instancedBillboard"] = {PropertyType::Bool, UpdateFlags_None, &def.instancedBillboard, comp ? &comp->instancedBillboard : nullptr};
-        ps["instancedCylindricalBillboard"] = {PropertyType::Bool, UpdateFlags_None, &def.instancedCylindricalBillboard, comp ? &comp->instancedCylindricalBillboard : nullptr};
+        ps["maxInstances"] = {PropertyType::UInt, UpdateFlags_Mesh_Reload, &def.maxInstances, comp ? &comp->maxInstances : nullptr};
+        ps["instancedBillboard"] = {PropertyType::Bool, UpdateFlags_Mesh_Reload, &def.instancedBillboard, comp ? &comp->instancedBillboard : nullptr};
+        ps["instancedCylindricalBillboard"] = {PropertyType::Bool, UpdateFlags_Mesh_Reload, &def.instancedCylindricalBillboard, comp ? &comp->instancedCylindricalBillboard : nullptr};
     }
 
     PropertyData resolveActionPropertyFast(void* comp, const std::string& propertyName) {

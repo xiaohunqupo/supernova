@@ -2561,7 +2561,9 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<InstancedMeshComponent>())){
             registry->addComponent<InstancedMeshComponent>(entity, instmesh);
         }else{
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::InstancedMeshComponent, existing, &instmesh);
             registry->getComponent<InstancedMeshComponent>(entity) = instmesh;
+            Catalog::updateEntity(registry, entity, flags);
         }
     }
 

@@ -52,6 +52,8 @@ public:
     // Returns entity type name (e.g. "Mesh", "Camera", "Light") based on its components
     static std::string getEntityTypeName(Scene* scene, Entity entity);
 
+    static void removeDynamicInstmesh(Entity entity, const YAML::Node& savedComponents, EntityRegistry* registry);
+
     // Fills a Texture with the editor built-in default skybox cubemap.
     static void setDefaultSkyTexture(Texture& outTexture);
 

@@ -44,12 +44,8 @@ void ActionSystem::actionStart(Entity entity){
             if (targetSignature.test(scene->getComponentId<MeshComponent>())) {
                 MeshComponent& mesh = scene->getComponent<MeshComponent>(action.target);
 
-                if (!targetSignature.test(scene->getComponentId<InstancedMeshComponent>())){
-                    scene->getSystem<MeshSystem>()->createInstancedMesh(action.target);
-                    targetSignature = scene->getSignature(action.target);
-                    if (mesh.loaded)
-                        mesh.needReload = true;
-                }
+                scene->getSystem<MeshSystem>()->createInstancedMesh(action.target);
+                targetSignature = scene->getSignature(action.target);
 
                 InstancedMeshComponent& instmesh = scene->getComponent<InstancedMeshComponent>(action.target);
 
@@ -680,8 +676,8 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, InstancedM
 
     if (instmesh.maxInstances != particles.maxParticles){
         instmesh.maxInstances = particles.maxParticles;
-
-        mesh.needReload = true;
+        if (mesh.loaded)
+            mesh.needReload = true;
     }
 
     particles.emitter = true;
@@ -924,6 +920,22 @@ void ActionSystem::morphTracksUpdate(KeyframeTracksComponent& keyframe, MorphTra
 
 void ActionSystem::load(){
 
+}
+
+void ActionSystem::resetRunningActions(){
+    // Reset actions serialized in Running/Paused state so actionStart fires on the first update tick.
+    auto actions = scene->getComponentArray<ActionComponent>();
+    for (int i = 0; i < actions->size(); i++) {
+        ActionComponent& action = actions->getComponentFromIndex(i);
+
+        if (action.state == ActionState::Running || action.state == ActionState::Paused) {
+            action.state = ActionState::Stopped;
+            action.timecount = 0;
+            action.startTrigger = true;
+            action.stopTrigger = false;
+            action.pauseTrigger = false;
+        }
+    }
 }
 
 void ActionSystem::destroy(){

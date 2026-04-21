@@ -2644,26 +2644,6 @@ void MeshSystem::createInstancedMesh(Entity entity){
 
     if (!signature.test(scene->getComponentId<InstancedMeshComponent>())){
         scene->addComponent<InstancedMeshComponent>(entity);
-
-        InstancedMeshComponent& instmesh = scene->getComponent<InstancedMeshComponent>(entity);
-
-        if (signature.test(scene->getComponentId<MeshComponent>())){
-            MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
-            if (mesh.loaded)
-                mesh.needReload = true;
-        }
-
-        instmesh.buffer.clear();
-        instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL1, 4, 0, true);
-        instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL2, 4, 4 * sizeof(float), true);
-        instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL3, 4, 8 * sizeof(float), true);
-        instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL4, 4, 12 * sizeof(float), true);
-        instmesh.buffer.addAttribute(AttributeType::INSTANCECOLOR, 4, 16 * sizeof(float), true);
-        instmesh.buffer.addAttribute(AttributeType::INSTANCETEXTURERECT, 4, 20 * sizeof(float), true);
-        instmesh.buffer.setStride(24 * sizeof(float));
-        instmesh.buffer.setRenderAttributes(true);
-        instmesh.buffer.setInstanceBuffer(true);
-        instmesh.buffer.setUsage(BufferUsage::STREAM);
     }
 }
 
@@ -2939,12 +2919,36 @@ void MeshSystem::draw(){
 }
 
 void MeshSystem::onComponentAdded(Entity entity, ComponentId componentId) {
-
+    if (componentId == scene->getComponentId<InstancedMeshComponent>()) {
+        InstancedMeshComponent& instmesh = scene->getComponent<InstancedMeshComponent>(entity);
+        if (instmesh.buffer.getAttributes().empty()) {
+            instmesh.buffer.clear();
+            instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL1, 4, 0, true);
+            instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL2, 4, 4 * sizeof(float), true);
+            instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL3, 4, 8 * sizeof(float), true);
+            instmesh.buffer.addAttribute(AttributeType::INSTANCEMATRIXCOL4, 4, 12 * sizeof(float), true);
+            instmesh.buffer.addAttribute(AttributeType::INSTANCECOLOR, 4, 16 * sizeof(float), true);
+            instmesh.buffer.addAttribute(AttributeType::INSTANCETEXTURERECT, 4, 20 * sizeof(float), true);
+            instmesh.buffer.setStride(24 * sizeof(float));
+            instmesh.buffer.setRenderAttributes(true);
+            instmesh.buffer.setInstanceBuffer(true);
+            instmesh.buffer.setUsage(BufferUsage::STREAM);
+        }
+        if (MeshComponent* mesh = scene->findComponent<MeshComponent>(entity)) {
+            if (mesh->loaded)
+                mesh->needReload = true;
+        }
+    }
 }
 
 void MeshSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
     if (componentId == scene->getComponentId<ModelComponent>()) {
         ModelComponent& model = scene->getComponent<ModelComponent>(entity);
         destroyModel(model);
+    }
+    if (componentId == scene->getComponentId<InstancedMeshComponent>()) {
+        if (MeshComponent* mesh = scene->findComponent<MeshComponent>(entity)) {
+            if (mesh->loaded) mesh->needReload = true;
+        }
     }
 }

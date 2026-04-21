@@ -1324,6 +1324,8 @@ void editor::Project::prepareRuntimeScene(PlayRuntimeScene& entry) {
     Entity camera = getSceneCamera(entry.runtime);
     entry.runtime->scene->setCamera(camera);
 
+    entry.runtime->scene->getSystem<ActionSystem>()->resetRunningActions();
+
     entry.runtime->scene->getSystem<UISystem>()->clearAnchorReferenceSize();
     pauseEngineScene(entry.runtime->scene, false);
 
@@ -2043,6 +2045,12 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
             auto entitiesNode = sceneProject->playStateSnapshot["entities"];
             for (const auto& entityNode : entitiesNode) {
                 Stream::decodeEntity(entityNode, sceneProject->scene, nullptr, nullptr, sceneProject, NULL_ENTITY, false);
+            }
+
+            // Remove InstancedMeshComponent dynamically added during play (e.g. particle targets).
+            for (const auto& entityNode : entitiesNode) {
+                if (!entityNode["entity"] || !entityNode["components"]) continue;
+                ProjectUtils::removeDynamicInstmesh(entityNode["entity"].as<Entity>(), entityNode["components"], sceneProject->scene);
             }
 
             // Clear the snapshot
