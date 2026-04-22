@@ -2903,11 +2903,13 @@ void RenderSystem::update(double dt){
             if (instmesh){
                 bool sortTransparentInstances = mesh.transparent && mainCamera.type != CameraType::CAMERA_UI;
 
-                if (instmesh->needUpdateInstances && !instmesh->instancedBillboard){
+                bool instancesNeedUpdate = instmesh->needUpdateInstances || mesh.needUpdateAABB;
+
+                if (instancesNeedUpdate && !instmesh->instancedBillboard){
                     updateInstancedMesh(*instmesh, mesh, transform, mainCamera, mainCameraTransform);
                 }
 
-                if (instmesh->needUpdateInstances || ((mainCamera.needUpdate || transform.needUpdate) && sortTransparentInstances)){
+                if (instancesNeedUpdate || ((mainCamera.needUpdate || transform.needUpdate) && sortTransparentInstances)){
                     if (!hasMultipleCameras || !sortTransparentInstances){
                         if (instmesh->instancedBillboard){
                             updateInstancedMesh(*instmesh, mesh, transform, mainCamera, mainCameraTransform);

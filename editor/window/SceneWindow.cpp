@@ -575,8 +575,17 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 std::vector<Entity> selEntities = project->getSelectedEntities(sceneId);
                 if (selEntities.size() == 1 && !io.KeyShift) {
                     Entity selEntity = selEntities[0];
-                    bool gizmoSideActiveLocal = sceneProject->sceneRender->isAnyGizmoSideSelected();
-                    if (!gizmoSideActiveLocal) {
+                    bool blockInstanceHit;
+                    if (gizmoSelected == GizmoSelected::OBJECT2D) {
+                        // With the 2D gizmo, CENTER is set when hovering over the entity body —
+                        // the same region where instances live. Allow hit-testing in that case,
+                        // mirroring the logic used for tile sub-selection.
+                        Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
+                        blockInstanceHit = !(gizmo2DSide == Gizmo2DSideSelected::NONE || gizmo2DSide == Gizmo2DSideSelected::CENTER);
+                    } else {
+                        blockInstanceHit = sceneProject->sceneRender->isAnyGizmoSideSelected();
+                    }
+                    if (!blockInstanceHit) {
                         int instHit = sceneProject->sceneRender->hitTestInstance(selEntity, x, y);
                         if (instHit >= 0) {
                             sceneProject->sceneRender->selectInstance(selEntity, instHit);

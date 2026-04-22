@@ -2948,6 +2948,8 @@ void MeshSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
     }
     if (componentId == scene->getComponentId<InstancedMeshComponent>()) {
         if (MeshComponent* mesh = scene->findComponent<MeshComponent>(entity)) {
+            mesh->aabb = mesh->verticesAABB;
+            mesh->needUpdateAABB = true;
             if (mesh->loaded) mesh->needReload = true;
         }
     }

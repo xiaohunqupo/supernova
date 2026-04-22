@@ -11,6 +11,8 @@
 #include "command/type/DeleteEntityCmd.h"
 #include "command/type/DuplicateEntityCmd.h"
 #include "command/type/AddComponentCmd.h"
+#include "command/type/MultiPropertyCmd.h"
+#include "component/InstancedMeshComponent.h"
 #include "command/type/ImportEntityBundleCmd.h"
 #include "command/type/RemoveEntityFromBundleCmd.h"
 #include "command/type/AddEntityToBundleCmd.h"
@@ -880,6 +882,16 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
             selectedScenes.clear();
             project->addSelectedEntity(node.entitySceneId, node.id);
             project->setSelectedSceneForProperties(node.entitySceneId);
+            // Clear any selected instance or tile that belonged to this entity
+            SceneProject* sp = project->getScene(node.entitySceneId);
+            if (sp && sp->sceneRender) {
+                if (sp->sceneRender->getSelectedInstanceEntity() == node.id) {
+                    sp->sceneRender->clearInstanceSelection();
+                }
+                if (sp->sceneRender->getSelectedTileEntity() == (Entity)node.id) {
+                    sp->sceneRender->clearTileSelection();
+                }
+            }
         } else if (!node.isScene){
             ImGuiIO& io = ImGui::GetIO();
             if (!io.KeyShift){
@@ -887,6 +899,16 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
             }
             project->addSelectedEntity(project->getSelectedSceneId(), node.id);
             project->setSelectedSceneForProperties(project->getSelectedSceneId());
+            // Clear any selected instance or tile that belonged to this entity
+            SceneProject* sp = project->getSelectedScene();
+            if (sp && sp->sceneRender) {
+                if (sp->sceneRender->getSelectedInstanceEntity() == node.id) {
+                    sp->sceneRender->clearInstanceSelection();
+                }
+                if (sp->sceneRender->getSelectedTileEntity() == (Entity)node.id) {
+                    sp->sceneRender->clearTileSelection();
+                }
+            }
         }else{
             project->clearAllSelections(project->getSelectedSceneId());
             selectedScenes.clear();
@@ -1011,7 +1033,11 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                     bool hasMesh = signature.test(selectedScene->scene->getComponentId<MeshComponent>());
                     bool hasInstanced = signature.test(selectedScene->scene->getComponentId<InstancedMeshComponent>());
                     if (hasMesh && ImGui::MenuItem(ICON_FA_LAYER_GROUP "  Add Instanced Mesh", nullptr, false, !node.isLocked && !hasInstanced)) {
-                        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new AddComponentCmd(project, project->getSelectedSceneId(), node.id, ComponentType::InstancedMeshComponent));
+                        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+                        multiCmd->addCommand(std::make_unique<AddComponentCmd>(project, project->getSelectedSceneId(), node.id, ComponentType::InstancedMeshComponent));
+                        std::vector<InstanceData> initialInstances = { InstanceData() };
+                        multiCmd->addPropertyCmd<std::vector<InstanceData>>(project, project->getSelectedSceneId(), node.id, ComponentType::InstancedMeshComponent, "instances", initialInstances);
+                        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(multiCmd);
                     }
                 }
             }
