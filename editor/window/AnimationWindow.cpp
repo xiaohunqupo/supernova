@@ -28,6 +28,7 @@
 #include "component/AlphaActionComponent.h"
 #include "subsystem/ActionSystem.h"
 #include "subsystem/MeshSystem.h"
+#include "util/ProjectUtils.h"
 
 #include <algorithm>
 #include <cmath>
@@ -49,6 +50,7 @@ editor::AnimationWindow::AnimationWindow(Project* project){
     maxPixelsPerSecond = 500.0f;
 
     selectedFrameIndex = -1;
+    prePlaySelectedFrameIndex = -1;
     isDraggingPlayhead = false;
     isDraggingFrame = false;
     draggingFrameIndex = -1;
@@ -296,6 +298,20 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     action.pauseTrigger = false;
     action.startTrigger = true;
 
+    // Reset all child action entities to Stopped so animationUpdate calls actionStart on
+    // them (initializing particle slots, sprite anims, etc.) during seek simulation.
+    for (const ActionFrame& frame : anim.actions) {
+        if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)) {
+            if (ActionComponent* childAction = scene->findComponent<ActionComponent>(frame.action)) {
+                childAction->state = ActionState::Stopped;
+                childAction->timecount = 0;
+                childAction->startTrigger = false;
+                childAction->stopTrigger = false;
+                childAction->pauseTrigger = false;
+            }
+        }
+    }
+
     // Simulate to the seek time incrementally for components that require integration (like particles)
     float remainingTime = currentTime;
     float stepSize = 1.0f / 60.0f;
@@ -323,6 +339,22 @@ void editor::AnimationWindow::startPreview(Scene* scene, SceneProject* sceneProj
         previewState.push_back(buildPreviewEntityState(scene, entity));
     }
 
+    // Reset all child action entities to Stopped so animationUpdate calls actionStart on
+    // them (which initializes particle systems, sprite animations, etc.) regardless of their
+    // saved state in the scene file.
+    AnimationComponent& animComp = scene->getComponent<AnimationComponent>(selectedEntity);
+    for (const ActionFrame& frame : animComp.actions) {
+        if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)) {
+            if (ActionComponent* childAction = scene->findComponent<ActionComponent>(frame.action)) {
+                childAction->state = ActionState::Stopped;
+                childAction->timecount = 0;
+                childAction->startTrigger = false;
+                childAction->stopTrigger = false;
+                childAction->pauseTrigger = false;
+            }
+        }
+    }
+
     ActionComponent& action = scene->getComponent<ActionComponent>(selectedEntity);
     action.timecount = 0;
     action.stopTrigger = false;
@@ -338,6 +370,11 @@ void editor::AnimationWindow::stopPreview(Scene* scene, SceneProject* sceneProje
     restorePreviewState(scene);
     if (applyBindPose) {
         applyPreviewModelBindPose(scene);
+    }
+
+    // Remove InstancedMeshComponent dynamically added during preview (e.g. particle targets).
+    for (const PreviewEntityState& state : previewState) {
+        ProjectUtils::removeDynamicInstmesh(state.entity, state.components, scene);
     }
 
     previewState.clear();
@@ -533,6 +570,8 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
         if (isPreviewing) {
             stopPreview(scene, sceneProject, true);
         }
+        selectedFrameIndex = prePlaySelectedFrameIndex;
+        prePlaySelectedFrameIndex = -1;
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
@@ -1272,6 +1311,10 @@ void editor::AnimationWindow::show() {
     if (isPreviewing && sceneIsStopped) {
         // Engine-driven preview: ActionSystem processes the animation
         if (isPlaying) {
+            if (prePlaySelectedFrameIndex == -1) {
+                prePlaySelectedFrameIndex = selectedFrameIndex;
+            }
+            selectedFrameIndex = -1;
             float dt = ImGui::GetIO().DeltaTime * playbackSpeed;
             scene->getSystem<ActionSystem>()->updateAnimationPreview(dt, selectedEntity);
             sceneProject->needUpdateRender = true;

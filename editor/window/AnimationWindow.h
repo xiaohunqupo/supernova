@@ -27,6 +27,7 @@ namespace doriax::editor{
 
         // Selection
         int selectedFrameIndex;
+        int prePlaySelectedFrameIndex;
         bool isDraggingPlayhead;
         bool isDraggingFrame;
         int draggingFrameIndex;
