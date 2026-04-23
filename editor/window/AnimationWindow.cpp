@@ -90,6 +90,7 @@ float editor::AnimationWindow::xToTime(float x, float timeStart, ImVec2 canvasPo
 
 std::string editor::AnimationWindow::getActionLabel(Entity actionEntity, Scene* scene) const {
     if (actionEntity == NULL_ENTITY) return "Empty";
+    if (!scene->isEntityCreated(actionEntity)) return "Empty";
 
     Signature sig = scene->getSignature(actionEntity);
 
