@@ -191,6 +191,19 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
                     return modelMatrix * aabb.getOBB();
                 }
             }
+        }else if (signature.test(scene->getComponentId<PointsComponent>())){
+            PointsComponent& points = scene->getComponent<PointsComponent>(entity);
+            AABB aabb(Vector3::ZERO, Vector3::ZERO);
+            for (const PointData& pt : points.points){
+                if (pt.visible){
+                    aabb.merge(pt.position);
+                }
+            }
+            if (local){
+                return aabb.getOBB();
+            }else{
+                return modelMatrix * aabb.getOBB();
+            }
         }
 
         if (local){
@@ -349,6 +362,30 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
 
     toolslayer.setShowAnchorGizmo(showAnchorGizmo);
 
+    auto syncObject2DGizmoMode = [&](){
+        if (toolslayer.getGizmoSelected() != GizmoSelected::OBJECT2D){
+            return;
+        }
+
+        bool showRects = true;
+        bool showCross = false;
+
+        if (selEntities.size() == 1){
+            Signature signature = scene->getSignature(selEntities[0]);
+            bool isTilemap = signature.test(scene->getComponentId<TilemapComponent>());
+            bool isCamera = signature.test(scene->getComponentId<CameraComponent>());
+            bool isInstancedMesh = signature.test(scene->getComponentId<InstancedMeshComponent>());
+
+            showCross = signature.test(scene->getComponentId<PointsComponent>());
+            showRects = (!isTilemap || selectedTileIndex >= 0) && !isCamera && !isInstancedMesh && !showCross;
+        }
+
+        toolslayer.setShowObject2DRects(showRects);
+        toolslayer.setShowObject2DCross(showCross);
+    };
+
+    syncObject2DGizmoMode();
+
     totalSelBB.setHalfExtents(totalSelBB.getHalfExtents() + Vector3(selectionOffset));
 
     bool selectionVisibility = false;
@@ -417,13 +454,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
         toolslayer.setGizmoVisible(selectionVisibility);
     }
 
-    // Hide resize rects for tilemaps and cameras (must be after setGizmoVisible which propagates visibility to children)
-    if (toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D && selEntities.size() == 1){
-        bool isTilemap = scene->getSignature(selEntities[0]).test(scene->getComponentId<TilemapComponent>());
-        bool isCamera = scene->getSignature(selEntities[0]).test(scene->getComponentId<CameraComponent>());
-        bool isInstancedMesh = scene->getSignature(selEntities[0]).test(scene->getComponentId<InstancedMeshComponent>());
-        toolslayer.setShowObject2DRects((!isTilemap || selectedTileIndex >= 0) && !isCamera && !isInstancedMesh);
-    }
+    syncObject2DGizmoMode();
 
     uilayer.setViewGizmoImageVisible(true);
 }

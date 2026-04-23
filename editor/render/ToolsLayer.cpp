@@ -155,6 +155,10 @@ void editor::ToolsLayer::setShowObject2DRects(bool show){
     oGizmo->setShowRects(show);
 }
 
+void editor::ToolsLayer::setShowObject2DCross(bool show){
+    oGizmo->setCrossVisible(show);
+}
+
 void editor::ToolsLayer::setGizmoVisible(bool visible){
     tGizmo->setVisible(false);
     rGizmo->setVisible(false);

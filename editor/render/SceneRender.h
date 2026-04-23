@@ -82,7 +82,8 @@ namespace doriax::editor{
         AABB getAABB(Entity entity, bool local);
         AABB getFamilyAABB(Entity entity, float offset);
 
-        OBB getOBB(Entity entity, bool local);        OBB getFamilyOBB(Entity entity, float offset);
+        OBB getOBB(Entity entity, bool local);
+        OBB getFamilyOBB(Entity entity, float offset);
 
     protected:
         void updateCameraFrustum(CameraObjects& co, const CameraComponent& cameraComponent, bool isMainCamera, bool fixedSizeFrustum = true);

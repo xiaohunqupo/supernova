@@ -51,6 +51,7 @@ namespace doriax::editor{
 
         void setShowAnchorGizmo(bool enabled);
         void setShowObject2DRects(bool show);
+        void setShowObject2DCross(bool show);
 
         void setGizmoVisible(bool visible);
 

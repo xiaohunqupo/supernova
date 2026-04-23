@@ -2510,6 +2510,34 @@ AABB editor::Project::getEntityWorldAABB(Scene* scene, Entity entity, Scene* mai
         float dist = (transform.worldPosition - camtransform.worldPosition).length();
         float size = dist * tan(camera.yfov) * 0.01;
         aabb = transform.modelMatrix * AABB(-size, -size, -size, size, size, size);
+    }else if (signature.test(scene->getComponentId<PointsComponent>())){
+        if (signature.test(scene->getComponentId<Transform>())) {
+            const PointsComponent& pts = scene->getComponent<PointsComponent>(entity);
+            const Transform& transform = scene->getComponent<Transform>(entity);
+            const Transform& camtransform = mainScene->getComponent<Transform>(mainScene->getCamera());
+            const CameraComponent& camera = mainScene->getComponent<CameraComponent>(mainScene->getCamera());
+
+            auto mergeWorldPoint = [&](const Vector3& worldPos) {
+                float size;
+                if (camera.type == CameraType::CAMERA_PERSPECTIVE) {
+                    float dist = (worldPos - camtransform.worldPosition).length();
+                    size = dist * std::tan(camera.yfov) * 0.01f;
+                } else {
+                    size = (camera.topClip - camera.bottomClip) * 0.02f;
+                }
+                if (size < 0.001f) size = 0.001f;
+                aabb.merge(AABB(worldPos.x - size, worldPos.y - size, worldPos.z - size,
+                                worldPos.x + size, worldPos.y + size, worldPos.z + size));
+            };
+
+            // Always include the entity origin
+            mergeWorldPoint(transform.worldPosition);
+
+            for (const PointData& pt : pts.points) {
+                if (!pt.visible) continue;
+                mergeWorldPoint(transform.modelMatrix * pt.position);
+            }
+        }
     }
 
     return aabb;
@@ -2533,6 +2561,15 @@ AABB editor::Project::getEntityLocalAABB(Scene* scene, Entity entity) const{
     }else if (signature.test(scene->getComponentId<LightComponent>()) || 
               signature.test(scene->getComponentId<CameraComponent>())){
         aabb = AABB::ZERO;
+    }else if (signature.test(scene->getComponentId<PointsComponent>())){
+        aabb.setNull();
+        const PointsComponent& pts = scene->getComponent<PointsComponent>(entity);
+        // Always include the entity origin (local space zero)
+        aabb.merge(Vector3::ZERO);
+        for (const PointData& pt : pts.points) {
+            if (!pt.visible) continue;
+            aabb.merge(pt.position);
+        }
     }
 
     return aabb;

@@ -18,9 +18,11 @@ namespace doriax::editor{
         float width;
         float height;
         bool showRects;
+        bool showCross;
 
         static const float rectSize;
         static const float sizeOffset;
+        static const float crossSize;
 
         void updateRects();
         void updateLines();
@@ -33,6 +35,7 @@ namespace doriax::editor{
         void setSize(float width, float height);
 
         void setShowRects(bool showRects);
+        void setCrossVisible(bool show);
 
         Gizmo2DSideSelected checkHover(const Ray& ray, const OBB& obb);
     };

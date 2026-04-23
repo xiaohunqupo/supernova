@@ -4,11 +4,13 @@ using namespace doriax;
 
 const float editor::Object2DGizmo::rectSize = 0.20;
 const float editor::Object2DGizmo::sizeOffset = 0.1;
+const float editor::Object2DGizmo::crossSize = 0.5f;
 
 editor::Object2DGizmo::Object2DGizmo(Scene* scene): Object(scene){
     width = 0.0;
     height = 0.0;
     showRects = true;
+    showCross = false;
 
     center = new Object(scene);
     lines = new Lines(scene);
@@ -69,10 +71,26 @@ void editor::Object2DGizmo::updateLines(){
     }
 
     lines->clearLines();
+    Vector4 color(0.9f, 0.5f, 0.3f, 1.0f);
+
+    if (showCross){
+        // Draw a fat cross: 3 tightly grouped vertical lines + 3 tightly grouped horizontal lines
+        const float s = crossSize * 0.6f;
+        const float gap = crossSize * 0.03f;  // small spacing between the 3 parallel lines
+        // vertical group
+        lines->addLine(Vector3(-gap, -s, 0), Vector3(-gap,  s, 0), color);
+        lines->addLine(Vector3(   0, -s, 0), Vector3(   0,  s, 0), color);
+        lines->addLine(Vector3( gap, -s, 0), Vector3( gap,  s, 0), color);
+        // horizontal group
+        lines->addLine(Vector3(-s, -gap, 0), Vector3( s, -gap, 0), color);
+        lines->addLine(Vector3(-s,    0, 0), Vector3( s,    0, 0), color);
+        lines->addLine(Vector3(-s,  gap, 0), Vector3( s,  gap, 0), color);
+        lines->setVisible(true);
+        return;
+    }
 
     float halfWidth = width / 2.0f;
     float halfHeight = height / 2.0f;
-    Vector4 color(0.9f, 0.5f, 0.3f, 1.0f);
 
     Vector3 bl(-halfWidth, -halfHeight, 0);
     Vector3 br(halfWidth, -halfHeight, 0);
@@ -104,10 +122,27 @@ void editor::Object2DGizmo::setShowRects(bool showRects){
     updateRects();
 }
 
-editor::Gizmo2DSideSelected editor::Object2DGizmo::checkHover(const Ray& ray, const OBB& obb){
-    editor::Gizmo2DSideSelected gizmoSideSelected = Gizmo2DSideSelected::NONE;
+void editor::Object2DGizmo::setCrossVisible(bool show){
+    if (showCross == show) return;
+    showCross = show;
+    updateLines();
+}
 
-    if (RayReturn rreturn = ray.intersects(obb)){
+editor::Gizmo2DSideSelected editor::Object2DGizmo::checkHover(const Ray& ray, const OBB& obb){
+    Gizmo2DSideSelected gizmoSideSelected = Gizmo2DSideSelected::NONE;
+
+    if (showCross){
+        // Compute the cross world position directly from the locally-set values,
+        // avoiding reliance on TransformSystem having propagated worldPosition yet.
+        Vector3 scale = getScale();
+        Vector3 centerPos = getPosition() + getRotation() * (center->getPosition() * scale);
+        float halfSize = crossSize * scale.x * 0.6f;
+        AABB crossAABB(centerPos - Vector3(halfSize, halfSize, 0),
+                       centerPos + Vector3(halfSize, halfSize, 0));
+        if (ray.intersects(crossAABB)){
+            gizmoSideSelected = Gizmo2DSideSelected::CENTER;
+        }
+    } else if (ray.intersects(obb)){
         gizmoSideSelected = Gizmo2DSideSelected::CENTER;
     }
 
