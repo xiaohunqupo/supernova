@@ -810,6 +810,7 @@ void editor::App::show(){
             // Check if a tile is selected — delete it instead of the entity
             SceneProject* sp = project.getScene(targetSceneId);
             bool tileDeleted = false;
+            bool instanceDeleted = false;
             if (sp && sp->sceneRender) {
                 int tileIdx = sp->sceneRender->getSelectedTileIndex();
                 Entity tileEntity = sp->sceneRender->getSelectedTileEntity();
@@ -821,9 +822,20 @@ void editor::App::show(){
                         tileDeleted = true;
                     }
                 }
+
+                int instIdx = sp->sceneRender->getSelectedInstanceIndex();
+                Entity instEntity = sp->sceneRender->getSelectedInstanceEntity();
+                if (!tileDeleted && instIdx >= 0) {
+                    Command* deleteCmd = ProjectUtils::buildDeleteInstanceCmd(&project, targetSceneId, instEntity, (unsigned int)instIdx);
+                    if (deleteCmd) {
+                        CommandHandle::get(sceneId)->addCommand(deleteCmd);
+                        sp->sceneRender->clearInstanceSelection();
+                        instanceDeleted = true;
+                    }
+                }
             }
 
-            if (!tileDeleted) {
+            if (!tileDeleted && !instanceDeleted) {
             const std::vector<Entity>& selectedEntities = project.getSelectedEntities(targetSceneId);
 
             Command* lastCmd = nullptr;

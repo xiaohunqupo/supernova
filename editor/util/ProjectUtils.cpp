@@ -34,7 +34,9 @@
 #include "component/Joint3DComponent.h"
 
 #include "component/TilemapComponent.h"
+#include "component/InstancedMeshComponent.h"
 #include "command/type/MultiPropertyCmd.h"
+#include "command/type/PropertyCmd.h"
 
 #include <algorithm>
 #include <cctype>
@@ -1302,6 +1304,25 @@ editor::Command* editor::ProjectUtils::buildDeleteTileCmd(Project* project, uint
 
     multiCmd->setNoMerge();
     return multiCmd;
+}
+
+editor::Command* editor::ProjectUtils::buildDeleteInstanceCmd(Project* project, uint32_t sceneId, Entity entity, unsigned int instanceIndex) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) {
+        return nullptr;
+    }
+
+    InstancedMeshComponent* instmesh = sceneProject->scene->findComponent<InstancedMeshComponent>(entity);
+    if (!instmesh || instanceIndex >= instmesh->instances.size()) {
+        return nullptr;
+    }
+
+    std::vector<InstanceData> newInstances = instmesh->instances;
+    newInstances.erase(newInstances.begin() + instanceIndex);
+
+    auto* cmd = new PropertyCmd<std::vector<InstanceData>>(project, sceneId, entity, ComponentType::InstancedMeshComponent, "instances", newInstances);
+    cmd->setNoMerge();
+    return cmd;
 }
 
 void editor::ProjectUtils::removeDynamicInstmesh(Entity entity, const YAML::Node& savedComponents, EntityRegistry* registry) {
