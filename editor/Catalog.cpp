@@ -2081,6 +2081,124 @@ namespace {
         ps["scaleModifier.toScale"] = {PropertyType::Vector3, UpdateFlags_None, &def.scaleModifier.toScale, comp ? &comp->scaleModifier.toScale : nullptr};
     }
 
+    PropertyData getPointsPropertyFast(PointsComponent* comp, const std::string& propertyName) {
+        PointsComponent& def = getDefaultComponent<PointsComponent>();
+        if (!comp) return PropertyData();
+
+        if (propertyName == "maxPoints") return {PropertyType::UInt, UpdateFlags_None, &def.maxPoints, &comp->maxPoints};
+        if (propertyName == "transparent") return {PropertyType::Bool, UpdateFlags_None, &def.transparent, &comp->transparent};
+        if (propertyName == "autoTransparency") return {PropertyType::Bool, UpdateFlags_None, &def.autoTransparency, &comp->autoTransparency};
+        if (propertyName == "texture") return {PropertyType::Texture, UpdateFlags_None, &def.texture, &comp->texture};
+
+        if (propertyName == "numFramesRect") {
+            return {PropertyType::UInt, UpdateFlags_None, (void*)&def.numFramesRect, (void*)&comp->numFramesRect};
+        }
+
+        if (propertyName.compare(0, 11, "framesRect[") == 0) {
+            size_t pos = 11;
+            size_t frameIndex = 0;
+            if (!parseIndex(propertyName, pos, frameIndex) || pos >= propertyName.size() || propertyName[pos] != ']') {
+                return PropertyData();
+            }
+            SpriteFrameData& frame = comp->framesRect[frameIndex];
+            SpriteFrameData& defFrame = def.framesRect[0];
+            pos++;
+            if (pos == propertyName.size()) {
+                return {PropertyType::Custom, UpdateFlags_None, (void*)&defFrame, (void*)&frame};
+            }
+            if (propertyName[pos] != '.') return PropertyData();
+            const size_t fieldPos = pos + 1;
+            if (propertyName.compare(fieldPos, 4, "name") == 0 && fieldPos + 4 == propertyName.size()) {
+                return {PropertyType::String, UpdateFlags_None, (void*)&defFrame.name, (void*)&frame.name};
+            }
+            if (propertyName.compare(fieldPos, 4, "rect") == 0 && fieldPos + 4 == propertyName.size()) {
+                return {PropertyType::Vector4, UpdateFlags_None, (void*)&defFrame.rect, (void*)&frame.rect};
+            }
+            return PropertyData();
+        }
+
+        if (propertyName == "points") {
+            static std::vector<PointData> defPoints;
+            return {PropertyType::Custom, UpdateFlags_Points, (void*)&defPoints, (void*)&comp->points};
+        }
+
+        if (propertyName.compare(0, 7, "points[") == 0) {
+            size_t pos = 7;
+            size_t index = 0;
+            if (!parseIndex(propertyName, pos, index) || pos >= propertyName.size() || propertyName[pos] != ']') return PropertyData();
+            if (index >= comp->points.size()) return PropertyData();
+            if (pos + 1 >= propertyName.size()) return PropertyData();
+            std::string fieldName = propertyName.substr(pos + 1);
+            if (fieldName == ".position") {
+                static Vector3 defPos = Vector3(0.0f, 0.0f, 0.0f);
+                return {PropertyType::Vector3, UpdateFlags_Points, (void*)&defPos, (void*)&comp->points[index].position};
+            }
+            if (fieldName == ".color") {
+                static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+                return {PropertyType::Vector4, UpdateFlags_Points, (void*)&defColor, (void*)&comp->points[index].color};
+            }
+            if (fieldName == ".size") {
+                static float defSize = 1.0f;
+                return {PropertyType::Float, UpdateFlags_Points, (void*)&defSize, (void*)&comp->points[index].size};
+            }
+            if (fieldName == ".rotation") {
+                static float defRotation = 0.0f;
+                return {PropertyType::Float, UpdateFlags_Points, (void*)&defRotation, (void*)&comp->points[index].rotation};
+            }
+            if (fieldName == ".textureRect") {
+                static Rect defRect = Rect(0.0f, 0.0f, 1.0f, 1.0f);
+                return {PropertyType::Vector4, UpdateFlags_Points, (void*)&defRect, (void*)&comp->points[index].textureRect};
+            }
+            if (fieldName == ".visible") {
+                static bool defVisible = true;
+                return {PropertyType::Bool, UpdateFlags_Points, (void*)&defVisible, (void*)&comp->points[index].visible};
+            }
+        }
+
+        return PropertyData();
+    }
+
+    PropertyData resolvePointsPropertyFast(void* comp, const std::string& propertyName) {
+        return getPointsPropertyFast(static_cast<PointsComponent*>(comp), propertyName);
+    }
+
+    void enumeratePointsProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
+        PointsComponent* comp = static_cast<PointsComponent*>(compRef);
+        PointsComponent& def = getDefaultComponent<PointsComponent>();
+
+        ps["maxPoints"] = {PropertyType::UInt, UpdateFlags_None, &def.maxPoints, comp ? &comp->maxPoints : nullptr};
+        ps["transparent"] = {PropertyType::Bool, UpdateFlags_None, &def.transparent, comp ? &comp->transparent : nullptr};
+        ps["autoTransparency"] = {PropertyType::Bool, UpdateFlags_None, &def.autoTransparency, comp ? &comp->autoTransparency : nullptr};
+        ps["texture"] = {PropertyType::Texture, UpdateFlags_None, &def.texture, comp ? &comp->texture : nullptr};
+
+        static std::vector<PointData> defPoints;
+        ps["points"] = {PropertyType::Custom, UpdateFlags_Points, (void*)&defPoints, comp ? (void*)&comp->points : nullptr};
+
+        if (comp) {
+            ps["numFramesRect"] = {PropertyType::UInt, UpdateFlags_None, (void*)&def.numFramesRect, (void*)&comp->numFramesRect};
+            for (unsigned int i = 0; i < comp->numFramesRect; i++) {
+                std::string idx = std::to_string(i);
+                ps["framesRect[" + idx + "].name"] = {PropertyType::String, UpdateFlags_None, (void*)&def.framesRect[0].name, (void*)&comp->framesRect[i].name};
+                ps["framesRect[" + idx + "].rect"] = {PropertyType::Vector4, UpdateFlags_None, (void*)&def.framesRect[0].rect, (void*)&comp->framesRect[i].rect};
+            }
+            static Vector3 defPos = Vector3(0.0f, 0.0f, 0.0f);
+            static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            static float defSize = 1.0f;
+            static float defRotation = 0.0f;
+            static Rect defRect = Rect(0.0f, 0.0f, 1.0f, 1.0f);
+            static bool defVisible = true;
+            for (size_t i = 0; i < comp->points.size(); i++) {
+                std::string idx = std::to_string(i);
+                ps["points[" + idx + "].position"] = {PropertyType::Vector3, UpdateFlags_Points, (void*)&defPos, (void*)&comp->points[i].position};
+                ps["points[" + idx + "].color"] = {PropertyType::Vector4, UpdateFlags_Points, (void*)&defColor, (void*)&comp->points[i].color};
+                ps["points[" + idx + "].size"] = {PropertyType::Float, UpdateFlags_Points, (void*)&defSize, (void*)&comp->points[i].size};
+                ps["points[" + idx + "].rotation"] = {PropertyType::Float, UpdateFlags_Points, (void*)&defRotation, (void*)&comp->points[i].rotation};
+                ps["points[" + idx + "].textureRect"] = {PropertyType::Vector4, UpdateFlags_Points, (void*)&defRect, (void*)&comp->points[i].textureRect};
+                ps["points[" + idx + "].visible"] = {PropertyType::Bool, UpdateFlags_Points, (void*)&defVisible, (void*)&comp->points[i].visible};
+            }
+        }
+    }
+
     // ── Resolver dispatch table ──
 
     static const FastComponentResolver kFastComponentResolvers[] = {
@@ -2104,6 +2222,7 @@ namespace {
         {ComponentType::Body3DComponent, &findComponentPtr<Body3DComponent>, &resolveBody3DPropertyFast, &enumerateBody3DProperties},
         {ComponentType::InstancedMeshComponent, &findComponentPtr<InstancedMeshComponent>, &resolveInstancedMeshPropertyFast, &enumerateInstancedMeshProperties},
         {ComponentType::ParticlesComponent, &findComponentPtr<ParticlesComponent>, &resolveParticlesPropertyFast, &enumerateParticlesProperties},
+        {ComponentType::PointsComponent, &findComponentPtr<PointsComponent>, &resolvePointsPropertyFast, &enumeratePointsProperties},
         {ComponentType::ActionComponent, &findComponentPtr<ActionComponent>, &resolveActionPropertyFast, &enumerateActionProperties},
         {ComponentType::TimedActionComponent, &findComponentPtr<TimedActionComponent>, &resolveTimedActionPropertyFast, &enumerateTimedActionProperties},
         {ComponentType::PositionActionComponent, &findComponentPtr<PositionActionComponent>, &resolvePositionActionPropertyFast, &enumeratePositionActionProperties},
@@ -2887,6 +3006,11 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int 
     if (updateFlags & UpdateFlags_Instanced_Mesh){
         if (InstancedMeshComponent* instmesh = registry->findComponent<InstancedMeshComponent>(entity)){
             instmesh->needUpdateInstances = true;
+        }
+    }
+    if (updateFlags & UpdateFlags_Points){
+        if (PointsComponent* pts = registry->findComponent<PointsComponent>(entity)){
+            pts->needUpdate = true;
         }
     }
 }

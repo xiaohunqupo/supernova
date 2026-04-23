@@ -42,7 +42,8 @@ namespace doriax::editor{
         COLOR_ACTION,
         ALPHA_ACTION,
         MODEL,
-        PARTICLES
+        PARTICLES,
+        POINTS
     };
 
     class CreateEntityCmd: public Command{

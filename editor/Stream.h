@@ -280,5 +280,8 @@ namespace doriax::editor {
 
         static YAML::Node encodeInstancedMeshComponent(const InstancedMeshComponent& instmesh);
         static InstancedMeshComponent decodeInstancedMeshComponent(const YAML::Node& node, const InstancedMeshComponent* oldInstmesh = nullptr);
+
+        static YAML::Node encodePointsComponent(const PointsComponent& points);
+        static PointsComponent decodePointsComponent(const YAML::Node& node, const PointsComponent* oldPoints = nullptr);
     };
 }

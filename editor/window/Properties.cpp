@@ -39,6 +39,7 @@
 #include "component/TranslateTracksComponent.h"
 #include "component/MorphTracksComponent.h"
 #include "component/ParticlesComponent.h"
+#include "component/PointsComponent.h"
 #include "util/SHA1.h"
 #include "util/ProjectUtils.h"
 #include "Stream.h"
@@ -6156,6 +6157,129 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 }
 
+void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    RowSettings settingsInt;
+    settingsInt.secondColSize = 6 * ImGui::GetFontSize();
+
+    beginTable(cpType, getLabelSize("Auto Transparency"));
+    propertyRow(RowPropertyType::UInt, cpType, "maxPoints", "Max Points", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Texture, cpType, "texture", "Texture", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "transparent", "Transparent", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "autoTransparency", "Auto Transparency", sceneProject, entities);
+    endTable();
+
+    if (entities.size() != 1) {
+        ImGui::SeparatorText("Points");
+        ImGui::TextDisabled("Select a single entity to edit points");
+        return;
+    }
+
+    Entity entity = entities[0];
+    PointsComponent& pts = sceneProject->scene->getComponent<PointsComponent>(entity);
+
+    ImGui::SeparatorText("Points");
+
+    if (ImGui::Button(ICON_FA_PLUS " Add Point", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (const Entity& selectedEntity : entities) {
+            if (PointsComponent* ptsComp = sceneProject->scene->findComponent<PointsComponent>(selectedEntity)) {
+                std::vector<PointData> newPoints = ptsComp->points;
+                PointData newPt;
+                if (!newPoints.empty()) {
+                    newPt = newPoints.back();
+                }
+                newPoints.push_back(newPt);
+                multiCmd->addPropertyCmd<std::vector<PointData>>(project, sceneProject->id, selectedEntity, cpType, "points", newPoints);
+            }
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+
+    beginTable(cpType, getLabelSize("Points"), "points_header");
+    propertyHeader("Points", -1, false, false);
+    ImGui::Text("%zu", pts.points.size());
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##toggle_points", pointsExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
+        pointsExpanded = !pointsExpanded;
+    }
+    endTable();
+
+    if (!pointsExpanded || pts.points.empty()) {
+        return;
+    }
+
+    bool removedPoint = false;
+
+    for (size_t i = 0; i < pts.points.size(); i++) {
+        ImGui::PushID((int)i);
+
+        std::string pointGroupStr = "point_" + std::to_string(i);
+        std::string pointLabel = "[" + std::to_string(i) + "] Point " + std::to_string(i);
+
+        ImGui::SeparatorText(pointLabel.c_str());
+
+        beginTable(cpType, getLabelSize("Position"), pointGroupStr);
+        propertyHeader("Point", -1, false, false);
+
+        float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
+        float clearButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x;
+        ImVec2 deleteButtonSize = ImVec2(clearButtonWidth + clearButtonFramePadding * 2, 0);
+        float arrowButtonWidth = ImGui::GetFrameHeight();
+        float trailingWidth = deleteButtonSize.x + ImGui::GetStyle().ItemSpacing.x + arrowButtonWidth;
+        float targetX = ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - trailingWidth);
+        ImGui::SetCursorPosX(targetX);
+
+        if (ImGui::ArrowButton("##toggle_point", pointsButtonGroups[pointGroupStr] ? ImGuiDir_Up : ImGuiDir_Down)) {
+            pointsButtonGroups[pointGroupStr] = !pointsButtonGroups[pointGroupStr];
+        }
+        ImGui::SameLine();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(clearButtonFramePadding, ImGui::GetStyle().FramePadding.y));
+        if (ImGui::Button(ICON_FA_TRASH_CAN "##delete_point", deleteButtonSize)) {
+            MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+            for (const Entity& selectedEntity : entities) {
+                if (PointsComponent* ptsComp = sceneProject->scene->findComponent<PointsComponent>(selectedEntity)) {
+                    if (i < ptsComp->points.size()) {
+                        std::vector<PointData> newPoints = ptsComp->points;
+                        newPoints.erase(newPoints.begin() + (long int)i);
+                        multiCmd->addPropertyCmd<std::vector<PointData>>(project, sceneProject->id, selectedEntity, cpType, "points", newPoints);
+                    }
+                }
+            }
+            multiCmd->setNoMerge();
+            CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+            removedPoint = true;
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            endTable();
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+
+        if (pointsButtonGroups[pointGroupStr]) {
+            std::string propPrefix = "points[" + std::to_string(i) + "]";
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".position", "Position", sceneProject, entities);
+            propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".color", "Color", sceneProject, entities);
+            propertyRow(RowPropertyType::Float, cpType, propPrefix + ".size", "Size", sceneProject, entities);
+            propertyRow(RowPropertyType::Float, cpType, propPrefix + ".rotation", "Rotation", sceneProject, entities);
+            propertyRow(RowPropertyType::Vector4, cpType, propPrefix + ".textureRect", "Texture Rect", sceneProject, entities);
+            propertyRow(RowPropertyType::Bool, cpType, propPrefix + ".visible", "Visible", sceneProject, entities);
+        }
+
+        endTable();
+        ImGui::PopID();
+    }
+
+    if (removedPoint) {
+        return;
+    }
+}
+
 void editor::Properties::drawBody2DComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     Body2DComponent& body = sceneProject->scene->getComponent<Body2DComponent>(entities[0]);
 
@@ -9063,6 +9187,8 @@ void editor::Properties::show(){
                     drawMorphTracksComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::ParticlesComponent){
                     drawParticlesComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::PointsComponent){
+                    drawPointsComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::InstancedMeshComponent){
                     drawInstancedMeshComponent(cpType, sceneProject, entities);
                 }

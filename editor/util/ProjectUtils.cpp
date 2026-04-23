@@ -540,8 +540,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<PointsComponent>(entity, {});
             }else{
-                registry->addComponent<PointsComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<PointsComponent>(entity, Stream::decodePointsComponent(componentNode));
             }
             break;
         case ComponentType::PolygonComponent:
@@ -914,7 +913,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::PointsComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodePointsComponent(registry->getComponent<PointsComponent>(entity));
             }
             registry->removeComponent<PointsComponent>(entity);
             break;

@@ -1565,6 +1565,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::ScaleTracksComponent: return createScaleTracksComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::MorphTracksComponent: return createMorphTracksComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ParticlesComponent: return createParticlesComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::PointsComponent: return createPointsComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::InstancedMeshComponent: return createInstancedMeshComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         default: return "";
     }
@@ -2122,5 +2123,44 @@ std::string editor::Factory::createInstancedMeshComponent(int indentSpaces, Enti
     }
 
     addComponentCode(code, ind, sceneName, entityName, entity, "InstancedMeshComponent", "instmesh", assignExisting);
+    return code.str();
+}
+
+std::string editor::Factory::createPointsComponent(int indentSpaces, EntityRegistry* scene, Entity entity, const fs::path& projectPath, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<PointsComponent>(entity)) return "";
+    PointsComponent& p = scene->getComponent<PointsComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+
+    code << ind << "PointsComponent pointscomp;\n";
+    code << ind << "pointscomp.maxPoints = " << formatUInt(p.maxPoints) << ";\n";
+    code << ind << "pointscomp.transparent = " << formatBool(p.transparent) << ";\n";
+    code << ind << "pointscomp.autoTransparency = " << formatBool(p.autoTransparency) << ";\n";
+    code << formatTexture(indentSpaces, p.texture, "pointscomp.texture", projectPath);
+
+    if (p.numFramesRect > 0) {
+        for (unsigned int i = 0; i < p.numFramesRect; i++) {
+            const SpriteFrameData& frame = p.framesRect[i];
+            code << ind << "pointscomp.framesRect[" << i << "].name = " << formatString(frame.name) << ";\n";
+            code << ind << "pointscomp.framesRect[" << i << "].rect = " << formatRect(frame.rect) << ";\n";
+        }
+        code << ind << "pointscomp.numFramesRect = " << p.numFramesRect << ";\n";
+    }
+
+    for (size_t i = 0; i < p.points.size(); i++) {
+        const PointData& pt = p.points[i];
+        code << ind << "{\n";
+        code << ind << "    PointData pt;\n";
+        code << ind << "    pt.position = " << formatVector3(pt.position) << ";\n";
+        code << ind << "    pt.color = " << formatVector4(pt.color) << ";\n";
+        code << ind << "    pt.size = " << formatFloat(pt.size) << ";\n";
+        code << ind << "    pt.rotation = " << formatFloat(pt.rotation) << ";\n";
+        code << ind << "    pt.textureRect = " << formatRect(pt.textureRect) << ";\n";
+        code << ind << "    pt.visible = " << formatBool(pt.visible) << ";\n";
+        code << ind << "    pointscomp.points.push_back(pt);\n";
+        code << ind << "}\n";
+    }
+
+    addComponentCode(code, ind, sceneName, entityName, entity, "PointsComponent", "pointscomp", assignExisting);
     return code.str();
 }

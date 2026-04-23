@@ -2093,6 +2093,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::ParticlesComponent, true)] = encodeParticlesComponent(particles);
     }
 
+    if (signature.test(registry->getComponentId<PointsComponent>())) {
+        PointsComponent pts = registry->getComponent<PointsComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::PointsComponent, true)] = encodePointsComponent(pts);
+    }
+
     if (signature.test(registry->getComponentId<InstancedMeshComponent>())) {
         InstancedMeshComponent instmesh = registry->getComponent<InstancedMeshComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::InstancedMeshComponent, true)] = encodeInstancedMeshComponent(instmesh);
@@ -2551,6 +2556,17 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
             registry->addComponent<ParticlesComponent>(entity, particles);
         }else{
             registry->getComponent<ParticlesComponent>(entity) = particles;
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::PointsComponent, true);
+    if (compNode[compName]) {
+        PointsComponent* existing = registry->findComponent<PointsComponent>(entity);
+        PointsComponent pts = decodePointsComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<PointsComponent>())) {
+            registry->addComponent<PointsComponent>(entity, pts);
+        } else {
+            registry->getComponent<PointsComponent>(entity) = pts;
         }
     }
 
@@ -4824,4 +4840,80 @@ InstancedMeshComponent editor::Stream::decodeInstancedMeshComponent(const YAML::
     instmesh.needUpdateInstances = true;
 
     return instmesh;
+}
+
+YAML::Node editor::Stream::encodePointsComponent(const PointsComponent& points) {
+    YAML::Node node;
+
+    node["maxPoints"] = points.maxPoints;
+    node["transparent"] = points.transparent;
+    node["autoTransparency"] = points.autoTransparency;
+    node["texture"] = encodeTexture(points.texture);
+
+    YAML::Node framesNode;
+    for (unsigned int i = 0; i < points.numFramesRect; i++) {
+        framesNode.push_back(encodeSpriteFrameData(points.framesRect[i]));
+    }
+    if (framesNode.size() > 0) {
+        node["framesRect"] = framesNode;
+    }
+
+    YAML::Node pointsNode;
+    for (const PointData& pt : points.points) {
+        YAML::Node ptNode;
+        ptNode["position"] = encodeVector3(pt.position);
+        ptNode["color"] = encodeVector4(pt.color);
+        ptNode["size"] = pt.size;
+        ptNode["rotation"] = pt.rotation;
+        ptNode["textureRect"] = encodeRect(pt.textureRect);
+        ptNode["visible"] = pt.visible;
+        pointsNode.push_back(ptNode);
+    }
+    node["points"] = pointsNode;
+
+    return node;
+}
+
+PointsComponent editor::Stream::decodePointsComponent(const YAML::Node& node, const PointsComponent* oldPoints) {
+    PointsComponent points;
+    if (oldPoints) { points = *oldPoints; }
+
+    if (node["maxPoints"]) points.maxPoints = node["maxPoints"].as<unsigned int>();
+    if (node["transparent"]) points.transparent = node["transparent"].as<bool>();
+    if (node["autoTransparency"]) points.autoTransparency = node["autoTransparency"].as<bool>();
+    if (node["texture"]) points.texture = decodeTexture(node["texture"]);
+
+    if (node["framesRect"]) {
+        points.numFramesRect = 0;
+        for (const YAML::Node& frameNode : node["framesRect"]) {
+            if (points.numFramesRect < (unsigned int)points.framesRect.size()) {
+                points.framesRect[points.numFramesRect] = decodeSpriteFrameData(frameNode);
+                points.numFramesRect++;
+            }
+        }
+    }
+
+    if (node["points"]) {
+        points.points.clear();
+        for (const YAML::Node& ptNode : node["points"]) {
+            PointData pt;
+            if (ptNode["position"]) pt.position = decodeVector3(ptNode["position"]);
+            if (ptNode["color"]) pt.color = decodeVector4(ptNode["color"]);
+            if (ptNode["size"]) pt.size = ptNode["size"].as<float>();
+            if (ptNode["rotation"]) pt.rotation = ptNode["rotation"].as<float>();
+            if (ptNode["textureRect"]) pt.textureRect = decodeRect(ptNode["textureRect"]);
+            if (ptNode["visible"]) pt.visible = ptNode["visible"].as<bool>();
+            points.points.push_back(pt);
+        }
+    }
+
+    // Reset runtime fields
+    points.loaded = false;
+    points.loadCalled = false;
+    points.needUpdate = true;
+    points.needUpdateBuffer = false;
+    points.needUpdateTexture = true;
+    points.needReload = false;
+
+    return points;
 }
