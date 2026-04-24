@@ -103,6 +103,7 @@ def create_build_dir(name):
 
 @click.command()
 @click.option('--platform', '-p', required=True, type=click.Choice(['web', 'linux', 'windows', 'macos', 'macos-xcode', 'ios-xcode'], case_sensitive=False), help="Plataform build type")
+@click.option('--doriax', '-e', default='..', type=click.Path(), help="Doriax engine root path")
 @click.option('--project', '-s', default='../project', type=click.Path(), help="Source root path of project files")
 @click.option('--appname', '-a', default='doriax-project', help="Project target name")
 @click.option('--output', '-o', type=click.Path(), help="Output directory")
@@ -113,12 +114,13 @@ def create_build_dir(name):
 @click.option('--no-cpp-init', is_flag=True, help="No call C++ init on project start")
 @click.option('--no-lua-init', is_flag=True, help="No call Lua on project start")
 @click.option('--em-shell-file', type=click.Path(), help="Emscripten shell file")
-def build(platform, project, appname, output, build, debug, graphic_backend, app_backend, no_lua_init, no_cpp_init, em_shell_file):
+def build(platform, doriax, project, appname, output, build, debug, graphic_backend, app_backend, no_lua_init, no_cpp_init, em_shell_file):
 
     projectRoot = os.path.abspath(project)
+    doriaxRoot = os.path.abspath(doriax)
 
     cmake_generator = ""
-    source_path = projectRoot
+    source_path = doriaxRoot
     cmake_definitions = []
 
     build_config = []
