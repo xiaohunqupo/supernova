@@ -70,7 +70,7 @@ def get_frag(shaderType):
     return os.path.join(script_dir, "shaderlib", shaderType+'.frag')
 
 def get_header_output(engine_root):
-    return os.path.join(engine_root, "engine", "shaders")
+    return os.path.join(engine_root, "shaders")
 
 def get_sbs_output(shader, lang, temp_dir):
     outpath = os.path.join(temp_dir, shader+"_"+lang)
