@@ -4373,7 +4373,7 @@ void editor::Properties::drawUILayoutComponent(ComponentType cpType, SceneProjec
     settingsPositionOffset.stepSize = 1.0f;
     settingsPositionOffset.secondColSize = 6 * ImGui::GetFontSize();
 
-    beginTable(cpType, getLabelSize("Ignore Scissor"));
+    beginTable(cpType, getLabelSize("Position Offset"));
     propertyRow(RowPropertyType::UInt, cpType, "width", "Width", sceneProject, entities, settingsInt);
     propertyRow(RowPropertyType::UInt, cpType, "height", "Height", sceneProject, entities, settingsInt);
     propertyRow(RowPropertyType::Bool, cpType, "usingAnchors", "Use Anchors", sceneProject, entities);
@@ -6073,7 +6073,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 
     ImGui::SeparatorText("Position");
-    beginTable(cpType, getLabelSize("To Position"), "position_table");
+    beginTable(cpType, getLabelSize("From Position"), "position_table");
     propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.minPosition", "Min Position", sceneProject, entities);
     propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.maxPosition", "Max Position", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "positionModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
@@ -6083,7 +6083,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 
     ImGui::SeparatorText("Velocity");
-    beginTable(cpType, getLabelSize("To Velocity"), "velocity_table");
+    beginTable(cpType, getLabelSize("From Velocity"), "velocity_table");
     propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.minVelocity", "Min Velocity", sceneProject, entities);
     propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.maxVelocity", "Max Velocity", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "velocityModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
@@ -6093,7 +6093,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 
     ImGui::SeparatorText("Acceleration");
-    beginTable(cpType, getLabelSize("To Acceleration"), "acceleration_table");
+    beginTable(cpType, getLabelSize("From Acceleration"), "acceleration_table");
     propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.minAcceleration", "Min Acceleration", sceneProject, entities);
     propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.maxAcceleration", "Max Acceleration", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
@@ -6103,7 +6103,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 
     ImGui::SeparatorText("Color");
-    beginTable(cpType, getLabelSize("Use sRGB"), "color_table");
+    beginTable(cpType, getLabelSize("From Color"), "color_table");
     propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.minColor", "Min Color", sceneProject, entities);
     propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.maxColor", "Max Color", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "colorInitializer.useSRGB", "Use sRGB", sceneProject, entities);
@@ -6115,7 +6115,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 
     ImGui::SeparatorText("Alpha");
-    beginTable(cpType, getLabelSize("To Alpha"), "alpha_table");
+    beginTable(cpType, getLabelSize("From Alpha"), "alpha_table");
     propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.minAlpha", "Min Alpha", sceneProject, entities, settingsFloat);
     propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.maxAlpha", "Max Alpha", sceneProject, entities, settingsFloat);
     propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
@@ -6125,7 +6125,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 
     ImGui::SeparatorText("Size");
-    beginTable(cpType, getLabelSize("To Size"), "size_table");
+    beginTable(cpType, getLabelSize("From Size"), "size_table");
     propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.minSize", "Min Size", sceneProject, entities, settingsFloat);
     propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.maxSize", "Max Size", sceneProject, entities, settingsFloat);
     propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
@@ -6147,7 +6147,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     endTable();
 
     ImGui::SeparatorText("Scale");
-    beginTable(cpType, getLabelSize("To Scale"), "scale_table");
+    beginTable(cpType, getLabelSize("From Scale"), "scale_table");
     propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.minScale", "Min Scale", sceneProject, entities);
     propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.maxScale", "Max Scale", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "scaleModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
@@ -6161,11 +6161,14 @@ void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject*
     RowSettings settingsInt;
     settingsInt.secondColSize = 6 * ImGui::GetFontSize();
 
-    beginTable(cpType, getLabelSize("Auto Transparency"));
-    propertyRow(RowPropertyType::UInt, cpType, "maxPoints", "Max Points", sceneProject, entities, settingsInt);
+    beginTable(cpType, getLabelSize("Transparent"));
     propertyRow(RowPropertyType::Texture, cpType, "texture", "Texture", sceneProject, entities);
-    propertyRow(RowPropertyType::Bool, cpType, "transparent", "Transparent", sceneProject, entities);
-    propertyRow(RowPropertyType::Bool, cpType, "autoTransparency", "Auto Transparency", sceneProject, entities);
+
+    RowSettings transparencySettings;
+    transparencySettings.help = "Just for render ordering";
+    propertyRowWithAutoButton(RowPropertyType::Bool, cpType, "transparent", "Transparent", "autoTransparency", "Auto Transparency", sceneProject, entities, transparencySettings);
+
+    propertyRow(RowPropertyType::UInt, cpType, "maxPoints", "Max Points", sceneProject, entities, settingsInt);
     endTable();
 
     if (entities.size() != 1) {
@@ -8223,7 +8226,7 @@ void editor::Properties::drawAlphaActionComponent(ComponentType cpType, ScenePro
 }
 
 void editor::Properties::drawSpriteAnimationComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    beginTable(cpType, getLabelSize("Sprite counter"));
+    beginTable(cpType, getLabelSize("Interval index"));
     propertyRow(RowPropertyType::String, cpType, "name", "Name", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
     propertyRow(RowPropertyType::Label, cpType, "frameIndex", "Frame index", sceneProject, entities);
