@@ -452,6 +452,63 @@ void editor::TerrainEditWindow::applySnapshotToTexture(Project* project, Texture
     texture.setReleaseDataAfterLoad(false);
 }
 
+void editor::TerrainEditWindow::cleanUnusedTerrainMaps(Project* project){
+    if (!project || project->getProjectPath().empty()){
+        return;
+    }
+
+    std::unordered_set<std::string> activeFiles;
+    for (SceneProject& sceneProject : project->getScenes()){
+        if (!sceneProject.scene){
+            continue;
+        }
+
+        for (int i = 0; i < sceneProject.entities.size(); i++){
+            Entity entity = sceneProject.entities[i];
+            TerrainComponent* terrain = sceneProject.scene->findComponent<TerrainComponent>(entity);
+            if (terrain){
+                if (!terrain->heightMap.getPath(0).empty() && isEditableTexturePath(terrain->heightMap.getPath(0))){
+                    activeFiles.insert(fs::path(terrain->heightMap.getPath(0)).filename().string());
+                }
+                if (!terrain->blendMap.getPath(0).empty() && isEditableTexturePath(terrain->blendMap.getPath(0))){
+                    activeFiles.insert(fs::path(terrain->blendMap.getPath(0)).filename().string());
+                }
+            }
+        }
+    }
+
+    fs::path baseDir = "terrain_maps";
+    fs::path assetsDir = project->getAssetsDir();
+    if (assetsDir.is_absolute() && !project->getProjectPath().empty()){
+        std::error_code ec;
+        fs::path relativeAssets = fs::relative(assetsDir, project->getProjectPath(), ec);
+        if (!ec && !relativeAssets.empty()){
+            assetsDir = relativeAssets;
+        }
+    }
+    if (!assetsDir.empty() && assetsDir != "."){
+        baseDir = assetsDir / baseDir;
+    }
+    fs::path absoluteBaseDir = project->getProjectPath() / baseDir;
+
+    std::error_code ec;
+    if (!fs::exists(absoluteBaseDir, ec) || !fs::is_directory(absoluteBaseDir, ec)){
+        return;
+    }
+
+    for (const auto& entry : fs::directory_iterator(absoluteBaseDir, ec)){
+        if (entry.is_regular_file(ec)){
+            std::string filename = entry.path().filename().string();
+            if (filename.rfind("terrain_edit_", 0) == 0){
+                if (activeFiles.find(filename) == activeFiles.end()){
+                    fs::remove(entry.path(), ec);
+                    Out::info("Garbage collected old terrain map: %s", filename.c_str());
+                }
+            }
+        }
+    }
+}
+
 bool editor::TerrainEditWindow::ensureEditableMap(Project* project, SceneProject* sceneProject, Entity entity, TerrainMapTarget target, int resolution){
     TerrainComponent& terrain = sceneProject->scene->getComponent<TerrainComponent>(entity);
     Texture& texture = getTerrainTexture(terrain, target);

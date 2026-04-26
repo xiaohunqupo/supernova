@@ -2,6 +2,7 @@
 #include "Factory.h"
 
 #include "Backend.h"
+#include "window/TerrainEditWindow.h"
 
 #include <fstream>
 #ifdef _WIN32
@@ -2426,6 +2427,8 @@ void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::p
         }
         addTab(TabType::SCENE, relPath.string());
     }
+
+    TerrainEditWindow::cleanUnusedTerrainMaps(this);
 
     saveProject();
 

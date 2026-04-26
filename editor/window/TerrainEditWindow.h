@@ -163,6 +163,8 @@ namespace doriax::editor{
     public:
         static constexpr const char* WINDOW_NAME = "Terrain Editor";
 
+        static void cleanUnusedTerrainMaps(Project* project);
+
         TerrainEditWindow(Project* project);
         ~TerrainEditWindow();
 
