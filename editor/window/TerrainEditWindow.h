@@ -89,13 +89,15 @@ namespace doriax::editor{
         static bool writeTextureFile(Project* project, const std::string& relativePath, int width, int height, int channels, const std::vector<unsigned char>& pixels);
         static bool setFileBackedTextureData(Project* project, Texture& texture, const std::string& relativePath, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
         static bool hasLoadedData(Texture& texture);
+        static bool isOwnedEditableTexturePath(const std::string& path, uint32_t sceneId, Entity entity, TerrainMapTarget target);
+        static bool loadTerrainTextureDataFromPath(Project* project, const std::string& path, TextureData& data);
         static TerrainMapInfo getTerrainMapInfo(Texture& texture);
         static std::string getTerrainMapStatusText(const TerrainMapInfo& info);
         static void showTerrainMapStatus(const TerrainMapInfo& info);
         static std::vector<unsigned char> copyTexturePixels(TextureData& data);
         static std::vector<unsigned char> convertTexturePixels(TextureData& data, TerrainMapTarget target);
         static void setOwnedTextureData(Texture& texture, const std::string& id, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
-        static TerrainMapSnapshot captureSnapshot(Texture& texture, bool forcePixels);
+        static TerrainMapSnapshot captureSnapshot(Project* project, Texture& texture, bool forcePixels);
         static bool snapshotsEqual(const TerrainMapSnapshot& a, const TerrainMapSnapshot& b);
         static void applySnapshotToTexture(Project* project, Texture& texture, const TerrainMapSnapshot& snapshot);
         static bool ensureEditableMap(Project* project, SceneProject* sceneProject, Entity entity, TerrainMapTarget target, int resolution);
