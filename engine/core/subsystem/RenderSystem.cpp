@@ -2060,14 +2060,13 @@ void RenderSystem::updateTerrain(TerrainComponent& terrain, Transform& transform
 }
 
 AABB RenderSystem::getTerrainNodeAABB(Transform& transform, TerrainNode& terrainNode){
-    float halfSize = terrainNode.size/2;
-    Vector3 worldHalfScale(halfSize * transform.worldScale.x, 1, halfSize * transform.worldScale.z);
-    Vector3 worldPosition = transform.modelMatrix * Vector3(terrainNode.position.x, 0, terrainNode.position.y);
+    float halfSize = terrainNode.size / 2.0f;
+    Vector3 localMin(terrainNode.position.x - halfSize, terrainNode.minHeight, terrainNode.position.y - halfSize);
+    Vector3 localMax(terrainNode.position.x + halfSize, terrainNode.maxHeight, terrainNode.position.y + halfSize);
 
-    Vector3 c1 = Vector3(worldPosition.x - worldHalfScale.x, terrainNode.minHeight, worldPosition.z - worldHalfScale.z);
-    Vector3 c2 = Vector3(worldPosition.x + worldHalfScale.x, terrainNode.maxHeight, worldPosition.z + worldHalfScale.z);
-
-    return AABB(c1, c2);
+    AABB box(localMin, localMax);
+    box.transform(transform.modelMatrix);
+    return box;
 };
 
 bool RenderSystem::isTerrainNodeInSphere(Vector3 position, float radius, const AABB& box) {
