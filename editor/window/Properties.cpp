@@ -539,6 +539,10 @@ void editor::Properties::dragDropResourcesFont(ComponentType cpType, std::string
         return;
     }
 
+    if (ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled) {
+        return;
+    }
+
     if (ImGui::BeginDragDropTarget()){
 
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("resource_files", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
@@ -605,6 +609,10 @@ void editor::Properties::dragDropResourcesFont(ComponentType cpType, std::string
 void editor::Properties::dragDropResourcesTexture(ComponentType cpType, std::string id, SceneProject* sceneProject, std::vector<Entity> entities, ComponentType componentType){
     // Block DnD while playing for non-script components
     if (sceneProject && sceneProject->playState != ScenePlayState::STOPPED) {
+        return;
+    }
+
+    if (ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled) {
         return;
     }
 
@@ -3150,7 +3158,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             }
         };
 
-        if (ImGui::BeginDragDropTarget()) {
+        if (!(ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled) && ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("resource_files", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
                 std::vector<std::string> receivedStrings = Util::getStringsFromPayload(payload);
 
@@ -4076,7 +4084,7 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
         ImVec2 separatorMax = ImGui::GetItemRectMax();
         ImVec2 cursorAfterSeparator = ImGui::GetCursorPos();
 
-        if (!submeshGenerated) {
+        {
             float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
             float clearButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x;
             ImVec2 deleteButtonSize = ImVec2(clearButtonWidth + clearButtonFramePadding * 2, 0);
