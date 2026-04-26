@@ -3278,7 +3278,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
                 }
             }
             ImGui::EndDragDropTarget();
-        } else {
+        } else if (matDropPreviewing && matDropPropertyId == id) {
             // Drag ended without delivery — restore preview
             restoreMatDropPreview();
         }
@@ -4049,6 +4049,7 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
     }
 
     for (int s = 0; s < numSubmeshes; s++){
+        ImGui::PushID(s);
         std::string submeshLabel = "Submesh " + std::to_string(s);
         ImGui::SeparatorText(submeshLabel.c_str());
 
@@ -4097,6 +4098,7 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
                     new MeshChangeCmd(project, sceneProject->id, entity, meshComp));
             }
 
+            ImGui::PopID();
             return;
         }
         ImGui::PopStyleVar();
@@ -4166,6 +4168,8 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
         propertyRow(RowPropertyType::Vector4, cpType, "submeshes["+std::to_string(s)+"].textureRect", "Texture Rect", sceneProject, entities, settingsTextureRect);
 
         endTable();
+
+        ImGui::PopID();
     }
 }
 
@@ -5381,6 +5385,15 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
 void editor::Properties::drawTerrainComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     TerrainComponent& terrain = sceneProject->scene->getComponent<TerrainComponent>(entities[0]);
 
+    RowSettings textureSettings;
+    textureSettings.secondColSize = -1;
+
+    ImGui::SeparatorText("Maps");
+    beginTable(cpType, getLabelSize("Blend Map"), "terrain_maps");
+    propertyRow(RowPropertyType::Texture, cpType, "heightMap", "Height Map", sceneProject, entities, textureSettings);
+    propertyRow(RowPropertyType::Texture, cpType, "blendMap", "Blend Map", sceneProject, entities, textureSettings);
+    endTable();
+
     if (entities.size() == 1){
         if (ImGui::Button(ICON_FA_MOUNTAIN " Open Terrain Editor")){
             if (TerrainEditWindow* terrainEditWindow = Backend::getApp().getTerrainEditWindow()){
@@ -5389,13 +5402,8 @@ void editor::Properties::drawTerrainComponent(ComponentType cpType, SceneProject
         }
     }
 
-    RowSettings textureSettings;
-    textureSettings.secondColSize = -1;
-
-    ImGui::SeparatorText("Textures");
-    beginTable(cpType, getLabelSize("Detail Green"), "terrain_textures");
-    propertyRow(RowPropertyType::Texture, cpType, "heightMap", "Height Map", sceneProject, entities, textureSettings);
-    propertyRow(RowPropertyType::Texture, cpType, "blendMap", "Blend Map", sceneProject, entities, textureSettings);
+    ImGui::SeparatorText("Details");
+    beginTable(cpType, getLabelSize("Detail Green"), "terrain_details");
     propertyRow(RowPropertyType::Texture, cpType, "textureDetailRed", "Detail Red", sceneProject, entities, textureSettings);
     propertyRow(RowPropertyType::Texture, cpType, "textureDetailGreen", "Detail Green", sceneProject, entities, textureSettings);
     propertyRow(RowPropertyType::Texture, cpType, "textureDetailBlue", "Detail Blue", sceneProject, entities, textureSettings);

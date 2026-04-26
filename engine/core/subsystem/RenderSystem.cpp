@@ -2925,10 +2925,22 @@ void RenderSystem::update(double dt){
                 instmesh->needUpdateInstances = false;
             }
 
+            if (terrain && mesh.numSubmeshes > 1 && mesh.submeshes[0].needUpdateTexture){
+                for (unsigned int s = 1; s < mesh.numSubmeshes; s++){
+                    if (mesh.submeshes[s].material != mesh.submeshes[0].material){
+                        mesh.submeshes[s].material = mesh.submeshes[0].material;
+                    }
+                    mesh.submeshes[s].needUpdateTexture = true;
+                }
+            }
+
             for (int s = 0; s < mesh.numSubmeshes; s++){
                 if (mesh.submeshes[s].needUpdateTexture){
-                    if (mesh.submeshes[i].textureShadow){
-                        mesh.submeshes[i].needUpdateDepthTexture = true;
+                    if (terrain){
+                        transform.needUpdate = true;
+                    }
+                    if (mesh.submeshes[s].textureShadow){
+                        mesh.submeshes[s].needUpdateDepthTexture = true;
                     }
                     if (checkPBRTextures(mesh.submeshes[s].material, mesh.receiveLights)){
                         if (!(mesh.submeshes[s].shaderProperties & (1 << 1)) && !(mesh.submeshes[s].shaderProperties & (1 << 2))){ // not 'Uv1' and not 'Uv2'
