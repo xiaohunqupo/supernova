@@ -54,7 +54,26 @@ std::vector<Entity> editor::Structure::getTopLevelSelectedEntities(Entity dragge
 editor::Structure::Structure(Project* project, SceneWindow* sceneWindow){
     this->project = project;
     this->sceneWindow = sceneWindow;
+    this->windowOpen = true;
+    this->focusRequested = false;
     this->openParent = NULL_ENTITY;
+}
+
+void editor::Structure::setOpen(bool open){
+    if (open){
+        if (!windowOpen){
+            focusRequested = true;
+        }
+        windowOpen = true;
+        return;
+    }
+
+    windowOpen = false;
+    focusRequested = false;
+}
+
+bool editor::Structure::isOpen() const{
+    return windowOpen;
 }
 
 void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addToBundle){
@@ -1244,8 +1263,27 @@ void editor::Structure::popNodeImGuiId(const TreeNode& node){
 }
 
 void editor::Structure::show(){
+    if (!windowOpen) {
+        return;
+    }
+
     SceneProject* sceneProject = project->getSelectedScene();
     if (!sceneProject || !sceneProject->scene) {
+        return;
+    }
+
+    if (focusRequested) {
+        ImGui::SetNextWindowFocus();
+        focusRequested = false;
+    }
+
+    bool wasOpen = windowOpen;
+
+    if (!ImGui::Begin(Structure::WINDOW_NAME, &windowOpen)) {
+        ImGui::End();
+        if (wasOpen && !windowOpen) {
+            setOpen(false);
+        }
         return;
     }
 
@@ -1538,9 +1576,6 @@ void editor::Structure::show(){
             splicedNew = true;
         }
     } while (splicedNew);
-
-    ImGui::Begin(Structure::WINDOW_NAME);
-
     showIconMenu();
     ImGui::BeginChild("StructureScrollRegion", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
 
@@ -1644,4 +1679,8 @@ void editor::Structure::show(){
     }
 
     ImGui::End();
+
+    if (wasOpen && !windowOpen) {
+        setOpen(false);
+    }
 }

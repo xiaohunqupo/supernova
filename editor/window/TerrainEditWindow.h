@@ -125,6 +125,7 @@ namespace doriax::editor{
         Project* project;
 
         bool windowOpen;
+        bool focusRequested;
         bool brushActive;
         bool normalizeBlendPaint;
 
@@ -169,7 +170,10 @@ namespace doriax::editor{
         ~TerrainEditWindow();
 
         void show();
+        void open();
         void openForEntity(Entity entity, uint32_t sceneId);
+        void setOpen(bool open);
+        bool isOpen() const;
 
         bool isEditingScene(Scene* scene) const;
         bool beginStroke(Scene* scene, const Ray& ray);

@@ -49,6 +49,8 @@ namespace doriax::editor {
 
         // Tab notification
         bool hasNotification;
+        bool windowOpen;
+        bool focusRequested;
         bool isWindowVisible;
 
         void rebuildBuffer(float wrapWidth); // accept wrap width
@@ -70,5 +72,7 @@ namespace doriax::editor {
         void addLog(LogType type, const char* fmt, ...);
         void addLog(LogType type, const std::string& message);
         void show();
+        void setOpen(bool open);
+        bool isOpen() const;
     };
 }

@@ -287,10 +287,46 @@ void editor::App::showMenu(){
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("Reset Layout")) {
-                 buildDockspace();
+            bool structureOpen = structureWindow->isOpen();
+            if (ImGui::MenuItem(Structure::WINDOW_NAME, nullptr, &structureOpen)) {
+                structureWindow->setOpen(structureOpen);
             }
-             ImGui::EndMenu();
+
+            bool propertiesOpen = propertiesWindow->isOpen();
+            if (ImGui::MenuItem(Properties::WINDOW_NAME, nullptr, &propertiesOpen)) {
+                propertiesWindow->setOpen(propertiesOpen);
+            }
+
+            bool resourcesOpen = resourcesWindow->isOpen();
+            if (ImGui::MenuItem(ResourcesWindow::WINDOW_NAME, nullptr, &resourcesOpen)) {
+                resourcesWindow->setOpen(resourcesOpen);
+            }
+
+            bool outputOpen = outputWindow->isOpen();
+            if (ImGui::MenuItem(OutputWindow::WINDOW_NAME, nullptr, &outputOpen)) {
+                outputWindow->setOpen(outputOpen);
+            }
+
+            bool animationOpen = animationWindow->isOpen();
+            if (ImGui::MenuItem(AnimationWindow::WINDOW_NAME, nullptr, &animationOpen)) {
+                animationWindow->setOpen(animationOpen);
+            }
+
+            bool terrainOpen = terrainEditWindow->isOpen();
+            if (ImGui::MenuItem(TerrainEditWindow::WINDOW_NAME, nullptr, &terrainOpen)) {
+                terrainEditWindow->setOpen(terrainOpen);
+            }
+
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reset Layout")) {
+                structureWindow->setOpen(true);
+                propertiesWindow->setOpen(true);
+                resourcesWindow->setOpen(true);
+                outputWindow->setOpen(true);
+                animationWindow->setOpen(true);
+                buildDockspace();
+            }
+            ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Project")) {
             if (ImGui::MenuItem("Project Settings...")) {
@@ -347,10 +383,7 @@ void editor::App::showMenu(){
         }
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("About Doriax")) {
-                registerAlert("About Doriax", "Doriax Engine Editor\n\nVersion: 0.1.0\n\nDeveloped by Doriax Team");
-            }
-            if (ImGui::MenuItem("Documentation")) {
-                // TODO: Open URL
+                registerAlert("About Doriax", "Doriax Engine\n\nVersion: (development)\n\nDeveloped by Eduardo Doria");
             }
             ImGui::EndMenu();
         }

@@ -68,6 +68,8 @@ namespace doriax::editor{
         Project* project;
         Command* cmd;
 
+        bool windowOpen;
+        bool focusRequested;
         bool finishProperty;
 
         std::set<std::string> usedPreviewIds;
@@ -228,6 +230,8 @@ namespace doriax::editor{
         Properties(Project* project);
 
         void show();
+        void setOpen(bool open);
+        bool isOpen() const;
     };
 
 }

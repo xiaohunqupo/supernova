@@ -861,6 +861,7 @@ public:
 editor::TerrainEditWindow::TerrainEditWindow(Project* project){
     this->project = project;
     windowOpen = false;
+    focusRequested = false;
     brushActive = false;
     selectedSceneId = NULL_PROJECT_SCENE;
     selectedEntity = NULL_ENTITY;
@@ -1168,14 +1169,16 @@ bool editor::TerrainEditWindow::deleteMapForTarget(TerrainMapTarget target){
 
 void editor::TerrainEditWindow::show(){
     if (!windowOpen){
-        brushActive = false;
-        clearStroke();
         return;
     }
 
     updateTargetFromSelection();
 
     ImGui::SetNextWindowSize(ImVec2(340.0f, 480.0f), ImGuiCond_FirstUseEver);
+    if (focusRequested){
+        ImGui::SetNextWindowFocus();
+        focusRequested = false;
+    }
 
     bool wasOpen = windowOpen;
     if (!ImGui::Begin(WINDOW_NAME, &windowOpen)){
@@ -1405,13 +1408,32 @@ void editor::TerrainEditWindow::show(){
     }
 
     if (wasOpen && !windowOpen){
-        brushActive = false;
-        clearStroke();
+        setOpen(false);
     }
 }
 
+void editor::TerrainEditWindow::open(){
+    setOpen(true);
+    updateTargetFromSelection();
+}
+
+void editor::TerrainEditWindow::setOpen(bool open){
+    if (open){
+        if (!windowOpen){
+            focusRequested = true;
+        }
+        windowOpen = true;
+        return;
+    }
+
+    windowOpen = false;
+    focusRequested = false;
+    brushActive = false;
+    clearStroke();
+}
+
 void editor::TerrainEditWindow::openForEntity(Entity entity, uint32_t sceneId){
-    windowOpen = true;
+    open();
     selectedSceneId = sceneId;
     selectedEntity = entity;
 
@@ -1425,6 +1447,10 @@ void editor::TerrainEditWindow::openForEntity(Entity entity, uint32_t sceneId){
     heightMapResolution = ts.heightMapResolution;
     blendMapResolution  = ts.blendMapResolution;
     normalizeBlendPaint = ts.normalizeBlendPaint;
+}
+
+bool editor::TerrainEditWindow::isOpen() const{
+    return windowOpen;
 }
 
 bool editor::TerrainEditWindow::isEditingScene(Scene* scene) const{

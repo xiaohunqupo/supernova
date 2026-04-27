@@ -365,7 +365,26 @@ editor::Properties::Properties(Project* project){
     this->project = project;
     this->cmd = nullptr;
 
+    this->windowOpen = true;
+    this->focusRequested = false;
     this->finishProperty = false;
+}
+
+void editor::Properties::setOpen(bool open){
+    if (open){
+        if (!windowOpen){
+            focusRequested = true;
+        }
+        windowOpen = true;
+        return;
+    }
+
+    windowOpen = false;
+    focusRequested = false;
+}
+
+bool editor::Properties::isOpen() const{
+    return windowOpen;
 }
 
 editor::RowPropertyType editor::Properties::scriptPropertyTypeToRowPropertyType(ScriptPropertyType scriptType){
@@ -8961,7 +8980,24 @@ void editor::Properties::show(){
     // Flush any debounced material file writes
     flushDirtyMaterials(project, ImGui::GetIO().DeltaTime);
 
-    ImGui::Begin(Properties::WINDOW_NAME);
+    if (!windowOpen) {
+        return;
+    }
+
+    if (focusRequested) {
+        ImGui::SetNextWindowFocus();
+        focusRequested = false;
+    }
+
+    bool wasOpen = windowOpen;
+
+    if (!ImGui::Begin(Properties::WINDOW_NAME, &windowOpen)) {
+        ImGui::End();
+        if (wasOpen && !windowOpen) {
+            setOpen(false);
+        }
+        return;
+    }
 
     uint32_t propertiesSceneId = project->getSelectedSceneForProperties();
     SceneProject* sceneProject = project->getScene(propertiesSceneId);
@@ -9392,4 +9428,8 @@ void editor::Properties::show(){
     textureSlicerToolDialog.show();
 
     ImGui::End();
+
+    if (wasOpen && !windowOpen) {
+        setOpen(false);
+    }
 }

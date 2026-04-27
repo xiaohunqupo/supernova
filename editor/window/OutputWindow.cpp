@@ -47,8 +47,28 @@ OutputWindow::OutputWindow() {
     }
     searchMatchCase = false; // default: case-insensitive
     hasNotification = false;
+    windowOpen = true;
+    focusRequested = false;
     isWindowVisible = false;
     clear();
+}
+
+void OutputWindow::setOpen(bool open) {
+    if (open) {
+        if (!windowOpen) {
+            focusRequested = true;
+        }
+        windowOpen = true;
+        return;
+    }
+
+    windowOpen = false;
+    focusRequested = false;
+    isWindowVisible = false;
+}
+
+bool OutputWindow::isOpen() const {
+    return windowOpen;
 }
 
 void OutputWindow::clear() {
@@ -400,13 +420,28 @@ bool OutputWindow::passTextFilter(const char* text) const {
 }
 
 void OutputWindow::show() {
+    if (!windowOpen) {
+        isWindowVisible = false;
+        return;
+    }
+
+    if (focusRequested) {
+        ImGui::SetNextWindowFocus();
+        focusRequested = false;
+    }
+
+    bool wasOpen = windowOpen;
+
     if (hasNotification) {
         App::pushTabNotificationStyle();
     }
-    if (!ImGui::Begin(OutputWindow::WINDOW_NAME, nullptr, hasNotification ? ImGuiWindowFlags_UnsavedDocument : 0)) {
+    if (!ImGui::Begin(OutputWindow::WINDOW_NAME, &windowOpen, hasNotification ? ImGuiWindowFlags_UnsavedDocument : 0)) {
         if (hasNotification) App::popTabNotificationStyle();
         isWindowVisible = false;
         ImGui::End();
+        if (wasOpen && !windowOpen) {
+            setOpen(false);
+        }
         return;
     }
     if (hasNotification) App::popTabNotificationStyle();
@@ -872,4 +907,8 @@ void OutputWindow::show() {
 
     ImGui::EndChild();
     ImGui::End();
+
+    if (wasOpen && !windowOpen) {
+        setOpen(false);
+    }
 }

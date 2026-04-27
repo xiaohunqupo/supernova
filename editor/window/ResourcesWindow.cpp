@@ -49,6 +49,8 @@ editor::ResourcesWindow::ResourcesWindow(Project* project, CodeEditor* codeEdito
     this->isRenaming = false;
     this->isCreatingNewDirectory = false;
     this->timeSinceLastCheck = 0.0f;
+    this->windowOpen = true;
+    this->focusRequested = false;
     this->windowFocused = false;
     this->showDeleteConfirmation = false;
     this->stopThumbnailThread = false;
@@ -67,6 +69,24 @@ editor::ResourcesWindow::~ResourcesWindow() {
 
 bool editor::ResourcesWindow::isFocused() const{
     return windowFocused;
+}
+
+void editor::ResourcesWindow::setOpen(bool open){
+    if (open){
+        if (!windowOpen){
+            focusRequested = true;
+        }
+        windowOpen = true;
+        return;
+    }
+
+    windowOpen = false;
+    focusRequested = false;
+    windowFocused = false;
+}
+
+bool editor::ResourcesWindow::isOpen() const{
+    return windowOpen;
 }
 
 void editor::ResourcesWindow::notifyProjectPathChange(){
@@ -1721,13 +1741,33 @@ void editor::ResourcesWindow::show() {
         timeSinceLastCheck = 0.0f;
     }
 
+    if (!windowOpen) {
+        windowFocused = false;
+        return;
+    }
+
     ctrlPressed = ImGui::GetIO().KeyCtrl;
     shiftPressed = ImGui::GetIO().KeyShift;
 
     windowPos = ImGui::GetWindowPos();
     scrollOffset = ImVec2(ImGui::GetScrollX(), ImGui::GetScrollY());
 
-    ImGui::Begin(ResourcesWindow::WINDOW_NAME);
+    if (focusRequested) {
+        ImGui::SetNextWindowFocus();
+        focusRequested = false;
+    }
+
+    bool wasOpen = windowOpen;
+
+    if (!ImGui::Begin(ResourcesWindow::WINDOW_NAME, &windowOpen)) {
+        windowFocused = false;
+        ImGui::End();
+        if (wasOpen && !windowOpen) {
+            setOpen(false);
+        }
+        return;
+    }
+
     windowPos = ImGui::GetWindowPos();
     scrollOffset = ImVec2(ImGui::GetScrollX(), ImGui::GetScrollY());
 
@@ -1892,6 +1932,10 @@ void editor::ResourcesWindow::show() {
     }
 
     ImGui::End();
+
+    if (wasOpen && !windowOpen) {
+        setOpen(false);
+    }
 
     handleNewDirectory();
     handleRename();

@@ -51,6 +51,9 @@ namespace doriax::editor{
 
         std::vector<uint32_t> selectedScenes;
 
+        bool windowOpen;
+        bool focusRequested;
+
         Entity openParent;
 
         std::vector<Entity> getTopLevelSelectedEntities(Entity draggedEntity);
@@ -79,6 +82,8 @@ namespace doriax::editor{
         Structure(Project* project, SceneWindow* sceneWindow);
 
         void show();
+        void setOpen(bool open);
+        bool isOpen() const;
     };
 
 }

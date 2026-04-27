@@ -67,12 +67,44 @@ editor::AnimationWindow::AnimationWindow(Project* project){
     snapInterval = 0.1f;
 
     hasNotification = false;
+    windowOpen = true;
+    focusRequested = false;
     isWindowVisible = false;
 
     isPreviewing = false;
 
     selectedEntity = NULL_ENTITY;
     selectedSceneId = 0;
+}
+
+void editor::AnimationWindow::setOpen(bool open){
+    if (open){
+        if (!windowOpen){
+            focusRequested = true;
+        }
+        windowOpen = true;
+        return;
+    }
+
+    windowOpen = false;
+    focusRequested = false;
+    isWindowVisible = false;
+
+    if (isPreviewing) {
+        SceneProject* previewSceneProject = project->getScene(selectedSceneId);
+        if (previewSceneProject && previewSceneProject->scene) {
+            stopPreview(previewSceneProject->scene, previewSceneProject);
+        } else {
+            previewState.clear();
+            isPreviewing = false;
+        }
+    }
+
+    isPlaying = false;
+}
+
+bool editor::AnimationWindow::isOpen() const{
+    return windowOpen;
 }
 
 float editor::AnimationWindow::snapTime(float time) const {
@@ -1141,7 +1173,19 @@ bool editor::AnimationWindow::drawPlayhead(ImVec2 canvasPos, ImVec2 canvasSize, 
 }
 
 void editor::AnimationWindow::show() {
+    if (!windowOpen) {
+        isWindowVisible = false;
+        return;
+    }
+
     static bool preventScroll = false;
+
+    if (focusRequested) {
+        ImGui::SetNextWindowFocus();
+        focusRequested = false;
+    }
+
+    bool wasOpen = windowOpen;
 
     if (hasNotification) {
         App::pushTabNotificationStyle();
@@ -1150,7 +1194,7 @@ void editor::AnimationWindow::show() {
     ImGuiWindowFlags flags = hasNotification ? ImGuiWindowFlags_UnsavedDocument : 0;
     if (preventScroll) flags |= ImGuiWindowFlags_NoScrollWithMouse;
 
-    isWindowVisible = ImGui::Begin(AnimationWindow::WINDOW_NAME, nullptr, flags);
+    isWindowVisible = ImGui::Begin(AnimationWindow::WINDOW_NAME, &windowOpen, flags);
     if (hasNotification) App::popTabNotificationStyle();
 
     if (isWindowVisible) {
@@ -1176,6 +1220,9 @@ void editor::AnimationWindow::show() {
         }
         ImGui::TextDisabled("No scene selected.");
         ImGui::End();
+        if (wasOpen && !windowOpen) {
+            setOpen(false);
+        }
         return;
     }
 
@@ -1186,6 +1233,9 @@ void editor::AnimationWindow::show() {
         }
         ImGui::TextDisabled("No scene available.");
         ImGui::End();
+        if (wasOpen && !windowOpen) {
+            setOpen(false);
+        }
         return;
     }
 
@@ -1205,6 +1255,9 @@ void editor::AnimationWindow::show() {
         selectedSceneId = 0;
         ImGui::TextDisabled("No entities with AnimationComponent in this scene.");
         ImGui::End();
+        if (wasOpen && !windowOpen) {
+            setOpen(false);
+        }
         return;
     }
 
@@ -1406,6 +1459,10 @@ void editor::AnimationWindow::show() {
     if (scrollX > maxScroll) scrollX = maxScroll;
 
     ImGui::End();
+
+    if (wasOpen && !windowOpen) {
+        setOpen(false);
+    }
 }
 
 bool editor::AnimationWindow::isPreviewingEntity(Entity entity, uint32_t sceneId) const {

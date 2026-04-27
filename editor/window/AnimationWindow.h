@@ -51,6 +51,8 @@ namespace doriax::editor{
 
         // Tab notification
         bool hasNotification;
+        bool windowOpen;
+        bool focusRequested;
         bool isWindowVisible;
 
         // Animation preview
@@ -94,6 +96,8 @@ namespace doriax::editor{
         AnimationWindow(Project* project);
 
         void show();
+        void setOpen(bool open);
+        bool isOpen() const;
 
         void selectEntity(Entity entity, uint32_t sceneId);
 

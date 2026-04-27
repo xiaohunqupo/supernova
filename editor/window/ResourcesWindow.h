@@ -109,6 +109,8 @@ namespace doriax::editor {
         std::filesystem::file_time_type lastWriteTime;
         float timeSinceLastCheck;
 
+        bool windowOpen;
+        bool focusRequested;
         bool windowFocused;
 
         bool showDeleteConfirmation;
@@ -185,6 +187,8 @@ namespace doriax::editor {
         void refreshCurrentDirectory();
 
         void show();
+        void setOpen(bool open);
+        bool isOpen() const;
     };
 
 }
