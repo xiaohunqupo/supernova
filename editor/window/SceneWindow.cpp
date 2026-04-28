@@ -1257,6 +1257,7 @@ void editor::SceneWindow::show() {
 
                         drawSettingRow(ICON_FA_CAMERA " Hide camera view", sceneProject.displaySettings.hideCameraView);
                         drawSettingRow(ICON_FA_LIGHTBULB " Hide light icons", sceneProject.displaySettings.hideLightIcons, sceneProject.sceneType != SceneType::SCENE_3D);
+                        drawSettingRow(ICON_FA_VOLUME_HIGH " Hide sound icons", sceneProject.displaySettings.hideSoundIcons);
 
                         drawSettingRow(ICON_FA_SQUARE " Hide container guides", sceneProject.displaySettings.hideContainerGuides, sceneProject.sceneType == SceneType::SCENE_3D);
 

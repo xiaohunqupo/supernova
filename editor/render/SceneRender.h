@@ -15,6 +15,7 @@ namespace doriax::editor{
         bool hideAllBodies       = false;
         bool hideCameraView      = false;
         bool hideLightIcons      = false;
+        bool hideSoundIcons      = false;
         bool hideContainerGuides = false;
         bool showOrigin          = true;
         bool showGrid3D          = true;

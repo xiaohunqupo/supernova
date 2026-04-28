@@ -735,6 +735,10 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             so.icon->setPosition(transform.worldPosition);
             so.icon->setScale(0.25f * zoom);
             so.icon->setVisible(transform.visible);
+
+            if (displaySettings.hideSoundIcons) {
+                so.icon->setVisible(false);
+            }
         }
     }
 

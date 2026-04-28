@@ -1066,6 +1066,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
             sceneNode["hideAllBodies"]        = sceneProject.displaySettings.hideAllBodies;
             sceneNode["hideCameraView"]       = sceneProject.displaySettings.hideCameraView;
             sceneNode["hideLightIcons"]       = sceneProject.displaySettings.hideLightIcons;
+            sceneNode["hideSoundIcons"]       = sceneProject.displaySettings.hideSoundIcons;
             sceneNode["hideContainerGuides"]  = sceneProject.displaySettings.hideContainerGuides;
             sceneNode["showOrigin"]           = sceneProject.displaySettings.showOrigin;
             sceneNode["showGrid3D"]           = sceneProject.displaySettings.showGrid3D;
@@ -1209,6 +1210,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
                         if (sceneNode["hideAllBodies"])        ds.hideAllBodies        = sceneNode["hideAllBodies"].as<bool>();
                         if (sceneNode["hideCameraView"])       ds.hideCameraView       = sceneNode["hideCameraView"].as<bool>();
                         if (sceneNode["hideLightIcons"])       ds.hideLightIcons       = sceneNode["hideLightIcons"].as<bool>();
+                        if (sceneNode["hideSoundIcons"])       ds.hideSoundIcons       = sceneNode["hideSoundIcons"].as<bool>();
                         if (sceneNode["hideContainerGuides"])  ds.hideContainerGuides  = sceneNode["hideContainerGuides"].as<bool>();
 
                         if (sceneNode["showOrigin"])           ds.showOrigin           = sceneNode["showOrigin"].as<bool>();

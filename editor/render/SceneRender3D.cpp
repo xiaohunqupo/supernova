@@ -1212,6 +1212,10 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             currentIconSounds.insert(entity);
             bool newSound = instanciateSoundObject(entity);
             createOrUpdateSoundIcon(entity, transform, newSound);
+
+            if (displaySettings.hideSoundIcons && soundObjects.find(entity) != soundObjects.end()) {
+                soundObjects[entity].icon->setVisible(false);
+            }
         }
 
         if (signature.test(scene->getComponentId<Body3DComponent>()) && signature.test(scene->getComponentId<Transform>())) {
