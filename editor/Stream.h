@@ -48,6 +48,9 @@ namespace doriax::editor {
         static std::string lightTypeToString(LightType type);
         static LightType stringToLightType(const std::string& str);
 
+        static std::string fogTypeToString(FogType type);
+        static FogType stringToFogType(const std::string& str);
+
         static std::string lightStateToString(LightState state);
         static LightState stringToLightState(const std::string& str);
 
@@ -199,6 +202,9 @@ namespace doriax::editor {
 
         static YAML::Node encodeLightComponent(const LightComponent& light);
         static LightComponent decodeLightComponent(const YAML::Node& node, const LightComponent* oldLight = nullptr);
+
+        static YAML::Node encodeFogComponent(const FogComponent& fog);
+        static FogComponent decodeFogComponent(const YAML::Node& node, const FogComponent* oldFog = nullptr);
 
         static YAML::Node encodeCameraComponent(const CameraComponent& camera);
         static CameraComponent decodeCameraComponent(const YAML::Node& node, const CameraComponent* oldCamera = nullptr);

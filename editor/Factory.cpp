@@ -250,6 +250,15 @@ std::string editor::Factory::formatLightType(LightType type) {
     }
 }
 
+std::string editor::Factory::formatFogType(FogType type) {
+    switch (type) {
+        case FogType::LINEAR: return "FogType::LINEAR";
+        case FogType::EXPONENTIAL: return "FogType::EXPONENTIAL";
+        case FogType::EXPONENTIALSQUARED: return "FogType::EXPONENTIALSQUARED";
+        default: return "FogType::LINEAR";
+    }
+}
+
 std::string editor::Factory::formatLightState(LightState state) {
     switch (state) {
         case LightState::OFF: return "LightState::OFF";
@@ -990,6 +999,21 @@ std::string editor::Factory::createLightComponent(int indentSpaces, EntityRegist
     return code.str();
 }
 
+std::string editor::Factory::createFogComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<FogComponent>(entity)) return "";
+    FogComponent& fog = scene->getComponent<FogComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "FogComponent fog;\n";
+    code << ind << "fog.type = " << formatFogType(fog.type) << ";\n";
+    code << ind << "fog.color = " << formatVector3(fog.color) << ";\n";
+    code << ind << "fog.density = " << formatFloat(fog.density) << ";\n";
+    code << ind << "fog.linearStart = " << formatFloat(fog.linearStart) << ";\n";
+    code << ind << "fog.linearEnd = " << formatFloat(fog.linearEnd) << ";\n";
+    addComponentCode(code, ind, sceneName, entityName, entity, "FogComponent", "fog", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::createCameraComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
     if (!scene->findComponent<CameraComponent>(entity)) return "";
     CameraComponent& camera = scene->getComponent<CameraComponent>(entity);
@@ -1677,6 +1701,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::TilemapComponent: return createTilemapComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TerrainComponent: return createTerrainComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::LightComponent: return createLightComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::FogComponent: return createFogComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::CameraComponent: return createCameraComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::SoundComponent: return createSoundComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ScriptComponent: return createScriptComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);

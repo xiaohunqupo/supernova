@@ -307,6 +307,14 @@ namespace {
         makeFastProperty<LightComponent, unsigned int, &LightComponent::numShadowCascades>("numShadowCascades", PropertyType::UInt, UpdateFlags_LightShadowCamera | UpdateFlags_Scene_Mesh_Reload),
     };
 
+    static const FastPropertyDescriptor kFogProperties[] = {
+        makeFastProperty<FogComponent, FogType, &FogComponent::type>("type", PropertyType::Enum, UpdateFlags_None),
+        makeFastProperty<FogComponent, Vector3, &FogComponent::color>("color", PropertyType::Vector3, UpdateFlags_None),
+        makeFastProperty<FogComponent, float, &FogComponent::density>("density", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<FogComponent, float, &FogComponent::linearStart>("linearStart", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<FogComponent, float, &FogComponent::linearEnd>("linearEnd", PropertyType::Float, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kCameraProperties[] = {
         makeFastProperty<CameraComponent, CameraType, &CameraComponent::type>("type", PropertyType::Enum, UpdateFlags_Camera),
         makeFastProperty<CameraComponent, Vector3, &CameraComponent::target>("target", PropertyType::Vector3, UpdateFlags_Camera),
@@ -1098,6 +1106,10 @@ namespace {
         return resolveDirectProperties(static_cast<LightComponent*>(comp), propertyName, kLightProperties);
     }
 
+    PropertyData resolveFogPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<FogComponent*>(comp), propertyName, kFogProperties);
+    }
+
     PropertyData resolveCameraPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<CameraComponent*>(comp), propertyName, kCameraProperties);
     }
@@ -1862,6 +1874,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kLightProperties);
     }
 
+    void enumerateFogProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kFogProperties);
+    }
+
     void enumerateCameraProperties(void* comp, std::map<std::string, PropertyData>& ps) {
         enumerateFromDescriptors(comp, ps, kCameraProperties);
     }
@@ -2303,6 +2319,7 @@ namespace {
         {ComponentType::TilemapComponent, &findComponentPtr<TilemapComponent>, &resolveTilemapPropertyFast, &enumerateTilemapProperties},
         {ComponentType::TerrainComponent, &findComponentPtr<TerrainComponent>, &resolveTerrainPropertyFast, &enumerateTerrainProperties},
         {ComponentType::LightComponent, &findComponentPtr<LightComponent>, &resolveLightPropertyFast, &enumerateLightProperties},
+        {ComponentType::FogComponent, &findComponentPtr<FogComponent>, &resolveFogPropertyFast, &enumerateFogProperties},
         {ComponentType::CameraComponent, &findComponentPtr<CameraComponent>, &resolveCameraPropertyFast, &enumerateCameraProperties},
         {ComponentType::SoundComponent, &findComponentPtr<SoundComponent>, &resolveAudioPropertyFast, &enumerateAudioProperties},
         {ComponentType::SkyComponent, &findComponentPtr<SkyComponent>, &resolveSkyPropertyFast, &enumerateSkyProperties},
@@ -2980,6 +2997,15 @@ int editor::Catalog::getChangedUpdateFlags(ComponentType compType, void* oldComp
     return flags;
 }
 
+int editor::Catalog::getComponentStructuralUpdateFlags(ComponentType compType) {
+    switch (compType) {
+        case ComponentType::FogComponent:
+            return UpdateFlags_Scene_Mesh_Reload;
+        default:
+            return UpdateFlags_None;
+    }
+}
+
 void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int updateFlags){
     if (updateFlags & UpdateFlags_Transform){
         if (Transform* transform = registry->findComponent<Transform>(entity)){
@@ -3205,6 +3231,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::LightComponent: {
             YAML::Node encoded = Stream::encodeLightComponent(sourceRegistry->getComponent<LightComponent>(sourceEntity));
             targetRegistry->getComponent<LightComponent>(targetEntity) = Stream::decodeLightComponent(encoded);
+            break;
+        }
+
+        case ComponentType::FogComponent: {
+            YAML::Node encoded = Stream::encodeFogComponent(sourceRegistry->getComponent<FogComponent>(sourceEntity));
+            targetRegistry->getComponent<FogComponent>(targetEntity) = Stream::decodeFogComponent(encoded);
             break;
         }
 

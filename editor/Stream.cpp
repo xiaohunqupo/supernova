@@ -391,6 +391,22 @@ LightType editor::Stream::stringToLightType(const std::string& str) {
     return LightType::DIRECTIONAL; // Default
 }
 
+std::string editor::Stream::fogTypeToString(FogType type) {
+    switch (type) {
+        case FogType::LINEAR: return "linear";
+        case FogType::EXPONENTIAL: return "exponential";
+        case FogType::EXPONENTIALSQUARED: return "exponential_squared";
+        default: return "linear";
+    }
+}
+
+FogType editor::Stream::stringToFogType(const std::string& str) {
+    if (str == "linear") return FogType::LINEAR;
+    if (str == "exponential") return FogType::EXPONENTIAL;
+    if (str == "exponential_squared" || str == "exponentialsquared" || str == "exponentialSquared") return FogType::EXPONENTIALSQUARED;
+    return FogType::LINEAR;
+}
+
 std::string editor::Stream::lightStateToString(LightState state) {
     switch (state) {
         case LightState::OFF: return "off";
@@ -2140,6 +2156,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::LightComponent, true)] = encodeLightComponent(light);
     }
 
+    if (signature.test(registry->getComponentId<FogComponent>())) {
+        FogComponent fog = registry->getComponent<FogComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::FogComponent, true)] = encodeFogComponent(fog);
+    }
+
     if (signature.test(registry->getComponentId<CameraComponent>())) {
         CameraComponent camera = registry->getComponent<CameraComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::CameraComponent, true)] = encodeCameraComponent(camera);
@@ -2442,6 +2463,20 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             int flags = Catalog::getChangedUpdateFlags(ComponentType::LightComponent, existing, &light);
             registry->getComponent<LightComponent>(entity) = light;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::FogComponent, true);
+    if (compNode[compName]) {
+        FogComponent* existing = registry->findComponent<FogComponent>(entity);
+        FogComponent fog = decodeFogComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<FogComponent>())){
+            registry->addComponent<FogComponent>(entity, fog);
+            Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::FogComponent));
+        }else{
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::FogComponent, existing, &fog);
+            registry->getComponent<FogComponent>(entity) = fog;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -3583,6 +3618,34 @@ LightComponent editor::Stream::decodeLightComponent(const YAML::Node& node, cons
     if (node["numShadowCascades"]) light.numShadowCascades = node["numShadowCascades"].as<unsigned int>();
 
     return light;
+}
+
+YAML::Node editor::Stream::encodeFogComponent(const FogComponent& fog) {
+    YAML::Node node;
+
+    node["type"] = fogTypeToString(fog.type);
+    node["color"] = encodeVector3(fog.color);
+    node["density"] = fog.density;
+    node["linearStart"] = fog.linearStart;
+    node["linearEnd"] = fog.linearEnd;
+
+    return node;
+}
+
+FogComponent editor::Stream::decodeFogComponent(const YAML::Node& node, const FogComponent* oldFog) {
+    FogComponent fog;
+
+    if (oldFog) {
+        fog = *oldFog;
+    }
+
+    if (node["type"]) fog.type = stringToFogType(node["type"].as<std::string>());
+    if (node["color"]) fog.color = decodeVector3(node["color"]);
+    if (node["density"]) fog.density = node["density"].as<float>();
+    if (node["linearStart"]) fog.linearStart = node["linearStart"].as<float>();
+    if (node["linearEnd"]) fog.linearEnd = node["linearEnd"].as<float>();
+
+    return fog;
 }
 
 YAML::Node editor::Stream::encodeCameraComponent(const CameraComponent& camera) {

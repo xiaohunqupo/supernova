@@ -271,6 +271,11 @@ bool editor::CreateEntityCmd::execute(){
 
         scene->addComponent<SkyComponent>(entity, {});
 
+    }else if (type == EntityCreationType::FOG){
+
+        scene->addComponent<FogComponent>(entity, {});
+        updateFlags |= Catalog::getComponentStructuralUpdateFlags(ComponentType::FogComponent);
+
     }else if (type == EntityCreationType::ANIMATION){
 
         scene->addComponent<ActionComponent>(entity, {});

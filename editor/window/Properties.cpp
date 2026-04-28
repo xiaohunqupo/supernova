@@ -108,6 +108,12 @@ static std::vector<editor::EnumEntry> entriesLightType = {
     { (int)LightType::SPOT, "Spot" }
 };
 
+static std::vector<editor::EnumEntry> entriesFogType = {
+    { (int)FogType::LINEAR, "Linear" },
+    { (int)FogType::EXPONENTIAL, "Exponential" },
+    { (int)FogType::EXPONENTIALSQUARED, "Exponential Squared" }
+};
+
 static std::vector<editor::EnumEntry> entriesCameraType = {
     { (int)CameraType::CAMERA_ORTHO, "Orthographic" },
     { (int)CameraType::CAMERA_PERSPECTIVE, "Perspective" }
@@ -6124,6 +6130,31 @@ void editor::Properties::drawLightComponent(ComponentType cpType, SceneProject* 
     endTable();
 }
 
+void editor::Properties::drawFogComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    FogComponent& fog = sceneProject->scene->getComponent<FogComponent>(entities[0]);
+
+    RowSettings settingsFogType;
+    settingsFogType.enumEntries = &entriesFogType;
+
+    RowSettings settingsFloat;
+    settingsFloat.secondColSize = 6 * ImGui::GetFontSize();
+
+    RowSettings settingsDensity = settingsFloat;
+    settingsDensity.stepSize = 0.001f;
+    settingsDensity.format = "%.4f";
+
+    beginTable(cpType, getLabelSize("Linear Start"));
+    propertyRow(RowPropertyType::Enum, cpType, "type", "Type", sceneProject, entities, settingsFogType);
+    propertyRow(RowPropertyType::Color3L, cpType, "color", "Color", sceneProject, entities);
+    if (fog.type == FogType::LINEAR) {
+        propertyRow(RowPropertyType::Float, cpType, "linearStart", "Linear Start", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "linearEnd", "Linear End", sceneProject, entities, settingsFloat);
+    } else {
+        propertyRow(RowPropertyType::Float, cpType, "density", "Density", sceneProject, entities, settingsDensity);
+    }
+    endTable();
+}
+
 void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     if (entities.empty()) return;
 
@@ -9833,6 +9864,8 @@ void editor::Properties::show(){
                     drawTerrainComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::LightComponent){
                     drawLightComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::FogComponent){
+                    drawFogComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::CameraComponent){
                     drawCameraComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::SoundComponent){

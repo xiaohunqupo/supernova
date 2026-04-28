@@ -137,6 +137,7 @@ namespace doriax::editor{
         static std::map<std::string, PropertyData> findEntityProperties(EntityRegistry* registry, Entity entity, ComponentType component);
 
         static int getChangedUpdateFlags(ComponentType compType, void* oldComp, void* newComp);
+        static int getComponentStructuralUpdateFlags(ComponentType compType);
 
         static void updateEntity(EntityRegistry* registry, Entity entity, int updateFlags);
 

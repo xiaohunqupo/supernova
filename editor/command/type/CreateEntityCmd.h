@@ -33,6 +33,7 @@ namespace doriax::editor{
         BODY2D,
         BODY3D,
         SKY,
+        FOG,
         CAMERA,
         SOUND,
         SOUND_3D,

@@ -442,8 +442,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<FogComponent>(entity, {});
             }else{
-                registry->addComponent<FogComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<FogComponent>(entity, Stream::decodeFogComponent(componentNode));
             }
             break;
         case ComponentType::ImageComponent:
@@ -672,6 +671,8 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
         default:
             break;
     }
+
+    Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(componentType));
 }
 
 Entity editor::ProjectUtils::getVirtualParent(Scene* scene, Entity entity) {
@@ -829,7 +830,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::FogComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodeFogComponent(registry->getComponent<FogComponent>(entity));
             }
             registry->removeComponent<FogComponent>(entity);
             break;
@@ -1022,6 +1023,8 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
         default:
             break;
     }
+
+    Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(componentType));
 
     return oldComponent;
 }

@@ -47,8 +47,15 @@ editor::DeleteEntityCmd::DeleteEntityCmd(Project* project, uint32_t sceneId, con
 }
 
 void editor::DeleteEntityCmd::destroyEntity(EntityRegistry* registry, Entity entity, std::vector<Entity>& entities, Project* project, uint32_t sceneId){
+    int structuralFlags = UpdateFlags_None;
     if (registry->isEntityCreated(entity)){ // locked child are deleted by systems when their parent is deleted
+        if (registry->findComponent<FogComponent>(entity)){
+            structuralFlags |= Catalog::getComponentStructuralUpdateFlags(ComponentType::FogComponent);
+        }
         registry->destroyEntity(entity);
+    }
+    if (structuralFlags != UpdateFlags_None){
+        Catalog::updateEntity(registry, NULL_ENTITY, structuralFlags);
     }
 
     auto ite = std::find(entities.begin(), entities.end(), entity);
