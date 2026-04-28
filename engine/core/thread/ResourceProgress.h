@@ -18,7 +18,7 @@ namespace doriax {
         Shader,
         Texture,
         Model,
-        Audio,
+        Sound,
         Material
     };
 

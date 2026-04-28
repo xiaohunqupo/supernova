@@ -325,25 +325,25 @@ namespace {
         makeFastProperty<CameraComponent, bool, &CameraComponent::autoResize>("autoResize", PropertyType::Bool, UpdateFlags_Camera),
     };
 
-    static const FastPropertyDescriptor kAudioProperties[] = {
-        makeFastProperty<AudioComponent, AudioState, &AudioComponent::state>("state", PropertyType::Enum, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, std::string, &AudioComponent::filename>("filename", PropertyType::String, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, bool, &AudioComponent::enableClocked>("enableClocked", PropertyType::Bool, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, double, &AudioComponent::volume>("volume", PropertyType::Double, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, float, &AudioComponent::speed>("speed", PropertyType::Float, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, float, &AudioComponent::pan>("pan", PropertyType::Float, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, bool, &AudioComponent::looping>("looping", PropertyType::Bool, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, double, &AudioComponent::loopingPoint>("loopingPoint", PropertyType::Double, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, bool, &AudioComponent::protectVoice>("protectVoice", PropertyType::Bool, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, bool, &AudioComponent::inaudibleBehaviorMustTick>("inaudibleBehaviorMustTick", PropertyType::Bool, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, bool, &AudioComponent::inaudibleBehaviorKill>("inaudibleBehaviorKill", PropertyType::Bool, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, float, &AudioComponent::minDistance>("minDistance", PropertyType::Float, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, float, &AudioComponent::maxDistance>("maxDistance", PropertyType::Float, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, AudioAttenuation, &AudioComponent::attenuationModel>("attenuationModel", PropertyType::Enum, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, float, &AudioComponent::attenuationRolloffFactor>("attenuationRolloffFactor", PropertyType::Float, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, float, &AudioComponent::dopplerFactor>("dopplerFactor", PropertyType::Float, UpdateFlags_Audio),
-        makeFastPropertyNoDefault<AudioComponent, double, &AudioComponent::length>("length", PropertyType::Double, UpdateFlags_None),
-        makeFastPropertyNoDefault<AudioComponent, double, &AudioComponent::playingTime>("playingTime", PropertyType::Double, UpdateFlags_None),
+    static const FastPropertyDescriptor kSoundProperties[] = {
+        makeFastProperty<SoundComponent, SoundState, &SoundComponent::state>("state", PropertyType::Enum, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, std::string, &SoundComponent::filename>("filename", PropertyType::String, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, bool, &SoundComponent::enableClocked>("enableClocked", PropertyType::Bool, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, double, &SoundComponent::volume>("volume", PropertyType::Double, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, float, &SoundComponent::speed>("speed", PropertyType::Float, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, float, &SoundComponent::pan>("pan", PropertyType::Float, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, bool, &SoundComponent::looping>("looping", PropertyType::Bool, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, double, &SoundComponent::loopingPoint>("loopingPoint", PropertyType::Double, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, bool, &SoundComponent::protectVoice>("protectVoice", PropertyType::Bool, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, bool, &SoundComponent::inaudibleBehaviorMustTick>("inaudibleBehaviorMustTick", PropertyType::Bool, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, bool, &SoundComponent::inaudibleBehaviorKill>("inaudibleBehaviorKill", PropertyType::Bool, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, float, &SoundComponent::minDistance>("minDistance", PropertyType::Float, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, float, &SoundComponent::maxDistance>("maxDistance", PropertyType::Float, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, SoundAttenuation, &SoundComponent::attenuationModel>("attenuationModel", PropertyType::Enum, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, float, &SoundComponent::attenuationRolloffFactor>("attenuationRolloffFactor", PropertyType::Float, UpdateFlags_Sound),
+        makeFastProperty<SoundComponent, float, &SoundComponent::dopplerFactor>("dopplerFactor", PropertyType::Float, UpdateFlags_Sound),
+        makeFastPropertyNoDefault<SoundComponent, double, &SoundComponent::length>("length", PropertyType::Double, UpdateFlags_None),
+        makeFastPropertyNoDefault<SoundComponent, double, &SoundComponent::playingTime>("playingTime", PropertyType::Double, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kSkyProperties[] = {
@@ -1103,7 +1103,7 @@ namespace {
     }
 
     PropertyData resolveAudioPropertyFast(void* comp, const std::string& propertyName) {
-        return resolveDirectProperties(static_cast<AudioComponent*>(comp), propertyName, kAudioProperties);
+        return resolveDirectProperties(static_cast<SoundComponent*>(comp), propertyName, kSoundProperties);
     }
 
     PropertyData resolveSkyPropertyFast(void* comp, const std::string& propertyName) {
@@ -1867,7 +1867,7 @@ namespace {
     }
 
     void enumerateAudioProperties(void* comp, std::map<std::string, PropertyData>& ps) {
-        enumerateFromDescriptors(comp, ps, kAudioProperties);
+        enumerateFromDescriptors(comp, ps, kSoundProperties);
     }
 
     void enumerateSkyProperties(void* comp, std::map<std::string, PropertyData>& ps) {
@@ -2304,7 +2304,7 @@ namespace {
         {ComponentType::TerrainComponent, &findComponentPtr<TerrainComponent>, &resolveTerrainPropertyFast, &enumerateTerrainProperties},
         {ComponentType::LightComponent, &findComponentPtr<LightComponent>, &resolveLightPropertyFast, &enumerateLightProperties},
         {ComponentType::CameraComponent, &findComponentPtr<CameraComponent>, &resolveCameraPropertyFast, &enumerateCameraProperties},
-        {ComponentType::AudioComponent, &findComponentPtr<AudioComponent>, &resolveAudioPropertyFast, &enumerateAudioProperties},
+        {ComponentType::SoundComponent, &findComponentPtr<SoundComponent>, &resolveAudioPropertyFast, &enumerateAudioProperties},
         {ComponentType::SkyComponent, &findComponentPtr<SkyComponent>, &resolveSkyPropertyFast, &enumerateSkyProperties},
         {ComponentType::TextComponent, &findComponentPtr<TextComponent>, &resolveTextPropertyFast, &enumerateTextProperties},
         {ComponentType::ScriptComponent, &findComponentPtr<ScriptComponent>, &resolveScriptPropertyFast, &enumerateScriptProperties},
@@ -2404,8 +2404,8 @@ std::string editor::Catalog::getComponentName(ComponentType component, bool remo
         name = "AlphaActionComponent";
     }else if(component == ComponentType::AnimationComponent){
         name = "AnimationComponent";
-    }else if(component == ComponentType::AudioComponent){
-        name = "AudioComponent";
+    }else if(component == ComponentType::SoundComponent){
+        name = "SoundComponent";
     }else if(component == ComponentType::Body2DComponent){
         name = "Body2DComponent";
     }else if(component == ComponentType::Body3DComponent){
@@ -2521,8 +2521,8 @@ ComponentId editor::Catalog::getComponentId(const EntityRegistry* registry, Comp
             return registry->getComponentId<AlphaActionComponent>();
         case ComponentType::AnimationComponent:
             return registry->getComponentId<AnimationComponent>();
-        case ComponentType::AudioComponent:
-            return registry->getComponentId<AudioComponent>();
+        case ComponentType::SoundComponent:
+            return registry->getComponentId<SoundComponent>();
         case ComponentType::Body2DComponent:
             return registry->getComponentId<Body2DComponent>();
         case ComponentType::Body3DComponent:
@@ -2616,7 +2616,7 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
     }else if(normalizedName == "animation"){
         return ComponentType::AnimationComponent;
     }else if(normalizedName == "audio"){
-        return ComponentType::AudioComponent;
+        return ComponentType::SoundComponent;
     }else if(normalizedName == "body2d"){
         return ComponentType::Body2DComponent;
     }else if(normalizedName == "body3d"){
@@ -2761,8 +2761,8 @@ std::vector<editor::ComponentType> editor::Catalog::findComponents(EntityRegistr
     if (registry->findComponent<AnimationComponent>(entity)){
         ret.push_back(ComponentType::AnimationComponent);
     }
-    if (registry->findComponent<AudioComponent>(entity)){
-        ret.push_back(ComponentType::AudioComponent);
+    if (registry->findComponent<SoundComponent>(entity)){
+        ret.push_back(ComponentType::SoundComponent);
     }
     if (registry->findComponent<Body2DComponent>(entity)){
         ret.push_back(ComponentType::Body2DComponent);
@@ -3116,8 +3116,8 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int 
             pts->needUpdate = true;
         }
     }
-    if (updateFlags & UpdateFlags_Audio){
-        if (AudioComponent* audio = registry->findComponent<AudioComponent>(entity)){
+    if (updateFlags & UpdateFlags_Sound){
+        if (SoundComponent* audio = registry->findComponent<SoundComponent>(entity)){
             audio->needUpdate = true;
         }
     }
@@ -3214,9 +3214,9 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
             break;
         }
 
-        case ComponentType::AudioComponent: {
-            YAML::Node encoded = Stream::encodeAudioComponent(sourceRegistry->getComponent<AudioComponent>(sourceEntity));
-            targetRegistry->getComponent<AudioComponent>(targetEntity) = Stream::decodeAudioComponent(encoded);
+        case ComponentType::SoundComponent: {
+            YAML::Node encoded = Stream::encodeSoundComponent(sourceRegistry->getComponent<SoundComponent>(sourceEntity));
+            targetRegistry->getComponent<SoundComponent>(targetEntity) = Stream::decodeSoundComponent(encoded);
             break;
         }
 

@@ -640,10 +640,10 @@
 		717AD95E290B6292007D7DB5 /* libsoloud-macos.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 717AD7A2290B5DA1007D7DB5 /* libsoloud-macos.a */; };
 		717AD961290B6521007D7DB5 /* soloud_coreaudio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD960290B6521007D7DB5 /* soloud_coreaudio.cpp */; };
 		717AD962290B6521007D7DB5 /* soloud_coreaudio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD960290B6521007D7DB5 /* soloud_coreaudio.cpp */; };
-		717AD964290B65E6007D7DB5 /* AudioComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD963290B65E6007D7DB5 /* AudioComponent.h */; };
-		717AD968290B6602007D7DB5 /* Audio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD966290B6602007D7DB5 /* Audio.cpp */; };
-		717AD969290B6602007D7DB5 /* Audio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD966290B6602007D7DB5 /* Audio.cpp */; };
-		717AD96A290B6602007D7DB5 /* Audio.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD967290B6602007D7DB5 /* Audio.h */; };
+		717AD964290B65E6007D7DB5 /* SoundComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD963290B65E6007D7DB5 /* SoundComponent.h */; };
+		717AD968290B6602007D7DB5 /* Sound.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD966290B6602007D7DB5 /* Sound.cpp */; };
+		717AD969290B6602007D7DB5 /* Sound.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD966290B6602007D7DB5 /* Sound.cpp */; };
+		717AD96A290B6602007D7DB5 /* Sound.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD967290B6602007D7DB5 /* Sound.h */; };
 		717AD96D290B661A007D7DB5 /* AudioSystem.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD96B290B661A007D7DB5 /* AudioSystem.cpp */; };
 		717AD96E290B661A007D7DB5 /* AudioSystem.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 717AD96B290B661A007D7DB5 /* AudioSystem.cpp */; };
 		717AD96F290B661A007D7DB5 /* AudioSystem.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD96C290B661A007D7DB5 /* AudioSystem.h */; };
@@ -2032,9 +2032,9 @@
 		717AD847290B5DF3007D7DB5 /* dr_impl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = dr_impl.cpp; sourceTree = "<group>"; };
 		717AD848290B5DF3007D7DB5 /* soloud_wav.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = soloud_wav.cpp; sourceTree = "<group>"; };
 		717AD960290B6521007D7DB5 /* soloud_coreaudio.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = soloud_coreaudio.cpp; sourceTree = "<group>"; };
-		717AD963290B65E6007D7DB5 /* AudioComponent.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AudioComponent.h; sourceTree = "<group>"; };
-		717AD966290B6602007D7DB5 /* Audio.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Audio.cpp; sourceTree = "<group>"; };
-		717AD967290B6602007D7DB5 /* Audio.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Audio.h; sourceTree = "<group>"; };
+		717AD963290B65E6007D7DB5 /* SoundComponent.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SoundComponent.h; sourceTree = "<group>"; };
+		717AD966290B6602007D7DB5 /* Sound.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Sound.cpp; sourceTree = "<group>"; };
+		717AD967290B6602007D7DB5 /* Sound.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Sound.h; sourceTree = "<group>"; };
 		717AD96B290B661A007D7DB5 /* AudioSystem.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AudioSystem.cpp; sourceTree = "<group>"; };
 		717AD96C290B661A007D7DB5 /* AudioSystem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AudioSystem.h; sourceTree = "<group>"; };
 		717AD970290B67A5007D7DB5 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
@@ -3399,7 +3399,7 @@
 				71451BB4270C9D0F00712643 /* ActionComponent.h */,
 				71ABBD12277A3166001CE3AF /* AlphaActionComponent.h */,
 				71E5450F284D5BDF00C68FAB /* AnimationComponent.h */,
-				717AD963290B65E6007D7DB5 /* AudioComponent.h */,
+				717AD963290B65E6007D7DB5 /* SoundComponent.h */,
 				71E824832A9C238800C8E6F2 /* Body2DComponent.h */,
 				7105CAAA2AD61C7A007C91BA /* Body3DComponent.h */,
 				7170A3C92818A87E0003E965 /* BoneComponent.h */,
@@ -3858,13 +3858,13 @@
 			path = coreaudio;
 			sourceTree = "<group>";
 		};
-		717AD965290B6602007D7DB5 /* audio */ = {
+		717AD965290B6602007D7DB5 /* sound */ = {
 			isa = PBXGroup;
 			children = (
-				717AD966290B6602007D7DB5 /* Audio.cpp */,
-				717AD967290B6602007D7DB5 /* Audio.h */,
+				717AD966290B6602007D7DB5 /* Sound.cpp */,
+				717AD967290B6602007D7DB5 /* Sound.h */,
 			);
-			path = audio;
+			path = sound;
 			sourceTree = "<group>";
 		};
 		718FDDEE2837CA9A00AF314C /* shaders */ = {
@@ -4321,7 +4321,7 @@
 				718FDDF52837CA9A00AF314C /* msl21ios.h in Headers */,
 				71E824962A9C242B00C8E6F2 /* PhysicsSystem.h in Headers */,
 				718FDDF92837CA9A00AF314C /* glsl330.h in Headers */,
-				717AD96A290B6602007D7DB5 /* Audio.h in Headers */,
+				717AD96A290B6602007D7DB5 /* Sound.h in Headers */,
 				71F2254D2C58740F006ED3CA /* Points.h in Headers */,
 				71ABBD382791167A001CE3AF /* UIComponent.h in Headers */,
 				71BE623E25B1DB9E006D6E02 /* LuaScript.h in Headers */,
@@ -4375,7 +4375,7 @@
 				717AD9882919E1E9007D7DB5 /* ImageComponent.h in Headers */,
 				7170A3CB2818A87E0003E965 /* BoneComponent.h in Headers */,
 				71FFE3FF2A369FE90089A6C9 /* ThreadUtils.h in Headers */,
-				717AD964290B65E6007D7DB5 /* AudioComponent.h in Headers */,
+				717AD964290B65E6007D7DB5 /* SoundComponent.h in Headers */,
 				71CC83AA26B8D54800EEBB93 /* SokolFramebuffer.h in Headers */,
 				71BE622225B1DB83006D6E02 /* TextureData.h in Headers */,
 				717AD98A292118EF007D7DB5 /* UIContainerComponent.h in Headers */,
@@ -5542,7 +5542,7 @@
 				7105A56328B305B20092EA05 /* ObjectClassesLua.cpp in Sources */,
 				713D82A0259D307F00567F9F /* Matrix4.cpp in Sources */,
 				713D82A1259D307F00567F9F /* Matrix3.cpp in Sources */,
-				717AD969290B6602007D7DB5 /* Audio.cpp in Sources */,
+				717AD969290B6602007D7DB5 /* Sound.cpp in Sources */,
 				713D82A2259D307F00567F9F /* Rect.cpp in Sources */,
 				713D82A3259D307F00567F9F /* Quaternion.cpp in Sources */,
 				7185BF9128BAFC2000B82865 /* ActionClassesLua.cpp in Sources */,
@@ -5716,7 +5716,7 @@
 				7105A56228B305B20092EA05 /* ObjectClassesLua.cpp in Sources */,
 				7162FD2A25963AE00075B97D /* Vector4.cpp in Sources */,
 				7162FD2B25963AE00075B97D /* Vector3.cpp in Sources */,
-				717AD968290B6602007D7DB5 /* Audio.cpp in Sources */,
+				717AD968290B6602007D7DB5 /* Sound.cpp in Sources */,
 				7162FD2D25963AE00075B97D /* Vector2.cpp in Sources */,
 				7162FD2E25963AE00075B97D /* Matrix4.cpp in Sources */,
 				7185BF9028BAFC2000B82865 /* ActionClassesLua.cpp in Sources */,

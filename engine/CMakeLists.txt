@@ -471,7 +471,7 @@ include_directories(core/io)
 include_directories(core/manager)
 include_directories(core/math)
 include_directories(core/object)
-include_directories(core/object/audio)
+include_directories(core/object/sound)
 include_directories(core/object/ui)
 include_directories(core/object/environment)
 include_directories(core/object/physics)
@@ -578,7 +578,7 @@ set(DORIAX_SRCS
     core/object/Sprite.cpp
     core/object/Terrain.cpp
     core/object/Tilemap.cpp
-    core/object/audio/Audio.cpp
+    core/object/sound/Sound.cpp
     core/object/environment/Fog.cpp
     core/object/environment/SkyBox.cpp
     core/object/physics/Body2D.cpp

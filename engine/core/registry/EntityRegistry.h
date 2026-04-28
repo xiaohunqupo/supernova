@@ -45,7 +45,7 @@
 #include "component/ScaleTracksComponent.h"
 #include "component/ScriptComponent.h"
 #include "component/TerrainComponent.h"
-#include "component/AudioComponent.h"
+#include "component/SoundComponent.h"
 #include "component/TilemapComponent.h"
 #include "component/Body2DComponent.h"
 #include "component/Joint2DComponent.h"

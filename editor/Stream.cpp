@@ -407,38 +407,38 @@ LightState editor::Stream::stringToLightState(const std::string& str) {
     return LightState::AUTO; // Default
 }
 
-std::string editor::Stream::audioStateToString(AudioState state) {
+std::string editor::Stream::soundStateToString(SoundState state) {
     switch (state) {
-        case AudioState::Playing: return "playing";
-        case AudioState::Paused: return "paused";
-        case AudioState::Stopped: return "stopped";
+        case SoundState::Playing: return "playing";
+        case SoundState::Paused: return "paused";
+        case SoundState::Stopped: return "stopped";
         default: return "stopped";
     }
 }
 
-AudioState editor::Stream::stringToAudioState(const std::string& str) {
-    if (str == "playing") return AudioState::Playing;
-    if (str == "paused") return AudioState::Paused;
-    if (str == "stopped") return AudioState::Stopped;
-    return AudioState::Stopped;
+SoundState editor::Stream::stringToSoundState(const std::string& str) {
+    if (str == "playing") return SoundState::Playing;
+    if (str == "paused") return SoundState::Paused;
+    if (str == "stopped") return SoundState::Stopped;
+    return SoundState::Stopped;
 }
 
-std::string editor::Stream::audioAttenuationToString(AudioAttenuation attenuation) {
+std::string editor::Stream::soundAttenuationToString(SoundAttenuation attenuation) {
     switch (attenuation) {
-        case AudioAttenuation::NO_ATTENUATION: return "no_attenuation";
-        case AudioAttenuation::INVERSE_DISTANCE: return "inverse_distance";
-        case AudioAttenuation::LINEAR_DISTANCE: return "linear_distance";
-        case AudioAttenuation::EXPONENTIAL_DISTANCE: return "exponential_distance";
+        case SoundAttenuation::NO_ATTENUATION: return "no_attenuation";
+        case SoundAttenuation::INVERSE_DISTANCE: return "inverse_distance";
+        case SoundAttenuation::LINEAR_DISTANCE: return "linear_distance";
+        case SoundAttenuation::EXPONENTIAL_DISTANCE: return "exponential_distance";
         default: return "no_attenuation";
     }
 }
 
-AudioAttenuation editor::Stream::stringToAudioAttenuation(const std::string& str) {
-    if (str == "no_attenuation") return AudioAttenuation::NO_ATTENUATION;
-    if (str == "inverse_distance") return AudioAttenuation::INVERSE_DISTANCE;
-    if (str == "linear_distance") return AudioAttenuation::LINEAR_DISTANCE;
-    if (str == "exponential_distance") return AudioAttenuation::EXPONENTIAL_DISTANCE;
-    return AudioAttenuation::NO_ATTENUATION;
+SoundAttenuation editor::Stream::stringToSoundAttenuation(const std::string& str) {
+    if (str == "no_attenuation") return SoundAttenuation::NO_ATTENUATION;
+    if (str == "inverse_distance") return SoundAttenuation::INVERSE_DISTANCE;
+    if (str == "linear_distance") return SoundAttenuation::LINEAR_DISTANCE;
+    if (str == "exponential_distance") return SoundAttenuation::EXPONENTIAL_DISTANCE;
+    return SoundAttenuation::NO_ATTENUATION;
 }
 
 std::string editor::Stream::uiEventStateToString(UIEventState state) {
@@ -2145,9 +2145,9 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::CameraComponent, true)] = encodeCameraComponent(camera);
     }
 
-    if (signature.test(registry->getComponentId<AudioComponent>())) {
-        AudioComponent audio = registry->getComponent<AudioComponent>(entity);
-        compNode[Catalog::getComponentName(ComponentType::AudioComponent, true)] = encodeAudioComponent(audio);
+    if (signature.test(registry->getComponentId<SoundComponent>())) {
+        SoundComponent audio = registry->getComponent<SoundComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::SoundComponent, true)] = encodeSoundComponent(audio);
     }
 
     if (signature.test(registry->getComponentId<ScriptComponent>())) {
@@ -2459,15 +2459,15 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }
     }
 
-    compName = Catalog::getComponentName(ComponentType::AudioComponent, true);
+    compName = Catalog::getComponentName(ComponentType::SoundComponent, true);
     if (compNode[compName]) {
-        AudioComponent* existing = registry->findComponent<AudioComponent>(entity);
-        AudioComponent audio = decodeAudioComponent(compNode[compName], existing);
-        if (!signature.test(registry->getComponentId<AudioComponent>())){
-            registry->addComponent<AudioComponent>(entity, audio);
+        SoundComponent* existing = registry->findComponent<SoundComponent>(entity);
+        SoundComponent audio = decodeSoundComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<SoundComponent>())){
+            registry->addComponent<SoundComponent>(entity, audio);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::AudioComponent, existing, &audio);
-            registry->getComponent<AudioComponent>(entity) = audio;
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::SoundComponent, existing, &audio);
+            registry->getComponent<SoundComponent>(entity) = audio;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -3634,10 +3634,10 @@ CameraComponent editor::Stream::decodeCameraComponent(const YAML::Node& node, co
     return camera;
 }
 
-YAML::Node editor::Stream::encodeAudioComponent(const AudioComponent& audio) {
+YAML::Node editor::Stream::encodeSoundComponent(const SoundComponent& audio) {
     YAML::Node node;
 
-    node["state"] = audioStateToString(audio.state);
+    node["state"] = soundStateToString(audio.state);
     if (!audio.filename.empty()) node["filename"] = audio.filename;
     node["enableClocked"] = audio.enableClocked;
     node["volume"] = audio.volume;
@@ -3650,15 +3650,15 @@ YAML::Node editor::Stream::encodeAudioComponent(const AudioComponent& audio) {
     node["inaudibleBehaviorKill"] = audio.inaudibleBehaviorKill;
     node["minDistance"] = audio.minDistance;
     node["maxDistance"] = audio.maxDistance;
-    node["attenuationModel"] = audioAttenuationToString(audio.attenuationModel);
+    node["attenuationModel"] = soundAttenuationToString(audio.attenuationModel);
     node["attenuationRolloffFactor"] = audio.attenuationRolloffFactor;
     node["dopplerFactor"] = audio.dopplerFactor;
 
     return node;
 }
 
-AudioComponent editor::Stream::decodeAudioComponent(const YAML::Node& node, const AudioComponent* oldAudio) {
-    AudioComponent audio;
+SoundComponent editor::Stream::decodeSoundComponent(const YAML::Node& node, const SoundComponent* oldAudio) {
+    SoundComponent audio;
     std::string oldFilename;
 
     if (oldAudio) {
@@ -3666,7 +3666,7 @@ AudioComponent editor::Stream::decodeAudioComponent(const YAML::Node& node, cons
         oldFilename = oldAudio->filename;
     }
 
-    if (node["state"]) audio.state = stringToAudioState(node["state"].as<std::string>());
+    if (node["state"]) audio.state = stringToSoundState(node["state"].as<std::string>());
     if (node["filename"]) audio.filename = node["filename"].as<std::string>();
     if (node["enableClocked"]) audio.enableClocked = node["enableClocked"].as<bool>();
     if (node["volume"]) audio.volume = node["volume"].as<double>();
@@ -3679,7 +3679,7 @@ AudioComponent editor::Stream::decodeAudioComponent(const YAML::Node& node, cons
     if (node["inaudibleBehaviorKill"]) audio.inaudibleBehaviorKill = node["inaudibleBehaviorKill"].as<bool>();
     if (node["minDistance"]) audio.minDistance = node["minDistance"].as<float>();
     if (node["maxDistance"]) audio.maxDistance = node["maxDistance"].as<float>();
-    if (node["attenuationModel"]) audio.attenuationModel = stringToAudioAttenuation(node["attenuationModel"].as<std::string>());
+    if (node["attenuationModel"]) audio.attenuationModel = stringToSoundAttenuation(node["attenuationModel"].as<std::string>());
     if (node["attenuationRolloffFactor"]) audio.attenuationRolloffFactor = node["attenuationRolloffFactor"].as<float>();
     if (node["dopplerFactor"]) audio.dopplerFactor = node["dopplerFactor"].as<float>();
 

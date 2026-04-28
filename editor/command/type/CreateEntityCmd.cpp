@@ -379,12 +379,12 @@ bool editor::CreateEntityCmd::execute(){
 
     }else if (type == EntityCreationType::SOUND){
 
-        scene->addComponent<AudioComponent>(entity, {});
+        scene->addComponent<SoundComponent>(entity, {});
 
     }else if (type == EntityCreationType::SOUND_3D){
 
         scene->addComponent<Transform>(entity, {});
-        scene->addComponent<AudioComponent>(entity, {});
+        scene->addComponent<SoundComponent>(entity, {});
 
     }else if (type == EntityCreationType::MODEL){
 

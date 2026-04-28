@@ -2,8 +2,8 @@
 // (c) 2026 Eduardo Doria.
 //
 
-#ifndef AUDIO_COMPONENT_H
-#define AUDIO_COMPONENT_H
+#ifndef SOUND_COMPONENT_H
+#define SOUND_COMPONENT_H
 
 #include "Engine.h"
 
@@ -13,24 +13,24 @@ namespace SoLoud{
 
 namespace doriax{
 
-    enum class AudioState{
+    enum class SoundState{
         Playing,
         Paused,
         Stopped
     };
 
-    enum class AudioAttenuation{
+    enum class SoundAttenuation{
         NO_ATTENUATION,
         INVERSE_DISTANCE,
         LINEAR_DISTANCE,
         EXPONENTIAL_DISTANCE
     };
 
-    struct DORIAX_API AudioComponent{
+    struct DORIAX_API SoundComponent{
         SoLoud::Wav* sample = nullptr;
         unsigned int handle = 0; //Soloud handle
 
-        AudioState state = AudioState::Stopped;
+        SoundState state = SoundState::Stopped;
 
         std::string filename;
         bool loaded = false;
@@ -58,7 +58,7 @@ namespace doriax{
         // for 3D sound
         float minDistance = 1.0;
         float maxDistance = 1000.0;
-        AudioAttenuation attenuationModel = AudioAttenuation::NO_ATTENUATION;
+        SoundAttenuation attenuationModel = SoundAttenuation::NO_ATTENUATION;
         float attenuationRolloffFactor = 1.0; // means that end of max distance sound will be zero
         float dopplerFactor = 1.0;
 
@@ -71,4 +71,4 @@ namespace doriax{
 
 }
 
-#endif //AUDIO_COMPONENT_H
+#endif //SOUND_COMPONENT_H

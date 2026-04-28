@@ -42,7 +42,7 @@ EntityRegistry::EntityRegistry() {
     registerComponent<ScaleTracksComponent>();
     registerComponent<ScriptComponent>();
     registerComponent<TerrainComponent>();
-    registerComponent<AudioComponent>();
+    registerComponent<SoundComponent>();
     registerComponent<TilemapComponent>();
     registerComponent<Body2DComponent>();
     registerComponent<Joint2DComponent>();
@@ -120,9 +120,9 @@ void EntityRegistry::sortComponentsByTransform(Signature entitySignature){
         lines->sortByComponent<Transform>(componentManager.getComponentArray<Transform>());
     }
 
-    // Audio component
-    if (entitySignature.test(getComponentId<AudioComponent>())){
-        auto audios = componentManager.getComponentArray<AudioComponent>();
+    // Sound component
+    if (entitySignature.test(getComponentId<SoundComponent>())){
+        auto audios = componentManager.getComponentArray<SoundComponent>();
         audios->sortByComponent<Transform>(componentManager.getComponentArray<Transform>());
     }
 }

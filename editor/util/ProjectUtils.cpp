@@ -19,7 +19,7 @@
 #include "component/PointsComponent.h"
 #include "component/LinesComponent.h"
 #include "component/TerrainComponent.h"
-#include "component/AudioComponent.h"
+#include "component/SoundComponent.h"
 #include "component/UIContainerComponent.h"
 #include "component/UIComponent.h"
 #include "component/TextComponent.h"
@@ -382,11 +382,11 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
                 registry->addComponent<AnimationComponent>(entity, Stream::decodeAnimationComponent(componentNode));
             }
             break;
-        case ComponentType::AudioComponent:
+        case ComponentType::SoundComponent:
             if (!componentNode.IsDefined() || componentNode.IsNull()){
-                registry->addComponent<AudioComponent>(entity, {});
+                registry->addComponent<SoundComponent>(entity, {});
             }else{
-                registry->addComponent<AudioComponent>(entity, Stream::decodeAudioComponent(componentNode));
+                registry->addComponent<SoundComponent>(entity, Stream::decodeSoundComponent(componentNode));
             }
             break;
         case ComponentType::Body2DComponent:
@@ -782,11 +782,11 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             }
             registry->removeComponent<AnimationComponent>(entity);
             break;
-        case ComponentType::AudioComponent:
+        case ComponentType::SoundComponent:
             if (encodeComponent){
-                oldComponent = Stream::encodeAudioComponent(registry->getComponent<AudioComponent>(entity));
+                oldComponent = Stream::encodeSoundComponent(registry->getComponent<SoundComponent>(entity));
             }
-            registry->removeComponent<AudioComponent>(entity);
+            registry->removeComponent<SoundComponent>(entity);
             break;
         case ComponentType::Body2DComponent:
             if (encodeComponent){
@@ -1344,7 +1344,7 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<MeshComponent>()))        return "Mesh";
     if (signature.test(scene->getComponentId<SkyComponent>()))         return "SkyBox";
     if (signature.test(scene->getComponentId<FogComponent>()))         return "Fog";
-    if (signature.test(scene->getComponentId<AudioComponent>()))       return "Audio";
+    if (signature.test(scene->getComponentId<SoundComponent>()))       return "Sound";
     if (signature.test(scene->getComponentId<ButtonComponent>()))      return "Button";
     if (signature.test(scene->getComponentId<TextEditComponent>()))    return "TextEdit";
     if (signature.test(scene->getComponentId<TextComponent>()))        return "Text";

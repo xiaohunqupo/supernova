@@ -27,7 +27,7 @@
 #include "object/Bone.h"
 #include "object/environment/Fog.h"
 #include "object/environment/SkyBox.h"
-#include "object/audio/Audio.h"
+#include "object/sound/Sound.h"
 #include "object/ui/UILayout.h"
 #include "object/ui/Container.h"
 #include "object/ui/Polygon.h"
@@ -466,7 +466,7 @@ bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, dori
     DISPATCH_TYPE(Points, "points");
     DISPATCH_TYPE(Lines, "lines");
     DISPATCH_TYPE(Sprite, "sprite");
-    DISPATCH_TYPE(Audio, "audio");
+    DISPATCH_TYPE(Sound, "sound");
     DISPATCH_TYPE(UILayout, "uilayout");
     DISPATCH_TYPE(Container, "container");
     DISPATCH_TYPE(Polygon, "polygon");

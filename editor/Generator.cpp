@@ -793,7 +793,7 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "    " + engineApiPathStr + "/core/manager\n";
     cmakeContent += "    " + engineApiPathStr + "/core/math\n";
     cmakeContent += "    " + engineApiPathStr + "/core/object\n";
-    cmakeContent += "    " + engineApiPathStr + "/core/object/audio\n";
+    cmakeContent += "    " + engineApiPathStr + "/core/object/sound\n";
     cmakeContent += "    " + engineApiPathStr + "/core/object/ui\n";
     cmakeContent += "    " + engineApiPathStr + "/core/object/environment\n";
     cmakeContent += "    " + engineApiPathStr + "/core/object/physics\n";

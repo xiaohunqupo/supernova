@@ -7,7 +7,7 @@
 
 #include "SubSystem.h"
 
-#include "component/AudioComponent.h"
+#include "component/SoundComponent.h"
 
 namespace SoLoud{
 	class Soloud;
@@ -39,10 +39,10 @@ namespace doriax{
 		static void setGlobalVolume(float volume);
 		static float getGlobalVolume();
 
-        bool loadAudio(AudioComponent& audio, Entity entity);
-		void destroyAudio(AudioComponent& audio);
-		void stopSceneAudio();
-		bool seekAudio(AudioComponent& audio, double time);
+        bool loadSound(SoundComponent& audio, Entity entity);
+		void destroySound(SoundComponent& audio);
+		void stopSceneSounds();
+		bool seekSound(SoundComponent& audio, double time);
 
 		void setPaused(bool paused) override;
 

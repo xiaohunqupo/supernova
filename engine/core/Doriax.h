@@ -39,7 +39,7 @@
 #include "component/ActionComponent.h"
 #include "component/AlphaActionComponent.h"
 #include "component/AnimationComponent.h"
-#include "component/AudioComponent.h"
+#include "component/SoundComponent.h"
 #include "component/Body2DComponent.h"
 #include "component/Body3DComponent.h"
 #include "component/BoneComponent.h"
@@ -108,7 +108,7 @@
 #include "math/Vector3.h"
 #include "math/Vector4.h"
 
-#include "object/audio/Audio.h"
+#include "object/sound/Sound.h"
 #include "object/Bone.h"
 #include "object/Camera.h"
 #include "object/EntityHandle.h"

@@ -70,8 +70,8 @@ void ComponentAddDialog::initializeCategories() {
             {ComponentType::ScaleTracksComponent, ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, "Scale Tracks", "Scale tracks", ImVec4(0.8f, 0.55f, 0.3f, 1.0f)},
             {ComponentType::TranslateTracksComponent, ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "Translate Tracks", "Translation tracks", ImVec4(0.85f, 0.6f, 0.25f, 1.0f)}
         }},
-        {"Audio & Script", ICON_FA_CODE, ImVec4(0.6f, 0.6f, 0.6f, 1.0f), {
-            {ComponentType::AudioComponent, ICON_FA_VOLUME_HIGH, "Audio", "Sound player", ImVec4(0.4f, 0.7f, 0.9f, 1.0f)},
+        {"Sound & Script", ICON_FA_CODE, ImVec4(0.6f, 0.6f, 0.6f, 1.0f), {
+            {ComponentType::SoundComponent, ICON_FA_VOLUME_HIGH, "Sound", "Sound player", ImVec4(0.4f, 0.7f, 0.9f, 1.0f)},
             {ComponentType::ScriptComponent, ICON_FA_CODE, "Script", "C++ or Lua script", ImVec4(0.7f, 0.5f, 0.8f, 1.0f)}
         }}
     };

@@ -66,8 +66,8 @@ namespace luabridge
     template<> struct Stack<CameraType> : EnumWrapper<CameraType>{};
     template<> struct Stack<FrustumPlane> : EnumWrapper<FrustumPlane>{};
     template<> struct Stack<LightType> : EnumWrapper<LightType>{};
-    template<> struct Stack<AudioState> : EnumWrapper<AudioState>{};
-    template<> struct Stack<AudioAttenuation> : EnumWrapper<AudioAttenuation>{};
+    template<> struct Stack<SoundState> : EnumWrapper<SoundState>{};
+    template<> struct Stack<SoundAttenuation> : EnumWrapper<SoundAttenuation>{};
 
     template<> struct Stack<EaseType> : EnumWrapper<EaseType>{};
     template<> struct Stack<ActionState> : EnumWrapper<ActionState>{};

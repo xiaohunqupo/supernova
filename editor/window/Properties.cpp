@@ -113,16 +113,16 @@ static std::vector<editor::EnumEntry> entriesCameraType = {
 };
 
 static std::vector<editor::EnumEntry> entriesAudioAttenuation = {
-    { (int)AudioAttenuation::NO_ATTENUATION, "No Attenuation" },
-    { (int)AudioAttenuation::INVERSE_DISTANCE, "Inverse Distance" },
-    { (int)AudioAttenuation::LINEAR_DISTANCE, "Linear Distance" },
-    { (int)AudioAttenuation::EXPONENTIAL_DISTANCE, "Exponential Distance" }
+    { (int)SoundAttenuation::NO_ATTENUATION, "No Attenuation" },
+    { (int)SoundAttenuation::INVERSE_DISTANCE, "Inverse Distance" },
+    { (int)SoundAttenuation::LINEAR_DISTANCE, "Linear Distance" },
+    { (int)SoundAttenuation::EXPONENTIAL_DISTANCE, "Exponential Distance" }
 };
 
 static std::vector<editor::EnumEntry> entriesAudioState = {
-    { (int)AudioState::Playing, "Playing" },
-    { (int)AudioState::Paused, "Paused" },
-    { (int)AudioState::Stopped, "Stopped" }
+    { (int)SoundState::Playing, "Playing" },
+    { (int)SoundState::Paused, "Paused" },
+    { (int)SoundState::Stopped, "Stopped" }
 };
 
 static std::vector<editor::EnumEntry> entriesBodyType = {
@@ -351,7 +351,7 @@ namespace {
         }
     }
 
-    struct AudioPreviewRuntime {
+    struct SoundPreviewRuntime {
         SoLoud::Soloud soloud;
         SoLoud::Wav sample;
         bool initialized = false;
@@ -369,13 +369,13 @@ namespace {
 
     // Heap-allocated to avoid the static deinit-order fiasco with SoLoud's audio
     // thread, mirroring AudioSystem::getSoloud(). Intentionally never deleted.
-    AudioPreviewRuntime& audioPreview() {
-        static AudioPreviewRuntime* instance = new AudioPreviewRuntime();
+    SoundPreviewRuntime& soundPreview() {
+        static SoundPreviewRuntime* instance = new SoundPreviewRuntime();
         return *instance;
     }
 
-    bool ensureAudioPreviewInitialized() {
-        AudioPreviewRuntime& ap = audioPreview();
+    bool ensureSoundPreviewInitialized() {
+        SoundPreviewRuntime& ap = soundPreview();
         if (ap.initialized) {
             return true;
         }
@@ -390,8 +390,8 @@ namespace {
         return true;
     }
 
-    void stopAudioPreview(bool unload = false) {
-        AudioPreviewRuntime& ap = audioPreview();
+    void stopSoundPreview(bool unload = false) {
+        SoundPreviewRuntime& ap = soundPreview();
         if (ap.initialized && ap.handle != 0) {
             ap.soloud.stop(ap.handle);
         }
@@ -410,7 +410,7 @@ namespace {
         }
     }
 
-    std::filesystem::path resolveAudioPreviewPath(editor::Project* project, const std::string& filename) {
+    std::filesystem::path resolveSoundPreviewPath(editor::Project* project, const std::string& filename) {
         std::filesystem::path audioPath(filename);
         if (audioPath.is_relative()) {
             audioPath = project->getProjectPath() / audioPath;
@@ -418,8 +418,8 @@ namespace {
         return audioPath.lexically_normal();
     }
 
-    void applyAudioPreviewSettings(const AudioComponent& audio) {
-        AudioPreviewRuntime& ap = audioPreview();
+    void applySoundPreviewSettings(const SoundComponent& audio) {
+        SoundPreviewRuntime& ap = soundPreview();
         if (!ap.initialized || !ap.active || ap.handle == 0) {
             return;
         }
@@ -434,14 +434,14 @@ namespace {
         ap.soloud.setInaudibleBehavior(ap.handle, audio.inaudibleBehaviorMustTick, audio.inaudibleBehaviorKill);
     }
 
-    bool loadAudioPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const AudioComponent& audio) {
-        AudioPreviewRuntime& ap = audioPreview();
+    bool loadSoundPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const SoundComponent& audio) {
+        SoundPreviewRuntime& ap = soundPreview();
         if (audio.filename.empty()) {
             ap.error = "Select a sound file before previewing.";
             return false;
         }
 
-        if (!ensureAudioPreviewInitialized()) {
+        if (!ensureSoundPreviewInitialized()) {
             return false;
         }
 
@@ -449,9 +449,9 @@ namespace {
             return true;
         }
 
-        stopAudioPreview(true);
+        stopSoundPreview(true);
 
-        std::filesystem::path audioPath = resolveAudioPreviewPath(project, audio.filename);
+        std::filesystem::path audioPath = resolveSoundPreviewPath(project, audio.filename);
         SoLoud::result result = ap.sample.load(audioPath.string().c_str());
         if (result != SoLoud::SOLOUD_ERRORS::SO_NO_ERROR) {
             ap.error = "Failed to load audio preview file:\n" + audioPath.string();
@@ -470,16 +470,16 @@ namespace {
         return true;
     }
 
-    bool startAudioPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const AudioComponent& audio) {
-        if (!loadAudioPreview(project, sceneProject, entity, audio)) {
+    bool startSoundPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const SoundComponent& audio) {
+        if (!loadSoundPreview(project, sceneProject, entity, audio)) {
             return false;
         }
 
-        AudioPreviewRuntime& ap = audioPreview();
+        SoundPreviewRuntime& ap = soundPreview();
         if (ap.active && ap.handle != 0) {
             ap.soloud.setPause(ap.handle, false);
             ap.playing = true;
-            applyAudioPreviewSettings(audio);
+            applySoundPreviewSettings(audio);
             return true;
         }
 
@@ -492,13 +492,13 @@ namespace {
         ap.active = true;
         ap.playing = true;
         ap.time = 0.0;
-        applyAudioPreviewSettings(audio);
+        applySoundPreviewSettings(audio);
 
         return true;
     }
 
-    void pauseAudioPreview() {
-        AudioPreviewRuntime& ap = audioPreview();
+    void pauseSoundPreview() {
+        SoundPreviewRuntime& ap = soundPreview();
         if (!ap.initialized || !ap.active || ap.handle == 0) {
             return;
         }
@@ -507,12 +507,12 @@ namespace {
         ap.playing = false;
     }
 
-    bool seekAudioPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const AudioComponent& audio, double time) {
-        if (!loadAudioPreview(project, sceneProject, entity, audio)) {
+    bool seekSoundPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const SoundComponent& audio, double time) {
+        if (!loadSoundPreview(project, sceneProject, entity, audio)) {
             return false;
         }
 
-        AudioPreviewRuntime& ap = audioPreview();
+        SoundPreviewRuntime& ap = soundPreview();
         bool shouldKeepPlaying = ap.active && ap.playing;
         if (!ap.active || ap.handle == 0) {
             ap.handle = ap.soloud.play(ap.sample);
@@ -534,23 +534,23 @@ namespace {
         ap.time = time;
         ap.playing = shouldKeepPlaying;
         ap.soloud.setPause(ap.handle, !shouldKeepPlaying);
-        applyAudioPreviewSettings(audio);
+        applySoundPreviewSettings(audio);
 
         return true;
     }
 
-    void updateAudioPreview(const AudioComponent& audio) {
-        AudioPreviewRuntime& ap = audioPreview();
+    void updateSoundPreview(const SoundComponent& audio) {
+        SoundPreviewRuntime& ap = soundPreview();
         if (!ap.initialized || !ap.active || ap.handle == 0) {
             return;
         }
 
         if (!ap.soloud.isValidVoiceHandle(ap.handle)) {
-            stopAudioPreview();
+            stopSoundPreview();
             return;
         }
 
-        applyAudioPreviewSettings(audio);
+        applySoundPreviewSettings(audio);
         ap.time = ap.soloud.getStreamTime(ap.handle);
     }
 
@@ -603,7 +603,7 @@ void editor::Properties::setOpen(bool open){
     }
 
     if (windowOpen) {
-        stopAudioPreview();
+        stopSoundPreview();
     }
 
     windowOpen = false;
@@ -5231,7 +5231,7 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
 
     if (entities.size() == 1) {
         Entity entity = entities[0];
-        AudioComponent& audio = sceneProject->scene->getComponent<AudioComponent>(entity);
+        SoundComponent& audio = sceneProject->scene->getComponent<SoundComponent>(entity);
 
         auto setAudioFilename = [&](const std::filesystem::path& selectedPath) -> bool {
             std::filesystem::path projectPath = std::filesystem::absolute(project->getProjectPath()).lexically_normal();
@@ -5245,7 +5245,7 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
             std::filesystem::path relative = std::filesystem::relative(filePath, projectPath, errorCode);
             std::string relativePath = relative.generic_string();
             if (errorCode || relativePath == ".." || relativePath.rfind("../", 0) == 0) {
-                ImGui::OpenPopup("Audio Import Error");
+                ImGui::OpenPopup("Sound Import Error");
                 return false;
             }
 
@@ -5312,7 +5312,7 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
             }
         }
 
-        if (ImGui::BeginPopupModal("Audio Import Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal("Sound Import Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("Selected file must be an audio file within the project directory.");
             ImGui::Separator();
             float buttonModalWidth = 120;
@@ -5374,18 +5374,18 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
     }
 
     Entity entity = entities[0];
-    AudioComponent& audio = sceneProject->scene->getComponent<AudioComponent>(entity);
+    SoundComponent& audio = sceneProject->scene->getComponent<SoundComponent>(entity);
     bool sceneIsStopped = sceneProject->playState == ScenePlayState::STOPPED;
-    AudioPreviewRuntime& ap = audioPreview();
+    SoundPreviewRuntime& ap = soundPreview();
     bool isThisPreview = ap.active && ap.sceneId == sceneProject->id && ap.entity == entity;
 
     if (ap.active && (!isThisPreview || !sceneIsStopped || ap.filename != audio.filename)) {
-        stopAudioPreview(!isThisPreview || ap.filename != audio.filename);
+        stopSoundPreview(!isThisPreview || ap.filename != audio.filename);
         isThisPreview = false;
     }
 
     if (isThisPreview) {
-        updateAudioPreview(audio);
+        updateSoundPreview(audio);
         isThisPreview = ap.active && ap.sceneId == sceneProject->id && ap.entity == entity;
     }
 
@@ -5394,12 +5394,12 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
 
     if (isThisPreview && ap.playing) {
         if (ImGui::Button(ICON_FA_PAUSE "##audio_pause")) {
-            pauseAudioPreview();
+            pauseSoundPreview();
         }
     } else {
         if (ImGui::Button(ICON_FA_PLAY "##audio_play")) {
-            if (!startAudioPreview(project, sceneProject, entity, audio)) {
-                ImGui::OpenPopup("Audio Preview Error");
+            if (!startSoundPreview(project, sceneProject, entity, audio)) {
+                ImGui::OpenPopup("Sound Preview Error");
             } else {
                 isThisPreview = true;
             }
@@ -5409,7 +5409,7 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
 
     ImGui::BeginDisabled(!isThisPreview);
     if (ImGui::Button(ICON_FA_STOP "##audio_stop")) {
-        stopAudioPreview();
+        stopSoundPreview();
         isThisPreview = false;
     }
     ImGui::EndDisabled();
@@ -5435,8 +5435,8 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
         float mouseX = ImGui::GetIO().MousePos.x;
         float clickFraction = std::clamp((mouseX - timelinePos.x) / timelineWidth, 0.0f, 1.0f);
         double seekTime = clickFraction * previewLength;
-        if (!seekAudioPreview(project, sceneProject, entity, audio, seekTime)) {
-            ImGui::OpenPopup("Audio Preview Error");
+        if (!seekSoundPreview(project, sceneProject, entity, audio, seekTime)) {
+            ImGui::OpenPopup("Sound Preview Error");
         } else {
             isThisPreview = true;
         }
@@ -5464,7 +5464,7 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
 
     ImGui::EndDisabled();
 
-    if (ImGui::BeginPopupModal("Audio Preview Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal("Sound Preview Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextWrapped("%s", ap.error.c_str());
         ImGui::Separator();
         float buttonModalWidth = 120;
@@ -9823,7 +9823,7 @@ void editor::Properties::show(){
                     drawLightComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::CameraComponent){
                     drawCameraComponent(cpType, sceneProject, entities);
-                }else if (cpType == ComponentType::AudioComponent){
+                }else if (cpType == ComponentType::SoundComponent){
                     drawAudioComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::SkyComponent){
                     drawSkyComponent(cpType, sceneProject, entities);

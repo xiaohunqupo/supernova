@@ -141,7 +141,7 @@ std::string ResourceProgress::getResourceTypeName(ResourceType type) {
         case ResourceType::Shader: return "Shader";
         case ResourceType::Texture: return "Texture";
         case ResourceType::Model: return "Model";
-        case ResourceType::Audio: return "Audio";
+        case ResourceType::Sound: return "Sound";
         case ResourceType::Material: return "Material";
         default: return "Resource";
     }

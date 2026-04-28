@@ -2,24 +2,24 @@
 // (c) 2026 Eduardo Doria.
 //
 
-#ifndef Audio_h
-#define Audio_h
+#ifndef Sound_h
+#define Sound_h
 
 #include "EntityHandle.h"
 #include "Object.h"
-#include "component/AudioComponent.h"
+#include "component/SoundComponent.h"
 
 namespace doriax {
 
-    class DORIAX_API Audio: public EntityHandle{
+    class DORIAX_API Sound: public EntityHandle{
     public:
-        Audio(Scene* scene);
-        Audio(Scene* scene, bool is3D);
-        Audio(Scene* scene, Entity entity);
-        virtual ~Audio();
+        Sound(Scene* scene);
+        Sound(Scene* scene, bool is3D);
+        Sound(Scene* scene, Entity entity);
+        virtual ~Sound();
 
-        int loadAudio(const std::string& filename);
-        void destroyAudio();
+        int loadSound(const std::string& filename);
+        void destroySound();
 
         Object getObject() const;
 
@@ -69,8 +69,8 @@ namespace doriax {
         void setMaxDistance(float maxDistance);
         float getMaxDistance() const;
 
-        void setAttenuationModel(AudioAttenuation attenuationModel);
-        AudioAttenuation getAttenuationModel() const;
+        void setAttenuationModel(SoundAttenuation attenuationModel);
+        SoundAttenuation getAttenuationModel() const;
 
         void setAttenuationRolloffFactor(float attenuationRolloffFactor);
         float getAttenuationRolloffFactor() const;
@@ -81,4 +81,4 @@ namespace doriax {
 
 }
 
-#endif /* Audio_h */
+#endif /* Sound_h */

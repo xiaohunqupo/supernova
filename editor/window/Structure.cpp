@@ -352,7 +352,7 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_CIRCLE_DOT;
     }else if (signature.test(scene->getComponentId<ActionComponent>())){
         return ICON_FA_PLAY;
-    }else if (signature.test(scene->getComponentId<AudioComponent>())){
+    }else if (signature.test(scene->getComponentId<SoundComponent>())){
         if (signature.test(scene->getComponentId<Transform>())) {
             return ICON_FA_VOLUME_HIGH;
         }

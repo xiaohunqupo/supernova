@@ -715,7 +715,7 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             }
         }
 
-        if (signature.test(scene->getComponentId<AudioComponent>()) && signature.test(scene->getComponentId<Transform>())){
+        if (signature.test(scene->getComponentId<SoundComponent>()) && signature.test(scene->getComponentId<Transform>())){
             Transform& transform = scene->getComponent<Transform>(entity);
 
             currentSounds.insert(entity);

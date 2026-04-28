@@ -2059,7 +2059,7 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         BundleManager::destroyAllInstances(sceneProject->scene);
 
         // Stop scene audio before restoring snapshot to prevent stale SoLoud handles on the next play
-        sceneProject->scene->getSystem<AudioSystem>()->stopSceneAudio();
+        sceneProject->scene->getSystem<AudioSystem>()->stopSceneSounds();
 
         // Restore snapshot if present
         if (sceneProject->playStateSnapshot && !sceneProject->playStateSnapshot.IsNull()) {

@@ -63,7 +63,7 @@ namespace doriax::editor{
                 }
                 if (filterFlags & FILE_DIALOG_AUDIO) {
                     audioExtensions = Util::getAudioExtensions();
-                    filterItems.push_back({ "Audio files", audioExtensions.c_str() });
+                    filterItems.push_back({ "Sound files", audioExtensions.c_str() });
                 }
 
                 if (!filterItems.empty()) {

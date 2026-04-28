@@ -21,7 +21,7 @@ void LuaBinding::registerThreadClasses(lua_State *L){
         .addVariable("Shader", ResourceType::Shader)
         .addVariable("Texture", ResourceType::Texture)
         .addVariable("Model", ResourceType::Model)
-        .addVariable("Audio", ResourceType::Audio)
+        .addVariable("Sound", ResourceType::Sound)
         .addVariable("Material", ResourceType::Material)
         .endNamespace();
 

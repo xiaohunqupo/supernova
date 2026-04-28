@@ -18,7 +18,7 @@ bool AudioSystem::inited = false;
 float AudioSystem::globalVolume = 1.0;
 
 AudioSystem::AudioSystem(Scene* scene): SubSystem(scene){
-    signature.set(scene->getComponentId<AudioComponent>());
+    signature.set(scene->getComponentId<SoundComponent>());
 
     cameraLastPosition = Vector3(0, 0, 0);
 }
@@ -50,11 +50,11 @@ void AudioSystem::deInit(){
     }
 }
 
-bool AudioSystem::loadAudio(AudioComponent& audio, Entity entity){
+bool AudioSystem::loadSound(SoundComponent& audio, Entity entity){
     Data filedata;
 
     if (filedata.open(audio.filename.c_str()) != FileErrors::FILEDATA_OK){
-        Log::error("Audio file not found: %s", audio.filename.c_str());
+        Log::error("Sound file not found: %s", audio.filename.c_str());
         return false;
     }
 
@@ -65,7 +65,7 @@ bool AudioSystem::loadAudio(AudioComponent& audio, Entity entity){
     SoLoud::result res = audio.sample->loadMem(filedata.getMemPtr(), filedata.length(), false, false);
 
     if (res == SoLoud::SOLOUD_ERRORS::FILE_LOAD_FAILED){
-        Log::error("Audio file type of '%s' could not be loaded", audio.filename.c_str());
+        Log::error("Sound file type of '%s' could not be loaded", audio.filename.c_str());
         return false;
     }else if (res == SoLoud::SOLOUD_ERRORS::OUT_OF_MEMORY){
         Log::error("Out of memory when loading '%s'", audio.filename.c_str());
@@ -87,7 +87,7 @@ bool AudioSystem::loadAudio(AudioComponent& audio, Entity entity){
     return true;
 }
 
-void AudioSystem::destroyAudio(AudioComponent& audio){
+void AudioSystem::destroySound(SoundComponent& audio){
     if (inited && audio.handle != 0) {
         getSoloud().stop(audio.handle);
     }
@@ -104,7 +104,7 @@ void AudioSystem::destroyAudio(AudioComponent& audio){
     }
 }
 
-bool AudioSystem::seekAudio(AudioComponent& audio, double time){
+bool AudioSystem::seekSound(SoundComponent& audio, double time){
     SoLoud::result res = getSoloud().seek(audio.handle, time);
 
     if (res != SoLoud::SOLOUD_ERRORS::SO_NO_ERROR)
@@ -116,9 +116,9 @@ bool AudioSystem::seekAudio(AudioComponent& audio, double time){
 void AudioSystem::setPaused(bool paused) {
     this->paused = paused;
     if (inited) {
-        auto audios = scene->getComponentArray<AudioComponent>();
+        auto audios = scene->getComponentArray<SoundComponent>();
         for (int i = 0; i < audios->size(); i++) {
-            AudioComponent& audio = audios->getComponentFromIndex(i);
+            SoundComponent& audio = audios->getComponentFromIndex(i);
             if (audio.handle != 0) {
                 getSoloud().setPause(audio.handle, paused);
             }
@@ -126,10 +126,10 @@ void AudioSystem::setPaused(bool paused) {
     }
 }
 
-void AudioSystem::stopSceneAudio() {
-    auto audios = scene->getComponentArray<AudioComponent>();
+void AudioSystem::stopSceneSounds() {
+    auto audios = scene->getComponentArray<SoundComponent>();
     for (int i = 0; i < audios->size(); i++) {
-        AudioComponent& audio = audios->getComponentFromIndex(i);
+        SoundComponent& audio = audios->getComponentFromIndex(i);
 
         if (inited && audio.handle != 0) {
             getSoloud().stop(audio.handle);
@@ -191,9 +191,9 @@ void AudioSystem::update(double dt){
         return;
     }
 
-    auto audios = scene->getComponentArray<AudioComponent>();
+    auto audios = scene->getComponentArray<SoundComponent>();
     for (int i = 0; i < audios->size(); i++){
-		AudioComponent& audio = audios->getComponentFromIndex(i);
+		SoundComponent& audio = audios->getComponentFromIndex(i);
 
         Entity entity = audios->getEntity(i);
         Signature signature = scene->getSignature(entity);
@@ -206,11 +206,11 @@ void AudioSystem::update(double dt){
             worldPosition = transform.worldPosition;
         }
 
-        bool pendingStart = audio.startTrigger || (audio.state == AudioState::Playing && audio.handle == 0);
+        bool pendingStart = audio.startTrigger || (audio.state == SoundState::Playing && audio.handle == 0);
 
-        if (audio.state == AudioState::Playing || pendingStart){
+        if (audio.state == SoundState::Playing || pendingStart){
             if (!audio.loaded){
-                loadAudio(audio, entity);
+                loadSound(audio, entity);
             }
         }
 
@@ -219,7 +219,7 @@ void AudioSystem::update(double dt){
                 audio.pauseTrigger = false;
 
                 getSoloud().setPause(audio.handle, true);
-                audio.state = AudioState::Paused;
+                audio.state = SoundState::Paused;
             }
             if (audio.stopTrigger){
                 audio.stopTrigger = false;
@@ -227,12 +227,12 @@ void AudioSystem::update(double dt){
                 getSoloud().stop(audio.handle);
                 audio.handle = 0;
                 audio.playingTime = 0;
-                audio.state = AudioState::Stopped;
+                audio.state = SoundState::Stopped;
             }
             if (pendingStart){
                 audio.startTrigger = false;
 
-                if (audio.state != AudioState::Paused || audio.handle == 0) {
+                if (audio.state != SoundState::Paused || audio.handle == 0) {
                     init();
                     if (use3DAudio){
                         if (audio.enableClocked){
@@ -257,10 +257,10 @@ void AudioSystem::update(double dt){
                     cameraLastPosition = cameraTransform.worldPosition;
                 }
 
-                audio.state = AudioState::Playing;
+                audio.state = SoundState::Playing;
             }
 
-            if (audio.state == AudioState::Playing){
+            if (audio.state == SoundState::Playing){
                 audio.playingTime = getSoloud().getStreamTime(audio.handle);
 
                 if (audio.needUpdate){
@@ -284,11 +284,11 @@ void AudioSystem::update(double dt){
                         Vector3 camVelocity = cameraLastPosition - camWorldPos;
 
                         unsigned int attModel = SoLoud::AudioSource::NO_ATTENUATION;
-                        if (audio.attenuationModel == AudioAttenuation::INVERSE_DISTANCE)
+                        if (audio.attenuationModel == SoundAttenuation::INVERSE_DISTANCE)
                             attModel = SoLoud::AudioSource::INVERSE_DISTANCE;
-                        if (audio.attenuationModel == AudioAttenuation::LINEAR_DISTANCE)
+                        if (audio.attenuationModel == SoundAttenuation::LINEAR_DISTANCE)
                             attModel = SoLoud::AudioSource::LINEAR_DISTANCE;
-                        if (audio.attenuationModel == AudioAttenuation::EXPONENTIAL_DISTANCE)
+                        if (audio.attenuationModel == SoundAttenuation::EXPONENTIAL_DISTANCE)
                             attModel = SoLoud::AudioSource::EXPONENTIAL_DISTANCE;
 
                         getSoloud().set3dSourceMinMaxDistance(audio.handle, audio.minDistance, audio.maxDistance);
@@ -326,8 +326,8 @@ void AudioSystem::onComponentAdded(Entity entity, ComponentId componentId) {
 }
 
 void AudioSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
-	if (componentId == scene->getComponentId<AudioComponent>()) {
-		AudioComponent& audio = scene->getComponent<AudioComponent>(entity);
-		destroyAudio(audio);
+	if (componentId == scene->getComponentId<SoundComponent>()) {
+		SoundComponent& audio = scene->getComponent<SoundComponent>(entity);
+		destroySound(audio);
 	}
 }

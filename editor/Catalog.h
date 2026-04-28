@@ -35,7 +35,7 @@ namespace doriax::editor{
         UpdateFlags_Points              = 1 << 24,
         UpdateFlags_Terrain             = 1 << 25,
         UpdateFlags_Terrain_Texture     = 1 << 26,
-        UpdateFlags_Audio               = 1 << 27
+        UpdateFlags_Sound               = 1 << 27
     };
 
     // the order of components here affects properties window
@@ -49,7 +49,7 @@ namespace doriax::editor{
         TimedActionComponent,
         AlphaActionComponent,
         AnimationComponent,
-        AudioComponent,
+        SoundComponent,
         Body2DComponent,
         Body3DComponent,
         BoneComponent,

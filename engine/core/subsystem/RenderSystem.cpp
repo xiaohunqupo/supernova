@@ -3072,8 +3072,8 @@ void RenderSystem::update(double dt){
                 }
             }
             
-            if (signature.test(scene->getComponentId<AudioComponent>())){
-                AudioComponent& audio = scene->getComponent<AudioComponent>(entity);
+            if (signature.test(scene->getComponentId<SoundComponent>())){
+                SoundComponent& audio = scene->getComponent<SoundComponent>(entity);
 
                 audio.needUpdate = true;
             }
