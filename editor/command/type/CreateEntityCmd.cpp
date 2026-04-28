@@ -385,7 +385,6 @@ bool editor::CreateEntityCmd::execute(){
 
         scene->addComponent<Transform>(entity, {});
         scene->addComponent<AudioComponent>(entity, {});
-        scene->getComponent<AudioComponent>(entity).enable3D = true;
 
     }else if (type == EntityCreationType::MODEL){
 

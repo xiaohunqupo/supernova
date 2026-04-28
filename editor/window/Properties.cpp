@@ -119,6 +119,12 @@ static std::vector<editor::EnumEntry> entriesAudioAttenuation = {
     { (int)AudioAttenuation::EXPONENTIAL_DISTANCE, "Exponential Distance" }
 };
 
+static std::vector<editor::EnumEntry> entriesAudioState = {
+    { (int)AudioState::Playing, "Playing" },
+    { (int)AudioState::Paused, "Paused" },
+    { (int)AudioState::Stopped, "Stopped" }
+};
+
 static std::vector<editor::EnumEntry> entriesBodyType = {
     { (int)BodyType::STATIC, "Static" },
     { (int)BodyType::KINEMATIC, "Kinematic" },
@@ -5305,6 +5311,10 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
         propertyRow(RowPropertyType::String, cpType, "filename", "Sound File", sceneProject, entities);
     }
 
+    RowSettings stateSettings = compactSettings;
+    stateSettings.enumEntries = &entriesAudioState;
+    propertyRow(RowPropertyType::Enum, cpType, "state", "State", sceneProject, entities, stateSettings);
+
     propertyRow(RowPropertyType::DoublePositive, cpType, "volume", "Volume", sceneProject, entities, doubleSettings);
     propertyRow(RowPropertyType::FloatPositive, cpType, "speed", "Speed", sceneProject, entities, floatSettings);
 
@@ -5316,18 +5326,22 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
     propertyRow(RowPropertyType::DoublePositive, cpType, "loopingPoint", "Loop Point", sceneProject, entities, doubleSettings);
     propertyRow(RowPropertyType::Bool, cpType, "protectVoice", "Protect Voice", sceneProject, entities, compactSettings);
     propertyRow(RowPropertyType::Bool, cpType, "enableClocked", "Clocked", sceneProject, entities, compactSettings);
-    propertyRow(RowPropertyType::Bool, cpType, "enable3D", "3D", sceneProject, entities, compactSettings);
     propertyRow(RowPropertyType::Bool, cpType, "inaudibleBehaviorMustTick", "Inaudible Must Tick", sceneProject, entities, compactSettings);
     propertyRow(RowPropertyType::Bool, cpType, "inaudibleBehaviorKill", "Inaudible Kill", sceneProject, entities, compactSettings);
 
     bool show3DSettings = false;
     for (Entity entity : entities){
-        if (AudioComponent* audio = sceneProject->scene->findComponent<AudioComponent>(entity)){
-            show3DSettings = show3DSettings || audio->enable3D;
-        }
+        Signature signature = sceneProject->scene->getSignature(entity);
+        show3DSettings = show3DSettings || signature.test(sceneProject->scene->getComponentId<Transform>());
     }
 
+    endTable();
+
     if (show3DSettings){
+        ImGui::SeparatorText("3D Sound");
+
+        beginTable(cpType, getLabelSize("Attenuation Rolloff"), "audio_3d_settings");
+
         RowSettings attenuationSettings = compactSettings;
         attenuationSettings.enumEntries = &entriesAudioAttenuation;
         propertyRow(RowPropertyType::FloatPositive, cpType, "minDistance", "Min Distance", sceneProject, entities, floatSettings);
@@ -5335,12 +5349,9 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
         propertyRow(RowPropertyType::Enum, cpType, "attenuationModel", "Attenuation", sceneProject, entities, attenuationSettings);
         propertyRow(RowPropertyType::FloatPositive, cpType, "attenuationRolloffFactor", "Rolloff", sceneProject, entities, floatSettings);
         propertyRow(RowPropertyType::FloatPositive, cpType, "dopplerFactor", "Doppler", sceneProject, entities, floatSettings);
+
+        endTable();
     }
-
-    propertyRow(RowPropertyType::Label, cpType, "length", "Length", sceneProject, entities, compactSettings);
-    propertyRow(RowPropertyType::Label, cpType, "playingTime", "Playing Time", sceneProject, entities, compactSettings);
-
-    endTable();
 
     if (entities.size() != 1) {
         return;

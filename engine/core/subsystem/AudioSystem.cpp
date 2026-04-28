@@ -88,6 +88,15 @@ bool AudioSystem::loadAudio(AudioComponent& audio, Entity entity){
 }
 
 void AudioSystem::destroyAudio(AudioComponent& audio){
+    if (inited && audio.handle != 0) {
+        getSoloud().stop(audio.handle);
+    }
+
+    audio.handle = 0;
+    audio.playingTime = 0;
+    audio.startTrigger = false;
+    audio.pauseTrigger = false;
+    audio.stopTrigger = false;
     audio.loaded = false;
     if (audio.sample){
         delete audio.sample;
@@ -102,6 +111,36 @@ bool AudioSystem::seekAudio(AudioComponent& audio, double time){
         return false;
 
     return true;
+}
+
+void AudioSystem::setPaused(bool paused) {
+    this->paused = paused;
+    if (inited) {
+        auto audios = scene->getComponentArray<AudioComponent>();
+        for (int i = 0; i < audios->size(); i++) {
+            AudioComponent& audio = audios->getComponentFromIndex(i);
+            if (audio.handle != 0) {
+                getSoloud().setPause(audio.handle, paused);
+            }
+        }
+    }
+}
+
+void AudioSystem::stopSceneAudio() {
+    auto audios = scene->getComponentArray<AudioComponent>();
+    for (int i = 0; i < audios->size(); i++) {
+        AudioComponent& audio = audios->getComponentFromIndex(i);
+
+        if (inited && audio.handle != 0) {
+            getSoloud().stop(audio.handle);
+        }
+
+        audio.handle = 0;
+        audio.playingTime = 0;
+        audio.startTrigger = false;
+        audio.pauseTrigger = false;
+        audio.stopTrigger = false;
+    }
 }
 
 void AudioSystem::stopAll(){
@@ -158,15 +197,18 @@ void AudioSystem::update(double dt){
 
         Entity entity = audios->getEntity(i);
         Signature signature = scene->getSignature(entity);
+        bool use3DAudio = signature.test(scene->getComponentId<Transform>());
 
         Vector3 worldPosition = Vector3(0, 0, 0);
-        if (signature.test(scene->getComponentId<Transform>()) && audio.enable3D){
+        if (use3DAudio){
             Transform& transform = scene->getComponent<Transform>(entity);
 
             worldPosition = transform.worldPosition;
         }
 
-        if (audio.state == AudioState::Playing || audio.startTrigger){
+        bool pendingStart = audio.startTrigger || (audio.state == AudioState::Playing && audio.handle == 0);
+
+        if (audio.state == AudioState::Playing || pendingStart){
             if (!audio.loaded){
                 loadAudio(audio, entity);
             }
@@ -183,14 +225,16 @@ void AudioSystem::update(double dt){
                 audio.stopTrigger = false;
 
                 getSoloud().stop(audio.handle);
+                audio.handle = 0;
+                audio.playingTime = 0;
                 audio.state = AudioState::Stopped;
             }
-            if (audio.startTrigger){
+            if (pendingStart){
                 audio.startTrigger = false;
 
-                if (audio.state != AudioState::Paused) {
+                if (audio.state != AudioState::Paused || audio.handle == 0) {
                     init();
-                    if (audio.enable3D){
+                    if (use3DAudio){
                         if (audio.enableClocked){
                             audio.handle = getSoloud().play3dClocked(Engine::getDeltatime(), *audio.sample, worldPosition.x, worldPosition.y, worldPosition.z);
                         }else{
@@ -206,7 +250,7 @@ void AudioSystem::update(double dt){
                 }else{
                     getSoloud().setPause(audio.handle, false);
                 }
-                if (audio.enable3D){
+                if (use3DAudio){
                     Transform& cameraTransform =  scene->getComponent<Transform>(scene->getCamera());
 
                     audio.lastPosition = worldPosition;
@@ -228,7 +272,7 @@ void AudioSystem::update(double dt){
                     getSoloud().setProtectVoice(audio.handle, audio.protectVoice);
                     getSoloud().setInaudibleBehavior(audio.handle, audio.inaudibleBehaviorMustTick, audio.inaudibleBehaviorKill);
 
-                    if (audio.enable3D){
+                    if (use3DAudio){
                         CameraComponent& camera =  scene->getComponent<CameraComponent>(scene->getCamera());
                         Transform& cameraTransform =  scene->getComponent<Transform>(scene->getCamera());
 

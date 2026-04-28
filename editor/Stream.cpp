@@ -3640,7 +3640,6 @@ YAML::Node editor::Stream::encodeAudioComponent(const AudioComponent& audio) {
     node["state"] = audioStateToString(audio.state);
     if (!audio.filename.empty()) node["filename"] = audio.filename;
     node["enableClocked"] = audio.enableClocked;
-    node["enable3D"] = audio.enable3D;
     node["volume"] = audio.volume;
     node["speed"] = audio.speed;
     node["pan"] = audio.pan;
@@ -3670,7 +3669,6 @@ AudioComponent editor::Stream::decodeAudioComponent(const YAML::Node& node, cons
     if (node["state"]) audio.state = stringToAudioState(node["state"].as<std::string>());
     if (node["filename"]) audio.filename = node["filename"].as<std::string>();
     if (node["enableClocked"]) audio.enableClocked = node["enableClocked"].as<bool>();
-    if (node["enable3D"]) audio.enable3D = node["enable3D"].as<bool>();
     if (node["volume"]) audio.volume = node["volume"].as<double>();
     if (node["speed"]) audio.speed = node["speed"].as<float>();
     if (node["pan"]) audio.pan = node["pan"].as<float>();
@@ -3685,10 +3683,12 @@ AudioComponent editor::Stream::decodeAudioComponent(const YAML::Node& node, cons
     if (node["attenuationRolloffFactor"]) audio.attenuationRolloffFactor = node["attenuationRolloffFactor"].as<float>();
     if (node["dopplerFactor"]) audio.dopplerFactor = node["dopplerFactor"].as<float>();
 
-    if (!oldAudio || oldFilename != audio.filename) {
-        audio.loaded = false;
-        audio.handle = 0;
-    }
+    bool keepLoadedSample = oldAudio && oldFilename == audio.filename && oldAudio->sample && oldAudio->loaded;
+    audio.loaded = keepLoadedSample;
+    audio.length = keepLoadedSample ? oldAudio->length : 0;
+    audio.handle = 0;
+    audio.playingTime = 0;
+    audio.lastPosition = Vector3(0, 0, 0);
     audio.startTrigger = false;
     audio.pauseTrigger = false;
     audio.stopTrigger = false;

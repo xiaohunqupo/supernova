@@ -36,7 +36,6 @@ namespace doriax{
         bool loaded = false;
 
         bool enableClocked = false;
-        bool enable3D = false;
         Vector3 lastPosition = Vector3(0, 0, 0);
 
         bool startTrigger = false;

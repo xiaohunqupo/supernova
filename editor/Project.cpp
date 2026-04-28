@@ -2058,6 +2058,9 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         // Destroy all bundle instances created during play before restoring snapshot
         BundleManager::destroyAllInstances(sceneProject->scene);
 
+        // Stop scene audio before restoring snapshot to prevent stale SoLoud handles on the next play
+        sceneProject->scene->getSystem<AudioSystem>()->stopSceneAudio();
+
         // Restore snapshot if present
         if (sceneProject->playStateSnapshot && !sceneProject->playStateSnapshot.IsNull()) {
             Stream::decodeScene(sceneProject->scene, sceneProject->playStateSnapshot["scene"]);

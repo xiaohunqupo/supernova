@@ -5,19 +5,32 @@
 #include "Audio.h"
 #include "subsystem/AudioSystem.h"
 
+#include "Log.h"
+
+#include <stdexcept>
+
 
 using namespace doriax;
 
-Audio::Audio(Scene* scene): Object(scene){
+Audio::Audio(Scene* scene): EntityHandle(scene){
     addComponent<AudioComponent>();
 }
 
-Audio::Audio(Scene* scene, Entity entity): Object(scene, entity){
+Audio::Audio(Scene* scene, Entity entity): EntityHandle(scene, entity){
 }
 
 
 Audio::~Audio(){
 
+}
+
+Object Audio::getObject() const{
+    if (!isSound3D()){
+        Log::error("Cannot get object from 2D audio: enable 3D sound first");
+        throw std::runtime_error("Cannot get object from 2D audio");
+    }
+
+    return Object(scene, entity);
 }
 
 int Audio::loadAudio(const std::string& filename){
@@ -100,16 +113,20 @@ bool Audio::isStopped(){
     return (audio.state == AudioState::Stopped);
 }
 
-void Audio::setSound3D(bool enable3D){
-    AudioComponent& audio = getComponent<AudioComponent>();
+void Audio::setSound3D(bool sound3D){
+    bool hasTransform = scene->findComponent<Transform>(entity) != nullptr;
+    if (sound3D && !hasTransform){
+        addComponent<Transform>();
+    }else if (!sound3D && hasTransform){
+        removeComponent<Transform>();
+    }
 
-    audio.enable3D = enable3D;
+    AudioComponent& audio = getComponent<AudioComponent>();
+    audio.needUpdate = true;
 }
 
 bool Audio::isSound3D() const{
-    AudioComponent& audio = getComponent<AudioComponent>();
-
-    return audio.enable3D;
+    return scene->findComponent<Transform>(entity) != nullptr;
 }
 
 void Audio::setClockedSound(bool enableClocked){

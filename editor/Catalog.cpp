@@ -329,7 +329,6 @@ namespace {
         makeFastProperty<AudioComponent, AudioState, &AudioComponent::state>("state", PropertyType::Enum, UpdateFlags_Audio),
         makeFastProperty<AudioComponent, std::string, &AudioComponent::filename>("filename", PropertyType::String, UpdateFlags_Audio),
         makeFastProperty<AudioComponent, bool, &AudioComponent::enableClocked>("enableClocked", PropertyType::Bool, UpdateFlags_Audio),
-        makeFastProperty<AudioComponent, bool, &AudioComponent::enable3D>("enable3D", PropertyType::Bool, UpdateFlags_Audio),
         makeFastProperty<AudioComponent, double, &AudioComponent::volume>("volume", PropertyType::Double, UpdateFlags_Audio),
         makeFastProperty<AudioComponent, float, &AudioComponent::speed>("speed", PropertyType::Float, UpdateFlags_Audio),
         makeFastProperty<AudioComponent, float, &AudioComponent::pan>("pan", PropertyType::Float, UpdateFlags_Audio),

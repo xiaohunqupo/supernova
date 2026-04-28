@@ -41,7 +41,10 @@ namespace doriax{
 
         bool loadAudio(AudioComponent& audio, Entity entity);
 		void destroyAudio(AudioComponent& audio);
+		void stopSceneAudio();
 		bool seekAudio(AudioComponent& audio, double time);
+
+		void setPaused(bool paused) override;
 
 		void load() override;
 		void draw() override;

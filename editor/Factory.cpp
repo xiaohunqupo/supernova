@@ -1024,7 +1024,6 @@ std::string editor::Factory::createAudioComponent(int indentSpaces, EntityRegist
     code << ind << "audio.state = " << formatAudioState(AudioState::Stopped) << ";\n";
     code << ind << "audio.filename = " << formatString(audio.filename) << ";\n";
     code << ind << "audio.enableClocked = " << formatBool(audio.enableClocked) << ";\n";
-    code << ind << "audio.enable3D = " << formatBool(audio.enable3D) << ";\n";
     code << ind << "audio.volume = " << formatDouble(audio.volume) << ";\n";
     code << ind << "audio.speed = " << formatFloat(audio.speed) << ";\n";
     code << ind << "audio.pan = " << formatFloat(audio.pan) << ";\n";

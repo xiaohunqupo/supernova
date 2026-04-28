@@ -561,7 +561,6 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("filename", &AudioComponent::filename)
         .addProperty("loaded", &AudioComponent::loaded)
         .addProperty("enableClocked", &AudioComponent::enableClocked)
-        .addProperty("enable3D", &AudioComponent::enable3D)
         .addProperty("lastPosition", &AudioComponent::lastPosition)
         .addProperty("startTrigger", &AudioComponent::startTrigger)
         .addProperty("stopTrigger", &AudioComponent::stopTrigger)

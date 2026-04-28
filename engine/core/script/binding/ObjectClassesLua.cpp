@@ -817,10 +817,11 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .deriveClass<Audio, Object>("Audio")
+        .deriveClass<Audio, EntityHandle>("Audio")
         .addConstructor <void (*) (Scene*)> ()
         .addFunction("loadAudio", &Audio::loadAudio)
         .addFunction("destroyAudio", &Audio::destroyAudio)
+        .addFunction("getObject", &Audio::getObject)
         .addFunction("play", &Audio::play)
         .addFunction("pause", &Audio::pause)
         .addFunction("stop", &Audio::stop)
@@ -845,7 +846,7 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("attenuationModel", &Audio::getAttenuationModel, &Audio::setAttenuationModel)
         .addProperty("attenuationRolloffFactor", &Audio::getAttenuationRolloffFactor, &Audio::setAttenuationRolloffFactor)
         .addProperty("dopplerFactor", &Audio::getDopplerFactor, &Audio::setDopplerFactor)
-        .addFunction("getAudioComponent", &Image::getComponent<AudioComponent>)
+        .addFunction("getAudioComponent", &Audio::getComponent<AudioComponent>)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

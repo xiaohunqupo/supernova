@@ -5,12 +5,13 @@
 #ifndef Audio_h
 #define Audio_h
 
+#include "EntityHandle.h"
 #include "Object.h"
 #include "component/AudioComponent.h"
 
 namespace doriax {
 
-    class DORIAX_API Audio: public Object{
+    class DORIAX_API Audio: public EntityHandle{
     public:
         Audio(Scene* scene);
         Audio(Scene* scene, Entity entity);
@@ -18,6 +19,8 @@ namespace doriax {
 
         int loadAudio(const std::string& filename);
         void destroyAudio();
+
+        Object getObject() const;
 
         void play();
         void pause();
@@ -31,7 +34,7 @@ namespace doriax {
         bool isPaused();
         bool isStopped();
 
-        void setSound3D(bool enable3D);
+        void setSound3D(bool sound3D);
         bool isSound3D() const;
 
         void setClockedSound(bool enableClocked);
