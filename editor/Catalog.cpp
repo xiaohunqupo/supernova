@@ -2305,6 +2305,72 @@ namespace {
         }
     }
 
+    PropertyData getLinesPropertyFast(LinesComponent* comp, const std::string& propertyName) {
+        LinesComponent& def = getDefaultComponent<LinesComponent>();
+        if (!comp) return PropertyData();
+
+        if (propertyName == "maxLines") return {PropertyType::UInt, UpdateFlags_Lines_Reload, &def.maxLines, &comp->maxLines};
+
+        if (propertyName == "lines") {
+            static std::vector<LineData> defLines;
+            return {PropertyType::Custom, UpdateFlags_Lines, (void*)&defLines, (void*)&comp->lines};
+        }
+
+        if (propertyName.compare(0, 6, "lines[") == 0) {
+            size_t pos = 6;
+            size_t index = 0;
+            if (!parseIndex(propertyName, pos, index) || pos >= propertyName.size() || propertyName[pos] != ']') return PropertyData();
+            if (index >= comp->lines.size()) return PropertyData();
+            if (pos + 1 >= propertyName.size()) return PropertyData();
+
+            std::string fieldName = propertyName.substr(pos + 1);
+            if (fieldName == ".pointA") {
+                static Vector3 defPoint = Vector3(0.0f, 0.0f, 0.0f);
+                return {PropertyType::Vector3, UpdateFlags_Lines, (void*)&defPoint, (void*)&comp->lines[index].pointA};
+            }
+            if (fieldName == ".colorA") {
+                static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+                return {PropertyType::Vector4, UpdateFlags_Lines, (void*)&defColor, (void*)&comp->lines[index].colorA};
+            }
+            if (fieldName == ".pointB") {
+                static Vector3 defPoint = Vector3(0.0f, 0.0f, 0.0f);
+                return {PropertyType::Vector3, UpdateFlags_Lines, (void*)&defPoint, (void*)&comp->lines[index].pointB};
+            }
+            if (fieldName == ".colorB") {
+                static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+                return {PropertyType::Vector4, UpdateFlags_Lines, (void*)&defColor, (void*)&comp->lines[index].colorB};
+            }
+        }
+
+        return PropertyData();
+    }
+
+    PropertyData resolveLinesPropertyFast(void* comp, const std::string& propertyName) {
+        return getLinesPropertyFast(static_cast<LinesComponent*>(comp), propertyName);
+    }
+
+    void enumerateLinesProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
+        LinesComponent* comp = static_cast<LinesComponent*>(compRef);
+        LinesComponent& def = getDefaultComponent<LinesComponent>();
+
+        ps["maxLines"] = {PropertyType::UInt, UpdateFlags_Lines_Reload, &def.maxLines, comp ? &comp->maxLines : nullptr};
+
+        static std::vector<LineData> defLines;
+        ps["lines"] = {PropertyType::Custom, UpdateFlags_Lines, (void*)&defLines, comp ? (void*)&comp->lines : nullptr};
+
+        if (comp) {
+            static Vector3 defPoint = Vector3(0.0f, 0.0f, 0.0f);
+            static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            for (size_t i = 0; i < comp->lines.size(); i++) {
+                std::string idx = std::to_string(i);
+                ps["lines[" + idx + "].pointA"] = {PropertyType::Vector3, UpdateFlags_Lines, (void*)&defPoint, (void*)&comp->lines[i].pointA};
+                ps["lines[" + idx + "].colorA"] = {PropertyType::Vector4, UpdateFlags_Lines, (void*)&defColor, (void*)&comp->lines[i].colorA};
+                ps["lines[" + idx + "].pointB"] = {PropertyType::Vector3, UpdateFlags_Lines, (void*)&defPoint, (void*)&comp->lines[i].pointB};
+                ps["lines[" + idx + "].colorB"] = {PropertyType::Vector4, UpdateFlags_Lines, (void*)&defColor, (void*)&comp->lines[i].colorB};
+            }
+        }
+    }
+
     // ── Resolver dispatch table ──
 
     static const FastComponentResolver kFastComponentResolvers[] = {
@@ -2332,6 +2398,7 @@ namespace {
         {ComponentType::InstancedMeshComponent, &findComponentPtr<InstancedMeshComponent>, &resolveInstancedMeshPropertyFast, &enumerateInstancedMeshProperties},
         {ComponentType::ParticlesComponent, &findComponentPtr<ParticlesComponent>, &resolveParticlesPropertyFast, &enumerateParticlesProperties},
         {ComponentType::PointsComponent, &findComponentPtr<PointsComponent>, &resolvePointsPropertyFast, &enumeratePointsProperties},
+        {ComponentType::LinesComponent, &findComponentPtr<LinesComponent>, &resolveLinesPropertyFast, &enumerateLinesProperties},
         {ComponentType::ActionComponent, &findComponentPtr<ActionComponent>, &resolveActionPropertyFast, &enumerateActionProperties},
         {ComponentType::TimedActionComponent, &findComponentPtr<TimedActionComponent>, &resolveTimedActionPropertyFast, &enumerateTimedActionProperties},
         {ComponentType::PositionActionComponent, &findComponentPtr<PositionActionComponent>, &resolvePositionActionPropertyFast, &enumeratePositionActionProperties},
@@ -3143,6 +3210,20 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int 
             pts->needUpdate = true;
         }
     }
+    if (updateFlags & (UpdateFlags_Lines | UpdateFlags_Lines_Reload)){
+        if (LinesComponent* lines = registry->findComponent<LinesComponent>(entity)){
+            bool needsLargerBuffer = lines->lines.size() > lines->maxLines;
+            if (needsLargerBuffer){
+                lines->maxLines = static_cast<unsigned int>(lines->lines.size());
+            }
+
+            if ((updateFlags & UpdateFlags_Lines_Reload) || needsLargerBuffer){
+                lines->needReload = true;
+            }else{
+                lines->needUpdateBuffer = true;
+            }
+        }
+    }
     if (updateFlags & UpdateFlags_Sound){
         if (SoundComponent* audio = registry->findComponent<SoundComponent>(entity)){
             audio->needUpdate = true;
@@ -3232,6 +3313,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::LightComponent: {
             YAML::Node encoded = Stream::encodeLightComponent(sourceRegistry->getComponent<LightComponent>(sourceEntity));
             targetRegistry->getComponent<LightComponent>(targetEntity) = Stream::decodeLightComponent(encoded);
+            break;
+        }
+
+        case ComponentType::LinesComponent: {
+            YAML::Node encoded = Stream::encodeLinesComponent(sourceRegistry->getComponent<LinesComponent>(sourceEntity));
+            targetRegistry->getComponent<LinesComponent>(targetEntity) = Stream::decodeLinesComponent(encoded);
             break;
         }
 

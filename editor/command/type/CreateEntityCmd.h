@@ -47,6 +47,7 @@ namespace doriax::editor{
         MODEL,
         PARTICLES,
         POINTS,
+        LINES,
         TERRAIN
     };
 

@@ -220,6 +220,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
+    if (ImGui::MenuItem(ICON_FA_GRIP_LINES"  Lines")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Lines", EntityCreationType::LINES, parent, addToBundle));
+        openParent = parent;
+    }
+
     if (ImGui::MenuItem(ICON_FA_FIRE"  Particles")){
         CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Particles", EntityCreationType::PARTICLES, parent, addToBundle));
         openParent = parent;
@@ -355,6 +360,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_FILM;
     }else if (signature.test(scene->getComponentId<ParticlesComponent>())){
         return ICON_FA_FIRE;
+    }else if (signature.test(scene->getComponentId<LinesComponent>())){
+        return ICON_FA_GRIP_LINES;
     }else if (signature.test(scene->getComponentId<PointsComponent>())){
         return ICON_FA_CIRCLE_DOT;
     }else if (signature.test(scene->getComponentId<ActionComponent>())){

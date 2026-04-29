@@ -2293,6 +2293,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::PointsComponent, true)] = encodePointsComponent(pts);
     }
 
+    if (signature.test(registry->getComponentId<LinesComponent>())) {
+        LinesComponent lines = registry->getComponent<LinesComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::LinesComponent, true)] = encodeLinesComponent(lines);
+    }
+
     if (signature.test(registry->getComponentId<InstancedMeshComponent>())) {
         InstancedMeshComponent instmesh = registry->getComponent<InstancedMeshComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::InstancedMeshComponent, true)] = encodeInstancedMeshComponent(instmesh);
@@ -2803,6 +2808,17 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
             registry->addComponent<PointsComponent>(entity, pts);
         } else {
             registry->getComponent<PointsComponent>(entity) = pts;
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::LinesComponent, true);
+    if (compNode[compName]) {
+        LinesComponent* existing = registry->findComponent<LinesComponent>(entity);
+        LinesComponent lines = decodeLinesComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<LinesComponent>())) {
+            registry->addComponent<LinesComponent>(entity, lines);
+        } else {
+            registry->getComponent<LinesComponent>(entity) = lines;
         }
     }
 
@@ -5313,4 +5329,53 @@ PointsComponent editor::Stream::decodePointsComponent(const YAML::Node& node, co
     points.needReload = false;
 
     return points;
+}
+
+YAML::Node editor::Stream::encodeLinesComponent(const LinesComponent& lines) {
+    YAML::Node node;
+
+    node["maxLines"] = lines.maxLines;
+
+    YAML::Node linesNode;
+    for (const LineData& line : lines.lines) {
+        YAML::Node lineNode;
+        lineNode["pointA"] = encodeVector3(line.pointA);
+        lineNode["colorA"] = encodeVector4(line.colorA);
+        lineNode["pointB"] = encodeVector3(line.pointB);
+        lineNode["colorB"] = encodeVector4(line.colorB);
+        linesNode.push_back(lineNode);
+    }
+    node["lines"] = linesNode;
+
+    return node;
+}
+
+LinesComponent editor::Stream::decodeLinesComponent(const YAML::Node& node, const LinesComponent* oldLines) {
+    LinesComponent lines;
+    if (oldLines) { lines = *oldLines; }
+
+    if (node["maxLines"]) lines.maxLines = node["maxLines"].as<unsigned int>();
+
+    if (node["lines"]) {
+        lines.lines.clear();
+        for (const YAML::Node& lineNode : node["lines"]) {
+            LineData line;
+            if (lineNode["pointA"]) line.pointA = decodeVector3(lineNode["pointA"]);
+            if (lineNode["colorA"]) line.colorA = decodeVector4(lineNode["colorA"]);
+            if (lineNode["pointB"]) line.pointB = decodeVector3(lineNode["pointB"]);
+            if (lineNode["colorB"]) line.colorB = decodeVector4(lineNode["colorB"]);
+            lines.lines.push_back(line);
+        }
+    }
+
+    if (lines.lines.size() > lines.maxLines) {
+        lines.maxLines = static_cast<unsigned int>(lines.lines.size());
+    }
+
+    lines.loaded = false;
+    lines.loadCalled = false;
+    lines.needUpdateBuffer = false;
+    lines.needReload = false;
+
+    return lines;
 }

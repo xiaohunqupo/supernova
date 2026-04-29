@@ -491,8 +491,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<LinesComponent>(entity, {});
             }else{
-                registry->addComponent<LinesComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<LinesComponent>(entity, Stream::decodeLinesComponent(componentNode));
             }
             break;
         case ComponentType::MeshPolygonComponent:
@@ -872,7 +871,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::LinesComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodeLinesComponent(registry->getComponent<LinesComponent>(entity));
             }
             registry->removeComponent<LinesComponent>(entity);
             break;

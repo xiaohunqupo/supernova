@@ -307,5 +307,8 @@ namespace doriax::editor {
 
         static YAML::Node encodePointsComponent(const PointsComponent& points);
         static PointsComponent decodePointsComponent(const YAML::Node& node, const PointsComponent* oldPoints = nullptr);
+
+        static YAML::Node encodeLinesComponent(const LinesComponent& lines);
+        static LinesComponent decodeLinesComponent(const YAML::Node& node, const LinesComponent* oldLines = nullptr);
     };
 }

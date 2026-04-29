@@ -413,6 +413,11 @@ bool editor::CreateEntityCmd::execute(){
         scene->addComponent<Transform>(entity, {});
         scene->addComponent<PointsComponent>(entity, {});
 
+    }else if (type == EntityCreationType::LINES){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<LinesComponent>(entity, {});
+
     }else if (type == EntityCreationType::TERRAIN){
 
         scene->addComponent<Transform>(entity, {});

@@ -103,6 +103,32 @@ AABB editor::SceneRender::getAABB(Entity entity, bool local){
                 return transform.modelMatrix * aabb;
             }
         }
+    }else if ((signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())) && signature.test(scene->getComponentId<Transform>())){
+        Transform& transform = scene->getComponent<Transform>(entity);
+        AABB aabb(Vector3::ZERO, Vector3::ZERO);
+
+        if (signature.test(scene->getComponentId<PointsComponent>())){
+            PointsComponent& points = scene->getComponent<PointsComponent>(entity);
+            for (const PointData& pt : points.points){
+                if (pt.visible){
+                    aabb.merge(pt.position);
+                }
+            }
+        }
+
+        if (signature.test(scene->getComponentId<LinesComponent>())){
+            LinesComponent& lines = scene->getComponent<LinesComponent>(entity);
+            for (const LineData& line : lines.lines){
+                aabb.merge(line.pointA);
+                aabb.merge(line.pointB);
+            }
+        }
+
+        if (local){
+            return aabb;
+        }else{
+            return transform.modelMatrix * aabb;
+        }
     }
 
     return AABB();
@@ -199,14 +225,26 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
                     return modelMatrix * aabb.getOBB();
                 }
             }
-        }else if (signature.test(scene->getComponentId<PointsComponent>())){
-            PointsComponent& points = scene->getComponent<PointsComponent>(entity);
+        }else if (signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())){
             AABB aabb(Vector3::ZERO, Vector3::ZERO);
-            for (const PointData& pt : points.points){
-                if (pt.visible){
-                    aabb.merge(pt.position);
+
+            if (signature.test(scene->getComponentId<PointsComponent>())){
+                PointsComponent& points = scene->getComponent<PointsComponent>(entity);
+                for (const PointData& pt : points.points){
+                    if (pt.visible){
+                        aabb.merge(pt.position);
+                    }
                 }
             }
+
+            if (signature.test(scene->getComponentId<LinesComponent>())){
+                LinesComponent& lines = scene->getComponent<LinesComponent>(entity);
+                for (const LineData& line : lines.lines){
+                    aabb.merge(line.pointA);
+                    aabb.merge(line.pointB);
+                }
+            }
+
             if (local){
                 return aabb.getOBB();
             }else{
@@ -385,7 +423,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             bool isCamera = signature.test(scene->getComponentId<CameraComponent>());
             bool isInstancedMesh = signature.test(scene->getComponentId<InstancedMeshComponent>());
 
-            showCross = signature.test(scene->getComponentId<PointsComponent>());
+            showCross = signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>());
             showRects = (!isTilemap || selectedTileIndex >= 0) && !isCamera && !isInstancedMesh && !showCross;
         }
 

@@ -39,6 +39,7 @@
 #include "component/TranslateTracksComponent.h"
 #include "component/MorphTracksComponent.h"
 #include "component/ParticlesComponent.h"
+#include "component/LinesComponent.h"
 #include "component/PointsComponent.h"
 #include "util/SHA1.h"
 #include "util/ProjectUtils.h"
@@ -6986,6 +6987,126 @@ void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject*
     }
 }
 
+void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    RowSettings settingsInt;
+    settingsInt.secondColSize = 6 * ImGui::GetFontSize();
+
+    beginTable(cpType, getLabelSize("Max Lines"));
+    propertyRow(RowPropertyType::UInt, cpType, "maxLines", "Max Lines", sceneProject, entities, settingsInt);
+    endTable();
+
+    if (entities.size() != 1) {
+        ImGui::SeparatorText("Lines");
+        ImGui::TextDisabled("Select a single entity to edit lines");
+        return;
+    }
+
+    Entity entity = entities[0];
+    LinesComponent& lines = sceneProject->scene->getComponent<LinesComponent>(entity);
+
+    ImGui::SeparatorText("Lines");
+
+    if (ImGui::Button(ICON_FA_PLUS " Add Line", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (const Entity& selectedEntity : entities) {
+            if (LinesComponent* linesComp = sceneProject->scene->findComponent<LinesComponent>(selectedEntity)) {
+                std::vector<LineData> newLines = linesComp->lines;
+                LineData newLine;
+                if (!newLines.empty()) {
+                    newLine = newLines.back();
+                }else{
+                    newLine.pointB = Vector3(1.0f, 0.0f, 0.0f);
+                }
+                newLines.push_back(newLine);
+                multiCmd->addPropertyCmd<std::vector<LineData>>(project, sceneProject->id, selectedEntity, cpType, "lines", newLines);
+            }
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+
+    beginTable(cpType, getLabelSize("Lines"), "lines_header");
+    propertyHeader("Lines", -1, false, false);
+    ImGui::Text("%zu", lines.lines.size());
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##toggle_lines", linesExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
+        linesExpanded = !linesExpanded;
+    }
+    endTable();
+
+    if (!linesExpanded || lines.lines.empty()) {
+        return;
+    }
+
+    bool removedLine = false;
+
+    for (size_t i = 0; i < lines.lines.size(); i++) {
+        ImGui::PushID((int)i);
+
+        std::string lineGroupStr = "line_" + std::to_string(i);
+        std::string lineLabel = "[" + std::to_string(i) + "] Line " + std::to_string(i);
+
+        ImGui::SeparatorText(lineLabel.c_str());
+
+        beginTable(cpType, getLabelSize("Point A"), lineGroupStr);
+        propertyHeader("Line", -1, false, false);
+
+        float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
+        float clearButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x;
+        ImVec2 deleteButtonSize = ImVec2(clearButtonWidth + clearButtonFramePadding * 2, 0);
+        float arrowButtonWidth = ImGui::GetFrameHeight();
+        float trailingWidth = deleteButtonSize.x + ImGui::GetStyle().ItemSpacing.x + arrowButtonWidth;
+        float targetX = ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - trailingWidth);
+        ImGui::SetCursorPosX(targetX);
+
+        if (ImGui::ArrowButton("##toggle_line", linesButtonGroups[lineGroupStr] ? ImGuiDir_Up : ImGuiDir_Down)) {
+            linesButtonGroups[lineGroupStr] = !linesButtonGroups[lineGroupStr];
+        }
+        ImGui::SameLine();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(clearButtonFramePadding, ImGui::GetStyle().FramePadding.y));
+        if (ImGui::Button(ICON_FA_TRASH_CAN "##delete_line", deleteButtonSize)) {
+            MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+            for (const Entity& selectedEntity : entities) {
+                if (LinesComponent* linesComp = sceneProject->scene->findComponent<LinesComponent>(selectedEntity)) {
+                    if (i < linesComp->lines.size()) {
+                        std::vector<LineData> newLines = linesComp->lines;
+                        newLines.erase(newLines.begin() + (long int)i);
+                        multiCmd->addPropertyCmd<std::vector<LineData>>(project, sceneProject->id, selectedEntity, cpType, "lines", newLines);
+                    }
+                }
+            }
+            multiCmd->setNoMerge();
+            CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+            removedLine = true;
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            endTable();
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+
+        if (linesButtonGroups[lineGroupStr]) {
+            std::string propPrefix = "lines[" + std::to_string(i) + "]";
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".pointA", "Point A", sceneProject, entities);
+            propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".colorA", "Color A", sceneProject, entities);
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".pointB", "Point B", sceneProject, entities);
+            propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".colorB", "Color B", sceneProject, entities);
+        }
+
+        endTable();
+        ImGui::PopID();
+    }
+
+    if (removedLine) {
+        return;
+    }
+}
+
 void editor::Properties::drawBody2DComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     Body2DComponent& body = sceneProject->scene->getComponent<Body2DComponent>(entities[0]);
 
@@ -9916,6 +10037,8 @@ void editor::Properties::show(){
                     drawMorphTracksComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::ParticlesComponent){
                     drawParticlesComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::LinesComponent){
+                    drawLinesComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::PointsComponent){
                     drawPointsComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::InstancedMeshComponent){

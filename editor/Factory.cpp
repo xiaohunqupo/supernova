@@ -1727,6 +1727,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::ScaleTracksComponent: return createScaleTracksComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::MorphTracksComponent: return createMorphTracksComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ParticlesComponent: return createParticlesComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::LinesComponent: return createLinesComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::PointsComponent: return createPointsComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::InstancedMeshComponent: return createInstancedMeshComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         default: return "";
@@ -2331,5 +2332,31 @@ std::string editor::Factory::createPointsComponent(int indentSpaces, EntityRegis
     }
 
     addComponentCode(code, ind, sceneName, entityName, entity, "PointsComponent", "pointscomp", assignExisting);
+    return code.str();
+}
+
+std::string editor::Factory::createLinesComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<LinesComponent>(entity)) return "";
+    LinesComponent& l = scene->getComponent<LinesComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+
+    unsigned int maxLines = std::max(l.maxLines, static_cast<unsigned int>(l.lines.size()));
+    code << ind << "LinesComponent linescomp;\n";
+    code << ind << "linescomp.maxLines = " << formatUInt(maxLines) << ";\n";
+
+    for (size_t i = 0; i < l.lines.size(); i++) {
+        const LineData& line = l.lines[i];
+        code << ind << "{\n";
+        code << ind << "    LineData line;\n";
+        code << ind << "    line.pointA = " << formatVector3(line.pointA) << ";\n";
+        code << ind << "    line.colorA = " << formatVector4(line.colorA) << ";\n";
+        code << ind << "    line.pointB = " << formatVector3(line.pointB) << ";\n";
+        code << ind << "    line.colorB = " << formatVector4(line.colorB) << ";\n";
+        code << ind << "    linescomp.lines.push_back(line);\n";
+        code << ind << "}\n";
+    }
+
+    addComponentCode(code, ind, sceneName, entityName, entity, "LinesComponent", "linescomp", assignExisting);
     return code.str();
 }

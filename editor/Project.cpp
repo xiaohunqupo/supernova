@@ -2536,9 +2536,8 @@ AABB editor::Project::getEntityWorldAABB(Scene* scene, Entity entity, Scene* mai
         float dist = (transform.worldPosition - camtransform.worldPosition).length();
         float size = dist * tan(camera.yfov) * 0.01;
         aabb = transform.modelMatrix * AABB(-size, -size, -size, size, size, size);
-    }else if (signature.test(scene->getComponentId<PointsComponent>())){
+    }else if (signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())){
         if (signature.test(scene->getComponentId<Transform>())) {
-            const PointsComponent& pts = scene->getComponent<PointsComponent>(entity);
             const Transform& transform = scene->getComponent<Transform>(entity);
             const Transform& camtransform = mainScene->getComponent<Transform>(mainScene->getCamera());
             const CameraComponent& camera = mainScene->getComponent<CameraComponent>(mainScene->getCamera());
@@ -2559,9 +2558,20 @@ AABB editor::Project::getEntityWorldAABB(Scene* scene, Entity entity, Scene* mai
             // Always include the entity origin
             mergeWorldPoint(transform.worldPosition);
 
-            for (const PointData& pt : pts.points) {
-                if (!pt.visible) continue;
-                mergeWorldPoint(transform.modelMatrix * pt.position);
+            if (signature.test(scene->getComponentId<PointsComponent>())){
+                const PointsComponent& pts = scene->getComponent<PointsComponent>(entity);
+                for (const PointData& pt : pts.points) {
+                    if (!pt.visible) continue;
+                    mergeWorldPoint(transform.modelMatrix * pt.position);
+                }
+            }
+
+            if (signature.test(scene->getComponentId<LinesComponent>())){
+                const LinesComponent& lines = scene->getComponent<LinesComponent>(entity);
+                for (const LineData& line : lines.lines) {
+                    mergeWorldPoint(transform.modelMatrix * line.pointA);
+                    mergeWorldPoint(transform.modelMatrix * line.pointB);
+                }
             }
         }
     }
@@ -2588,14 +2598,23 @@ AABB editor::Project::getEntityLocalAABB(Scene* scene, Entity entity) const{
               signature.test(scene->getComponentId<CameraComponent>()) ||
               signature.test(scene->getComponentId<SoundComponent>())){
         aabb = AABB::ZERO;
-    }else if (signature.test(scene->getComponentId<PointsComponent>())){
+    }else if (signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())){
         aabb.setNull();
-        const PointsComponent& pts = scene->getComponent<PointsComponent>(entity);
         // Always include the entity origin (local space zero)
         aabb.merge(Vector3::ZERO);
-        for (const PointData& pt : pts.points) {
-            if (!pt.visible) continue;
-            aabb.merge(pt.position);
+        if (signature.test(scene->getComponentId<PointsComponent>())){
+            const PointsComponent& pts = scene->getComponent<PointsComponent>(entity);
+            for (const PointData& pt : pts.points) {
+                if (!pt.visible) continue;
+                aabb.merge(pt.position);
+            }
+        }
+        if (signature.test(scene->getComponentId<LinesComponent>())){
+            const LinesComponent& lines = scene->getComponent<LinesComponent>(entity);
+            for (const LineData& line : lines.lines) {
+                aabb.merge(line.pointA);
+                aabb.merge(line.pointB);
+            }
         }
     }
 
