@@ -635,7 +635,7 @@ Matrix4 editor::Stream::decodeMatrix4(const YAML::Node& node) {
     return mat;
 }
 
-YAML::Node editor::Stream::encodeTexture(const Texture& texture) {
+YAML::Node editor::Stream::encodeTexture(const Texture& texture, bool embedData) {
     YAML::Node node;
     if (texture.empty() || texture.isFramebuffer())
         return node;
@@ -651,7 +651,7 @@ YAML::Node editor::Stream::encodeTexture(const Texture& texture) {
             node["path"] = path;
         } else {
             TextureData* embeddedData = nullptr;
-            if (getEmbeddedTextureData(texture, embeddedData)) {
+            if (embedData && getEmbeddedTextureData(texture, embeddedData)) {
                 node["source"] = "data";
                 node["id"] = texture.getId();
                 node["width"] = embeddedData->getWidth();
@@ -879,10 +879,10 @@ void editor::Stream::decodeExternalBuffer(ExternalBuffer& buffer, const YAML::No
     buffer.setName(node["name"].as<std::string>()); // Set ExternalBuffer specific property
 }
 
-YAML::Node editor::Stream::encodeSubmesh(const Submesh& submesh) {
+YAML::Node editor::Stream::encodeSubmesh(const Submesh& submesh, bool embedTextureData) {
     YAML::Node node;
 
-    node["material"] = encodeMaterial(submesh.material);
+    node["material"] = encodeMaterial(submesh.material, embedTextureData);
     node["textureRect"] = encodeRect(submesh.textureRect);
     node["primitiveType"] = primitiveTypeToString(submesh.primitiveType);
     node["vertexCount"] = submesh.vertexCount;
@@ -2025,7 +2025,7 @@ std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, E
     return allEntities;
 }
 
-YAML::Node editor::Stream::encodeMaterial(const Material& material) {
+YAML::Node editor::Stream::encodeMaterial(const Material& material, bool embedTextureData) {
     YAML::Node node;
 
     // Encode shader part properties
@@ -2036,23 +2036,23 @@ YAML::Node editor::Stream::encodeMaterial(const Material& material) {
 
     // Encode textures using the helper method
     if (!material.baseColorTexture.empty()) {
-        node["baseColorTexture"] = encodeTexture(material.baseColorTexture);
+        node["baseColorTexture"] = encodeTexture(material.baseColorTexture, embedTextureData);
     }
 
     if (!material.emissiveTexture.empty()) {
-        node["emissiveTexture"] = encodeTexture(material.emissiveTexture);
+        node["emissiveTexture"] = encodeTexture(material.emissiveTexture, embedTextureData);
     }
 
     if (!material.metallicRoughnessTexture.empty()) {
-        node["metallicRoughnessTexture"] = encodeTexture(material.metallicRoughnessTexture);
+        node["metallicRoughnessTexture"] = encodeTexture(material.metallicRoughnessTexture, embedTextureData);
     }
 
     if (!material.occlusionTexture.empty()) {
-        node["occlusionTexture"] = encodeTexture(material.occlusionTexture);
+        node["occlusionTexture"] = encodeTexture(material.occlusionTexture, embedTextureData);
     }
 
     if (!material.normalTexture.empty()) {
-        node["normalTexture"] = encodeTexture(material.normalTexture);
+        node["normalTexture"] = encodeTexture(material.normalTexture, embedTextureData);
     }
 
     // Encode material name
@@ -2105,7 +2105,7 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
     if (signature.test(registry->getComponentId<MeshComponent>())) {
         bool isModel = signature.test(registry->getComponentId<ModelComponent>());
         MeshComponent mesh = registry->getComponent<MeshComponent>(entity);
-        compNode[Catalog::getComponentName(ComponentType::MeshComponent, true)] = encodeMeshComponent(mesh, !isModel);
+        compNode[Catalog::getComponentName(ComponentType::MeshComponent, true)] = encodeMeshComponent(mesh, !isModel, !isModel);
     }
 
     if (signature.test(registry->getComponentId<UIComponent>())) {
@@ -2904,7 +2904,7 @@ Transform editor::Stream::decodeTransform(const YAML::Node& node, const Transfor
     return transform;
 }
 
-YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers) {
+YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers, bool embedTextureData) {
     YAML::Node node;
 
     //node["loaded"] = mesh.loaded;
@@ -2927,7 +2927,7 @@ YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool e
     // Encode submeshes
     YAML::Node submeshesNode;
     for(unsigned int i = 0; i < mesh.numSubmeshes; i++) {
-        submeshesNode.push_back(encodeSubmesh(mesh.submeshes[i]));
+        submeshesNode.push_back(encodeSubmesh(mesh.submeshes[i], embedTextureData));
     }
     node["submeshes"] = submeshesNode;
     //node["numSubmeshes"] = mesh.numSubmeshes;

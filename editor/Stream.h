@@ -107,7 +107,7 @@ namespace doriax::editor {
         static bool getEmbeddedTextureData(const Texture& texture, TextureData*& data);
         static bool setEmbeddedTextureData(Texture& texture, const std::string& preferredId, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
 
-        static YAML::Node encodeTexture(const Texture& texture);
+        static YAML::Node encodeTexture(const Texture& texture, bool embedData = true);
         static Texture decodeTexture(const YAML::Node& node);
 
         static YAML::Node encodeBuffer(const Buffer& buffer);
@@ -122,7 +122,7 @@ namespace doriax::editor {
         static YAML::Node encodeExternalBuffer(const ExternalBuffer& buffer);
         static void decodeExternalBuffer(ExternalBuffer& buffer, const YAML::Node& node);
 
-        static YAML::Node encodeSubmesh(const Submesh& submesh);
+        static YAML::Node encodeSubmesh(const Submesh& submesh, bool embedTextureData = true);
         static Submesh decodeSubmesh(const YAML::Node& node, const Submesh* oldSubmesh = nullptr);
 
         static YAML::Node encodeAABB(const AABB& aabb);
@@ -161,7 +161,7 @@ namespace doriax::editor {
         static YAML::Node encodeEntity(const Entity entity, const EntityRegistry* registry, const Project* project = nullptr, const SceneProject* sceneProject = nullptr);
         static std::vector<Entity> decodeEntity(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities = nullptr, Project* project = nullptr, SceneProject* sceneProject = nullptr, Entity parent = NULL_ENTITY, bool createNewIfExists = true);
 
-        static YAML::Node encodeMaterial(const Material& material);
+        static YAML::Node encodeMaterial(const Material& material, bool embedTextureData = true);
         static Material decodeMaterial(const YAML::Node& node);
 
         static YAML::Node encodeComponents(const Entity entity, const EntityRegistry* registry, Signature signature);
@@ -170,7 +170,7 @@ namespace doriax::editor {
         static YAML::Node encodeTransform(const Transform& transform);
         static Transform decodeTransform(const YAML::Node& node, const Transform* oldTransform = nullptr);
 
-        static YAML::Node encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers = true);
+        static YAML::Node encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers = true, bool embedTextureData = true);
         static MeshComponent decodeMeshComponent(const YAML::Node& node, const MeshComponent* oldMesh = nullptr);
 
         static YAML::Node encodeUIComponent(const UIComponent& ui);

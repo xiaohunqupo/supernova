@@ -59,7 +59,7 @@ bool editor::ModelLoadCmd::execute(){
 
     // Save old component state
     oldTransform = Stream::encodeTransform(transform);
-    oldMesh = Stream::encodeMeshComponent(mesh, false);
+    oldMesh = Stream::encodeMeshComponent(mesh, false, false);
     oldModel = Stream::encodeModelComponent(model);
 
     std::vector<Entity> oldSubEntityRoots = collectModelDeleteRoots(model);
