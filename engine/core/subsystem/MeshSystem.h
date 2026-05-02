@@ -39,6 +39,12 @@ namespace doriax{
         static bool fileExists(const std::string &abs_filename, void *);
         static bool readWholeFile(std::vector<unsigned char> *out, std::string *err, const std::string &filepath, void *);
         static bool getFileSizeInBytes(size_t *filesize_out, std::string *err, const std::string &filepath, void *userdata);
+        template<typename T>
+        static bool isValidGLTFIndex(int index, const std::vector<T>& values) {
+            return index >= 0 && static_cast<size_t>(index) < values.size();
+        }
+        static void applyDefaultGLTFMaterial(Material& material);
+        static void applyDefaultObjMaterial(Submesh& submesh);
         void addSubmeshAttribute(Submesh& submesh, const std::string& bufferName, AttributeType attribute, unsigned int elements, AttributeDataType dataType, size_t size, size_t offset, bool normalized);
         bool loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers);
         bool loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName);

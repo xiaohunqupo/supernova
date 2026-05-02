@@ -30,6 +30,22 @@ MeshSystem::~MeshSystem(){
 
 }
 
+void MeshSystem::applyDefaultGLTFMaterial(Material& material) {
+    material = Material();
+}
+
+void MeshSystem::applyDefaultObjMaterial(Submesh& submesh) {
+    submesh.attributes.clear();
+    submesh.material.baseColorFactor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+    submesh.material.emissiveFactor = Vector3(0.0f, 0.0f, 0.0f);
+    submesh.material.metallicFactor = 0.0f;
+    submesh.material.roughnessFactor = 1.0f;
+    submesh.material.baseColorTexture = Texture();
+    submesh.material.normalTexture = Texture();
+    submesh.material.emissiveTexture = Texture();
+    submesh.material.occlusionTexture = Texture();
+}
+
 bool MeshSystem::createSprite(SpriteComponent& sprite, MeshComponent& mesh, CameraComponent& camera){
     // Check texture loading state BEFORE clearing the buffer to avoid leaving
     // the mesh with an empty vertex buffer when the texture is still loading.
@@ -568,10 +584,31 @@ void MeshSystem::addSubmeshAttribute(Submesh& submesh, const std::string& buffer
 }
 
 bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers){
+    if (!model.gltfModel || !isValidGLTFIndex(bufferViewIndex, model.gltfModel->bufferViews)) {
+        Log::error("Invalid GLTF buffer view index %i", bufferViewIndex);
+        return false;
+    }
+
     const tinygltf::BufferView &bufferView = model.gltfModel->bufferViews[bufferViewIndex];
+    if (!isValidGLTFIndex(bufferView.buffer, model.gltfModel->buffers)) {
+        Log::error("Invalid GLTF buffer index %i for buffer view %i", bufferView.buffer, bufferViewIndex);
+        return false;
+    }
+
+    std::vector<unsigned char>& bufferData = model.gltfModel->buffers[bufferView.buffer].data;
+    if (bufferView.byteOffset > bufferData.size() || bufferView.byteLength > bufferData.size() - bufferView.byteOffset) {
+        Log::error("Invalid GLTF buffer view range %i", bufferViewIndex);
+        return false;
+    }
+
     const std::string name = getBufferName(bufferViewIndex, model);
 
     if (std::find(loadedBuffers.begin(), loadedBuffers.end(), name) == loadedBuffers.end() && bufferView.target != 0) {
+        if (mesh.numExternalBuffers >= mesh.eBuffers.size()){
+            Log::error("External buffer limit reached for GLTF model");
+            return false;
+        }
+
         loadedBuffers.push_back(name);
 
         if (bufferView.target == 34962) { //GL_ARRAY_BUFFER
@@ -580,15 +617,12 @@ bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelC
             mesh.eBuffers[mesh.numExternalBuffers].setType(BufferType::INDEX_BUFFER);
         }
 
-        mesh.eBuffers[mesh.numExternalBuffers].setData(&model.gltfModel->buffers[bufferView.buffer].data.at(0) + bufferView.byteOffset, bufferView.byteLength);
+        mesh.eBuffers[mesh.numExternalBuffers].setData(bufferData.data() + bufferView.byteOffset, bufferView.byteLength);
         mesh.eBuffers[mesh.numExternalBuffers].setStride(stride);
         mesh.eBuffers[mesh.numExternalBuffers].setName(name);
         mesh.eBuffers[mesh.numExternalBuffers].setRenderAttributes(false);
 
         mesh.numExternalBuffers++;
-        if (mesh.numExternalBuffers > mesh.eBuffers.size()){
-            Log::error("External buffer limit reached for GLTF model");
-        }
 
         return true;
     }
@@ -597,11 +631,31 @@ bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelC
 }
 
 bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName){
+    texture = Texture();
+
     if (textureIndex >= 0){
+        if (!model.gltfModel || !isValidGLTFIndex(textureIndex, model.gltfModel->textures)) {
+            Log::warn("Invalid GLTF texture index %i: %s", textureIndex, textureName.c_str());
+            return true;
+        }
+
         tinygltf::Texture &tex = model.gltfModel->textures[textureIndex];
+        if (!isValidGLTFIndex(tex.source, model.gltfModel->images)) {
+            Log::warn("Invalid GLTF image index %i for texture %i: %s", tex.source, textureIndex, textureName.c_str());
+            return true;
+        }
+
         tinygltf::Image &image = model.gltfModel->images[tex.source];
+        if (image.width <= 0 || image.height <= 0 || image.component <= 0 || image.image.empty()) {
+            Log::warn("Invalid GLTF image data for texture: %s", textureName.c_str());
+            return true;
+        }
 
         size_t imageSize = image.component * image.width * image.height; //in bytes
+        if (image.image.size() < imageSize) {
+            Log::warn("Incomplete GLTF image data for texture: %s", textureName.c_str());
+            return true;
+        }
 
         ColorFormat colorFormat;
         if (image.component == 1){
@@ -609,8 +663,8 @@ bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Textur
         }else if (image.component == 4){
             colorFormat = ColorFormat::RGBA;
         }else{
-            Log::error("Not compatible image %i: Renders only support 8bpp and 32bpp", textureName.c_str());
-            return false;
+            Log::warn("Not compatible image %s: Renders only support 8bpp and 32bpp", textureName.c_str());
+            return true;
         }
 
         TextureData textureData(image.width, image.height, imageSize, colorFormat, image.component, &image.image.at(0));
@@ -618,12 +672,14 @@ bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Textur
         std::string id = textureName + "|" + image.name;
         texture.setData(id, textureData);
 
-        if (tex.sampler >= 0){
+        if (tex.sampler >= 0 && isValidGLTFIndex(tex.sampler, model.gltfModel->samplers)){
             tinygltf::Sampler &sampler = model.gltfModel->samplers[tex.sampler];
             texture.setMinFilter(convertFilter(sampler.minFilter));
             texture.setMagFilter(convertFilter(sampler.magFilter));
             texture.setWrapU(convertWrap(sampler.wrapS));
             texture.setWrapV(convertWrap(sampler.wrapT));
+        }else if (tex.sampler >= 0){
+            Log::warn("Invalid GLTF sampler index %i for texture %i", tex.sampler, textureIndex);
         }
         // Prevent GLTF release because GLTF can have multiple textures with the same data
         // Image data is stored in tinygltf::Image
@@ -634,6 +690,10 @@ bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Textur
 }
 
 std::string MeshSystem::getBufferName(int bufferViewIndex, ModelComponent& model){
+    if (!model.gltfModel || !isValidGLTFIndex(bufferViewIndex, model.gltfModel->bufferViews)) {
+        return "buffer" + std::to_string(bufferViewIndex);
+    }
+
     const tinygltf::BufferView &bufferView = model.gltfModel->bufferViews[bufferViewIndex];
 
     if (!bufferView.name.empty())
@@ -644,6 +704,10 @@ std::string MeshSystem::getBufferName(int bufferViewIndex, ModelComponent& model
 }
 
 Matrix4 MeshSystem::getGLTFNodeMatrix(int nodeIndex, ModelComponent& model){
+    if (!model.gltfModel || !isValidGLTFIndex(nodeIndex, model.gltfModel->nodes)) {
+        return Matrix4();
+    }
+
     tinygltf::Node node = model.gltfModel->nodes[nodeIndex];
 
     Matrix4 matrix;
@@ -688,9 +752,17 @@ Matrix4 MeshSystem::getGLTFNodeMatrix(int nodeIndex, ModelComponent& model){
 
 Matrix4 MeshSystem::getGLTFMeshGlobalMatrix(int nodeIndex, ModelComponent& model, std::map<int, int>& nodesParent){
 
+    if (!model.gltfModel || !isValidGLTFIndex(nodeIndex, model.gltfModel->nodes)) {
+        return Matrix4();
+    }
+
     Matrix4 matrix = getGLTFNodeMatrix(nodeIndex, model);
 
-    int parent = nodesParent[nodeIndex];
+    int parent = -1;
+    auto parentIt = nodesParent.find(nodeIndex);
+    if (parentIt != nodesParent.end()) {
+        parent = parentIt->second;
+    }
 
     if (parent >= 0){
         return getGLTFMeshGlobalMatrix(parent, model, nodesParent) * matrix;
@@ -700,6 +772,10 @@ Matrix4 MeshSystem::getGLTFMeshGlobalMatrix(int nodeIndex, ModelComponent& model
 }
 
 Entity MeshSystem::generateSketetalStructure(Entity entity, ModelComponent& model, int nodeIndex, int skinIndex){
+    if (!model.gltfModel || !isValidGLTFIndex(nodeIndex, model.gltfModel->nodes) || !isValidGLTFIndex(skinIndex, model.gltfModel->skins)) {
+        return NULL_ENTITY;
+    }
+
     tinygltf::Node node = model.gltfModel->nodes[nodeIndex];
     tinygltf::Skin skin = model.gltfModel->skins[skinIndex];
 
@@ -710,16 +786,40 @@ Entity MeshSystem::generateSketetalStructure(Entity entity, ModelComponent& mode
             index = j;
     }
 
+    if (index < 0) {
+        return NULL_ENTITY;
+    }
+
     Matrix4 offsetMatrix;
 
     if (skin.inverseBindMatrices >= 0) {
 
+        if (!isValidGLTFIndex(skin.inverseBindMatrices, model.gltfModel->accessors)) {
+            Log::error("Skeleton error: Invalid inverse bind matrix accessor");
+            return NULL_ENTITY;
+        }
+
         tinygltf::Accessor accessor = model.gltfModel->accessors[skin.inverseBindMatrices];
+        if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
+            Log::error("Skeleton error: Invalid inverse bind matrix buffer view");
+            return NULL_ENTITY;
+        }
+
         tinygltf::BufferView bufferView = model.gltfModel->bufferViews[accessor.bufferView];
 
-        float *matrices = (float *) (&model.gltfModel->buffers[bufferView.buffer].data.at(0) +
-                                     bufferView.byteOffset + accessor.byteOffset +
-                                     (16 * sizeof(float) * index));
+        if (!isValidGLTFIndex(bufferView.buffer, model.gltfModel->buffers)) {
+            Log::error("Skeleton error: Invalid inverse bind matrix buffer");
+            return NULL_ENTITY;
+        }
+
+        std::vector<unsigned char>& bufferData = model.gltfModel->buffers[bufferView.buffer].data;
+        const size_t matrixOffset = bufferView.byteOffset + accessor.byteOffset + (16 * sizeof(float) * index);
+        if (matrixOffset > bufferData.size() || 16 * sizeof(float) > bufferData.size() - matrixOffset) {
+            Log::error("Skeleton error: Invalid inverse bind matrix range");
+            return NULL_ENTITY;
+        }
+
+        float *matrices = (float *) (bufferData.data() + matrixOffset);
 
         if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT || accessor.type != TINYGLTF_TYPE_MAT4) {
             Log::error("Skeleton error: Unknown inverse bind matrix data type");
@@ -763,7 +863,14 @@ Entity MeshSystem::generateSketetalStructure(Entity entity, ModelComponent& mode
 
     for (size_t i = 0; i < node.children.size(); i++){
         // here bonetransform and bonecomp losts references
-        scene->addEntityChild(bone, generateSketetalStructure(entity, model, node.children[i], skinIndex), false);
+        if (!isValidGLTFIndex(node.children[i], model.gltfModel->nodes)) {
+            continue;
+        }
+
+        Entity child = generateSketetalStructure(entity, model, node.children[i], skinIndex);
+        if (child != NULL_ENTITY) {
+            scene->addEntityChild(bone, child, false);
+        }
     }
 
     return bone;
@@ -1984,6 +2091,14 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         ResourceProgress::updateProgress(buildId, 0.4f); // Transform processing done
     }
 
+    if (!isValidGLTFIndex(meshIndex, model.gltfModel->meshes)) {
+        Log::error("GLTF model has no mesh index %i: %s", meshIndex, filename.c_str());
+        if (asyncLoad) {
+            ResourceProgress::failBuild(buildId);
+        }
+        return false;
+    }
+
     tinygltf::Mesh gltfmesh = model.gltfModel->meshes[meshIndex];
 
     if (gltfmesh.primitives.size() > 0){
@@ -2004,10 +2119,28 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
 
         mesh.submeshes[i].attributes.clear();
+        applyDefaultGLTFMaterial(mesh.submeshes[i].material);
 
         tinygltf::Primitive primitive = gltfmesh.primitives[i];
+        if (!isValidGLTFIndex(primitive.indices, model.gltfModel->accessors)) {
+            Log::error("GLTF primitive %zu has no valid index accessor: %s", i, filename.c_str());
+            continue;
+        }
+
         tinygltf::Accessor indexAccessor = model.gltfModel->accessors[primitive.indices];
-        tinygltf::Material &mat = model.gltfModel->materials[primitive.material];
+        if (!isValidGLTFIndex(indexAccessor.bufferView, model.gltfModel->bufferViews)) {
+            Log::error("GLTF primitive %zu has no valid index buffer view: %s", i, filename.c_str());
+            continue;
+        }
+
+        const tinygltf::Material* mat = nullptr;
+        if (primitive.material >= 0) {
+            if (isValidGLTFIndex(primitive.material, model.gltfModel->materials)) {
+                mat = &model.gltfModel->materials[primitive.material];
+            } else {
+                Log::warn("GLTF primitive %zu has invalid material index %i. Using default material: %s", i, primitive.material, filename.c_str());
+            }
+        }
 
         AttributeDataType indexType;
 
@@ -2021,80 +2154,82 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             continue;
         }
 
-        if (!loadGLTFTexture(
-            mat.pbrMetallicRoughness.baseColorTexture.index,
-            model, 
-            mesh.submeshes[i].material.baseColorTexture, 
-            filename + "|" + "baseColorTexture"))
-            continue;
+        if (mat) {
+            if (!loadGLTFTexture(
+                mat->pbrMetallicRoughness.baseColorTexture.index,
+                model, 
+                mesh.submeshes[i].material.baseColorTexture, 
+                filename + "|" + "baseColorTexture"))
+                continue;
 
-        if (mat.pbrMetallicRoughness.baseColorTexture.texCoord != 0){
-            Log::error("Not supported texcoord for %s, only one per submesh: %s", "baseColorTexture", filename.c_str());
-            continue;
+            if (mat->pbrMetallicRoughness.baseColorTexture.texCoord != 0){
+                Log::error("Not supported texcoord for %s, only one per submesh: %s", "baseColorTexture", filename.c_str());
+                continue;
+            }
+
+            if (!loadGLTFTexture(
+                mat->pbrMetallicRoughness.metallicRoughnessTexture.index, 
+                model,
+                mesh.submeshes[i].material.metallicRoughnessTexture, 
+                filename + "|" + "metallicRoughnessTexture"))
+                continue;
+
+            if (mat->pbrMetallicRoughness.metallicRoughnessTexture.texCoord != 0){
+                Log::error("Not supported texcoord for %s, only one per submesh: %s", "metallicRoughnessTexture", filename.c_str());
+                continue;
+            }
+
+            if (!loadGLTFTexture(
+                mat->occlusionTexture.index, 
+                model,
+                mesh.submeshes[i].material.occlusionTexture, 
+                filename + "|" + "occlusionTexture"))
+                continue;
+
+            if (mat->occlusionTexture.texCoord != 0){
+                Log::error("Not supported texcoord for %s, only one per submesh: %s", "occlusionTexture", filename.c_str());
+                continue;
+            }
+
+            if (!loadGLTFTexture(
+                mat->emissiveTexture.index, 
+                model,
+                mesh.submeshes[i].material.emissiveTexture, 
+                filename + "|" + "emissiveTexture"))
+                continue;
+
+            if (mat->emissiveTexture.texCoord != 0){
+                Log::error("Not supported texcoord for %s, only one per submesh: %s", "emissiveTexture", filename.c_str());
+                continue;
+            }
+
+            if (!loadGLTFTexture(
+                mat->normalTexture.index, 
+                model,
+                mesh.submeshes[i].material.normalTexture, 
+                filename + "|" + "normalTexture"))
+                continue;
+
+            if (mat->normalTexture.texCoord != 0){
+                Log::error("Not supported texcoord for %s, only one per submesh: %s", "normalTexture", filename.c_str());
+                continue;
+            }
+
+            mesh.submeshes[i].material.baseColorFactor = Vector4(
+                mat->pbrMetallicRoughness.baseColorFactor[0],
+                mat->pbrMetallicRoughness.baseColorFactor[1],
+                mat->pbrMetallicRoughness.baseColorFactor[2],
+                mat->pbrMetallicRoughness.baseColorFactor[3]);
+
+            mesh.submeshes[i].material.metallicFactor = mat->pbrMetallicRoughness.metallicFactor;
+
+            mesh.submeshes[i].material.roughnessFactor = mat->pbrMetallicRoughness.roughnessFactor;
+
+            mesh.submeshes[i].material.emissiveFactor = Vector3(
+                mat->emissiveFactor[0],
+                mat->emissiveFactor[1],
+                mat->emissiveFactor[2]);
         }
-
-        if (!loadGLTFTexture(
-            mat.pbrMetallicRoughness.metallicRoughnessTexture.index, 
-            model,
-            mesh.submeshes[i].material.metallicRoughnessTexture, 
-            filename + "|" + "metallicRoughnessTexture"))
-            continue;
-
-        if (mat.pbrMetallicRoughness.metallicRoughnessTexture.texCoord != 0){
-            Log::error("Not supported texcoord for %s, only one per submesh: %s", "metallicRoughnessTexture", filename.c_str());
-            continue;
-        }
-
-        if (!loadGLTFTexture(
-            mat.occlusionTexture.index, 
-            model,
-            mesh.submeshes[i].material.occlusionTexture, 
-            filename + "|" + "occlusionTexture"))
-            continue;
-
-        if (mat.occlusionTexture.texCoord != 0){
-            Log::error("Not supported texcoord for %s, only one per submesh: %s", "occlusionTexture", filename.c_str());
-            continue;
-        }
-
-        if (!loadGLTFTexture(
-            mat.emissiveTexture.index, 
-            model,
-            mesh.submeshes[i].material.emissiveTexture, 
-            filename + "|" + "emissiveTexture"))
-            continue;
-
-        if (mat.emissiveTexture.texCoord != 0){
-            Log::error("Not supported texcoord for %s, only one per submesh: %s", "emissiveTexture", filename.c_str());
-            continue;
-        }
-
-        if (!loadGLTFTexture(
-            mat.normalTexture.index, 
-            model,
-            mesh.submeshes[i].material.normalTexture, 
-            filename + "|" + "normalTexture"))
-            continue;
-
-        if (mat.normalTexture.texCoord != 0){
-            Log::error("Not supported texcoord for %s, only one per submesh: %s", "normalTexture", filename.c_str());
-            continue;
-        }
-
-        mesh.submeshes[i].material.baseColorFactor = Vector4(
-            mat.pbrMetallicRoughness.baseColorFactor[0],
-            mat.pbrMetallicRoughness.baseColorFactor[1],
-            mat.pbrMetallicRoughness.baseColorFactor[2],
-            mat.pbrMetallicRoughness.baseColorFactor[3]);
-
-        mesh.submeshes[i].material.metallicFactor = mat.pbrMetallicRoughness.metallicFactor;
-
-        mesh.submeshes[i].material.roughnessFactor = mat.pbrMetallicRoughness.roughnessFactor;
-
-        mesh.submeshes[i].material.emissiveFactor = Vector3(
-            mat.emissiveFactor[0],
-            mat.emissiveFactor[1],
-            mat.emissiveFactor[2]);
 
         int indexStride = 0;
         if (indexType == AttributeDataType::UNSIGNED_SHORT){
@@ -2103,14 +2238,24 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             indexStride = sizeof(uint32_t);
         }
 
-        mesh.submeshes[i].faceCulling = (mat.doubleSided)? false : true;
+        mesh.submeshes[i].faceCulling = mat ? !mat->doubleSided : true;
 
         loadGLTFBuffer(indexAccessor.bufferView, mesh, model, indexStride, loadedBuffers);
 
         addSubmeshAttribute(mesh.submeshes[i], getBufferName(indexAccessor.bufferView, model), AttributeType::INDEX, 1, indexType, indexAccessor.count, indexAccessor.byteOffset, false);
 
         for (auto &attrib : primitive.attributes) {
+            if (!isValidGLTFIndex(attrib.second, model.gltfModel->accessors)) {
+                Log::warn("Invalid GLTF accessor index %i for attribute %s", attrib.second, attrib.first.c_str());
+                continue;
+            }
+
             tinygltf::Accessor accessor = model.gltfModel->accessors[attrib.second];
+            if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
+                Log::warn("Invalid GLTF buffer view index %i for attribute %s", accessor.bufferView, attrib.first.c_str());
+                continue;
+            }
+
             int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
             std::string bufferName = getBufferName(accessor.bufferView, model);
 
@@ -2221,7 +2366,17 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
                 morphTargets = true;
 
+                if (!isValidGLTFIndex(attribMorph.second, model.gltfModel->accessors)) {
+                    Log::warn("Invalid GLTF accessor index %i for morph target %s", attribMorph.second, attribMorph.first.c_str());
+                    continue;
+                }
+
                 tinygltf::Accessor accessor = model.gltfModel->accessors[attribMorph.second];
+                if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
+                    Log::warn("Invalid GLTF buffer view index %i for morph target %s", accessor.bufferView, attribMorph.first.c_str());
+                    continue;
+                }
+
                 int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
                 std::string bufferName = getBufferName(accessor.bufferView, model);
 
@@ -2355,25 +2510,39 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         ResourceProgress::updateProgress(buildId, 0.8f); // Submeshes processed
     }
 
-    int skinIndex = model.gltfModel->nodes[meshNode].skin;
+    int skinIndex = -1;
+    if (isValidGLTFIndex(meshNode, model.gltfModel->nodes)) {
+        skinIndex = model.gltfModel->nodes[meshNode].skin;
+    }
     int skeletonRoot = -1;
+
+    if (skinIndex >= 0){
+        if (!isValidGLTFIndex(skinIndex, model.gltfModel->skins)) {
+            Log::warn("GLTF mesh node has invalid skin index %i: %s", skinIndex, filename.c_str());
+            skinIndex = -1;
+        }
+    }
 
     if (skinIndex >= 0){
         tinygltf::Skin skin = model.gltfModel->skins[skinIndex];
 
-        if (skin.skeleton >= 0) {
+        if (skin.skeleton >= 0 && isValidGLTFIndex(skin.skeleton, model.gltfModel->nodes)) {
             skeletonRoot = skin.skeleton;
         }else {
             //Find skeleton root
             for (int j = 0; j < skin.joints.size(); j++) {
                 int nodeIndex = skin.joints[j];
 
+                if (!isValidGLTFIndex(nodeIndex, model.gltfModel->nodes)) {
+                    continue;
+                }
+
                 if (std::find(skin.joints.begin(), skin.joints.end(), nodesParent[nodeIndex]) == skin.joints.end())
                     skeletonRoot = nodeIndex;
             }
         }
 
-        if (!skipEntities) {
+        if (!skipEntities && skeletonRoot >= 0) {
             model.bonesNameMapping.clear();
             model.bonesIdMapping.clear();
 
@@ -2416,13 +2585,41 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             for (size_t j = 0; j < animation.channels.size(); j++) {
 
                 const tinygltf::AnimationChannel &channel = animation.channels[j];
+                if (!isValidGLTFIndex(channel.sampler, animation.samplers)) {
+                    Log::warn("Cannot load animation: %s, channel %zu has invalid sampler", animation.name.c_str(), j);
+                    continue;
+                }
+
                 const tinygltf::AnimationSampler &sampler = animation.samplers[channel.sampler];
 
+                if (!isValidGLTFIndex(sampler.input, model.gltfModel->accessors) ||
+                    !isValidGLTFIndex(sampler.output, model.gltfModel->accessors)) {
+                    Log::warn("Cannot load animation: %s, channel %zu has invalid accessor", animation.name.c_str(), j);
+                    continue;
+                }
+
                 tinygltf::Accessor accessorIn = model.gltfModel->accessors[sampler.input];
+                if (!isValidGLTFIndex(accessorIn.bufferView, model.gltfModel->bufferViews)) {
+                    Log::warn("Cannot load animation: %s, channel %zu has invalid input buffer view", animation.name.c_str(), j);
+                    continue;
+                }
+
                 tinygltf::BufferView bufferViewIn = model.gltfModel->bufferViews[accessorIn.bufferView];
 
                 tinygltf::Accessor accessorOut = model.gltfModel->accessors[sampler.output];
+                if (!isValidGLTFIndex(accessorOut.bufferView, model.gltfModel->bufferViews)) {
+                    Log::warn("Cannot load animation: %s, channel %zu has invalid output buffer view", animation.name.c_str(), j);
+                    continue;
+                }
+
                 tinygltf::BufferView bufferViewOut = model.gltfModel->bufferViews[accessorOut.bufferView];
+
+                if (!isValidGLTFIndex(bufferViewIn.buffer, model.gltfModel->buffers) ||
+                    !isValidGLTFIndex(bufferViewOut.buffer, model.gltfModel->buffers) ||
+                    accessorIn.count == 0 || accessorOut.count == 0) {
+                    Log::warn("Cannot load animation: %s, channel %zu has invalid buffer data", animation.name.c_str(), j);
+                    continue;
+                }
 
                 //TODO: Implement rotation and weights non float
                 if (accessorOut.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
@@ -2432,10 +2629,15 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                                 animation.name.c_str(), channel.sampler);
                     }
 
-                    float *timeValues = (float *) (&model.gltfModel->buffers[bufferViewIn.buffer].data.at(0) +
-                                                bufferViewIn.byteOffset + accessorIn.byteOffset);
-                    float *values = (float *) (&model.gltfModel->buffers[bufferViewOut.buffer].data.at(0) +
-                                            bufferViewOut.byteOffset + accessorOut.byteOffset);
+                    std::vector<unsigned char>& inputData = model.gltfModel->buffers[bufferViewIn.buffer].data;
+                    std::vector<unsigned char>& outputData = model.gltfModel->buffers[bufferViewOut.buffer].data;
+                    if (inputData.empty() || outputData.empty()) {
+                        Log::warn("Cannot load animation: %s, channel %zu has empty buffer data", animation.name.c_str(), j);
+                        continue;
+                    }
+
+                    float *timeValues = (float *) (inputData.data() + bufferViewIn.byteOffset + accessorIn.byteOffset);
+                    float *values = (float *) (outputData.data() + bufferViewOut.byteOffset + accessorOut.byteOffset);
 
                     float duration = timeValues[accessorIn.count - 1];
 
@@ -2663,11 +2865,18 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
         ResourceProgress::updateProgress(buildId, 0.4f); // Materials setup
     }
 
+    const bool hasMaterials = !materials.empty();
+
     for (size_t i = 0; i < mesh.numSubmeshes; i++) {
         // Update progress for material processing
         if (asyncLoad) {
             float materialProgress = 0.4f + (0.2f * (float(i) / float(mesh.numSubmeshes)));
             ResourceProgress::updateProgress(buildId, materialProgress);
+        }
+
+        if (!hasMaterials) {
+            applyDefaultObjMaterial(mesh.submeshes[i]);
+            continue;
         }
 
         mesh.submeshes[i].attributes.clear();
@@ -2744,7 +2953,7 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
             size_t fnum = shapes[i].mesh.num_face_vertices[f];
 
             int material_id = shapes[i].mesh.material_ids[f];
-            if (material_id < 0)
+            if (material_id < 0 || material_id >= static_cast<int>(indexMap.size()))
                 material_id = 0;
 
             // For each vertex in the face

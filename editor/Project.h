@@ -308,10 +308,12 @@ namespace doriax::editor{
         void remapSceneFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
         void remapEntityBundleFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
         void remapScriptFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
+        void remapModelFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
         void cleanupMaterialFilePath(const std::filesystem::path& deletedPath);
         void cleanupSceneFilePath(const std::filesystem::path& deletedPath);
         void cleanupEntityBundleFilePath(const std::filesystem::path& deletedPath);
         void cleanupScriptFilePath(const std::filesystem::path& deletedPath);
+        void cleanupModelFilePath(const std::filesystem::path& deletedPath);
 
         //=== end File path remapping ===
 

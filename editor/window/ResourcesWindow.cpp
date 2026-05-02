@@ -111,7 +111,8 @@ void editor::ResourcesWindow::handleExternalDragLeave() {
 }
 
 void editor::ResourcesWindow::notifyResourceFileChanged(const fs::path& filePath) {
-    if (!fs::exists(filePath) || fs::is_directory(filePath)) {
+    std::error_code ec;
+    if (!fs::exists(filePath, ec) || ec || fs::is_directory(filePath, ec) || ec) {
         return;
     }
 
@@ -1003,14 +1004,19 @@ void editor::ResourcesWindow::renderDirectoryTree(const fs::path& rootPath) {
 void editor::ResourcesWindow::scanDirectory(const fs::path& path) {
     currentPath = path;
 
-    if (!std::filesystem::is_directory(path)) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(currentPath, ec) || ec) {
         currentPath = project->getProjectPath();
     }
 
     requestSort = true;
 
     // Update last write time
-    lastWriteTime = fs::last_write_time(currentPath);
+    ec.clear();
+    lastWriteTime = fs::last_write_time(currentPath, ec);
+    if (ec) {
+        lastWriteTime = {};
+    }
 
     intptr_t folderIconH = (intptr_t)folderIcon.getRender()->getGLHandler();
     intptr_t fileIconH = (intptr_t)fileIcon.getRender()->getGLHandler();
@@ -1019,7 +1025,13 @@ void editor::ResourcesWindow::scanDirectory(const fs::path& path) {
 
     files.clear();
 
-    for (const auto& entry : fs::directory_iterator(path)) {
+    ec.clear();
+    fs::directory_iterator it(currentPath, fs::directory_options::skip_permission_denied, ec);
+    fs::directory_iterator end;
+    while (!ec && it != end) {
+        const auto entry = *it;
+        it.increment(ec);
+
         // Skip hidden files and directories (starting with '.')
         if (entry.path().filename().string()[0] == '.') {
             continue;
@@ -1032,8 +1044,9 @@ void editor::ResourcesWindow::scanDirectory(const fs::path& path) {
 
         FileEntry fileEntry;
         fileEntry.name = entry.path().filename().string();
-        fileEntry.isDirectory = entry.is_directory();
-        fileEntry.icon = entry.is_directory() ? folderIconH : fileIconH;
+    std::error_code entryEc;
+    fileEntry.isDirectory = entry.is_directory(entryEc) && !entryEc;
+        fileEntry.icon = fileEntry.isDirectory ? folderIconH : fileIconH;
         fileEntry.hasThumbnail = false;
 
         if (!fileEntry.isDirectory) {
@@ -1370,13 +1383,21 @@ void editor::ResourcesWindow::pasteFiles(const fs::path& targetDirectory) {
 }
 
 void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath, FileType type, bool forceRegenerate) {
+    std::error_code ec;
+    if (!fs::exists(filePath, ec) || ec) {
+        return;
+    }
+
     fs::path thumbnailPath = project->getThumbnailPath(filePath);
 
     ThumbnailRequest thumbFile = {filePath, type};
-    if (!forceRegenerate && fs::exists(thumbnailPath)) {
-        auto imageTime = fs::last_write_time(filePath);
-        auto thumbTime = fs::last_write_time(thumbnailPath);
-        if (thumbTime >= imageTime) {
+    ec.clear();
+    if (!forceRegenerate && fs::exists(thumbnailPath, ec) && !ec) {
+        std::error_code imageTimeEc;
+        std::error_code thumbTimeEc;
+        auto imageTime = fs::last_write_time(filePath, imageTimeEc);
+        auto thumbTime = fs::last_write_time(thumbnailPath, thumbTimeEc);
+        if (!imageTimeEc && !thumbTimeEc && thumbTime >= imageTime) {
             // Thumbnail is up-to-date, queue it for loading
             std::lock_guard<std::mutex> lock(completedThumbnailMutex);
             completedThumbnailQueue.push(thumbFile);

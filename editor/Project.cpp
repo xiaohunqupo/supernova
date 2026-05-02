@@ -37,6 +37,7 @@
 #include "util/SHA1.h"
 #include "util/GraphicUtils.h"
 #include "util/ProjectUtils.h"
+#include "util/Util.h"
 
 #include "texture/Texture.h"
 #include "pool/ShaderPool.h"
@@ -530,8 +531,6 @@ void editor::Project::remapScriptFilePath(const std::filesystem::path& oldPath, 
         return;
     }
 
-    std::unordered_set<uint32_t> affectedSceneIds;
-
     for (auto& sceneProject : scenes) {
         if (!sceneProject.scene) {
             continue;
@@ -542,13 +541,69 @@ void editor::Project::remapScriptFilePath(const std::filesystem::path& oldPath, 
             updateSceneCppScripts(&sceneProject);
         }
     }
+}
 
-    for (uint32_t sceneId : affectedSceneIds) {
-        if (SceneProject* sceneProject = getScene(sceneId)) {
-            sceneProject->isModified = true;
-            if (sceneProject->scene) {
-                updateSceneCppScripts(sceneProject);
+void editor::Project::remapModelFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath) {
+    if (projectPath.empty()) {
+        return;
+    }
+
+    fs::path oldRelative = normalizeToProjectRelative(oldPath);
+    fs::path newRelative = normalizeToProjectRelative(newPath);
+
+    if (oldRelative.empty() || newRelative.empty()) {
+        return;
+    }
+
+    for (auto& sceneProject : scenes) {
+        if (!sceneProject.scene) {
+            continue;
+        }
+
+        auto models = sceneProject.scene->getComponentArray<ModelComponent>();
+        bool sceneChanged = false;
+
+        for (size_t i = 0; i < models->size(); ++i) {
+            ModelComponent& model = models->getComponentFromIndex(i);
+            std::string updatedPath;
+            if (!remapRelativeString(oldRelative, newRelative, model.filename, updatedPath)) {
+                continue;
             }
+
+            model.filename = updatedPath;
+            model.needUpdateModel = true;
+            sceneProject.isModified = true;
+            sceneChanged = true;
+        }
+
+        if (sceneChanged) {
+            sceneProject.needUpdateRender = true;
+        }
+    }
+
+    for (auto& [bundlePath, bundle] : entityBundles) {
+        if (!bundle.registry) {
+            continue;
+        }
+
+        auto models = bundle.registry->getComponentArray<ModelComponent>();
+        bool bundleChanged = false;
+
+        for (size_t i = 0; i < models->size(); ++i) {
+            ModelComponent& model = models->getComponentFromIndex(i);
+            std::string updatedPath;
+            if (!remapRelativeString(oldRelative, newRelative, model.filename, updatedPath)) {
+                continue;
+            }
+
+            model.filename = updatedPath;
+            model.needUpdateModel = true;
+            bundle.isModified = true;
+            bundleChanged = true;
+        }
+
+        if (bundleChanged) {
+            saveEntityBundleToDisk(bundlePath);
         }
     }
 }
@@ -723,8 +778,6 @@ void editor::Project::cleanupScriptFilePath(const std::filesystem::path& deleted
         return;
     }
 
-    std::unordered_set<uint32_t> affectedSceneIds;
-
     for (auto& sceneProject : scenes) {
         if (!sceneProject.scene) {
             continue;
@@ -735,13 +788,65 @@ void editor::Project::cleanupScriptFilePath(const std::filesystem::path& deleted
             updateSceneCppScripts(&sceneProject);
         }
     }
+}
 
-    for (uint32_t sceneId : affectedSceneIds) {
-        if (SceneProject* sceneProject = getScene(sceneId)) {
-            sceneProject->isModified = true;
-            if (sceneProject->scene) {
-                updateSceneCppScripts(sceneProject);
+void editor::Project::cleanupModelFilePath(const std::filesystem::path& deletedPath) {
+    if (projectPath.empty()) {
+        return;
+    }
+
+    fs::path deletedRelative = normalizeToProjectRelative(deletedPath);
+    if (deletedRelative.empty()) {
+        return;
+    }
+
+    for (auto& sceneProject : scenes) {
+        if (!sceneProject.scene) {
+            continue;
+        }
+
+        auto models = sceneProject.scene->getComponentArray<ModelComponent>();
+        bool sceneChanged = false;
+
+        for (size_t i = 0; i < models->size(); ++i) {
+            ModelComponent& model = models->getComponentFromIndex(i);
+            if (!matchesRelativeString(deletedRelative, model.filename)) {
+                continue;
             }
+
+            model.filename.clear();
+            model.needUpdateModel = true;
+            sceneProject.isModified = true;
+            sceneChanged = true;
+        }
+
+        if (sceneChanged) {
+            sceneProject.needUpdateRender = true;
+        }
+    }
+
+    for (auto& [bundlePath, bundle] : entityBundles) {
+        if (!bundle.registry) {
+            continue;
+        }
+
+        auto models = bundle.registry->getComponentArray<ModelComponent>();
+        bool bundleChanged = false;
+
+        for (size_t i = 0; i < models->size(); ++i) {
+            ModelComponent& model = models->getComponentFromIndex(i);
+            if (!matchesRelativeString(deletedRelative, model.filename)) {
+                continue;
+            }
+
+            model.filename.clear();
+            model.needUpdateModel = true;
+            bundle.isModified = true;
+            bundleChanged = true;
+        }
+
+        if (bundleChanged) {
+            saveEntityBundleToDisk(bundlePath);
         }
     }
 }
@@ -2937,14 +3042,24 @@ fs::path editor::Project::getThumbnailPath(const fs::path& originalPath) const {
 
     resolvedPath = resolvedPath.lexically_normal();
 
-    // Get relative path from project root, as a string
-    fs::path relativePath = fs::relative(resolvedPath, getProjectPath());
-    std::string relPathStr = relativePath.generic_string();
+    fs::path relativePath;
+    if (!projectPath.empty()) {
+        relativePath = resolvedPath.lexically_relative(projectPath.lexically_normal());
+    }
 
-    // Include file size and modification time in hash for uniqueness
-    auto fileSize = fs::file_size(resolvedPath);
-    auto modTime = fs::last_write_time(resolvedPath).time_since_epoch().count();
-    std::string hashInput = relPathStr + "_" + std::to_string(static_cast<uint64_t>(fileSize)) + "_" + std::to_string(static_cast<int64_t>(modTime));
+    std::string hashInput = relativePath.empty() ? resolvedPath.generic_string() : relativePath.generic_string();
+
+    std::error_code ec;
+    const auto fileSize = fs::file_size(resolvedPath, ec);
+    if (!ec) {
+        hashInput += "_" + std::to_string(static_cast<uint64_t>(fileSize));
+    }
+
+    ec.clear();
+    const auto modTime = fs::last_write_time(resolvedPath, ec);
+    if (!ec) {
+        hashInput += "_" + std::to_string(static_cast<int64_t>(modTime.time_since_epoch().count()));
+    }
 
     // Hash the combined string
     std::string hash = SHA1::hash(hashInput);

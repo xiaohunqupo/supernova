@@ -32,6 +32,9 @@ bool editor::RenameFileCmd::execute(){
                 if (isDir || Util::isScriptFile(extension)) {
                     project->remapScriptFilePath(sourceFs, destFs);
                 }
+                if (isDir || Util::isModelFile(extension)) {
+                    project->remapModelFilePath(sourceFs, destFs);
+                }
             }
         }
     } catch (const fs::filesystem_error& e) {
@@ -62,6 +65,9 @@ void editor::RenameFileCmd::undo(){
                 }
                 if (isDir || Util::isScriptFile(extension)) {
                     project->remapScriptFilePath(sourceFs, destFs);
+                }
+                if (isDir || Util::isModelFile(extension)) {
+                    project->remapModelFilePath(sourceFs, destFs);
                 }
             }
         }

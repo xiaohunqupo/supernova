@@ -700,6 +700,11 @@ Texture* editor::Properties::findThumbnail(const std::string& path) {
     projectPath = projectPath.lexically_normal();
 
     if (!texPath.empty() && texPath.is_absolute()) {
+        std::error_code ec;
+        if (!std::filesystem::exists(texPath, ec) || ec) {
+            return nullptr;
+        }
+
         thumbnailPath = project->getThumbnailPath(texPath);
 
         // If the thumbnail exists, load and use it
