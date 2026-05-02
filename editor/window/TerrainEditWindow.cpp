@@ -5,6 +5,7 @@
 #include "Out.h"
 #include "command/CommandHandle.h"
 #include "external/IconsFontAwesome6.h"
+#include "subsystem/MeshSystem.h"
 #include "stb_image_write.h"
 
 #include <algorithm>
@@ -570,48 +571,16 @@ void editor::TerrainEditWindow::writeHeight(TextureData& data, int x, int y, flo
     }
 }
 
-bool editor::TerrainEditWindow::sampleTerrainHeightPixels(const unsigned char* pixels, int width, int height, int channels, float terrainSize, float maxHeight, float localX, float localZ, float& localHeight){
-    if (terrainSize <= std::numeric_limits<float>::epsilon()){
+bool editor::TerrainEditWindow::raycastTerrainStrokeSurface(const Ray& localRay, TerrainComponent& terrain, const ActiveStroke* activeStroke, Vector3& localPoint, float& localHeight){
+    const bool useHeightReference = activeStroke &&
+                                    activeStroke->active &&
+                                    activeStroke->target == TerrainMapTarget::HeightMap &&
+                                    activeStroke->heightReferenceValid &&
+                                    !activeStroke->heightReferencePixels.empty();
+    if (!useHeightReference){
         return false;
     }
 
-    const float halfSize = terrainSize * 0.5f;
-    if (localX < -halfSize || localX > halfSize || localZ < -halfSize || localZ > halfSize){
-        return false;
-    }
-
-    localHeight = 0.0f;
-    if (!pixels || width <= 0 || height <= 0 || channels <= 0){
-        return true;
-    }
-
-    const float normalizedX = std::clamp((localX + halfSize) / terrainSize, 0.0f, 1.0f);
-    const float normalizedZ = std::clamp((localZ + halfSize) / terrainSize, 0.0f, 1.0f);
-    const float texelX = normalizedX * static_cast<float>(width - 1);
-    const float texelZ = normalizedZ * static_cast<float>(height - 1);
-    const int lowerX = std::clamp(static_cast<int>(std::floor(texelX)), 0, width - 1);
-    const int lowerZ = std::clamp(static_cast<int>(std::floor(texelZ)), 0, height - 1);
-    const int upperX = std::min(lowerX + 1, width - 1);
-    const int upperZ = std::min(lowerZ + 1, height - 1);
-    const float blendX = texelX - static_cast<float>(lowerX);
-    const float blendZ = texelZ - static_cast<float>(lowerZ);
-
-    auto samplePixel = [&](int sampleX, int sampleZ){
-        const size_t index = (static_cast<size_t>(sampleZ) * static_cast<size_t>(width) + static_cast<size_t>(sampleX)) * static_cast<size_t>(channels);
-        return pixels[index] / 255.0f;
-    };
-
-    const float height00 = samplePixel(lowerX, lowerZ);
-    const float height10 = samplePixel(upperX, lowerZ);
-    const float height01 = samplePixel(lowerX, upperZ);
-    const float height11 = samplePixel(upperX, upperZ);
-    const float lowerBlend = height00 + (height10 - height00) * blendX;
-    const float upperBlend = height01 + (height11 - height01) * blendX;
-    localHeight = (lowerBlend + (upperBlend - lowerBlend) * blendZ) * maxHeight;
-    return true;
-}
-
-bool editor::TerrainEditWindow::raycastTerrainSurface(const Ray& localRay, TerrainComponent& terrain, const ActiveStroke* activeStroke, Vector3& localPoint, float& localHeight){
     const unsigned char* currentPixels = nullptr;
     int currentWidth = 0;
     int currentHeight = 0;
@@ -625,34 +594,66 @@ bool editor::TerrainEditWindow::raycastTerrainSurface(const Ray& localRay, Terra
         currentChannels = heightData.getChannels();
     }
 
-    auto sampleCurrentHeight = [&](float localX, float localZ, float& sampledHeight){
-        return sampleTerrainHeightPixels(currentPixels, currentWidth, currentHeight, currentChannels, terrain.terrainSize, terrain.maxHeight, localX, localZ, sampledHeight);
+    auto sampleHeightPixels = [](const unsigned char* pixels, int width, int height, int channels, float terrainSize, float maxHeight, float localX, float localZ, float& sampledHeight){
+        if (terrainSize <= std::numeric_limits<float>::epsilon()){
+            return false;
+        }
+
+        const float halfSize = terrainSize * 0.5f;
+        if (localX < -halfSize || localX > halfSize || localZ < -halfSize || localZ > halfSize){
+            return false;
+        }
+
+        sampledHeight = 0.0f;
+        if (!pixels || width <= 0 || height <= 0 || channels <= 0){
+            return true;
+        }
+
+        const float normalizedX = std::clamp((localX + halfSize) / terrainSize, 0.0f, 1.0f);
+        const float normalizedZ = std::clamp((localZ + halfSize) / terrainSize, 0.0f, 1.0f);
+        const float texelX = normalizedX * static_cast<float>(width - 1);
+        const float texelZ = normalizedZ * static_cast<float>(height - 1);
+        const int lowerX = std::clamp(static_cast<int>(std::floor(texelX)), 0, width - 1);
+        const int lowerZ = std::clamp(static_cast<int>(std::floor(texelZ)), 0, height - 1);
+        const int upperX = std::min(lowerX + 1, width - 1);
+        const int upperZ = std::min(lowerZ + 1, height - 1);
+        const float blendX = texelX - static_cast<float>(lowerX);
+        const float blendZ = texelZ - static_cast<float>(lowerZ);
+
+        auto samplePixel = [&](int sampleX, int sampleZ){
+            const size_t index = (static_cast<size_t>(sampleZ) * static_cast<size_t>(width) + static_cast<size_t>(sampleX)) * static_cast<size_t>(channels);
+            return pixels[index] / 255.0f;
+        };
+
+        const float height00 = samplePixel(lowerX, lowerZ);
+        const float height10 = samplePixel(upperX, lowerZ);
+        const float height01 = samplePixel(lowerX, upperZ);
+        const float height11 = samplePixel(upperX, upperZ);
+        const float lowerBlend = height00 + (height10 - height00) * blendX;
+        const float upperBlend = height01 + (height11 - height01) * blendX;
+        sampledHeight = (lowerBlend + (upperBlend - lowerBlend) * blendZ) * maxHeight;
+        return true;
     };
 
-    const bool useHeightReference = activeStroke &&
-                                    activeStroke->active &&
-                                    activeStroke->target == TerrainMapTarget::HeightMap &&
-                                    activeStroke->heightReferenceValid &&
-                                    !activeStroke->heightReferencePixels.empty();
+    auto sampleCurrentHeight = [&](float localX, float localZ, float& sampledHeight){
+        return sampleHeightPixels(currentPixels, currentWidth, currentHeight, currentChannels, terrain.terrainSize, terrain.maxHeight, localX, localZ, sampledHeight);
+    };
 
     auto sampleRaycastHeight = [&](float localX, float localZ, float& sampledHeight){
-        if (useHeightReference){
-            return sampleTerrainHeightPixels(activeStroke->heightReferencePixels.data(),
-                                             activeStroke->heightReferenceWidth,
-                                             activeStroke->heightReferenceHeight,
-                                             activeStroke->heightReferenceChannels,
-                                             activeStroke->heightReferenceTerrainSize,
-                                             activeStroke->heightReferenceMaxHeight,
-                                             localX,
-                                             localZ,
-                                             sampledHeight);
-        }
-        return sampleCurrentHeight(localX, localZ, sampledHeight);
+        return sampleHeightPixels(activeStroke->heightReferencePixels.data(),
+                                  activeStroke->heightReferenceWidth,
+                                  activeStroke->heightReferenceHeight,
+                                  activeStroke->heightReferenceChannels,
+                                  activeStroke->heightReferenceTerrainSize,
+                                  activeStroke->heightReferenceMaxHeight,
+                                  localX,
+                                  localZ,
+                                  sampledHeight);
     };
 
     const float halfSize = terrain.terrainSize * 0.5f;
-    const float surfaceMinHeight = std::min(0.0f, useHeightReference ? activeStroke->heightReferenceMaxHeight : terrain.maxHeight);
-    const float surfaceMaxHeight = std::max(0.0f, useHeightReference ? activeStroke->heightReferenceMaxHeight : terrain.maxHeight);
+    const float surfaceMinHeight = std::min(0.0f, activeStroke->heightReferenceMaxHeight);
+    const float surfaceMaxHeight = std::max(0.0f, activeStroke->heightReferenceMaxHeight);
     const Vector3 rayOrigin = localRay.getOrigin();
     const Vector3 rayDirection = localRay.getDirection();
 
@@ -698,7 +699,6 @@ bool editor::TerrainEditWindow::raycastTerrainSurface(const Ray& localRay, Terra
         return false;
     }
 
-    float closestParameter = previousParameter;
     float closestDistance = previousDistance;
     Vector3 closestPoint = previousPoint;
     if (std::abs(previousDistance) <= surfaceEpsilon){
@@ -714,7 +714,6 @@ bool editor::TerrainEditWindow::raycastTerrainSurface(const Ray& localRay, Terra
         }
 
         if (std::abs(currentDistance) < std::abs(closestDistance)){
-            closestParameter = rayParameter;
             closestDistance = currentDistance;
             closestPoint = currentPoint;
         }
@@ -741,8 +740,7 @@ bool editor::TerrainEditWindow::raycastTerrainSurface(const Ray& localRay, Terra
                     upperParameter = midParameter;
                 }
             }
-            closestParameter = (lowerParameter + upperParameter) * 0.5f;
-            closestPoint = localRay.getPoint(closestParameter);
+            closestPoint = localRay.getPoint((lowerParameter + upperParameter) * 0.5f);
             closestDistance = 0.0f;
             break;
         }
@@ -958,13 +956,28 @@ bool editor::TerrainEditWindow::findTerrainHit(Scene* scene, const Ray& ray, Ent
     entity = selectedEntity;
     Transform& transform = scene->getComponent<Transform>(entity);
     TerrainComponent& terrain = scene->getComponent<TerrainComponent>(entity);
+    const bool useHeightReference = activeStroke &&
+                                    activeStroke->active &&
+                                    activeStroke->target == TerrainMapTarget::HeightMap &&
+                                    activeStroke->heightReferenceValid &&
+                                    !activeStroke->heightReferencePixels.empty();
 
     Matrix4 inverseModel = transform.modelMatrix.inverse();
+    if (!useHeightReference){
+        if (!scene->getSystem<MeshSystem>()->raycastTerrainSurface(ray, terrain, transform, worldPoint)){
+            return false;
+        }
+
+        localPoint = inverseModel * worldPoint;
+        localHeight = localPoint.y;
+        return true;
+    }
+
     Vector3 localOrigin = inverseModel * ray.getOrigin();
     Vector3 localEnd = inverseModel * (ray.getOrigin() + ray.getDirection());
     Ray localRay(localOrigin, localEnd - localOrigin);
 
-    if (!raycastTerrainSurface(localRay, terrain, activeStroke, localPoint, localHeight)){
+    if (!raycastTerrainStrokeSurface(localRay, terrain, activeStroke, localPoint, localHeight)){
         return false;
     }
 

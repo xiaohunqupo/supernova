@@ -14,6 +14,7 @@
 #include "util/ProjectUtils.h"
 #include "render/SceneRender2D.h"
 #include "render/SceneRender3D.h"
+#include "subsystem/MeshSystem.h"
 #include "Stream.h"
 #include "Out.h"
 #include "App.h"
@@ -100,9 +101,25 @@ std::string editor::SceneWindow::getWindowTitle(const SceneProject& sceneProject
     return icon + sceneProject.name + ((project->hasSceneUnsavedChanges(sceneProject.id)) ? " *" : "") + "###Scene" + std::to_string(sceneProject.id);
 }
 
-Vector3 editor::SceneWindow::getModelDropPosition(SceneProject* sceneProject, float x, float y) {
+Vector3 editor::SceneWindow::getModelDropPosition(SceneProject* sceneProject, float x, float y, Entity hitEntity) {
     Camera* camera = sceneProject->sceneRender->getCamera();
     Ray ray = camera->screenToRay(x, y);
+
+    if (hitEntity != NULL_ENTITY) {
+        AABB entityAABB = sceneProject->sceneRender->getEntitiesAABB({hitEntity});
+        RayReturn entityHit = ray.intersects(entityAABB);
+        if (entityHit) {
+            // If the hit entity is terrain, use its precise surface height instead of the AABB top
+            Vector3 terrainPosition;
+            TerrainComponent* terrain = sceneProject->scene->findComponent<TerrainComponent>(hitEntity);
+            Transform* transform = sceneProject->scene->findComponent<Transform>(hitEntity);
+            if (terrain && transform && sceneProject->scene->getSystem<MeshSystem>()->raycastTerrainSurface(ray, *terrain, *transform, terrainPosition)) {
+                return terrainPosition;
+            }
+            return entityHit.point;
+        }
+    }
+
     RayReturn hit = ray.intersects(Plane(Vector3(0, 1, 0), Vector3(0, 0, 0)));
     if (hit) {
         return hit.point;
@@ -181,7 +198,7 @@ void editor::SceneWindow::handleResourceFileDragDrop(SceneProject* sceneProject)
                                 modelEntityName = "Model";
                             }
 
-                            Vector3 dropPosition = getModelDropPosition(sceneProject, x, y);
+                            Vector3 dropPosition = getModelDropPosition(sceneProject, x, y, selEntity);
                             CommandHandle::get(sceneProject->id)->addCommandNoMerge(
                                 new ModelLoadCmd(project, sceneProject->id, modelEntityName, dropPosition, droppedRelativePath));
 

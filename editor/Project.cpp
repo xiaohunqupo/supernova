@@ -2623,8 +2623,31 @@ AABB editor::Project::getEntityLocalAABB(Scene* scene, Entity entity) const{
 
 Entity editor::Project::findBestEntityByRay(const std::vector<Entity>& entities, Scene* scene, const Ray& ray, Scene* mainScene, SceneType sceneType, float& distance, size_t& index) const{
     Entity selEntity = NULL_ENTITY;
+    Vector3 rayDirection = ray.getDirection();
+    float rayLengthSq = rayDirection.dotProduct(rayDirection);
+    if (rayLengthSq <= std::numeric_limits<float>::epsilon()) return NULL_ENTITY;
+
     for (auto& entity : entities) {
-        if (!scene->getSignature(entity).test(scene->getComponentId<Transform>())) continue;
+        Signature signature = scene->getSignature(entity);
+        if (!signature.test(scene->getComponentId<Transform>())) continue;
+
+        if (signature.test(scene->getComponentId<TerrainComponent>())) {
+            TerrainComponent& terrain = scene->getComponent<TerrainComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+            Vector3 worldPoint;
+            if (!scene->getSystem<MeshSystem>()->raycastTerrainSurface(ray, terrain, transform, worldPoint)) continue;
+
+            float terrainDistance = (worldPoint - ray.getOrigin()).dotProduct(rayDirection) / rayLengthSq;
+            if (terrainDistance < 0.0f || terrainDistance > 1.0f) continue;
+
+            size_t nIndex = scene->getComponentArray<Transform>()->getIndex(entity);
+            if (terrainDistance < distance || (nIndex >= index && sceneType != SceneType::SCENE_3D)){
+                distance = terrainDistance;
+                index = nIndex;
+                selEntity = entity;
+            }
+            continue;
+        }
 
         AABB aabb = getEntityWorldAABB(scene, entity, mainScene);
 

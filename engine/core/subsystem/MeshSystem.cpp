@@ -11,7 +11,10 @@
 #include "io/Data.h"
 #include "thread/ResourceProgress.h"
 
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <sstream>
 #include "tiny_obj_loader.h"
 #include "tiny_gltf.h"
@@ -909,6 +912,179 @@ size_t MeshSystem::getTerrainGridArraySize(int rootGridSize, int levels){
     size = size * rootGridSize * rootGridSize;
 
     return size;
+}
+
+bool MeshSystem::raycastTerrainSurface(const Ray& ray, TerrainComponent& terrain, Transform& transform, Vector3& worldPoint){
+
+    const unsigned char* pixels = nullptr;
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+
+    if (!terrain.heightMap.empty() && !terrain.heightMap.isFramebuffer()){
+        terrain.heightMap.setReleaseDataAfterLoad(false);
+        TextureLoadResult result = terrain.heightMap.load();
+        if (result.state == ResourceLoadState::Finished && result.data && terrain.heightMap.getData().getData()){
+            TextureData& heightData = terrain.heightMap.getData();
+            pixels = static_cast<const unsigned char*>(heightData.getData());
+            width = heightData.getWidth();
+            height = heightData.getHeight();
+            channels = heightData.getChannels();
+        }
+    }
+
+    auto sampleHeight = [&](float localX, float localZ, float& sampledHeight){
+        if (terrain.terrainSize <= std::numeric_limits<float>::epsilon()){
+            return false;
+        }
+
+        const float halfSize = terrain.terrainSize * 0.5f;
+        if (localX < -halfSize || localX > halfSize || localZ < -halfSize || localZ > halfSize){
+            return false;
+        }
+
+        sampledHeight = 0.0f;
+        if (!pixels || width <= 0 || height <= 0 || channels <= 0){
+            return true;
+        }
+
+        const float normalizedX = std::clamp((localX + halfSize) / terrain.terrainSize, 0.0f, 1.0f);
+        const float normalizedZ = std::clamp((localZ + halfSize) / terrain.terrainSize, 0.0f, 1.0f);
+        const float texelX = normalizedX * static_cast<float>(width - 1);
+        const float texelZ = normalizedZ * static_cast<float>(height - 1);
+        const int lowerX = std::clamp(static_cast<int>(std::floor(texelX)), 0, width - 1);
+        const int lowerZ = std::clamp(static_cast<int>(std::floor(texelZ)), 0, height - 1);
+        const int upperX = std::min(lowerX + 1, width - 1);
+        const int upperZ = std::min(lowerZ + 1, height - 1);
+        const float blendX = texelX - static_cast<float>(lowerX);
+        const float blendZ = texelZ - static_cast<float>(lowerZ);
+
+        auto samplePixel = [&](int sampleX, int sampleZ){
+            const size_t index = (static_cast<size_t>(sampleZ) * static_cast<size_t>(width) + static_cast<size_t>(sampleX)) * static_cast<size_t>(channels);
+            return pixels[index] / 255.0f;
+        };
+
+        const float height00 = samplePixel(lowerX, lowerZ);
+        const float height10 = samplePixel(upperX, lowerZ);
+        const float height01 = samplePixel(lowerX, upperZ);
+        const float height11 = samplePixel(upperX, upperZ);
+        const float lowerBlend = height00 + (height10 - height00) * blendX;
+        const float upperBlend = height01 + (height11 - height01) * blendX;
+        sampledHeight = (lowerBlend + (upperBlend - lowerBlend) * blendZ) * terrain.maxHeight;
+        return true;
+    };
+
+    Matrix4 inverseModel = transform.modelMatrix.inverse();
+    Vector3 localOrigin = inverseModel * ray.getOrigin();
+    Vector3 localEnd = inverseModel * (ray.getOrigin() + ray.getDirection());
+    Ray localRay(localOrigin, localEnd - localOrigin);
+
+    const float halfSize = terrain.terrainSize * 0.5f;
+    const float surfaceMinHeight = std::min(0.0f, terrain.maxHeight);
+    const float surfaceMaxHeight = std::max(0.0f, terrain.maxHeight);
+    const Vector3 rayOrigin = localRay.getOrigin();
+    const Vector3 rayDirection = localRay.getDirection();
+
+    float rayEntry = 0.0f;
+    float rayExit = 1.0f;
+    auto clipAxis = [&](float axisOrigin, float axisDirection, float minValue, float maxValue){
+        if (std::abs(axisDirection) <= std::numeric_limits<float>::epsilon()){
+            return axisOrigin >= minValue && axisOrigin <= maxValue;
+        }
+
+        float nearParameter = (minValue - axisOrigin) / axisDirection;
+        float farParameter = (maxValue - axisOrigin) / axisDirection;
+        if (nearParameter > farParameter){
+            std::swap(nearParameter, farParameter);
+        }
+        rayEntry = std::max(rayEntry, nearParameter);
+        rayExit = std::min(rayExit, farParameter);
+        return rayEntry <= rayExit;
+    };
+
+    if (!clipAxis(rayOrigin.x, rayDirection.x, -halfSize, halfSize) ||
+        !clipAxis(rayOrigin.y, rayDirection.y, surfaceMinHeight, surfaceMaxHeight) ||
+        !clipAxis(rayOrigin.z, rayDirection.z, -halfSize, halfSize)){
+        return false;
+    }
+
+    auto signedDistanceToSurface = [&](float rayParameter, float& signedDistance, Vector3& point){
+        point = localRay.getPoint(rayParameter);
+        float sampledHeight = 0.0f;
+        if (!sampleHeight(point.x, point.z, sampledHeight)){
+            return false;
+        }
+        signedDistance = point.y - sampledHeight;
+        return true;
+    };
+
+    const int raycastSteps = 160;
+    const float surfaceEpsilon = std::max(0.001f, std::abs(surfaceMaxHeight - surfaceMinHeight) * 0.0005f);
+    float previousParameter = rayEntry;
+    float previousDistance = 0.0f;
+    Vector3 previousPoint;
+    if (!signedDistanceToSurface(previousParameter, previousDistance, previousPoint)){
+        return false;
+    }
+
+    float closestDistance = previousDistance;
+    Vector3 closestPoint = previousPoint;
+    if (std::abs(previousDistance) <= surfaceEpsilon){
+        closestDistance = 0.0f;
+    }
+
+    for (int sampleIndex = 1; sampleIndex <= raycastSteps; sampleIndex++){
+        const float rayParameter = rayEntry + (rayExit - rayEntry) * (static_cast<float>(sampleIndex) / static_cast<float>(raycastSteps));
+        float currentDistance = 0.0f;
+        Vector3 currentPoint;
+        if (!signedDistanceToSurface(rayParameter, currentDistance, currentPoint)){
+            continue;
+        }
+
+        if (std::abs(currentDistance) < std::abs(closestDistance)){
+            closestDistance = currentDistance;
+            closestPoint = currentPoint;
+        }
+
+        const bool crossedSurface = (previousDistance <= 0.0f && currentDistance >= 0.0f) ||
+                                    (previousDistance >= 0.0f && currentDistance <= 0.0f);
+        if (crossedSurface){
+            float lowerParameter = previousParameter;
+            float upperParameter = rayParameter;
+            float lowerDistance = previousDistance;
+            for (int refineIndex = 0; refineIndex < 12; refineIndex++){
+                const float midParameter = (lowerParameter + upperParameter) * 0.5f;
+                float midDistance = 0.0f;
+                Vector3 midPoint;
+                if (!signedDistanceToSurface(midParameter, midDistance, midPoint)){
+                    break;
+                }
+                const bool sameSide = (lowerDistance <= 0.0f && midDistance <= 0.0f) ||
+                                      (lowerDistance >= 0.0f && midDistance >= 0.0f);
+                if (sameSide){
+                    lowerParameter = midParameter;
+                    lowerDistance = midDistance;
+                }else{
+                    upperParameter = midParameter;
+                }
+            }
+            closestPoint = localRay.getPoint((lowerParameter + upperParameter) * 0.5f);
+            closestDistance = 0.0f;
+            break;
+        }
+
+        previousParameter = rayParameter;
+        previousDistance = currentDistance;
+    }
+
+    float localHeight = 0.0f;
+    if (std::abs(closestDistance) > surfaceEpsilon * 4.0f || !sampleHeight(closestPoint.x, closestPoint.z, localHeight)){
+        return false;
+    }
+
+    Vector3 localPoint(closestPoint.x, localHeight, closestPoint.z);
+    worldPoint = transform.modelMatrix * localPoint;
+    return true;
 }
 
 float MeshSystem::getTerrainHeight(TerrainComponent& terrain, float x, float y){

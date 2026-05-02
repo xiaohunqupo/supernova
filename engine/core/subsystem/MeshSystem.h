@@ -16,6 +16,7 @@
 #include "component/TerrainComponent.h"
 #include "component/TilemapComponent.h"
 #include "component/Transform.h"
+#include "math/Ray.h"
 
 namespace doriax{
 
@@ -79,6 +80,8 @@ namespace doriax{
         void destroyModel(ModelComponent& model);
 
         void resetModelToBindPose(ModelComponent& model);
+
+        bool raycastTerrainSurface(const Ray& ray, TerrainComponent& terrain, Transform& transform, Vector3& worldPoint);
 
         bool createOrUpdateSprite(SpriteComponent& sprite, MeshComponent& mesh);
         bool createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent& mesh, Transform& transform);

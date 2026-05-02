@@ -119,8 +119,7 @@ namespace doriax::editor{
             std::vector<unsigned char> heightReferencePixels;
         };
 
-        static bool sampleTerrainHeightPixels(const unsigned char* pixels, int width, int height, int channels, float terrainSize, float maxHeight, float localX, float localZ, float& localHeight);
-        static bool raycastTerrainSurface(const Ray& localRay, TerrainComponent& terrain, const ActiveStroke* activeStroke, Vector3& localPoint, float& localHeight);
+        static bool raycastTerrainStrokeSurface(const Ray& localRay, TerrainComponent& terrain, const ActiveStroke* activeStroke, Vector3& localPoint, float& localHeight);
 
         Project* project;
 
