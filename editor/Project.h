@@ -109,6 +109,7 @@ namespace doriax::editor{
         int heightMapResolution = 512;
         int blendMapResolution = 512;
         bool normalizeBlendPaint = true;
+        bool heightMapStartAtMiddle = true;
     };
 
     using SharedMoveRecovery = std::map<std::string, SharedMoveRecoveryEntry>;

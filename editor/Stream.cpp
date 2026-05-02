@@ -1039,6 +1039,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         terrainNode["heightMapResolution"] = ts.heightMapResolution;
         terrainNode["blendMapResolution"] = ts.blendMapResolution;
         terrainNode["normalizeBlendPaint"] = ts.normalizeBlendPaint;
+        terrainNode["heightMapStartAtMiddle"] = ts.heightMapStartAtMiddle;
         root["terrainEditor"] = terrainNode;
     }
 
@@ -1162,6 +1163,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
         if (tn["heightMapResolution"].IsDefined()) ts.heightMapResolution = tn["heightMapResolution"].as<int>();
         if (tn["blendMapResolution"].IsDefined()) ts.blendMapResolution = tn["blendMapResolution"].as<int>();
         if (tn["normalizeBlendPaint"].IsDefined()) ts.normalizeBlendPaint = tn["normalizeBlendPaint"].as<bool>();
+        if (tn["heightMapStartAtMiddle"].IsDefined()) ts.heightMapStartAtMiddle = tn["heightMapStartAtMiddle"].as<bool>();
         project->getTerrainEditorSettings() = ts;
     }
 

@@ -60,66 +60,33 @@ namespace doriax::editor{
         std::vector<unsigned char> pixels;
     };
 
+    struct TerrainMapInfo{
+        bool present = false;
+        bool sizeKnown = false;
+        bool framebuffer = false;
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+    };
+
+    struct ActiveStroke{
+        bool active = false;
+        uint32_t sceneId = NULL_PROJECT_SCENE;
+        Entity entity = NULL_ENTITY;
+        TerrainMapTarget target = TerrainMapTarget::HeightMap;
+        TerrainMapSnapshot beforeSnapshot;
+        bool heightReferenceValid = false;
+        float heightReferenceTerrainSize = 0.0f;
+        float heightReferenceMaxHeight = 0.0f;
+        int heightReferenceWidth = 0;
+        int heightReferenceHeight = 0;
+        int heightReferenceChannels = 0;
+        std::vector<unsigned char> heightReferencePixels;
+    };
+
     class TerrainEditWindow{
     private:
-        struct TerrainMapInfo{
-            bool present = false;
-            bool sizeKnown = false;
-            bool framebuffer = false;
-            int width = 0;
-            int height = 0;
-            int channels = 0;
-        };
-
         class TerrainTextureEditCmd;
-
-        static uint64_t s_editTextureCounter;
-
-        static void showTooltip(const char* text, ImGuiHoveredFlags flags = 0);
-        static bool iconButton(const char* icon, const char* id, const char* tooltip, bool selected, const ImVec2& size);
-        static bool colorIconButton(const char* icon, const char* id, const char* tooltip, bool selected, const ImVec4& color, const ImVec2& size);
-        static std::string makeEditableTextureId(uint32_t sceneId, Entity entity, TerrainMapTarget target);
-        static std::string makeEditableTexturePath(Project* project, uint32_t sceneId, Entity entity, TerrainMapTarget target);
-        static bool isEditableTexturePath(const std::string& path);
-        static Texture& getTerrainTexture(TerrainComponent& terrain, TerrainMapTarget target);
-        static const char* getTerrainPropertyName(TerrainMapTarget target);
-        static int expectedChannels(TerrainMapTarget target);
-        static ColorFormat expectedFormat(TerrainMapTarget target);
-        static unsigned char clampByte(float value);
-        static bool writeTextureFile(Project* project, const std::string& relativePath, int width, int height, int channels, const std::vector<unsigned char>& pixels);
-        static bool setFileBackedTextureData(Project* project, Texture& texture, const std::string& relativePath, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
-        static bool hasLoadedData(Texture& texture);
-        static bool isOwnedEditableTexturePath(const std::string& path, uint32_t sceneId, Entity entity, TerrainMapTarget target);
-        static bool loadTerrainTextureDataFromPath(Project* project, const std::string& path, TextureData& data);
-        static TerrainMapInfo getTerrainMapInfo(Texture& texture);
-        static std::string getTerrainMapStatusText(const TerrainMapInfo& info);
-        static void showTerrainMapStatus(const TerrainMapInfo& info);
-        static std::vector<unsigned char> copyTexturePixels(TextureData& data);
-        static std::vector<unsigned char> convertTexturePixels(TextureData& data, TerrainMapTarget target);
-        static void setOwnedTextureData(Texture& texture, const std::string& id, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
-        static TerrainMapSnapshot captureSnapshot(Project* project, Texture& texture, bool forcePixels);
-        static bool snapshotsEqual(const TerrainMapSnapshot& a, const TerrainMapSnapshot& b);
-        static void applySnapshotToTexture(Project* project, Texture& texture, const TerrainMapSnapshot& snapshot);
-        static bool ensureEditableMap(Project* project, SceneProject* sceneProject, Entity entity, TerrainMapTarget target, int resolution);
-        static float readHeight(TextureData& data, int x, int y);
-        static void writeHeight(TextureData& data, int x, int y, float value);
-
-        struct ActiveStroke{
-            bool active = false;
-            uint32_t sceneId = NULL_PROJECT_SCENE;
-            Entity entity = NULL_ENTITY;
-            TerrainMapTarget target = TerrainMapTarget::HeightMap;
-            TerrainMapSnapshot beforeSnapshot;
-            bool heightReferenceValid = false;
-            float heightReferenceTerrainSize = 0.0f;
-            float heightReferenceMaxHeight = 0.0f;
-            int heightReferenceWidth = 0;
-            int heightReferenceHeight = 0;
-            int heightReferenceChannels = 0;
-            std::vector<unsigned char> heightReferencePixels;
-        };
-
-        static bool raycastTerrainStrokeSurface(const Ray& localRay, TerrainComponent& terrain, const ActiveStroke* activeStroke, Vector3& localPoint, float& localHeight);
 
         Project* project;
 
@@ -127,6 +94,7 @@ namespace doriax::editor{
         bool focusRequested;
         bool brushActive;
         bool normalizeBlendPaint;
+        bool heightMapStartAtMiddle;
 
         uint32_t selectedSceneId;
         Entity selectedEntity;
@@ -142,7 +110,38 @@ namespace doriax::editor{
         int heightMapResolution;
         int blendMapResolution;
 
+        uint64_t editTextureCounter = 1;
+
         ActiveStroke stroke;
+
+        void showTooltip(const char* text, ImGuiHoveredFlags flags = 0);
+        bool iconButton(const char* icon, const char* id, const char* tooltip, bool selected, const ImVec2& size);
+        bool colorIconButton(const char* icon, const char* id, const char* tooltip, bool selected, const ImVec4& color, const ImVec2& size);
+        std::string makeEditableTextureId(uint32_t sceneId, Entity entity, TerrainMapTarget target);
+        std::string makeEditableTexturePath(Project* project, uint32_t sceneId, Entity entity, TerrainMapTarget target);
+        Texture& getTerrainTexture(TerrainComponent& terrain, TerrainMapTarget target) const;
+        const char* getTerrainPropertyName(TerrainMapTarget target);
+        int expectedChannels(TerrainMapTarget target);
+        ColorFormat expectedFormat(TerrainMapTarget target);
+        unsigned char clampByte(float value);
+        bool writeTextureFile(Project* project, const std::string& relativePath, int width, int height, int channels, const std::vector<unsigned char>& pixels);
+        bool setFileBackedTextureData(Project* project, Texture& texture, const std::string& relativePath, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
+        bool hasLoadedData(Texture& texture) const;
+        bool isOwnedEditableTexturePath(const std::string& path, uint32_t sceneId, Entity entity, TerrainMapTarget target);
+        bool loadTerrainTextureDataFromPath(Project* project, const std::string& path, TextureData& data);
+        TerrainMapInfo getTerrainMapInfo(Texture& texture);
+        std::string getTerrainMapStatusText(const TerrainMapInfo& info);
+        void showTerrainMapStatus(const TerrainMapInfo& info);
+        std::vector<unsigned char> copyTexturePixels(TextureData& data);
+        std::vector<unsigned char> convertTexturePixels(TextureData& data, TerrainMapTarget target);
+        void setOwnedTextureData(Texture& texture, const std::string& id, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
+        TerrainMapSnapshot captureSnapshot(Project* project, Texture& texture, bool forcePixels);
+        bool snapshotsEqual(const TerrainMapSnapshot& a, const TerrainMapSnapshot& b);
+        void applySnapshotToTexture(Project* project, Texture& texture, const TerrainMapSnapshot& snapshot);
+        bool ensureEditableMap(Project* project, SceneProject* sceneProject, Entity entity, TerrainMapTarget target, int resolution);
+        float readHeight(TextureData& data, int x, int y);
+        void writeHeight(TextureData& data, int x, int y, float value);
+        bool raycastTerrainStrokeSurface(const Ray& localRay, TerrainComponent& terrain, const ActiveStroke* activeStroke, Vector3& localPoint, float& localHeight) const;
 
         SceneProject* findSceneProject(Scene* scene) const;
         SceneProject* getTargetSceneProject() const;
