@@ -13,6 +13,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <limits>
 #include <sstream>
@@ -667,10 +669,28 @@ bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Textur
             return true;
         }
 
-        TextureData textureData(image.width, image.height, imageSize, colorFormat, image.component, &image.image.at(0));
+        unsigned char* imageCopy = static_cast<unsigned char*>(std::malloc(imageSize));
+        if (!imageCopy) {
+            Log::error("Out of memory while copying GLTF texture data for %s", textureName.c_str());
+            return false;
+        }
 
-        std::string id = textureName + "|" + image.name;
+        std::memcpy(imageCopy, image.image.data(), imageSize);
+
+        TextureData textureData(image.width, image.height, imageSize, colorFormat, image.component, imageCopy);
+
+        std::string id = model.filename + "|gltf-texture|" + std::to_string(textureIndex);
+        if (!textureName.empty()) {
+            id += "|" + textureName;
+        }
         texture.setData(id, textureData);
+
+        TextureData& pooledData = texture.getData();
+        if (pooledData.getData() == imageCopy) {
+            pooledData.setDataOwned(true);
+        } else {
+            std::free(imageCopy);
+        }
 
         if (tex.sampler >= 0 && isValidGLTFIndex(tex.sampler, model.gltfModel->samplers)){
             tinygltf::Sampler &sampler = model.gltfModel->samplers[tex.sampler];

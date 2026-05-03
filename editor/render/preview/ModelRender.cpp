@@ -100,8 +100,14 @@ void editor::ModelRender::positionCameraForModel(){
 
     Vector3 cameraPosition = center + cameraOffset;
 
+    const float radius = std::max(0.5f, maxDimension * 0.5f);
+    const float nearClip = std::max(0.01f, distance - radius * 3.0f);
+    const float farClip = std::max(distance + radius * 6.0f, 1000.0f);
+
     camera->setPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
     camera->setTarget(center.x, center.y, center.z);
+    camera->setNearClip(nearClip);
+    camera->setFarClip(farClip);
 }
 
 void editor::ModelRender::fixDarkMaterials(){
