@@ -1076,6 +1076,8 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
             sceneNode["gridSpacing2D"]        = sceneProject.displaySettings.gridSpacing2D;
             sceneNode["gridSpacing3D"]        = sceneProject.displaySettings.gridSpacing3D;
             sceneNode["snapToGrid"]           = sceneProject.displaySettings.snapToGrid;
+            sceneNode["snapRotation"]         = sceneProject.displaySettings.snapRotation;
+            sceneNode["rotationSnapDegrees"]  = sceneProject.displaySettings.rotationSnapDegrees;
 
             if (sceneProject.sceneRender) {
                 Camera* editorCam = sceneProject.sceneRender->getCamera();
@@ -1223,6 +1225,8 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
                         if (sceneNode["gridSpacing2D"])        ds.gridSpacing2D        = sceneNode["gridSpacing2D"].as<float>();
                         if (sceneNode["gridSpacing3D"])        ds.gridSpacing3D        = sceneNode["gridSpacing3D"].as<float>();
                         if (sceneNode["snapToGrid"])           ds.snapToGrid           = sceneNode["snapToGrid"].as<bool>();
+                        if (sceneNode["snapRotation"])         ds.snapRotation         = sceneNode["snapRotation"].as<bool>();
+                        if (sceneNode["rotationSnapDegrees"])  ds.rotationSnapDegrees  = sceneNode["rotationSnapDegrees"].as<float>();
                     }
 
                     if (sceneNode["editorCamera"]) {

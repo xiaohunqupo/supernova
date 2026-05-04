@@ -842,8 +842,8 @@ void editor::SceneRender2D::mouseReleaseEvent(float x, float y){
     SceneRender::mouseReleaseEvent(x, y);
 }
 
-void editor::SceneRender2D::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection){
-    SceneRender::mouseDragEvent(x, y, origX, origY, project, sceneId, selEntities, disableSelection);
+void editor::SceneRender2D::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap){
+    SceneRender::mouseDragEvent(x, y, origX, origY, project, sceneId, selEntities, disableSelection, invertRotationSnap);
 }
 
 void editor::SceneRender2D::zoomAtPosition(float width, float height, Vector2 pos, float zoomFactor){

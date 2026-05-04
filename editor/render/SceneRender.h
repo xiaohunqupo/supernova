@@ -24,6 +24,8 @@ namespace doriax::editor{
         float gridSpacing2D      = 50.0f;
         float gridSpacing3D      = 1.0f;
         bool snapToGrid          = false;
+        bool snapRotation        = false;
+        float rotationSnapDegrees = 15.0f;
     };
 
     struct CameraObjects{
@@ -90,6 +92,7 @@ namespace doriax::editor{
         OBB getOBB(Entity entity, bool local);
         OBB getFamilyOBB(Entity entity, float offset);
         void updateTerrainBrushCursor();
+        float snapRotationAngle(float angle, bool invertRotationSnap) const;
 
     protected:
         void updateCameraFrustum(CameraObjects& co, const CameraComponent& cameraComponent, bool isMainCamera, bool fixedSizeFrustum = true);
@@ -135,7 +138,7 @@ namespace doriax::editor{
         virtual void mouseHoverEvent(float x, float y);
         virtual void mouseClickEvent(float x, float y, std::vector<Entity> selEntities);
         virtual void mouseReleaseEvent(float x, float y);
-        virtual void mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection);
+        virtual void mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap);
 
         virtual bool isAnyGizmoSideSelected() const;
         bool isTerrainEditing() const;

@@ -675,7 +675,7 @@ void editor::SceneRender::mouseReleaseEvent(float x, float y){
     }
 }
 
-void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection){
+void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap){
     mouseRay = camera->screenToRay(x, y);
 
     if (TerrainEditWindow* terrainEditWindow = Backend::getApp().getTerrainEditWindow()){
@@ -792,7 +792,7 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                     Vector3 cross = cursorStartOffset.crossProduct(lastPoint);
                     float sign = cross.dotProduct(cursorPlane.normal);
 
-                    float angle = (sign < 0) ? -orig_angle : orig_angle;
+                    float angle = snapRotationAngle((sign < 0) ? -orig_angle : orig_angle, invertRotationSnap);
 
                     Quaternion newRot = Quaternion(Angle::radToDefault(angle), rotationAxis) * rotationStartOffset;
 
@@ -1105,6 +1105,20 @@ bool editor::SceneRender::isTerrainEditing() const{
         return terrainEditWindow->isEditingScene(scene);
     }
     return false;
+}
+
+float editor::SceneRender::snapRotationAngle(float angle, bool invertRotationSnap) const{
+    bool snapRotation = displaySettings.snapRotation;
+    if (invertRotationSnap){
+        snapRotation = !snapRotation;
+    }
+
+    if (!snapRotation || displaySettings.rotationSnapDegrees <= 0.0f){
+        return angle;
+    }
+
+    float snapStep = Angle::defaultToRad(displaySettings.rotationSnapDegrees);
+    return std::round(angle / snapStep) * snapStep;
 }
 
 void editor::SceneRender::updateTerrainBrushCursor(){

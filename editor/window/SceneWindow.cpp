@@ -703,7 +703,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 mouseLeftDraggedInside = true;
             }
             if (mouseLeftDraggedInside){
-                sceneProject->sceneRender->mouseDragEvent(x, y, mouseLeftStartPos.x, mouseLeftStartPos.y, project, sceneId, project->getSelectedEntities(sceneId), disableSelection);
+                sceneProject->sceneRender->mouseDragEvent(x, y, mouseLeftStartPos.x, mouseLeftStartPos.y, project, sceneId, project->getSelectedEntities(sceneId), disableSelection, io.KeyCtrl);
             }
         }
 
@@ -1333,6 +1333,17 @@ void editor::SceneWindow::show() {
                                 ImGui::DragFloat("##GridSpacing2D", &sceneProject.displaySettings.gridSpacing2D, 1.0f, 1.0f, 10000.0f, "%.0f");
                             }
                         }
+
+                        drawSettingRow(ICON_FA_ROTATE " Snap rotation", sceneProject.displaySettings.snapRotation);
+
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("%s", ICON_FA_ROTATE " Rotation step");
+                        ImGui::TableSetColumnIndex(1);
+                        if (!sceneProject.displaySettings.snapRotation) ImGui::BeginDisabled();
+                        ImGui::SetNextItemWidth(-1);
+                        ImGui::DragFloat("##RotationSnapDegrees", &sceneProject.displaySettings.rotationSnapDegrees, 1.0f, 0.1f, 180.0f, "%.1f");
+                        if (!sceneProject.displaySettings.snapRotation) ImGui::EndDisabled();
 
                         ImGui::EndTable();
                     }

@@ -650,12 +650,28 @@ std::string editor::Properties::replaceNumberedBrackets(const std::string& input
     return result;
 }
 
-Vector3 editor::Properties::roundZero(const Vector3& val, const float threshold){
+Vector3 editor::Properties::roundZero(const Vector3& val, const float threshold) const{
     return Vector3(
         (fabs(val.x) < threshold) ? 0.0f : val.x,
         (fabs(val.y) < threshold) ? 0.0f : val.y,
         (fabs(val.z) < threshold) ? 0.0f : val.z
     );
+}
+
+float editor::Properties::snapDisplayedAngle(float angle, float threshold) const{
+    float rounded = std::round(angle);
+    return (std::fabs(angle - rounded) <= threshold) ? rounded : angle;
+}
+
+Vector3 editor::Properties::getDisplayedEulerAngles(const Quaternion& value, const RotationOrder& order, float zeroThreshold) const{
+    constexpr float displaySnapThreshold = 0.05f;
+
+    Vector3 euler = roundZero(Quaternion(value).normalize().getEulerAngles(order), zeroThreshold);
+    euler.x = snapDisplayedAngle(euler.x, displaySnapThreshold);
+    euler.y = snapDisplayedAngle(euler.y, displaySnapThreshold);
+    euler.z = snapDisplayedAngle(euler.z, displaySnapThreshold);
+
+    return euler;
 }
 
 bool editor::Properties::compareVectorFloat(const float* a, const float* b, size_t elements, const float threshold){
@@ -2053,7 +2069,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             PropertyData prop = Catalog::getProperty(sceneProject->scene, entity, cpType, id);
             defArr = static_cast<float*>(prop.def);
             qValue = *static_cast<Quaternion*>(prop.ref);
-            eValue[entity] = roundZero(Quaternion(qValue).normalize().getEulerAngles(order), zeroThreshold);
+            eValue[entity] = getDisplayedEulerAngles(qValue, order, zeroThreshold);
             if (value){
                 if (std::fabs(value->x - eValue[entity].x) > compThreshold)
                     difX = true;

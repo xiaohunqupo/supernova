@@ -145,7 +145,9 @@ namespace doriax::editor{
 
         // replace [number] with []
         std::string replaceNumberedBrackets(const std::string& input);
-        Vector3 roundZero(const Vector3& val, const float threshold);
+        Vector3 roundZero(const Vector3& val, const float threshold) const;
+        float snapDisplayedAngle(float angle, float threshold) const;
+        Vector3 getDisplayedEulerAngles(const Quaternion& value, const RotationOrder& order, float zeroThreshold) const;
 
         bool compareVectorFloat(const float* a, const float* b, size_t elements, const float threshold);
 

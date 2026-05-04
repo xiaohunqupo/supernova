@@ -46,7 +46,7 @@ namespace doriax::editor{
         void mouseHoverEvent(float x, float y) override;
         void mouseClickEvent(float x, float y, std::vector<Entity> selEntities) override;
         void mouseReleaseEvent(float x, float y) override;
-        void mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection) override;
+        void mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap) override;
 
         void zoomAtPosition(float width, float height, Vector2 pos, float zoomFactor);
 
