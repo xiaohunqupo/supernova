@@ -703,47 +703,47 @@ void editor::Properties::helpMarker(std::string desc) {
 Texture* editor::Properties::findThumbnail(const std::string& path) {
     if (path.empty()) return nullptr;
 
-    // Compute the thumbnail path
     std::filesystem::path texPath = path;
-    std::filesystem::path projectPath = project->getProjectPath();
-    std::filesystem::path thumbnailPath;
+    const std::filesystem::path projectPath = project->getProjectPath();
 
-    if (!texPath.empty() && texPath.is_relative() && !projectPath.empty()) {
+    if (texPath.is_relative() && !projectPath.empty()) {
         texPath = projectPath / texPath;
     }
-
     texPath = texPath.lexically_normal();
-    projectPath = projectPath.lexically_normal();
 
-    if (!texPath.empty() && texPath.is_absolute()) {
-        std::error_code ec;
-        if (!std::filesystem::exists(texPath, ec) || ec) {
-            return nullptr;
-        }
+    if (!texPath.is_absolute()) return nullptr;
 
-        thumbnailPath = project->getThumbnailPath(texPath);
+    std::error_code ec;
+    if (!std::filesystem::exists(texPath, ec) || ec) {
+        return nullptr;
+    }
 
-        // If the thumbnail exists, load and use it
-        if (std::filesystem::exists(thumbnailPath)) {
-            // Check if we already have this thumbnail loaded in cache
-            std::string thumbPathStr = thumbnailPath.string();
-            auto thumbIt = thumbnailTextures.find(thumbPathStr);
+    const std::filesystem::path thumbnailPath = project->getThumbnailPath(texPath);
+    const std::string thumbPathStr = thumbnailPath.string();
 
-            if (thumbIt == thumbnailTextures.end()) {
-                // Load the thumbnail texture if not in cache
-                Texture thumbTexture;
-                thumbTexture.setPath(thumbPathStr);
-                if (thumbTexture.load()) {
-                    thumbnailTextures[thumbPathStr] = thumbTexture;
-                    return &thumbnailTextures[thumbPathStr];
-                }
-            } else if (!thumbIt->second.empty()) {
-                // Return cached texture
-                return &thumbIt->second;
-            }
+    // Fast path: return from cache if already loaded
+    auto thumbIt = thumbnailTextures.find(thumbPathStr);
+    if (thumbIt != thumbnailTextures.end() && !thumbIt->second.empty()) {
+        return &thumbIt->second;
+    }
+
+    std::error_code thumbEc;
+    const bool thumbnailExists = std::filesystem::exists(thumbnailPath, thumbEc) && !thumbEc;
+
+    // Try to load from disk
+    if (thumbnailExists) {
+        Texture thumbTexture;
+        thumbTexture.setPath(thumbPathStr);
+        if (thumbTexture.load()) {
+            thumbnailTextures[thumbPathStr] = thumbTexture;
+            return &thumbnailTextures[thumbPathStr];
         }
     }
 
+    // Thumbnail missing or failed to load — request generation for all file types
+    if (ResourcesWindow* resourcesWindow = Backend::getApp().getResourcesWindow()) {
+        resourcesWindow->requestThumbnailGeneration(texPath, thumbnailExists);
+    }
     return nullptr;
 }
 

@@ -78,6 +78,7 @@ namespace doriax::editor {
         Texture sceneIcon;
         Texture entityIcon;
         std::unordered_map<std::string, Texture> thumbnailTextures;
+        std::unordered_set<std::string> pendingThumbnailRequests;
 
         int iconSize;
         float iconPadding;
@@ -152,6 +153,8 @@ namespace doriax::editor {
         void handleRename();
         void copySelectedFiles(bool cut);
         void pasteFiles(const fs::path& targetDirectory);
+        static FileType classifyThumbnailFileType(const fs::path& filePath);
+        static std::string thumbnailRequestKey(const fs::path& filePath);
 
         void queueThumbnailGeneration(const fs::path& filePath, FileType type, bool forceRegenerate = false);
         void thumbnailWorker();
@@ -181,6 +184,7 @@ namespace doriax::editor {
         void processModelThumbnails();
 
         void notifyResourceFileChanged(const fs::path& filePath);
+        void requestThumbnailGeneration(const fs::path& filePath, bool forceRegenerate = false);
 
         void cleanupThumbnails();
 

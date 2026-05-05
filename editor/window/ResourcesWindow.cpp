@@ -37,6 +37,26 @@
 
 using namespace doriax;
 
+editor::FileType editor::ResourcesWindow::classifyThumbnailFileType(const fs::path& filePath) {
+    const std::string extension = filePath.extension().string();
+
+    if (editor::Util::isImageFile(extension)) {
+        return editor::FileType::IMAGE;
+    }
+    if (editor::Util::isMaterialFile(extension)) {
+        return editor::FileType::MATERIAL;
+    }
+    if (editor::Util::isModelFile(extension)) {
+        return editor::FileType::MODEL;
+    }
+
+    return editor::FileType::NONE;
+}
+
+std::string editor::ResourcesWindow::thumbnailRequestKey(const fs::path& filePath) {
+    return filePath.lexically_normal().string();
+}
+
 editor::ResourcesWindow::ResourcesWindow(Project* project, CodeEditor* codeEditor) {
     this->project = project;
     this->codeEditor = codeEditor;
@@ -96,6 +116,7 @@ void editor::ResourcesWindow::notifyProjectPathChange(){
     // Clear the thumbnail queue
     {
         std::lock_guard<std::mutex> lock(thumbnailMutex);
+        pendingThumbnailRequests.clear();
         std::queue<ThumbnailRequest> empty;
         std::swap(thumbnailQueue, empty);
     }
@@ -116,16 +137,7 @@ void editor::ResourcesWindow::notifyResourceFileChanged(const fs::path& filePath
         return;
     }
 
-    std::string extension = filePath.extension().string();
-    FileType type = FileType::NONE;
-
-    if (Util::isImageFile(extension)) {
-        type = FileType::IMAGE;
-    } else if (Util::isMaterialFile(extension)) {
-        type = FileType::MATERIAL;
-    } else if (Util::isModelFile(extension)) {
-        type = FileType::MODEL;
-    }
+    FileType type = classifyThumbnailFileType(filePath);
 
     if (type == FileType::NONE) {
         return;
@@ -145,6 +157,15 @@ void editor::ResourcesWindow::notifyResourceFileChanged(const fs::path& filePath
     queueThumbnailGeneration(filePath, type, true);
 }
 
+void editor::ResourcesWindow::requestThumbnailGeneration(const fs::path& filePath, bool forceRegenerate) {
+    FileType type = classifyThumbnailFileType(filePath);
+    if (type == FileType::NONE) {
+        return;
+    }
+
+    queueThumbnailGeneration(filePath, type, forceRegenerate);
+}
+
 void editor::ResourcesWindow::processMaterialThumbnails() {
     // Check if we have a pending material render that needs post-processing
     if (hasPendingMaterialRender && !Engine::isSceneRunning(materialRender.getScene())) {
@@ -161,6 +182,10 @@ void editor::ResourcesWindow::processMaterialThumbnails() {
         GraphicUtils::saveFramebufferImage(materialRender.getFramebuffer(), thumbnailPath, true, 
             [this, capturedPath, capturedType]() {
                 // This code runs after the image has been saved
+                {
+                    std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+                    pendingThumbnailRequests.erase(thumbnailRequestKey(capturedPath));
+                }
                 std::lock_guard<std::mutex> completedLock(completedThumbnailMutex);
                 completedThumbnailQueue.push({capturedPath, capturedType});
             });
@@ -185,6 +210,10 @@ void editor::ResourcesWindow::processModelThumbnails() {
 
         GraphicUtils::saveFramebufferImage(modelRender.getFramebuffer(), thumbnailPath, true,
             [this, capturedPath, capturedType]() {
+                {
+                    std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+                    pendingThumbnailRequests.erase(thumbnailRequestKey(capturedPath));
+                }
                 std::lock_guard<std::mutex> completedLock(completedThumbnailMutex);
                 completedThumbnailQueue.push({capturedPath, capturedType});
             });
@@ -1388,14 +1417,22 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
         return;
     }
 
-    fs::path thumbnailPath = project->getThumbnailPath(filePath);
+    fs::path normalizedPath = filePath;
+    if (normalizedPath.is_relative() && !project->getProjectPath().empty()) {
+        normalizedPath = project->getProjectPath() / normalizedPath;
+    }
+    normalizedPath = normalizedPath.lexically_normal();
 
-    ThumbnailRequest thumbFile = {filePath, type};
+    const std::string requestKey = thumbnailRequestKey(normalizedPath);
+
+    fs::path thumbnailPath = project->getThumbnailPath(normalizedPath);
+
+    ThumbnailRequest thumbFile = {normalizedPath, type};
     ec.clear();
     if (!forceRegenerate && fs::exists(thumbnailPath, ec) && !ec) {
         std::error_code imageTimeEc;
         std::error_code thumbTimeEc;
-        auto imageTime = fs::last_write_time(filePath, imageTimeEc);
+        auto imageTime = fs::last_write_time(normalizedPath, imageTimeEc);
         auto thumbTime = fs::last_write_time(thumbnailPath, thumbTimeEc);
         if (!imageTimeEc && !thumbTimeEc && thumbTime >= imageTime) {
             // Thumbnail is up-to-date, queue it for loading
@@ -1406,6 +1443,9 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
     }
     {
         std::lock_guard<std::mutex> lock(thumbnailMutex);
+        if (!pendingThumbnailRequests.insert(requestKey).second) {
+            return;
+        }
         thumbnailQueue.push(thumbFile);
     }
     thumbnailCondition.notify_one();
@@ -1482,8 +1522,14 @@ void editor::ResourcesWindow::thumbnailWorker() {
                     std::lock_guard<std::mutex> lock(completedThumbnailMutex);
                     completedThumbnailQueue.push(thumbFile);
                 }
+                {
+                    std::lock_guard<std::mutex> lock(thumbnailMutex);
+                    pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
+                }
             } else {
                 std::cerr << "Failed to load image for thumbnail: " << thumbFile.path.string() << " - " << stbi_failure_reason() << std::endl;
+                std::lock_guard<std::mutex> lock(thumbnailMutex);
+                pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
             }
         } else if (thumbFile.type == FileType::MATERIAL) {
             try {
@@ -1510,8 +1556,12 @@ void editor::ResourcesWindow::thumbnailWorker() {
                 std::cerr << "Error generating thumbnail for material: " << thumbFile.path.string() << " - " << e.what() << std::endl;
 
                 // Make sure we reset the pending flag if there was an error
-                std::lock_guard<std::mutex> lock(materialRenderMutex);
-                hasPendingMaterialRender = false;
+                {
+                    std::lock_guard<std::mutex> lock(materialRenderMutex);
+                    hasPendingMaterialRender = false;
+                }
+                std::lock_guard<std::mutex> lock(thumbnailMutex);
+                pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
             }
 
         } else if (thumbFile.type == FileType::MODEL) {
@@ -1532,12 +1582,18 @@ void editor::ResourcesWindow::thumbnailWorker() {
                     }
                 } else {
                     std::cerr << "Failed to load model for thumbnail: " << thumbFile.path.string() << std::endl;
+                    std::lock_guard<std::mutex> lock(thumbnailMutex);
+                    pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
                 }
             } catch (const std::exception& e) {
                 std::cerr << "Error generating thumbnail for model: " << thumbFile.path.string() << " - " << e.what() << std::endl;
 
-                std::lock_guard<std::mutex> lock(modelRenderMutex);
-                hasPendingModelRender = false;
+                {
+                    std::lock_guard<std::mutex> lock(modelRenderMutex);
+                    hasPendingModelRender = false;
+                }
+                std::lock_guard<std::mutex> lock(thumbnailMutex);
+                pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
             }
         }
     }
