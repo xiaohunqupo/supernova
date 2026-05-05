@@ -50,7 +50,7 @@ namespace doriax::editor{
         void createOrUpdateLightIcon(Entity entity, const Transform& transform, LightType lightType, bool newLight);
         void createOrUpdateCameraIcon(Entity entity, const Transform& transform, bool newCamera);
         void createOrUpdateSoundIcon(Entity entity, const Transform& transform, bool newSound);
-        void createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body3DComponent& body);
+        void createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body3DComponent& body, bool visible, bool highlighted);
         void createOrUpdateJointLines(Entity entity, const Joint3DComponent& joint, bool visible, bool highlighted);
         void createCameraFrustum(Entity entity, const Transform& transform, const CameraComponent& cameraComponent, bool fixedSizeFrustum, bool isMainCamera);
         void createDirectionalLightArrow(Entity entity, const Transform& transform, const LightComponent& light, bool isSelected);

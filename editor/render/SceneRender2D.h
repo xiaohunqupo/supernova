@@ -27,7 +27,7 @@ namespace doriax::editor{
         void updateGridLines();
         bool instanciateBodyLines(Entity entity);
         bool instanciateJointLines(Entity entity);
-        void createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body2DComponent& body);
+        void createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body2DComponent& body, bool visible, bool highlighted);
         void createOrUpdateJointLines(Entity entity, const Joint2DComponent& joint, bool visible, bool highlighted);
 
     protected:

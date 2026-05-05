@@ -1298,7 +1298,7 @@ void editor::SceneWindow::show() {
 
                         drawSettingRow(ICON_FA_LINK " Show all joints", sceneProject.displaySettings.showAllJoints, notStopped);
                         drawSettingRow(ICON_FA_BONE " Show all bones", sceneProject.displaySettings.showAllBones, notStopped);
-                        drawSettingRow(ICON_FA_CUBES " Hide all bodies", sceneProject.displaySettings.hideAllBodies, notStopped);
+                        drawSettingRow(ICON_FA_CUBES " Show all bodies", sceneProject.displaySettings.showAllBodies, notStopped);
 
                         drawSettingRow(ICON_FA_CAMERA " Hide camera view", sceneProject.displaySettings.hideCameraView);
                         drawSettingRow(ICON_FA_LIGHTBULB " Hide light icons", sceneProject.displaySettings.hideLightIcons, sceneProject.sceneType != SceneType::SCENE_3D);

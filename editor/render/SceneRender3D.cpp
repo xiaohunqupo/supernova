@@ -278,17 +278,18 @@ void editor::SceneRender3D::createOrUpdateBoneLines(Entity entity, const ModelCo
     }
 }
 
-void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body3DComponent& body) {
+void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body3DComponent& body, bool visible, bool highlighted) {
     BodyObjects& bo = bodyObjects[entity];
 
     bo.lines->clearLines();
-    bo.lines->setVisible(transform.visible);
+    bo.lines->setVisible(transform.visible && visible);
 
-    if (!transform.visible || body.numShapes == 0) {
+    if (!transform.visible || !visible || body.numShapes == 0) {
         return;
     }
 
-    const Vector4 bodyColor(0.2f, 0.95f, 0.95f, 1.0f);
+    float alpha = highlighted ? 1.0f : 0.35f;
+    const Vector4 bodyColor(0.2f, 0.95f, 0.95f, alpha);
     const Matrix4 modelMatrix = transform.modelMatrix;
 
     auto addTransformedLine = [&](const Matrix4& shapeMatrix, const Vector3& from, const Vector3& to) {
@@ -1224,10 +1225,10 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
 
             currentBodyObjects.insert(entity);
             instanciateBodyObject(entity);
-            createOrUpdateBodyLines(entity, transform, body);
-            if (displaySettings.hideAllBodies && bodyObjects.find(entity) != bodyObjects.end()) {
-                bodyObjects[entity].lines->setVisible(false);
-            }
+            bool highlighted = isDescendantSelected(entity);
+            bool isVisible = displaySettings.showAllBodies || highlighted;
+
+            createOrUpdateBodyLines(entity, transform, body, isVisible, highlighted);
         }
 
         if (signature.test(scene->getComponentId<Joint3DComponent>())) {

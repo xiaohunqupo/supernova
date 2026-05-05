@@ -1064,7 +1064,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
             sceneNode["filepath"] = sceneProject.filepath.string();
             sceneNode["showAllJoints"]        = sceneProject.displaySettings.showAllJoints;
             sceneNode["showAllBones"]         = sceneProject.displaySettings.showAllBones;
-            sceneNode["hideAllBodies"]        = sceneProject.displaySettings.hideAllBodies;
+            sceneNode["showAllBodies"]        = sceneProject.displaySettings.showAllBodies;
             sceneNode["hideCameraView"]       = sceneProject.displaySettings.hideCameraView;
             sceneNode["hideLightIcons"]       = sceneProject.displaySettings.hideLightIcons;
             sceneNode["hideSoundIcons"]       = sceneProject.displaySettings.hideSoundIcons;
@@ -1211,7 +1211,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
                         SceneDisplaySettings& ds = scenes.back().displaySettings;
                         if (sceneNode["showAllJoints"])        ds.showAllJoints        = sceneNode["showAllJoints"].as<bool>();
                         if (sceneNode["showAllBones"])         ds.showAllBones         = sceneNode["showAllBones"].as<bool>();
-                        if (sceneNode["hideAllBodies"])        ds.hideAllBodies        = sceneNode["hideAllBodies"].as<bool>();
+                        if (sceneNode["showAllBodies"])        ds.showAllBodies        = sceneNode["showAllBodies"].as<bool>();
                         if (sceneNode["hideCameraView"])       ds.hideCameraView       = sceneNode["hideCameraView"].as<bool>();
                         if (sceneNode["hideLightIcons"])       ds.hideLightIcons       = sceneNode["hideLightIcons"].as<bool>();
                         if (sceneNode["hideSoundIcons"])       ds.hideSoundIcons       = sceneNode["hideSoundIcons"].as<bool>();

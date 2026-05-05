@@ -101,17 +101,18 @@ bool editor::SceneRender2D::instanciateJointLines(Entity entity){
     return false;
 }
 
-void editor::SceneRender2D::createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body2DComponent& body){
+void editor::SceneRender2D::createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body2DComponent& body, bool visible, bool highlighted){
     Lines* bodyLinesObj = bodyLines[entity];
 
     bodyLinesObj->clearLines();
-    bodyLinesObj->setVisible(transform.visible);
+    bodyLinesObj->setVisible(transform.visible && visible);
 
-    if (!transform.visible || body.numShapes == 0){
+    if (!transform.visible || !visible || body.numShapes == 0){
         return;
     }
 
-    const Vector4 bodyColor(0.2f, 0.95f, 0.95f, 1.0f);
+    float alpha = highlighted ? 1.0f : 0.35f;
+    const Vector4 bodyColor(0.2f, 0.95f, 0.95f, alpha);
     const Matrix4 modelMatrix = transform.modelMatrix;
 
     auto toWorld = [&](const Vector2& point){
@@ -645,10 +646,10 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
 
             currentBodies.insert(entity);
             instanciateBodyLines(entity);
-            createOrUpdateBodyLines(entity, transform, body);
-            if (displaySettings.hideAllBodies && bodyLines.find(entity) != bodyLines.end()) {
-                bodyLines[entity]->setVisible(false);
-            }
+            bool highlighted = isDescendantSelected(entity);
+            bool isVisible = displaySettings.showAllBodies || highlighted;
+
+            createOrUpdateBodyLines(entity, transform, body, isVisible, highlighted);
         }
 
         if (signature.test(scene->getComponentId<Joint2DComponent>())){
