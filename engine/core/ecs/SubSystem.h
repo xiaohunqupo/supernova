@@ -39,7 +39,12 @@ namespace doriax{
         virtual void load() = 0;
         virtual void draw() = 0;
         virtual void destroy() = 0;
+        // Variable timestep update. Called once per frame with the real frame delta time.
+        // Use for animation, input, UI, gameplay logic that does not need a deterministic step.
         virtual void update(double dt) = 0;
+        // Fixed timestep update. Called zero or more times per frame with Engine::getUpdateTime() as dt.
+        // Use for physics, networking and any logic requiring a stable, deterministic step.
+        virtual void fixedUpdate(double dt) { (void)dt; }
 
         virtual void onComponentAdded(Entity entity, ComponentId componentId) { (void)entity; (void)componentId; }
         virtual void onComponentRemoved(Entity entity, ComponentId componentId) { (void)entity; (void)componentId; }

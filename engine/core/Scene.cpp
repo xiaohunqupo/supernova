@@ -222,6 +222,12 @@ void Scene::update(double dt){
     }
 }
 
+void Scene::fixedUpdate(double dt){
+    for (auto const& pair : systems){
+        pair.second->fixedUpdate(dt);
+    }
+}
+
 void Scene::updateCameraSize(){
     getSystem<RenderSystem>()->updateCameraSize(getCamera());
 }

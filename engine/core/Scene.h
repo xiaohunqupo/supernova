@@ -83,6 +83,7 @@ namespace doriax{
         void destroy();
         void draw();
         void update(double dt);
+        void fixedUpdate(double dt);
 
         void updateCameraSize();
 

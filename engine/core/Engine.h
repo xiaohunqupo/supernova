@@ -177,15 +177,13 @@ namespace doriax {
 
         static bool uiEventReceived;
 
-        static bool fixedTimeSceneUpdate;
-
         static uint64_t lastTime;
-        static float updateTimeCount;
+        static double updateTimeCount;
         
         static double deltatime;
         static float framerate;
         
-        static float updateTime;
+        static double updateTime;
 
         static std::atomic<bool> viewLoaded;
         static std::atomic<bool> paused;
@@ -252,14 +250,14 @@ namespace doriax {
 
         static bool isUIEventReceived();
         
-        static void setFixedTimeSceneUpdate(bool fixedTimeSceneUpdate);
-        static bool isFixedTimeSceneUpdate();
-
         static void setUpdateTimeMS(unsigned int updateTimeMS);
         static void setUpdateTime(float updateTime);
         static float getUpdateTime();
 
-        static float getSceneUpdateTime();
+        // Interpolation alpha in [0,1) representing how far between the previous and the next
+        // fixed-update step the current rendered frame is. Useful for visual interpolation of
+        // physics-driven entities to remove temporal aliasing.
+        static double getInterpolationAlpha();
 
         static void setMouseCursor(CursorType type);
         static CursorType getMouseCursor();
@@ -326,6 +324,7 @@ namespace doriax {
         static FunctionSubscribe<void()> onViewDestroyed;
         static FunctionSubscribe<void()> onDraw;
         static FunctionSubscribe<void()> onUpdate;
+        static FunctionSubscribe<void()> onFixedUpdate;
         static FunctionSubscribe<void()> onPostUpdate;
         static FunctionSubscribe<void()> onPause;
         static FunctionSubscribe<void()> onResume;

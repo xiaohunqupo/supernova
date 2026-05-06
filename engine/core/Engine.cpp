@@ -46,17 +46,16 @@ bool Engine::callTouchInMouseEvent = false;
 bool Engine::useDegrees = true;
 bool Engine::allowEventsOutCanvas = false;
 bool Engine::ignoreEventsHandledByUI = true;
-bool Engine::fixedTimeSceneUpdate = true;
 
 bool Engine::uiEventReceived = false;
 
 uint64_t Engine::lastTime = 0;
-float Engine::updateTimeCount = 0;
+double Engine::updateTimeCount = 0;
 
 double Engine::deltatime = 0;
 float Engine::framerate = 0;
 
-float Engine::updateTime = 0.01667; //60Hz
+double Engine::updateTime = 1.0 / 60.0; //60Hz
 
 std::atomic<bool> Engine::viewLoaded = false;
 std::atomic<bool> Engine::paused = false;
@@ -74,6 +73,7 @@ FunctionSubscribe<void()> Engine::onViewChanged;
 FunctionSubscribe<void()> Engine::onViewDestroyed;
 FunctionSubscribe<void()> Engine::onDraw;
 FunctionSubscribe<void()> Engine::onUpdate;
+FunctionSubscribe<void()> Engine::onFixedUpdate;
 FunctionSubscribe<void()> Engine::onPostUpdate;
 FunctionSubscribe<void()> Engine::onPause;
 FunctionSubscribe<void()> Engine::onResume;
@@ -232,6 +232,7 @@ void Engine::pauseGameEvents(bool pause) {
     // Pause ALL subscriptions for game events
     // Don't pause drawing and lifecycle events
     onUpdate.setEnabled(!pause);
+    onFixedUpdate.setEnabled(!pause);
     onPostUpdate.setEnabled(!pause);
     onTouchStart.setEnabled(!pause);
     onTouchEnd.setEnabled(!pause);
@@ -346,32 +347,32 @@ bool Engine::isUIEventReceived(){
     return uiEventReceived;
 }
 
-void Engine::setFixedTimeSceneUpdate(bool fixedTimeSceneUpdate) {
-    Engine::fixedTimeSceneUpdate = fixedTimeSceneUpdate;
-}
-
-bool Engine::isFixedTimeSceneUpdate() {
-    return fixedTimeSceneUpdate;
-}
-
 void Engine::setUpdateTimeMS(unsigned int updateTimeMS){
-    Engine::updateTime = updateTimeMS / 1000.0f;
+    if (updateTimeMS == 0){
+        Log::warn("Engine::setUpdateTimeMS: zero is invalid, ignoring");
+        return;
+    }
+    Engine::updateTime = updateTimeMS / 1000.0;
 }
 
 void Engine::setUpdateTime(float updateTime){
+    if (!(updateTime > 0.0f) || std::isnan(updateTime) || std::isinf(updateTime)){
+        Log::warn("Engine::setUpdateTime: non-positive or non-finite value (%f) ignored", updateTime);
+        return;
+    }
     Engine::updateTime = updateTime;
 }
 
 float Engine::getUpdateTime(){
-    return Engine::updateTime;
+    return (float)Engine::updateTime;
 }
 
-float Engine::getSceneUpdateTime(){
-    if (isFixedTimeSceneUpdate()){
-        return getUpdateTime();
-    }else{
-        return getDeltatime();
-    }
+double Engine::getInterpolationAlpha(){
+    if (updateTime <= 0.0) return 0.0;
+    double alpha = updateTimeCount / updateTime;
+    if (alpha < 0.0) alpha = 0.0;
+    if (alpha > 1.0) alpha = 1.0;
+    return alpha;
 }
 
 void Engine::setMouseCursor(CursorType type){
@@ -502,6 +503,7 @@ Framebuffer* Engine::getFramebuffer(){
 
 void Engine::removeSubscriptionsByTag(const std::string& substring) {
     onUpdate.removeByTagSubstring(substring);
+    onFixedUpdate.removeByTagSubstring(substring);
     onPostUpdate.removeByTagSubstring(substring);
 
     onTouchStart.removeByTagSubstring(substring);
@@ -532,6 +534,7 @@ void Engine::removeSubscriptionsByTag(const std::string& substring) {
 void Engine::clearAllSubscriptions(bool includeLifecycle) {
     // Gameplay/input/update events
     onUpdate.clear();
+    onFixedUpdate.clear();
     onPostUpdate.clear();
 
     onTouchStart.clear();
@@ -722,36 +725,40 @@ void Engine::systemDraw(){
 
     // avoid increment updateTimeCount after resume
     if (!paused) {
-        // clamp deltaTime to prevent large jumps
-        //deltatime = std::min(deltatime, 0.25);  // bad for physics?
-        updateTimeCount += deltatime;
+        // Cap delta to prevent the spiral of death after long stalls (loading, debugger pause, alt-tab).
+        // Anything bigger gets discarded; the simulation effectively skips the lost time.
+        const double DELTA_CAP = 0.25;
+        double frameDelta = (deltatime > DELTA_CAP) ? DELTA_CAP : deltatime;
 
-        int updateLoops = 0;
-        while (updateTimeCount >= updateTime && updateLoops < MAX_UPDATES_PER_FRAME) {
-            Engine::onUpdate.call();
+        // 1) Fixed-timestep phase (deterministic). Runs zero or more times per frame.
+        //    Used for physics, networking, and any subsystem overriding fixedUpdate().
+        if (updateTime > 0.0) {
+            updateTimeCount += frameDelta;
 
-            if (isFixedTimeSceneUpdate()) {
+            int fixedLoops = 0;
+            while (updateTimeCount >= updateTime && fixedLoops < MAX_UPDATES_PER_FRAME) {
+                Engine::onFixedUpdate.call();
                 for (int i = 0; i < scenes.size(); i++) {
-                    scenes[i]->update(updateTime);
+                    scenes[i]->fixedUpdate(updateTime);
                 }
-                Engine::onPostUpdate.call();
+                updateTimeCount -= updateTime;
+                fixedLoops++;
             }
 
-            updateTimeCount -= updateTime;
-            updateLoops++;
-        }
-
-        if (updateLoops >= MAX_UPDATES_PER_FRAME) {
-            Log::warn("Dropping frames - More than %i updates per frame", MAX_UPDATES_PER_FRAME);
-            //updateTimeCount = 0;  // bad for physics?
-        }
-
-        if (!isFixedTimeSceneUpdate()) {
-            for (int i = 0; i < scenes.size(); i++) {
-                scenes[i]->update(deltatime);
+            if (fixedLoops >= MAX_UPDATES_PER_FRAME) {
+                Log::warn("Dropping fixed-update steps - more than %i per frame", MAX_UPDATES_PER_FRAME);
+                // Discard remaining backlog so we don't fall further behind next frame.
+                updateTimeCount = 0.0;
             }
-            Engine::onPostUpdate.call();
         }
+
+        // 2) Variable-timestep phase. Runs exactly once per frame with the real frame delta.
+        //    Used for animation, input, UI, and any subsystem overriding update().
+        Engine::onUpdate.call();
+        for (int i = 0; i < scenes.size(); i++) {
+            scenes[i]->update(frameDelta);
+        }
+        Engine::onPostUpdate.call();
     }
 
     Engine::onDraw.call();

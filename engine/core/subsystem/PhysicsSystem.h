@@ -156,6 +156,7 @@ namespace doriax{
 		void draw() override;
 		void destroy() override;
 		void update(double dt) override;
+		void fixedUpdate(double dt) override;
 
 		void onComponentAdded(Entity entity, ComponentId componentId) override;
 		void onComponentRemoved(Entity entity, ComponentId componentId) override;

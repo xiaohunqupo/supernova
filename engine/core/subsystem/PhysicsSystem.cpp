@@ -2148,9 +2148,17 @@ void PhysicsSystem::destroy(){
 }
 
 void PhysicsSystem::update(double dt){
+    // Variable-timestep update: physics intentionally does no work here.
+    // All deterministic stepping happens in fixedUpdate(), driven by Engine's accumulator.
+    (void)dt;
+}
+
+void PhysicsSystem::fixedUpdate(double dt){
     if (paused) {
         return;
     }
+
+    const float fixedStep = (float)dt;
 
 	auto bodies2d = scene->getComponentArray<Body2DComponent>();
 
@@ -2183,7 +2191,7 @@ void PhysicsSystem::update(double dt){
 
     if (bodies2d->size() > 0){
         int32_t subSteps = 4;
-        b2World_Step(world2D, dt, subSteps);
+        b2World_Step(world2D, fixedStep, subSteps);
     }
 
     b2BodyEvents events = b2World_GetBodyEvents(world2D);
@@ -2253,7 +2261,7 @@ void PhysicsSystem::update(double dt){
     if (bodies3d->size() > 0){
 		const int cCollisionSteps = 1;
 
-		world3D.Update(dt, cCollisionSteps, temp_allocator, job_system);
+		world3D.Update(fixedStep, cCollisionSteps, temp_allocator, job_system);
 	}
 
 	for (int i = 0; i < bodies3d->size(); i++){
@@ -2293,7 +2301,6 @@ void PhysicsSystem::update(double dt){
             }
         }
     }
-    
 }
 
 void PhysicsSystem::draw(){
