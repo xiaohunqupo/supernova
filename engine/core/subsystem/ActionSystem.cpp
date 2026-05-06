@@ -486,6 +486,16 @@ float ActionSystem::getTimeFromParticleTime(float& time, float& fromTime, float&
     return -1;
 }
 
+bool ActionSystem::getParticleModifierValue(float& particleTime, float& fromTime, float& toTime, FunctionSubscribe<float(float)>& function, float& value){
+    float time = getTimeFromParticleTime(particleTime, fromTime, toTime);
+    if (time < 0 || time > 1){
+        return false;
+    }
+
+    value = function.call(time);
+    return value >= 0 && value <= 1;
+}
+
 float ActionSystem::getFloatModifierValue(float& value, float& fromValue, float& toValue){
     return fromValue + ((toValue - fromValue) * value);
 }
@@ -525,33 +535,24 @@ Rect ActionSystem::getSpriteModifierValue(float& value, std::vector<int>& frames
 void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite){
     float particleTime = particles.particles[idx].time;
     float value;
-    float time;
 
     ParticlePositionModifier& posMod = particles.positionModifier;
-    time = getTimeFromParticleTime(particleTime, posMod.fromTime, posMod.toTime);
-    value = posMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, posMod.fromTime, posMod.toTime, posMod.function, value)){
         instmesh.instances[idx].position = getVector3ModifierValue(value, posMod.fromPosition, posMod.toPosition);
     }
 
     ParticleVelocityModifier& velMod = particles.velocityModifier;
-    time = getTimeFromParticleTime(particleTime, velMod.fromTime, velMod.toTime);
-    value = velMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, velMod.fromTime, velMod.toTime, velMod.function, value)){
         particles.particles[idx].velocity = getVector3ModifierValue(value, velMod.fromVelocity, velMod.toVelocity);
     }
 
     ParticleAccelerationModifier& accMod = particles.accelerationModifier;
-    time = getTimeFromParticleTime(particleTime, accMod.fromTime, accMod.toTime);
-    value = accMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, accMod.fromTime, accMod.toTime, accMod.function, value)){
         particles.particles[idx].acceleration = getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration);
     }
 
     ParticleColorModifier& colMod = particles.colorModifier;
-    time = getTimeFromParticleTime(particleTime, colMod.fromTime, colMod.toTime);
-    value = colMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, colMod.fromTime, colMod.toTime, colMod.function, value)){
         instmesh.instances[idx].color = getVector3ModifierValue(value, colMod.fromColor, colMod.toColor);
         if (colMod.useSRGB){
             instmesh.instances[idx].color = Color::sRGBToLinear(instmesh.instances[idx].color);
@@ -559,9 +560,7 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
     }
 
     ParticleAlphaModifier& alpMod = particles.alphaModifier;
-    time = getTimeFromParticleTime(particleTime, alpMod.fromTime, alpMod.toTime);
-    value = alpMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, alpMod.fromTime, alpMod.toTime, alpMod.function, value)){
         instmesh.instances[idx].color.w = getFloatModifierValue(value, alpMod.fromAlpha, alpMod.toAlpha);
     }
 
@@ -569,24 +568,18 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
 
     if (sprite){
         ParticleSpriteModifier& spriteMod = particles.spriteModifier;
-        time = getTimeFromParticleTime(particleTime, spriteMod.fromTime, spriteMod.toTime);
-        value = spriteMod.function.call(time);
-        if (value >= 0 && value <= 1){
+        if (getParticleModifierValue(particleTime, spriteMod.fromTime, spriteMod.toTime, spriteMod.function, value)){
             instmesh.instances[idx].textureRect = getSpriteModifierValue(value, spriteMod.frames, *sprite);
         }
     }
 
     ParticleRotationModifier& rotMod = particles.rotationModifier;
-    time = getTimeFromParticleTime(particleTime, rotMod.fromTime, rotMod.toTime);
-    value = rotMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, rotMod.fromTime, rotMod.toTime, rotMod.function, value)){
         instmesh.instances[idx].rotation = getQuaternionModifierValue(value, rotMod.fromRotation, rotMod.toRotation, rotMod.shortestPath);
     }
 
     ParticleScaleModifier& scaMod = particles.scaleModifier;
-    time = getTimeFromParticleTime(particleTime, scaMod.fromTime, scaMod.toTime);
-    value = scaMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, scaMod.fromTime, scaMod.toTime, scaMod.function, value)){
         instmesh.instances[idx].scale = getVector3ModifierValue(value, scaMod.fromScale, scaMod.toScale);
     }
 
@@ -595,33 +588,24 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
 void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& particles, PointsComponent& points){
     float particleTime = particles.particles[idx].time;
     float value;
-    float time;
 
     ParticlePositionModifier& posMod = particles.positionModifier;
-    time = getTimeFromParticleTime(particleTime, posMod.fromTime, posMod.toTime);
-    value = posMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, posMod.fromTime, posMod.toTime, posMod.function, value)){
         points.points[idx].position = getVector3ModifierValue(value, posMod.fromPosition, posMod.toPosition);
     }
 
     ParticleVelocityModifier& velMod = particles.velocityModifier;
-    time = getTimeFromParticleTime(particleTime, velMod.fromTime, velMod.toTime);
-    value = velMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, velMod.fromTime, velMod.toTime, velMod.function, value)){
         particles.particles[idx].velocity = getVector3ModifierValue(value, velMod.fromVelocity, velMod.toVelocity);
     }
 
     ParticleAccelerationModifier& accMod = particles.accelerationModifier;
-    time = getTimeFromParticleTime(particleTime, accMod.fromTime, accMod.toTime);
-    value = accMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, accMod.fromTime, accMod.toTime, accMod.function, value)){
         particles.particles[idx].acceleration = getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration);
     }
 
     ParticleColorModifier& colMod = particles.colorModifier;
-    time = getTimeFromParticleTime(particleTime, colMod.fromTime, colMod.toTime);
-    value = colMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, colMod.fromTime, colMod.toTime, colMod.function, value)){
         points.points[idx].color = getVector3ModifierValue(value, colMod.fromColor, colMod.toColor);
         if (colMod.useSRGB){
             points.points[idx].color = Color::sRGBToLinear(points.points[idx].color);
@@ -629,34 +613,82 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
     }
 
     ParticleAlphaModifier& alpMod = particles.alphaModifier;
-    time = getTimeFromParticleTime(particleTime, alpMod.fromTime, alpMod.toTime);
-    value = alpMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, alpMod.fromTime, alpMod.toTime, alpMod.function, value)){
         points.points[idx].color.w = getFloatModifierValue(value, alpMod.fromAlpha, alpMod.toAlpha);
     }
 
     ParticleSizeModifier& sizeMod = particles.sizeModifier;
-    time = getTimeFromParticleTime(particleTime, sizeMod.fromTime, sizeMod.toTime);
-    value = sizeMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, sizeMod.fromTime, sizeMod.toTime, sizeMod.function, value)){
         points.points[idx].size = getFloatModifierValue(value, sizeMod.fromSize, sizeMod.toSize);
     }
 
     ParticleSpriteModifier& spriteMod = particles.spriteModifier;
-    time = getTimeFromParticleTime(particleTime, spriteMod.fromTime, spriteMod.toTime);
-    value = spriteMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, spriteMod.fromTime, spriteMod.toTime, spriteMod.function, value)){
         points.points[idx].textureRect = getSpriteModifierValue(value, spriteMod.frames, points);
     }
 
     ParticleRotationModifier& rotMod = particles.rotationModifier;
-    time = getTimeFromParticleTime(particleTime, rotMod.fromTime, rotMod.toTime);
-    value = rotMod.function.call(time);
-    if (value >= 0 && value <= 1){
+    if (getParticleModifierValue(particleTime, rotMod.fromTime, rotMod.toTime, rotMod.function, value)){
         points.points[idx].rotation = Angle::defaultToRad(getQuaternionModifierValue(value, rotMod.fromRotation, rotMod.toRotation, rotMod.shortestPath).getRoll());
     }
 
     // scale modifier is not applicable to points
+}
+
+void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite){
+    float life = particles.particles[idx].life;
+    float time = particles.particles[idx].time;
+
+    if (life <= time){
+        instmesh.instances[idx].visible = false;
+        return;
+    }
+
+    applyParticleModifiers(idx, particles, instmesh, sprite);
+
+    Vector3 velocity = particles.particles[idx].velocity;
+    Vector3 position = instmesh.instances[idx].position;
+    Vector3 acceleration = particles.particles[idx].acceleration;
+
+    velocity += acceleration * dt * 0.5f;
+    position += velocity * dt;
+    velocity += acceleration * dt * 0.5f;
+    time += dt;
+
+    particles.particles[idx].time = time;
+    particles.particles[idx].velocity = velocity;
+    instmesh.instances[idx].position = position;
+
+    instmesh.instances[idx].visible = true;
+    instmesh.needUpdateInstances = true;
+}
+
+void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& particles, PointsComponent& points){
+    float life = particles.particles[idx].life;
+    float time = particles.particles[idx].time;
+
+    if (life <= time){
+        points.points[idx].visible = false;
+        return;
+    }
+
+    applyParticleModifiers(idx, particles, points);
+
+    Vector3 velocity = particles.particles[idx].velocity;
+    Vector3 position = points.points[idx].position;
+    Vector3 acceleration = particles.particles[idx].acceleration;
+
+    velocity += acceleration * dt * 0.5f;
+    position += velocity * dt;
+    velocity += acceleration * dt * 0.5f;
+    time += dt;
+
+    particles.particles[idx].time = time;
+    particles.particles[idx].velocity = velocity;
+    points.points[idx].position = position;
+
+    points.points[idx].visible = true;
+    points.needUpdate = true;
 }
 
 void ActionSystem::particleActionStart(ParticlesComponent& particles, InstancedMeshComponent& instmesh, MeshComponent& mesh){
@@ -720,6 +752,16 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, PointsComp
 void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target, ActionComponent& action, ParticlesComponent& particles, InstancedMeshComponent& instmesh){
     SpriteComponent* sprite = scene->findComponent<SpriteComponent>(target);
 
+    bool existParticles = false;
+    for(int i=0; i<particles.particles.size(); i++){
+        if (particles.particles[i].life > particles.particles[i].time){
+            advanceParticle(i, dt, particles, instmesh, sprite);
+            existParticles = true;
+        }else{
+            instmesh.instances[i].visible = false;
+        }
+    }
+
     if (particles.emitter){
         particles.newParticlesCount += dt * particles.rate;
 
@@ -734,45 +776,18 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
             if (particleIndex >= 0){
                 particles.particles[particleIndex].time = 0;
                 applyParticleInitializers(particleIndex, particles, instmesh, sprite);
-                instmesh.needUpdateInstances = true;
+
+                float spawnDt = (float)dt * (float)(newparticles - i) / (float)(newparticles + 1);
+                if (spawnDt > 0.0f){
+                    advanceParticle(particleIndex, spawnDt, particles, instmesh, sprite);
+                }
+
+                existParticles = true;
             }else{
                 if (!particles.loop)
                     particles.emitter = false;
                 break;
             }
-        }
-    }
-
-    bool existParticles = false;
-    for(int i=0; i<particles.particles.size(); i++){
-
-        float life = particles.particles[i].life;
-        float time = particles.particles[i].time;
-
-        if(life > time){
-
-            applyParticleModifiers(i, particles, instmesh, sprite);
-
-            Vector3 velocity = particles.particles[i].velocity;
-            Vector3 position = instmesh.instances[i].position;
-            Vector3 acceleration = particles.particles[i].acceleration;
-
-            velocity += acceleration * dt * 0.5f;
-            position += velocity * dt;
-            time += dt;
-
-            particles.particles[i].time = time;
-            particles.particles[i].velocity = velocity;
-            instmesh.instances[i].position = position;
-
-            existParticles = true;
-
-            instmesh.instances[i].visible = true;
-            instmesh.needUpdateInstances = true;
-
-            //printf("1.Particle %i life %f time %f position %f %f %f\n", i, life, time, position.x, position.y, position.z);
-        }else{
-            instmesh.instances[i].visible = false;
         }
     }
 
@@ -788,6 +803,16 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
 }
 
 void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target, ActionComponent& action, ParticlesComponent& particles, PointsComponent& points){
+    bool existParticles = false;
+    for(int i=0; i<particles.particles.size(); i++){
+        if (particles.particles[i].life > particles.particles[i].time){
+            advanceParticle(i, dt, particles, points);
+            existParticles = true;
+        }else{
+            points.points[i].visible = false;
+        }
+    }
+
     if (particles.emitter){
         particles.newParticlesCount += dt * particles.rate;
 
@@ -802,44 +827,18 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
             if (particleIndex >= 0){
                 particles.particles[particleIndex].time = 0;
                 applyParticleInitializers(particleIndex, particles, points);
-                points.needUpdate = true;
+
+                float spawnDt = (float)dt * (float)(newparticles - i) / (float)(newparticles + 1);
+                if (spawnDt > 0.0f){
+                    advanceParticle(particleIndex, spawnDt, particles, points);
+                }
+
+                existParticles = true;
             }else{
                 if (!particles.loop)
                     particles.emitter = false;
                 break;
             }
-        }
-    }
-
-    bool existParticles = false;
-    for(int i=0; i<particles.particles.size(); i++){
-
-        float life = particles.particles[i].life;
-        float time = particles.particles[i].time;
-
-        if(life > time){
-            applyParticleModifiers(i, particles, points);
-
-            Vector3 velocity = particles.particles[i].velocity;
-            Vector3 position = points.points[i].position;
-            Vector3 acceleration = particles.particles[i].acceleration;
-
-            velocity += acceleration * dt * 0.5f;
-            position += velocity * dt;
-            time += dt;
-
-            particles.particles[i].time = time;
-            particles.particles[i].velocity = velocity;
-            points.points[i].position = position;
-
-            existParticles = true;
-
-            points.points[i].visible = true;
-            points.needUpdate = true;
-
-            //printf("1.Particle %i life %f time %f position %f %f %f\n", i, life, time, position.x, position.y, position.z);
-        }else{
-            points.points[i].visible = false;
         }
     }
 

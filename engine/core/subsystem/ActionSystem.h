@@ -78,6 +78,7 @@ namespace doriax{
 		void applyParticleInitializers(size_t idx, ParticlesComponent& particles, PointsComponent& points);
 
 		float getTimeFromParticleTime(float& time, float& fromTime, float& toTime);
+		bool getParticleModifierValue(float& particleTime, float& fromTime, float& toTime, FunctionSubscribe<float(float)>& function, float& value);
 		float getFloatModifierValue(float& value, float& fromValue, float& toValue);
 		Vector3 getVector3ModifierValue(float& value, Vector3& fromValue, Vector3& toValue);
 		Quaternion getQuaternionModifierValue(float& value, Quaternion& fromValue, Quaternion& toValue, bool shortestPath);
@@ -85,6 +86,8 @@ namespace doriax{
 		Rect getSpriteModifierValue(float& value, std::vector<int>& frames, PointsComponent& points);
 		void applyParticleModifiers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite);
 		void applyParticleModifiers(size_t idx, ParticlesComponent& particles, PointsComponent& points);
+		void advanceParticle(size_t idx, float dt, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite);
+		void advanceParticle(size_t idx, float dt, ParticlesComponent& particles, PointsComponent& points);
 
 		void particleActionStart(ParticlesComponent& particles, InstancedMeshComponent& instmesh, MeshComponent& mesh);
 		void particleActionStart(ParticlesComponent& particles, PointsComponent& points);

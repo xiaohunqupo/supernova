@@ -6938,8 +6938,14 @@ void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject*
     }
 
     bool removedPoint = false;
+    const size_t maxDrawnPoints = 256;
+    const size_t drawnPoints = std::min(pts.points.size(), maxDrawnPoints);
 
-    for (size_t i = 0; i < pts.points.size(); i++) {
+    if (drawnPoints < pts.points.size()) {
+        ImGui::TextDisabled("Showing first %zu of %zu points", drawnPoints, pts.points.size());
+    }
+
+    for (size_t i = 0; i < drawnPoints; i++) {
         ImGui::PushID((int)i);
 
         std::string pointGroupStr = "point_" + std::to_string(i);

@@ -1996,9 +1996,6 @@ void RenderSystem::updateSkyViewProjection(SkyComponent& sky, CameraComponent& c
 }
 
 void RenderSystem::updatePoints(PointsComponent& points, Transform& transform, CameraComponent& camera, Transform& camTransform){
-    points.renderPoints.clear();
-    points.renderPoints.reserve(points.points.size());
-
     // point particle sizes are in pixels, need to convert it to canvas size
     float sizeScale = 1.0f;
     int canvasW = Engine::getCanvasWidth();
@@ -2011,17 +2008,22 @@ void RenderSystem::updatePoints(PointsComponent& points, Transform& transform, C
 
     points.numVisible = 0;
     size_t pointsSize = (points.points.size() < points.maxPoints)? points.points.size() : points.maxPoints;
+    if (points.renderPoints.size() < pointsSize){
+        points.renderPoints.resize(pointsSize);
+    }
+
     for (int i = 0; i < pointsSize; i++){
         if (points.points[i].visible){
-            points.renderPoints.push_back({});
-            points.renderPoints[points.numVisible].position = points.points[i].position;
-            points.renderPoints[points.numVisible].color = points.points[i].color;
-            points.renderPoints[points.numVisible].size = points.points[i].size * sizeScale;
-            points.renderPoints[points.numVisible].rotation = points.points[i].rotation;
-            points.renderPoints[points.numVisible].textureRect = points.points[i].textureRect;
+            PointRenderData& renderPoint = points.renderPoints[points.numVisible];
+            renderPoint.position = points.points[i].position;
+            renderPoint.color = points.points[i].color;
+            renderPoint.size = points.points[i].size * sizeScale;
+            renderPoint.rotation = points.points[i].rotation;
+            renderPoint.textureRect = points.points[i].textureRect;
             points.numVisible++;
         }
     }
+    points.renderPoints.resize(points.numVisible);
 
     if (points.loaded)
         points.needUpdateBuffer = true;
@@ -3030,7 +3032,7 @@ void RenderSystem::update(double dt){
                 updatePoints(points, transform, mainCamera, mainCameraTransform);
             }
 
-            if (points.needUpdate || ((mainCamera.needUpdate || transform.needUpdate) && sortTransparentPoints)){
+            if (sortTransparentPoints && (points.needUpdate || mainCamera.needUpdate || transform.needUpdate)){
                 if (!hasMultipleCameras || !sortTransparentPoints){
                     sortPoints(points, transform, mainCamera, mainCameraTransform);
                 }
