@@ -75,6 +75,7 @@ namespace doriax{
         
         BodyType type = BodyType::STATIC;
         bool newBody = true;
+        Vector3 loadedScale = Vector3::UNIT_SCALE;
     };
 
 }

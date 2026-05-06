@@ -5,6 +5,12 @@
 #include "Doriax.h"
 #include "gizmo/ViewportGizmo.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <unordered_set>
+#include <vector>
+
 namespace doriax::editor{
 
     struct LightObjects{
@@ -24,6 +30,9 @@ namespace doriax::editor{
 
     class SceneRender3D: public SceneRender{
     private:
+
+        static constexpr float kHullQuantizeScale = 4096.0f;
+        static constexpr size_t kMaxHullInputPoints = 96;
 
         Lines* lines;
 
@@ -46,6 +55,10 @@ namespace doriax::editor{
         bool instanciateBodyObject(Entity entity);
         bool instanciateJointObject(Entity entity);
         bool instanciateBoneLines(Entity entity);
+        static uint64_t quantizeHullKey(const Vector3& p);
+        static void pushUniqueHullPoint(std::vector<Vector3>& points, std::unordered_set<uint64_t>& seen, const Vector3& p);
+        static void reduceToExtremes(std::vector<Vector3>& points);
+        static void buildConvexHullEdges(std::vector<Vector3> points, const std::function<void(const Vector3&, const Vector3&)>& emit);
         void createOrUpdateBoneLines(Entity entity, const ModelComponent& model, bool visible, bool highlighted);
         void createOrUpdateLightIcon(Entity entity, const Transform& transform, LightType lightType, bool newLight);
         void createOrUpdateCameraIcon(Entity entity, const Transform& transform, bool newCamera);

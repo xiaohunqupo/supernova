@@ -131,7 +131,7 @@ namespace {
     static const FastPropertyDescriptor kTransformProperties[] = {
         makeFastProperty<Transform, Vector3, &Transform::position>("position", PropertyType::Vector3, UpdateFlags_Transform | UpdateFlags_Layout_Anchors),
         makeFastProperty<Transform, Quaternion, &Transform::rotation>("rotation", PropertyType::Quat, UpdateFlags_Transform),
-        makeFastProperty<Transform, Vector3, &Transform::scale>("scale", PropertyType::Vector3, UpdateFlags_Transform),
+        makeFastProperty<Transform, Vector3, &Transform::scale>("scale", PropertyType::Vector3, UpdateFlags_Transform | UpdateFlags_Body2D | UpdateFlags_Body3D),
         makeFastProperty<Transform, bool, &Transform::visible>("visible", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<Transform, bool, &Transform::billboard>("billboard", PropertyType::Bool, UpdateFlags_Transform),
         makeFastProperty<Transform, bool, &Transform::fakeBillboard>("fakeBillboard", PropertyType::Bool, UpdateFlags_Transform),

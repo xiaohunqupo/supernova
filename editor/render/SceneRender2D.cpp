@@ -3,6 +3,7 @@
 #include "Project.h"
 #include "LineDrawUtils.h"
 
+#include <algorithm>
 #include <cmath>
 
 
@@ -113,10 +114,21 @@ void editor::SceneRender2D::createOrUpdateBodyLines(Entity entity, const Transfo
 
     float alpha = highlighted ? 1.0f : 0.35f;
     const Vector4 bodyColor(0.2f, 0.95f, 0.95f, alpha);
-    const Matrix4 modelMatrix = transform.modelMatrix;
+    const Vector2 entityScale(transform.scale.x, transform.scale.y);
+    const Vector2 absScale(std::fabs(entityScale.x), std::fabs(entityScale.y));
+    const float radiusScale = std::max(absScale.x, absScale.y);
+    const Matrix4 bodyMatrix = Matrix4::translateMatrix(transform.worldPosition) * transform.worldRotation.getRotationMatrix();
+
+    auto scaledPoint = [&](const Vector2& point){
+        return point * entityScale;
+    };
+
+    auto scaledRadius = [&](float radius){
+        return radius * radiusScale;
+    };
 
     auto toWorld = [&](const Vector2& point){
-        return modelMatrix * Vector3(point.x, point.y, 0.0f);
+        return bodyMatrix * Vector3(point.x, point.y, 0.0f);
     };
 
     auto addCircle = [&](const Vector2& center, float radius, int segments){
@@ -197,20 +209,35 @@ void editor::SceneRender2D::createOrUpdateBodyLines(Entity entity, const Transfo
     for (size_t i = 0; i < body.numShapes; i++){
         const Shape2D& shape = body.shapes[i];
 
+        auto addPolygonEdges = [&](){
+            for (size_t j = 0; j < shape.numVertices; j++){
+                Vector2 p0 = scaledPoint(shape.vertices[j]);
+                Vector2 p1 = scaledPoint(shape.vertices[(j + 1) % shape.numVertices]);
+                bodyLinesObj->addLine(toWorld(p0), toWorld(p1), bodyColor);
+            }
+        };
+
         if (shape.type == Shape2DType::POLYGON){
             if (shape.numVertices >= 3){
-                if (shape.radius > 0.0f){
-                    addRoundedRect(shape.pointA, shape.pointB, shape.radius);
-                }else{
-                    for (size_t j = 0; j < shape.numVertices; j++){
-                        const Vector2& p0 = shape.vertices[j];
-                        const Vector2& p1 = shape.vertices[(j + 1) % shape.numVertices];
-                        bodyLinesObj->addLine(toWorld(p0), toWorld(p1), bodyColor);
+                if (shape.radius > 0.0f && shape.numVertices == 4){
+                    Vector2 minPt = scaledPoint(shape.vertices[0]);
+                    Vector2 maxPt = minPt;
+                    for (size_t j = 1; j < shape.numVertices; j++){
+                        Vector2 p = scaledPoint(shape.vertices[j]);
+                        minPt.x = std::min(minPt.x, p.x);
+                        minPt.y = std::min(minPt.y, p.y);
+                        maxPt.x = std::max(maxPt.x, p.x);
+                        maxPt.y = std::max(maxPt.y, p.y);
                     }
+                    addRoundedRect(minPt, maxPt, scaledRadius(shape.radius));
+                }else{
+                    addPolygonEdges();
                 }
             }else{
-                Vector2 minPt(std::min(shape.pointA.x, shape.pointB.x), std::min(shape.pointA.y, shape.pointB.y));
-                Vector2 maxPt(std::max(shape.pointA.x, shape.pointB.x), std::max(shape.pointA.y, shape.pointB.y));
+                Vector2 pointA = scaledPoint(shape.pointA);
+                Vector2 pointB = scaledPoint(shape.pointB);
+                Vector2 minPt(std::min(pointA.x, pointB.x), std::min(pointA.y, pointB.y));
+                Vector2 maxPt(std::max(pointA.x, pointB.x), std::max(pointA.y, pointB.y));
 
                 Vector2 p0(minPt.x, minPt.y);
                 Vector2 p1(maxPt.x, minPt.y);
@@ -223,11 +250,11 @@ void editor::SceneRender2D::createOrUpdateBodyLines(Entity entity, const Transfo
                 bodyLinesObj->addLine(toWorld(p3), toWorld(p0), bodyColor);
             }
         }else if (shape.type == Shape2DType::CIRCLE){
-            addCircle(shape.pointA, shape.radius, 24);
+            addCircle(scaledPoint(shape.pointA), scaledRadius(shape.radius), 24);
         }else if (shape.type == Shape2DType::CAPSULE){
-            Vector2 pointA = shape.pointA;
-            Vector2 pointB = shape.pointB;
-            float radius = shape.radius;
+            Vector2 pointA = scaledPoint(shape.pointA);
+            Vector2 pointB = scaledPoint(shape.pointB);
+            float radius = scaledRadius(shape.radius);
 
             if (radius <= 0.0f){
                 continue;
@@ -254,15 +281,15 @@ void editor::SceneRender2D::createOrUpdateBodyLines(Entity entity, const Transfo
             addArc(pointA, radius, baseAngle + 0.5f * M_PI, baseAngle + 1.5f * M_PI, 12);
             addArc(pointB, radius, baseAngle - 0.5f * M_PI, baseAngle + 0.5f * M_PI, 12);
         }else if (shape.type == Shape2DType::SEGMENT){
-            bodyLinesObj->addLine(toWorld(shape.pointA), toWorld(shape.pointB), bodyColor);
+            bodyLinesObj->addLine(toWorld(scaledPoint(shape.pointA)), toWorld(scaledPoint(shape.pointB)), bodyColor);
         }else if (shape.type == Shape2DType::CHAIN){
             if (shape.numVertices >= 2){
                 for (size_t j = 0; j < shape.numVertices - 1; j++){
-                    bodyLinesObj->addLine(toWorld(shape.vertices[j]), toWorld(shape.vertices[j + 1]), bodyColor);
+                    bodyLinesObj->addLine(toWorld(scaledPoint(shape.vertices[j])), toWorld(scaledPoint(shape.vertices[j + 1])), bodyColor);
                 }
 
                 if (shape.loop){
-                    bodyLinesObj->addLine(toWorld(shape.vertices[shape.numVertices - 1]), toWorld(shape.vertices[0]), bodyColor);
+                    bodyLinesObj->addLine(toWorld(scaledPoint(shape.vertices[shape.numVertices - 1])), toWorld(scaledPoint(shape.vertices[0])), bodyColor);
                 }
             }
         }
@@ -279,15 +306,19 @@ void editor::SceneRender2D::createOrUpdateJointLines(Entity entity, const Joint2
         return;
     }
 
-    auto getBodyWorldPoint = [&](Entity bodyEntity, const Vector2& localPoint){
+    auto getBodyWorldPosition = [&](Entity bodyEntity){
         if (bodyEntity != NULL_ENTITY){
             Transform* transform = scene->findComponent<Transform>(bodyEntity);
             if (transform){
-                return transform->modelMatrix * Vector3(localPoint.x, localPoint.y, 0.0f);
+                return transform->worldPosition;
             }
         }
 
-        return Vector3(localPoint.x, localPoint.y, 0.0f);
+        return Vector3::ZERO;
+    };
+
+    auto toWorldPoint = [](const Vector2& point){
+        return Vector3(point.x, point.y, 0.0f);
     };
 
     float alpha = highlighted ? 1.0f : 0.35f;
@@ -297,8 +328,28 @@ void editor::SceneRender2D::createOrUpdateJointLines(Entity entity, const Joint2
     const Vector4 axisColor(0.2f, 0.9f, 1.0f, alpha);
     const Vector4 limitColor(1.0f, 0.35f, 0.35f, alpha);
 
-    Vector3 anchorA = getBodyWorldPoint(joint.bodyA, joint.anchorA);
-    Vector3 anchorB = getBodyWorldPoint(joint.bodyB, joint.anchorB);
+    Vector3 anchorA = getBodyWorldPosition(joint.bodyA);
+    Vector3 anchorB = getBodyWorldPosition(joint.bodyB);
+
+    switch (joint.type){
+        case Joint2DType::DISTANCE:
+            if (!joint.autoAnchors){
+                anchorA = toWorldPoint(joint.anchorA);
+                anchorB = toWorldPoint(joint.anchorB);
+            }
+            break;
+        case Joint2DType::REVOLUTE:
+        case Joint2DType::PRISMATIC:
+        case Joint2DType::WHEEL:
+        case Joint2DType::WELD:
+            anchorA = anchorB = toWorldPoint(joint.anchorA);
+            break;
+        case Joint2DType::MOUSE:
+            anchorB = toWorldPoint(joint.target);
+            break;
+        case Joint2DType::MOTOR:
+            break;
+    }
 
     jointLinesObj->addLine(anchorA, anchorB, jointColor);
 
@@ -394,7 +445,6 @@ void editor::SceneRender2D::createOrUpdateJointLines(Entity entity, const Joint2
         }
         case Joint2DType::MOUSE:{
             Vector3 target(joint.target.x, joint.target.y, 0.0f);
-            jointLinesObj->addLine(anchorA, target, Vector4(1.0f, 0.4f, 0.4f, alpha));
             LineDrawUtils::addCircle2D(jointLinesObj, target, 8.0f * zoom, Vector4(1.0f, 0.4f, 0.4f, alpha), 16);
             jointLinesObj->addLine(target + Vector3(-markSize, 0.0f, 0.0f), target + Vector3(markSize, 0.0f, 0.0f), limitColor);
             jointLinesObj->addLine(target + Vector3(0.0f, -markSize, 0.0f), target + Vector3(0.0f, markSize, 0.0f), limitColor);

@@ -55,11 +55,19 @@ namespace doriax{
 		bool loadJoint2D(Entity entity, Joint2DComponent& joint);
 		bool loadJoint3D(Entity entity, Joint3DComponent& joint);
 
-		bool syncBody2DShapes(Body2DComponent& body);
+		bool syncBody2DShapes(Entity entity, Body2DComponent& body);
 		bool syncBody3DShapes(Entity entity, Body3DComponent& body);
 		bool createShape3DForIndex(Entity entity, Body3DComponent& body, size_t index);
 
 		void createGenericJoltBody(Entity entity, Body3DComponent& body, const JPH::ShapeRefC shape);
+
+		static Vector3 getEntityScale(Scene* scene, Entity entity);
+		static Vector3 absScale(const Vector3& scale);
+		static Vector2 getEntityScale2D(Scene* scene, Entity entity);
+		static Vector2 absScale2D(const Vector2& scale);
+		static float maxScaleXY(const Vector2& scale);
+		static float maxScaleXZ(const Vector3& scale);
+		static float maxScaleXYZ(const Vector3& scale);
 
 	public:
 		PhysicsSystem(Scene* scene);

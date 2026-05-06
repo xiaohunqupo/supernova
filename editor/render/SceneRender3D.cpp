@@ -7,9 +7,232 @@
 #include "Project.h"
 #include "LineDrawUtils.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <functional>
+#include <limits>
+#include <map>
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 using namespace doriax;
+
+uint64_t editor::SceneRender3D::quantizeHullKey(const Vector3& p) {
+    auto q = [](float v) { return int32_t(std::lround(v * SceneRender3D::kHullQuantizeScale)); };
+    uint64_t x = uint32_t(q(p.x));
+    uint64_t y = uint32_t(q(p.y));
+    uint64_t z = uint32_t(q(p.z));
+    return (x * 73856093u) ^ (y * 19349663u) ^ (z * 83492791u);
+}
+
+void editor::SceneRender3D::pushUniqueHullPoint(std::vector<Vector3>& points, std::unordered_set<uint64_t>& seen, const Vector3& p) {
+    if (!p.isValid()) return;
+    if (seen.insert(quantizeHullKey(p)).second) {
+        points.push_back(p);
+    }
+}
+
+// Reduce a large point cloud to its extremes along a fixed direction set.
+// The convex hull of these extremes is contained in the original hull and
+// is sufficient for visualization while bounding cost.
+void editor::SceneRender3D::reduceToExtremes(std::vector<Vector3>& points) {
+    if (points.size() <= SceneRender3D::kMaxHullInputPoints) return;
+
+    static const Vector3 directions[] = {
+        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
+        {1, 1, 0}, {1, -1, 0}, {-1, 1, 0}, {-1, -1, 0},
+        {1, 0, 1}, {1, 0, -1}, {-1, 0, 1}, {-1, 0, -1},
+        {0, 1, 1}, {0, 1, -1}, {0, -1, 1}, {0, -1, -1},
+        {1, 1, 1}, {1, 1, -1}, {1, -1, 1}, {1, -1, -1},
+        {-1, 1, 1}, {-1, 1, -1}, {-1, -1, 1}, {-1, -1, -1},
+    };
+    constexpr int dirCount = sizeof(directions) / sizeof(directions[0]);
+
+    std::vector<int> bestIndex(dirCount, 0);
+    std::vector<float> bestDot(dirCount, -std::numeric_limits<float>::infinity());
+
+    for (size_t i = 0; i < points.size(); i++) {
+        for (int d = 0; d < dirCount; d++) {
+            float dot = points[i].dotProduct(directions[d]);
+            if (dot > bestDot[d]) {
+                bestDot[d] = dot;
+                bestIndex[d] = int(i);
+            }
+        }
+    }
+
+    std::vector<Vector3> reduced;
+    std::unordered_set<uint64_t> seen;
+    reduced.reserve(dirCount);
+    for (int d = 0; d < dirCount; d++) {
+        pushUniqueHullPoint(reduced, seen, points[bestIndex[d]]);
+    }
+    points = std::move(reduced);
+}
+
+// Builds convex hull edges from a point set and emits each unique edge once.
+// Uses an incremental QuickHull with axis-extreme seeding, cached face
+// normals and a horizon-edge map. Falls back to a 2D Andrew monotone chain
+// when the input is coplanar.
+void editor::SceneRender3D::buildConvexHullEdges(std::vector<Vector3> points, const std::function<void(const Vector3&, const Vector3&)>& emit) {
+    reduceToExtremes(points);
+    if (points.size() < 2) return;
+    if (points.size() == 2) { emit(points[0], points[1]); return; }
+
+    Vector3 minPt = points[0];
+    Vector3 maxPt = points[0];
+    for (const Vector3& p : points) {
+        minPt.x = std::min(minPt.x, p.x); minPt.y = std::min(minPt.y, p.y); minPt.z = std::min(minPt.z, p.z);
+        maxPt.x = std::max(maxPt.x, p.x); maxPt.y = std::max(maxPt.y, p.y); maxPt.z = std::max(maxPt.z, p.z);
+    }
+    Vector3 extent = maxPt - minPt;
+    float maxExtent = std::max(extent.x, std::max(extent.y, extent.z));
+    float eps = std::max(1e-5f, maxExtent * 1e-5f);
+    float epsSq = eps * eps;
+
+    // Seed pair from the 6 axis extremes (min/max over x, y, z).
+    int axisExt[6] = {0, 0, 0, 0, 0, 0};
+    {
+        float bestVal[6] = {points[0].x, -points[0].x, points[0].y, -points[0].y, points[0].z, -points[0].z};
+        for (size_t i = 1; i < points.size(); i++) {
+            float v[6] = {points[i].x, -points[i].x, points[i].y, -points[i].y, points[i].z, -points[i].z};
+            for (int k = 0; k < 6; k++) {
+                if (v[k] > bestVal[k]) { bestVal[k] = v[k]; axisExt[k] = int(i); }
+            }
+        }
+    }
+
+    int i0 = 0, i1 = 0;
+    float maxDistSq = 0.0f;
+    for (int a = 0; a < 6; a++) {
+        for (int b = a + 1; b < 6; b++) {
+            float d = points[axisExt[a]].squaredDistance(points[axisExt[b]]);
+            if (d > maxDistSq) { maxDistSq = d; i0 = axisExt[a]; i1 = axisExt[b]; }
+        }
+    }
+    if (maxDistSq <= epsSq) return;
+
+    Vector3 baseLine = points[i1] - points[i0];
+    int i2 = -1;
+    float maxLineSq = 0.0f;
+    for (size_t i = 0; i < points.size(); i++) {
+        float d = (points[i] - points[i0]).crossProduct(baseLine).squaredLength() / maxDistSq;
+        if (d > maxLineSq) { maxLineSq = d; i2 = int(i); }
+    }
+    if (i2 < 0 || maxLineSq <= epsSq) { emit(points[i0], points[i1]); return; }
+
+    Vector3 planeNormal = (points[i1] - points[i0]).crossProduct(points[i2] - points[i0]);
+    float planeNormalLen = planeNormal.length();
+
+    int i3 = -1;
+    float maxPlaneDist = 0.0f;
+    for (size_t i = 0; i < points.size(); i++) {
+        float d = std::fabs(planeNormal.dotProduct(points[i] - points[i0]) / planeNormalLen);
+        if (d > maxPlaneDist) { maxPlaneDist = d; i3 = int(i); }
+    }
+
+    // Coplanar fallback: 2D convex hull (Andrew's monotone chain).
+    if (i3 < 0 || maxPlaneDist <= eps) {
+        Vector3 absN(std::fabs(planeNormal.x), std::fabs(planeNormal.y), std::fabs(planeNormal.z));
+        int drop = (absN.y > absN.x && absN.y >= absN.z) ? 1 : ((absN.z > absN.x) ? 2 : 0);
+        struct P2 { float x, y; int idx; };
+        std::vector<P2> pp;
+        pp.reserve(points.size());
+        for (size_t i = 0; i < points.size(); i++) {
+            const Vector3& p = points[i];
+            float px = drop == 0 ? p.y : p.x;
+            float py = drop == 2 ? p.y : p.z;
+            pp.push_back({px, py, int(i)});
+        }
+        std::sort(pp.begin(), pp.end(), [](const P2& a, const P2& b) { return a.x < b.x || (a.x == b.x && a.y < b.y); });
+        auto cross2 = [](const P2& a, const P2& b, const P2& c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); };
+        std::vector<P2> poly;
+        for (const P2& p : pp) {
+            while (poly.size() >= 2 && cross2(poly[poly.size() - 2], poly.back(), p) <= 0.0f) poly.pop_back();
+            poly.push_back(p);
+        }
+        size_t lower = poly.size();
+        for (auto it = pp.rbegin(); it != pp.rend(); ++it) {
+            while (poly.size() > lower && cross2(poly[poly.size() - 2], poly.back(), *it) <= 0.0f) poly.pop_back();
+            poly.push_back(*it);
+        }
+        if (!poly.empty()) poly.pop_back();
+        for (size_t i = 0; i < poly.size(); i++) {
+            emit(points[poly[i].idx], points[poly[(i + 1) % poly.size()].idx]);
+        }
+        return;
+    }
+
+    Vector3 interior = (points[i0] + points[i1] + points[i2] + points[i3]) * 0.25f;
+
+    struct Face { int a, b, c; Vector3 n; bool removed; };
+    std::vector<Face> faces;
+    faces.reserve(64);
+
+    auto pushFace = [&](int a, int b, int c) {
+        Vector3 n = (points[b] - points[a]).crossProduct(points[c] - points[a]);
+        if (n.squaredLength() <= epsSq) return;
+        if (n.dotProduct(interior - points[a]) > 0.0f) { std::swap(b, c); n = -n; }
+        faces.push_back({a, b, c, n, false});
+    };
+
+    pushFace(i0, i1, i2);
+    pushFace(i0, i3, i1);
+    pushFace(i0, i2, i3);
+    pushFace(i1, i3, i2);
+
+    auto edgeKey = [](int a, int b) { return (uint64_t(uint32_t(a)) << 32) | uint32_t(b); };
+
+    std::vector<int> visible;
+    std::unordered_map<uint64_t, int> horizon;
+
+    for (size_t pi = 0; pi < points.size(); pi++) {
+        if (int(pi) == i0 || int(pi) == i1 || int(pi) == i2 || int(pi) == i3) continue;
+
+        visible.clear();
+        for (size_t fi = 0; fi < faces.size(); fi++) {
+            const Face& f = faces[fi];
+            if (f.removed) continue;
+            if (f.n.dotProduct(points[pi] - points[f.a]) > eps * f.n.length()) {
+                visible.push_back(int(fi));
+            }
+        }
+        if (visible.empty()) continue;
+
+        horizon.clear();
+        auto addEdge = [&](int s, int e) {
+            uint64_t rev = edgeKey(e, s);
+            auto it = horizon.find(rev);
+            if (it != horizon.end()) { horizon.erase(it); return; }
+            horizon[edgeKey(s, e)] = s; // value unused; key encodes the directed edge
+        };
+        for (int fi : visible) {
+            Face& f = faces[fi];
+            addEdge(f.a, f.b); addEdge(f.b, f.c); addEdge(f.c, f.a);
+            f.removed = true;
+        }
+        for (const auto& kv : horizon) {
+            int s = int(uint32_t(kv.first >> 32));
+            int e = int(uint32_t(kv.first));
+            pushFace(s, e, int(pi));
+        }
+    }
+
+    std::unordered_set<uint64_t> drawn;
+    auto emitEdge = [&](int a, int b) {
+        if (a == b) return;
+        int lo = std::min(a, b), hi = std::max(a, b);
+        if (drawn.insert(edgeKey(lo, hi)).second) emit(points[a], points[b]);
+    };
+    for (const Face& f : faces) {
+        if (f.removed) continue;
+        emitEdge(f.a, f.b); emitEdge(f.b, f.c); emitEdge(f.c, f.a);
+    }
+}
 
 editor::SceneRender3D::SceneRender3D(Scene* scene): SceneRender(scene, false, true, 40.0, 0.01){
     ScopedDefaultEntityPool sys(*scene, EntityPool::System);
@@ -290,11 +513,21 @@ void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transfo
 
     float alpha = highlighted ? 1.0f : 0.35f;
     const Vector4 bodyColor(0.2f, 0.95f, 0.95f, alpha);
-    const Matrix4 modelMatrix = transform.modelMatrix;
+    const Vector3 entityScale = transform.scale;
+    const Vector3 absScale(std::fabs(entityScale.x), std::fabs(entityScale.y), std::fabs(entityScale.z));
+    const Matrix4 bodyMatrix = Matrix4::translateMatrix(transform.worldPosition) * transform.worldRotation.getRotationMatrix();
+
+    auto maxScaleXZ = [&](){
+        return std::max(absScale.x, absScale.z);
+    };
+
+    auto maxScaleXYZ = [&](){
+        return std::max(absScale.x, std::max(absScale.y, absScale.z));
+    };
 
     auto addTransformedLine = [&](const Matrix4& shapeMatrix, const Vector3& from, const Vector3& to) {
-        Vector3 worldFrom = modelMatrix * (shapeMatrix * from);
-        Vector3 worldTo = modelMatrix * (shapeMatrix * to);
+        Vector3 worldFrom = bodyMatrix * (shapeMatrix * from);
+        Vector3 worldTo = bodyMatrix * (shapeMatrix * to);
         bo.lines->addLine(worldFrom, worldTo, bodyColor);
     };
 
@@ -481,22 +714,149 @@ void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transfo
         }
     };
 
+    auto resolveNamedBuffer = [](const std::map<std::string, Buffer*>& buffers, const std::string& bufferName, Buffer* fallback) {
+        if (!bufferName.empty()) {
+            auto it = buffers.find(bufferName);
+            if (it != buffers.end()) {
+                return it->second;
+            }
+        }
+
+        return fallback;
+    };
+
+    auto forEachEntityMeshSubmesh = [&](const Shape3D& shapeData, auto&& callback) {
+        Entity meshEntity = shapeData.sourceEntity == NULL_ENTITY ? entity : shapeData.sourceEntity;
+        MeshComponent* mesh = scene->findComponent<MeshComponent>(meshEntity);
+        Transform* sourceTransform = scene->findComponent<Transform>(meshEntity);
+
+        if (!mesh || !sourceTransform) {
+            return false;
+        }
+
+        std::map<std::string, Buffer*> buffers;
+        if (mesh->buffer.getSize() > 0) buffers["vertices"] = &mesh->buffer;
+        if (mesh->indices.getSize() > 0) buffers["indices"] = &mesh->indices;
+        for (int bufferIndex = 0; bufferIndex < mesh->numExternalBuffers; bufferIndex++) {
+            buffers[mesh->eBuffers[bufferIndex].getName()] = &mesh->eBuffers[bufferIndex];
+        }
+
+        Buffer* defaultIndexBuffer = nullptr;
+        Attribute defaultIndexAttr;
+        Buffer* defaultVertexBuffer = nullptr;
+        Attribute defaultVertexAttr;
+
+        for (auto const& buf : buffers) {
+            if (buf.second->getAttribute(AttributeType::INDEX)) {
+                defaultIndexBuffer = buf.second;
+                defaultIndexAttr = *buf.second->getAttribute(AttributeType::INDEX);
+            }
+            if (buf.second->getAttribute(AttributeType::POSITION)) {
+                defaultVertexBuffer = buf.second;
+                defaultVertexAttr = *buf.second->getAttribute(AttributeType::POSITION);
+            }
+        }
+
+        Vector3 sourceScale = sourceTransform->scale;
+
+        for (size_t submeshIndex = 0; submeshIndex < mesh->numSubmeshes; submeshIndex++) {
+            Buffer* submeshIndexBuffer = defaultIndexBuffer;
+            Attribute submeshIndexAttr = defaultIndexAttr;
+            Buffer* submeshVertexBuffer = defaultVertexBuffer;
+            Attribute submeshVertexAttr = defaultVertexAttr;
+
+            for (auto const& attr : mesh->submeshes[submeshIndex].attributes) {
+                if (attr.first == AttributeType::INDEX) {
+                    submeshIndexBuffer = resolveNamedBuffer(buffers, attr.second.getBufferName(), submeshIndexBuffer);
+                    submeshIndexAttr = attr.second;
+                }
+                if (attr.first == AttributeType::POSITION) {
+                    submeshVertexBuffer = resolveNamedBuffer(buffers, attr.second.getBufferName(), submeshVertexBuffer);
+                    submeshVertexAttr = attr.second;
+                }
+            }
+
+            callback(submeshVertexBuffer, submeshVertexAttr, submeshIndexBuffer, submeshIndexAttr, sourceScale);
+        }
+
+        return true;
+    };
+
+    auto collectMeshHullPoints = [&](const Shape3D& shapeData, std::vector<Vector3>& hullPoints) {
+        std::unordered_set<uint64_t> seen;
+        bool resolved = forEachEntityMeshSubmesh(shapeData, [&](Buffer* vbuf, Attribute vattr, Buffer*, Attribute, const Vector3& sourceScale) {
+            if (!vbuf) return;
+            int count = int(vattr.getCount());
+            for (int v = 0; v < count; v++) {
+                pushUniqueHullPoint(hullPoints, seen, vbuf->getVector3(&vattr, v) * sourceScale);
+            }
+        });
+        return resolved && !hullPoints.empty();
+    };
+
+    auto drawConvexHull = [&](const Matrix4& shapeMatrix, const std::vector<Vector3>& sourcePoints) {
+        if (sourcePoints.size() < 2) return false;
+        bool drew = false;
+        buildConvexHullEdges(sourcePoints, [&](const Vector3& a, const Vector3& b) {
+            addTransformedLine(shapeMatrix, a, b);
+            drew = true;
+        });
+        return drew;
+    };
+
+    auto drawEntityMeshTriangleLines = [&](const Shape3D& shapeData, const Matrix4& shapeMatrix) {
+        bool drewLines = false;
+        bool resolvedMesh = forEachEntityMeshSubmesh(shapeData, [&](Buffer* vbuf, Attribute vattr, Buffer* ibuf, Attribute iattr, const Vector3& sourceScale) {
+            if (!vbuf) return;
+
+            auto emitTri = [&](unsigned int a, unsigned int b, unsigned int c) {
+                if (a >= vattr.getCount() || b >= vattr.getCount() || c >= vattr.getCount()) return;
+                Vector3 p0 = vbuf->getVector3(&vattr, a) * sourceScale;
+                Vector3 p1 = vbuf->getVector3(&vattr, b) * sourceScale;
+                Vector3 p2 = vbuf->getVector3(&vattr, c) * sourceScale;
+                addTransformedLine(shapeMatrix, p0, p1);
+                addTransformedLine(shapeMatrix, p1, p2);
+                addTransformedLine(shapeMatrix, p2, p0);
+                drewLines = true;
+            };
+
+            if (!ibuf) {
+                int triCount = int(vattr.getCount() / 3);
+                for (int t = 0; t < triCount; t++) emitTri(t * 3, t * 3 + 1, t * 3 + 2);
+                return;
+            }
+
+            int triCount = int(iattr.getCount() / 3);
+            auto readIndex = [&](unsigned int idx) -> uint32_t {
+                if (iattr.getDataType() == AttributeDataType::UNSIGNED_INT) return ibuf->getUInt32(&iattr, idx);
+                if (iattr.getDataType() == AttributeDataType::UNSIGNED_SHORT) return ibuf->getUInt16(&iattr, idx);
+                return UINT32_MAX;
+            };
+            for (int t = 0; t < triCount; t++) {
+                uint32_t i0 = readIndex(t * 3), i1 = readIndex(t * 3 + 1), i2 = readIndex(t * 3 + 2);
+                if (i0 == UINT32_MAX || i1 == UINT32_MAX || i2 == UINT32_MAX) continue;
+                emitTri(i0, i1, i2);
+            }
+        });
+        return resolvedMesh && drewLines;
+    };
+
     for (size_t i = 0; i < body.numShapes; i++) {
         const Shape3D& shapeData = body.shapes[i];
 
-        Matrix4 shapeMatrix = Matrix4::translateMatrix(shapeData.position) * shapeData.rotation.getRotationMatrix();
+        Matrix4 shapeMatrix = Matrix4::translateMatrix(shapeData.position * entityScale) * shapeData.rotation.getRotationMatrix();
 
         if (shapeData.type == Shape3DType::BOX) {
-            Vector3 halfSize(shapeData.width * 0.5f, shapeData.height * 0.5f, shapeData.depth * 0.5f);
+            Vector3 halfSize(shapeData.width * absScale.x * 0.5f, shapeData.height * absScale.y * 0.5f, shapeData.depth * absScale.z * 0.5f);
             addBox(shapeMatrix, -halfSize, halfSize);
             addBoxRings(shapeMatrix, -halfSize, halfSize);
             addBoxVerticals(shapeMatrix, -halfSize, halfSize);
             addBoxCaps(shapeMatrix, -halfSize, halfSize);
         } else if (shapeData.type == Shape3DType::SPHERE) {
-            addSpherePattern(shapeMatrix, shapeData.radius);
+            addSpherePattern(shapeMatrix, shapeData.radius * maxScaleXYZ());
         } else if (shapeData.type == Shape3DType::CAPSULE) {
-            const float halfHeight = shapeData.halfHeight;
-            const float radius = shapeData.radius;
+            const float halfHeight = shapeData.halfHeight * absScale.y;
+            const float radius = shapeData.radius * maxScaleXZ();
             Vector3 top(0, halfHeight, 0);
             Vector3 bottom(0, -halfHeight, 0);
 
@@ -507,9 +867,10 @@ void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transfo
             addHemisphere(shapeMatrix, top, radius, true);
             addHemisphere(shapeMatrix, bottom, radius, false);
         } else if (shapeData.type == Shape3DType::TAPERED_CAPSULE) {
-            const float halfHeight = shapeData.halfHeight;
-            const float topRadius = shapeData.topRadius;
-            const float bottomRadius = shapeData.bottomRadius;
+            const float halfHeight = shapeData.halfHeight * absScale.y;
+            const float radiusScale = maxScaleXZ();
+            const float topRadius = shapeData.topRadius * radiusScale;
+            const float bottomRadius = shapeData.bottomRadius * radiusScale;
 
             addCircle(shapeMatrix, Vector3(0, halfHeight, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), topRadius, 20);
             addCircle(shapeMatrix, Vector3(0, -halfHeight, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), bottomRadius, 20);
@@ -518,31 +879,36 @@ void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transfo
             addHemisphere(shapeMatrix, Vector3(0, halfHeight, 0), topRadius, true);
             addHemisphere(shapeMatrix, Vector3(0, -halfHeight, 0), bottomRadius, false);
         } else if (shapeData.type == Shape3DType::CYLINDER) {
-            const float halfHeight = shapeData.halfHeight;
-            const float radius = shapeData.radius;
+            const float halfHeight = shapeData.halfHeight * absScale.y;
+            const float radius = shapeData.radius * maxScaleXZ();
 
             addCircle(shapeMatrix, Vector3(0, halfHeight, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), radius, 20);
             addCircle(shapeMatrix, Vector3(0, -halfHeight, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), radius, 20);
             addCapsuleMiddle(shapeMatrix, halfHeight, radius, radius);
             addCylinderRings(shapeMatrix, halfHeight, radius);
         } else if (shapeData.type == Shape3DType::CONVEX_HULL) {
-            if (shapeData.numVertices >= 2) {
-                Vector3 minPt = shapeData.vertices[0];
-                Vector3 maxPt = shapeData.vertices[0];
-
-                for (size_t v = 1; v < shapeData.numVertices; v++) {
-                    minPt.x = std::min(minPt.x, shapeData.vertices[v].x);
-                    minPt.y = std::min(minPt.y, shapeData.vertices[v].y);
-                    minPt.z = std::min(minPt.z, shapeData.vertices[v].z);
-                    maxPt.x = std::max(maxPt.x, shapeData.vertices[v].x);
-                    maxPt.y = std::max(maxPt.y, shapeData.vertices[v].y);
-                    maxPt.z = std::max(maxPt.z, shapeData.vertices[v].z);
+            if (shapeData.source == Shape3DSource::ENTITY_MESH) {
+                std::vector<Vector3> hullPoints;
+                if (!collectMeshHullPoints(shapeData, hullPoints) || !drawConvexHull(shapeMatrix, hullPoints)) {
+                    continue;
                 }
-
-                addBox(shapeMatrix, minPt, maxPt);
+            } else if (shapeData.numVertices >= 2) {
+                std::vector<Vector3> hullPoints;
+                std::unordered_set<uint64_t> seen;
+                hullPoints.reserve(shapeData.numVertices);
+                for (size_t vertexIndex = 0; vertexIndex < shapeData.numVertices; vertexIndex++) {
+                    pushUniqueHullPoint(hullPoints, seen, shapeData.vertices[vertexIndex] * entityScale);
+                }
+                if (!drawConvexHull(shapeMatrix, hullPoints)) {
+                    continue;
+                }
             }
         } else if (shapeData.type == Shape3DType::MESH) {
-            if (shapeData.numVertices >= 3 && shapeData.numIndices >= 3) {
+            if (shapeData.source == Shape3DSource::ENTITY_MESH) {
+                if (!drawEntityMeshTriangleLines(shapeData, shapeMatrix)) {
+                    continue;
+                }
+            } else if (shapeData.numVertices >= 3 && shapeData.numIndices >= 3) {
                 int triangles = int(shapeData.numIndices / 3);
                 for (int tri = 0; tri < triangles; tri++) {
                     uint16_t i0 = shapeData.indices[tri * 3 + 0];
@@ -550,9 +916,9 @@ void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transfo
                     uint16_t i2 = shapeData.indices[tri * 3 + 2];
 
                     if (i0 < shapeData.numVertices && i1 < shapeData.numVertices && i2 < shapeData.numVertices) {
-                        const Vector3& p0 = shapeData.vertices[i0];
-                        const Vector3& p1 = shapeData.vertices[i1];
-                        const Vector3& p2 = shapeData.vertices[i2];
+                        Vector3 p0 = shapeData.vertices[i0] * entityScale;
+                        Vector3 p1 = shapeData.vertices[i1] * entityScale;
+                        Vector3 p2 = shapeData.vertices[i2] * entityScale;
 
                         addTransformedLine(shapeMatrix, p0, p1);
                         addTransformedLine(shapeMatrix, p1, p2);
@@ -582,15 +948,15 @@ void editor::SceneRender3D::createOrUpdateJointLines(Entity entity, const Joint3
         return;
     }
 
-    auto getBodyWorldPoint = [&](Entity bodyEntity, const Vector3& localPoint){
+    auto getBodyWorldPosition = [&](Entity bodyEntity){
         if (bodyEntity != NULL_ENTITY){
             Transform* transform = scene->findComponent<Transform>(bodyEntity);
             if (transform){
-                return transform->modelMatrix * localPoint;
+                return transform->worldPosition;
             }
         }
 
-        return localPoint;
+        return Vector3::ZERO;
     };
 
     float alpha = highlighted ? 1.0f : 0.35f;
@@ -600,8 +966,37 @@ void editor::SceneRender3D::createOrUpdateJointLines(Entity entity, const Joint3
     const Vector4 axisColor(0.2f, 0.9f, 1.0f, alpha);
     const Vector4 limitColor(1.0f, 0.35f, 0.35f, alpha);
 
-    Vector3 anchorA = getBodyWorldPoint(joint.bodyA, joint.anchorA);
-    Vector3 anchorB = getBodyWorldPoint(joint.bodyB, joint.anchorB);
+    Vector3 anchorA = getBodyWorldPosition(joint.bodyA);
+    Vector3 anchorB = getBodyWorldPosition(joint.bodyB);
+
+    switch (joint.type){
+        case Joint3DType::DISTANCE:
+            if (!joint.autoAnchors){
+                anchorA = joint.anchorA;
+                anchorB = joint.anchorB;
+            }
+            break;
+        case Joint3DType::POINT:
+        case Joint3DType::HINGE:
+        case Joint3DType::CONE:
+        case Joint3DType::SWINGTWIST:
+            anchorA = anchorB = joint.anchor;
+            break;
+        case Joint3DType::SIXDOF:
+            anchorA = joint.anchorA;
+            anchorB = joint.anchorB;
+            break;
+        case Joint3DType::PRISMATIC:
+            anchorA = anchorB = (anchorA + anchorB) * 0.5f;
+            break;
+        case Joint3DType::FIXED:
+        case Joint3DType::PATH:
+        case Joint3DType::GEAR:
+        case Joint3DType::RACKANDPINON:
+        case Joint3DType::PULLEY:
+        default:
+            break;
+    }
 
     jointLinesObj->addLine(anchorA, anchorB, jointColor);
 
@@ -635,10 +1030,27 @@ void editor::SceneRender3D::createOrUpdateJointLines(Entity entity, const Joint3
         case Joint3DType::PRISMATIC:{
             Vector3 axis = joint.axis.length() > 0.0001f ? joint.axis.normalized() : dirABNorm;
             auto [railAxis, side, up] = LineDrawUtils::makeBasis(axis);
-            float halfRail = 0.8f;
+            float limitMin = joint.limitsMin;
+            float limitMax = joint.limitsMax;
+            if (limitMax < limitMin){
+                std::swap(limitMin, limitMax);
+            }
+            if (limitMin > 0.0f){
+                float offset = limitMin;
+                limitMin -= offset;
+                limitMax -= offset;
+            }else if (limitMax < 0.0f){
+                float offset = limitMax;
+                limitMin -= offset;
+                limitMax -= offset;
+            }
+            if (std::fabs(limitMax - limitMin) < 0.000001f){
+                limitMin = -0.4f;
+                limitMax = 0.4f;
+            }
 
-            Vector3 railStart = anchorA - railAxis * halfRail;
-            Vector3 railEnd = anchorA + railAxis * halfRail;
+            Vector3 railStart = anchorA + railAxis * limitMin;
+            Vector3 railEnd = anchorA + railAxis * limitMax;
 
             float railOffset = 0.06f;
             jointLinesObj->addLine(railStart + side * railOffset, railEnd + side * railOffset, axisColor);
@@ -647,20 +1059,18 @@ void editor::SceneRender3D::createOrUpdateJointLines(Entity entity, const Joint3
             jointLinesObj->addLine(railStart - side * 0.12f, railStart + side * 0.12f, limitColor);
             jointLinesObj->addLine(railEnd - side * 0.12f, railEnd + side * 0.12f, limitColor);
 
-            float sliderPos = (anchorB - anchorA).dotProduct(railAxis);
-            sliderPos = std::max(-halfRail, std::min(halfRail, sliderPos));
-            Vector3 sliderCenter = anchorA + railAxis * sliderPos;
+            Vector3 sliderCenter = anchorA;
 
             LineDrawUtils::addRing3D(jointLinesObj, sliderCenter, railAxis, 0.09f, jointColor, 18);
             jointLinesObj->addLine(sliderCenter - up * 0.1f, sliderCenter + up * 0.1f, helperColor);
             break;
         }
         case Joint3DType::CONE:{
-            Vector3 axis = joint.axis.length() > 0.0001f ? joint.axis.normalized() : dirABNorm;
+            Vector3 axis = joint.twistAxis.length() > 0.0001f ? joint.twistAxis.normalized() : dirABNorm;
             auto [coneAxis, right, forward] = LineDrawUtils::makeBasis(axis);
             (void)right;
             float coneLen = 0.9f;
-            float angle = std::max(1.0f, joint.normalHalfConeAngle) * (M_PI / 180.0f);
+            float angle = std::clamp(joint.normalHalfConeAngle, 0.0f, 179.9f) * (M_PI / 180.0f);
             float radius = coneLen * std::tan(angle);
             Vector3 end = anchorA + coneAxis * coneLen;
             LineDrawUtils::addRing3D(jointLinesObj, end, coneAxis, radius, axisColor, 22);

@@ -16,6 +16,40 @@
 
 using namespace doriax;
 
+Vector3 PhysicsSystem::getEntityScale(Scene* scene, Entity entity){
+    Transform* transform = scene->findComponent<Transform>(entity);
+    if (!transform){
+        return Vector3::UNIT_SCALE;
+    }
+
+    return transform->scale;
+}
+
+Vector3 PhysicsSystem::absScale(const Vector3& scale){
+    return Vector3(std::fabs(scale.x), std::fabs(scale.y), std::fabs(scale.z));
+}
+
+Vector2 PhysicsSystem::getEntityScale2D(Scene* scene, Entity entity){
+    Vector3 scale = getEntityScale(scene, entity);
+    return Vector2(scale.x, scale.y);
+}
+
+Vector2 PhysicsSystem::absScale2D(const Vector2& scale){
+    return Vector2(std::fabs(scale.x), std::fabs(scale.y));
+}
+
+float PhysicsSystem::maxScaleXY(const Vector2& scale){
+    return std::max(scale.x, scale.y);
+}
+
+float PhysicsSystem::maxScaleXZ(const Vector3& scale){
+    return std::max(scale.x, scale.z);
+}
+
+float PhysicsSystem::maxScaleXYZ(const Vector3& scale){
+    return std::max(scale.x, std::max(scale.y, scale.z));
+}
+
 
 PhysicsSystem::PhysicsSystem(Scene* scene): SubSystem(scene){
 	signature.set(scene->getComponentId<Body2DComponent>());
@@ -326,10 +360,25 @@ bool PhysicsSystem::loadJoint3D(Entity entity, Joint3DComponent& joint){
     }
 }
 
-bool PhysicsSystem::syncBody2DShapes(Body2DComponent& body){
+bool PhysicsSystem::syncBody2DShapes(Entity entity, Body2DComponent& body){
     if (!b2Body_IsValid(body.body)){
         return false;
     }
+
+    const Vector2 entityScale = getEntityScale2D(scene, entity);
+    const float radiusScale = maxScaleXY(absScale2D(entityScale));
+
+    auto scaledPoint = [&](const Vector2& point){
+        return point * entityScale;
+    };
+
+    auto toBox2DPoint = [&](const Vector2& point){
+        return b2Vec2{point.x / pointsToMeterScale2D, point.y / pointsToMeterScale2D};
+    };
+
+    auto toBox2DRadius = [&](float radius){
+        return radius * radiusScale / pointsToMeterScale2D;
+    };
 
     for (size_t i = 0; i < body.numShapes; i++){
         destroyShape2D(body, i);
@@ -360,11 +409,13 @@ bool PhysicsSystem::syncBody2DShapes(Body2DComponent& body){
             if (shapeData.numVertices >= 3){
                 b2vertices.resize(shapeData.numVertices);
                 for (size_t j = 0; j < shapeData.numVertices; j++){
-                    b2vertices[j] = {shapeData.vertices[j].x / pointsToMeterScale2D, shapeData.vertices[j].y / pointsToMeterScale2D};
+                    b2vertices[j] = toBox2DPoint(scaledPoint(shapeData.vertices[j]));
                 }
             }else{
-                const Vector2 minPt(std::min(shapeData.pointA.x, shapeData.pointB.x), std::min(shapeData.pointA.y, shapeData.pointB.y));
-                const Vector2 maxPt(std::max(shapeData.pointA.x, shapeData.pointB.x), std::max(shapeData.pointA.y, shapeData.pointB.y));
+                const Vector2 pointA = scaledPoint(shapeData.pointA);
+                const Vector2 pointB = scaledPoint(shapeData.pointB);
+                const Vector2 minPt(std::min(pointA.x, pointB.x), std::min(pointA.y, pointB.y));
+                const Vector2 maxPt(std::max(pointA.x, pointB.x), std::max(pointA.y, pointB.y));
 
                 if (minPt == maxPt){
                     Log::error("Cannot create polygon shape %zu: less than 3 vertices and invalid pointA/pointB fallback", i);
@@ -372,23 +423,25 @@ bool PhysicsSystem::syncBody2DShapes(Body2DComponent& body){
                 }
 
                 b2vertices.resize(4);
-                b2vertices[0] = {minPt.x / pointsToMeterScale2D, minPt.y / pointsToMeterScale2D};
-                b2vertices[1] = {maxPt.x / pointsToMeterScale2D, minPt.y / pointsToMeterScale2D};
-                b2vertices[2] = {maxPt.x / pointsToMeterScale2D, maxPt.y / pointsToMeterScale2D};
-                b2vertices[3] = {minPt.x / pointsToMeterScale2D, maxPt.y / pointsToMeterScale2D};
+                b2vertices[0] = toBox2DPoint(minPt);
+                b2vertices[1] = toBox2DPoint(Vector2(maxPt.x, minPt.y));
+                b2vertices[2] = toBox2DPoint(maxPt);
+                b2vertices[3] = toBox2DPoint(Vector2(minPt.x, maxPt.y));
             }
 
             b2Hull hull = b2ComputeHull(&b2vertices[0], (int)b2vertices.size());
             if (!b2ValidateHull(&hull)){
-                const Vector2 minPt(std::min(shapeData.pointA.x, shapeData.pointB.x), std::min(shapeData.pointA.y, shapeData.pointB.y));
-                const Vector2 maxPt(std::max(shapeData.pointA.x, shapeData.pointB.x), std::max(shapeData.pointA.y, shapeData.pointB.y));
+                const Vector2 pointA = scaledPoint(shapeData.pointA);
+                const Vector2 pointB = scaledPoint(shapeData.pointB);
+                const Vector2 minPt(std::min(pointA.x, pointB.x), std::min(pointA.y, pointB.y));
+                const Vector2 maxPt(std::max(pointA.x, pointB.x), std::max(pointA.y, pointB.y));
 
                 if (minPt != maxPt){
                     b2vertices.resize(4);
-                    b2vertices[0] = {minPt.x / pointsToMeterScale2D, minPt.y / pointsToMeterScale2D};
-                    b2vertices[1] = {maxPt.x / pointsToMeterScale2D, minPt.y / pointsToMeterScale2D};
-                    b2vertices[2] = {maxPt.x / pointsToMeterScale2D, maxPt.y / pointsToMeterScale2D};
-                    b2vertices[3] = {minPt.x / pointsToMeterScale2D, maxPt.y / pointsToMeterScale2D};
+                    b2vertices[0] = toBox2DPoint(minPt);
+                    b2vertices[1] = toBox2DPoint(Vector2(maxPt.x, minPt.y));
+                    b2vertices[2] = toBox2DPoint(maxPt);
+                    b2vertices[3] = toBox2DPoint(Vector2(minPt.x, maxPt.y));
                     hull = b2ComputeHull(&b2vertices[0], (int)b2vertices.size());
                 }
 
@@ -398,43 +451,49 @@ bool PhysicsSystem::syncBody2DShapes(Body2DComponent& body){
                 }
             }
 
-            b2Polygon polygon = b2MakePolygon(&hull, std::max(0.0f, shapeData.radius / pointsToMeterScale2D));
+            b2Polygon polygon = b2MakePolygon(&hull, std::max(0.0f, toBox2DRadius(shapeData.radius)));
             shapeData.shape = b2CreatePolygonShape(body.body, &shapeDef, &polygon);
         }else if (shapeData.type == Shape2DType::CIRCLE){
-            if (shapeData.radius <= 0.0f){
+            float radius = toBox2DRadius(shapeData.radius);
+            if (radius <= 0.0f){
                 Log::error("Cannot create circle shape %zu: radius must be > 0", i);
                 continue;
             }
 
             b2Circle circle = {0};
-            circle.center = {shapeData.pointA.x / pointsToMeterScale2D, shapeData.pointA.y / pointsToMeterScale2D};
-            circle.radius = shapeData.radius / pointsToMeterScale2D;
+            circle.center = toBox2DPoint(scaledPoint(shapeData.pointA));
+            circle.radius = radius;
             shapeData.shape = b2CreateCircleShape(body.body, &shapeDef, &circle);
         }else if (shapeData.type == Shape2DType::CAPSULE){
-            if (shapeData.radius <= 0.0f){
+            float radius = toBox2DRadius(shapeData.radius);
+            if (radius <= 0.0f){
                 Log::error("Cannot create capsule shape %zu: radius must be > 0", i);
                 continue;
             }
 
-            if (shapeData.pointA == shapeData.pointB){
+            Vector2 center1 = scaledPoint(shapeData.pointA);
+            Vector2 center2 = scaledPoint(shapeData.pointB);
+            if (center1 == center2){
                 Log::error("Cannot create capsule shape %zu: pointA and pointB are equal", i);
                 continue;
             }
 
             b2Capsule capsule = {0};
-            capsule.center1 = {shapeData.pointA.x / pointsToMeterScale2D, shapeData.pointA.y / pointsToMeterScale2D};
-            capsule.center2 = {shapeData.pointB.x / pointsToMeterScale2D, shapeData.pointB.y / pointsToMeterScale2D};
-            capsule.radius = shapeData.radius / pointsToMeterScale2D;
+            capsule.center1 = toBox2DPoint(center1);
+            capsule.center2 = toBox2DPoint(center2);
+            capsule.radius = radius;
             shapeData.shape = b2CreateCapsuleShape(body.body, &shapeDef, &capsule);
         }else if (shapeData.type == Shape2DType::SEGMENT){
-            if (shapeData.pointA == shapeData.pointB){
+            Vector2 point1 = scaledPoint(shapeData.pointA);
+            Vector2 point2 = scaledPoint(shapeData.pointB);
+            if (point1 == point2){
                 Log::error("Cannot create segment shape %zu: pointA and pointB are equal", i);
                 continue;
             }
 
             b2Segment segment = {0};
-            segment.point1 = {shapeData.pointA.x / pointsToMeterScale2D, shapeData.pointA.y / pointsToMeterScale2D};
-            segment.point2 = {shapeData.pointB.x / pointsToMeterScale2D, shapeData.pointB.y / pointsToMeterScale2D};
+            segment.point1 = toBox2DPoint(point1);
+            segment.point2 = toBox2DPoint(point2);
             shapeData.shape = b2CreateSegmentShape(body.body, &shapeDef, &segment);
         }else if (shapeData.type == Shape2DType::CHAIN){
             if (shapeData.numVertices < 4){
@@ -444,7 +503,7 @@ bool PhysicsSystem::syncBody2DShapes(Body2DComponent& body){
 
             std::vector<b2Vec2> b2vertices(shapeData.numVertices);
             for (size_t j = 0; j < shapeData.numVertices; j++){
-                b2vertices[j] = {shapeData.vertices[j].x / pointsToMeterScale2D, shapeData.vertices[j].y / pointsToMeterScale2D};
+                b2vertices[j] = toBox2DPoint(scaledPoint(shapeData.vertices[j]));
             }
 
             b2ChainDef chainDef = b2DefaultChainDef();
@@ -462,6 +521,7 @@ bool PhysicsSystem::syncBody2DShapes(Body2DComponent& body){
     }
 
     body.needUpdateShapes = false;
+    body.loadedScale = entityScale;
 
     return true;
 }
@@ -469,29 +529,32 @@ bool PhysicsSystem::syncBody2DShapes(Body2DComponent& body){
 bool PhysicsSystem::createShape3DForIndex(Entity entity, Body3DComponent& body, size_t index){
     Shape3D& shapeData = body.shapes[index];
     shapeData.shape = NULL;
+    const Vector3 entityScale = getEntityScale(scene, entity);
+    const Vector3 absEntityScale = absScale(entityScale);
 
     if (shapeData.type == Shape3DType::BOX){
-        JPH::BoxShapeSettings shape_settings(JPH::Vec3(shapeData.width / 2.0f, shapeData.height / 2.0f, shapeData.depth / 2.0f));
+        JPH::BoxShapeSettings shape_settings(JPH::Vec3(shapeData.width * absEntityScale.x / 2.0f, shapeData.height * absEntityScale.y / 2.0f, shapeData.depth * absEntityScale.z / 2.0f));
         JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
         if (!shape_result.IsValid()) return false;
         shapeData.shape = shape_result.Get();
     }else if (shapeData.type == Shape3DType::SPHERE){
-        JPH::SphereShapeSettings shape_settings(shapeData.radius);
+        JPH::SphereShapeSettings shape_settings(shapeData.radius * maxScaleXYZ(absEntityScale));
         JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
         if (!shape_result.IsValid()) return false;
         shapeData.shape = shape_result.Get();
     }else if (shapeData.type == Shape3DType::CAPSULE){
-        JPH::CapsuleShapeSettings shape_settings(shapeData.halfHeight, shapeData.radius);
+        JPH::CapsuleShapeSettings shape_settings(shapeData.halfHeight * absEntityScale.y, shapeData.radius * maxScaleXZ(absEntityScale));
         JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
         if (!shape_result.IsValid()) return false;
         shapeData.shape = shape_result.Get();
     }else if (shapeData.type == Shape3DType::TAPERED_CAPSULE){
-        JPH::TaperedCapsuleShapeSettings shape_settings(shapeData.halfHeight, shapeData.topRadius, shapeData.bottomRadius);
+        const float radiusScale = maxScaleXZ(absEntityScale);
+        JPH::TaperedCapsuleShapeSettings shape_settings(shapeData.halfHeight * absEntityScale.y, shapeData.topRadius * radiusScale, shapeData.bottomRadius * radiusScale);
         JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
         if (!shape_result.IsValid()) return false;
         shapeData.shape = shape_result.Get();
     }else if (shapeData.type == Shape3DType::CYLINDER){
-        JPH::CylinderShapeSettings shape_settings(shapeData.halfHeight, shapeData.radius);
+        JPH::CylinderShapeSettings shape_settings(shapeData.halfHeight * absEntityScale.y, shapeData.radius * maxScaleXZ(absEntityScale));
         JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
         if (!shape_result.IsValid()) return false;
         shapeData.shape = shape_result.Get();
@@ -509,7 +572,8 @@ bool PhysicsSystem::createShape3DForIndex(Entity entity, Body3DComponent& body, 
         if (shapeData.source == Shape3DSource::RAW_VERTICES){
             jvertices.resize(shapeData.numVertices);
             for (size_t i = 0; i < shapeData.numVertices; i++){
-                jvertices[i] = JPH::Vec3(shapeData.vertices[i].x, shapeData.vertices[i].y, shapeData.vertices[i].z);
+                Vector3 vertex = shapeData.vertices[i] * entityScale;
+                jvertices[i] = JPH::Vec3(vertex.x, vertex.y, vertex.z);
             }
         }else if (shapeData.source == Shape3DSource::ENTITY_MESH){
             Entity meshEntity = shapeData.sourceEntity == NULL_ENTITY ? entity : shapeData.sourceEntity;
@@ -574,7 +638,8 @@ bool PhysicsSystem::createShape3DForIndex(Entity entity, Body3DComponent& body, 
         if (shapeData.source == Shape3DSource::RAW_MESH){
             jvertices.resize(shapeData.numVertices);
             for (size_t i = 0; i < shapeData.numVertices; i++){
-                jvertices[i] = JPH::Float3(shapeData.vertices[i].x, shapeData.vertices[i].y, shapeData.vertices[i].z);
+                Vector3 vertex = shapeData.vertices[i] * entityScale;
+                jvertices[i] = JPH::Float3(vertex.x, vertex.y, vertex.z);
             }
 
             int indicesize = int(shapeData.numIndices / 3);
@@ -738,9 +803,11 @@ bool PhysicsSystem::syncBody3DShapes(Entity entity, Body3DComponent& body){
     }
 
     if (body.numShapes > 1){
+        const Vector3 entityScale = getEntityScale(scene, entity);
         JPH::StaticCompoundShapeSettings compound_shape;
         for (size_t i = 0; i < body.numShapes; i++){
-            JPH::Vec3 jPosition(body.shapes[i].position.x, body.shapes[i].position.y, body.shapes[i].position.z);
+            Vector3 scaledPosition = body.shapes[i].position * entityScale;
+            JPH::Vec3 jPosition(scaledPosition.x, scaledPosition.y, scaledPosition.z);
             JPH::Quat jQuat(body.shapes[i].rotation.x, body.shapes[i].rotation.y, body.shapes[i].rotation.z, body.shapes[i].rotation.w);
             compound_shape.AddShape(jPosition, jQuat, body.shapes[i].shape);
         }
@@ -755,7 +822,8 @@ bool PhysicsSystem::syncBody3DShapes(Entity entity, Body3DComponent& body){
     }else{
         Shape3D& shapeData = body.shapes[0];
         if (shapeData.position != Vector3::ZERO || shapeData.rotation != Quaternion::IDENTITY){
-            JPH::Vec3 jPosition(shapeData.position.x, shapeData.position.y, shapeData.position.z);
+            Vector3 scaledPosition = shapeData.position * getEntityScale(scene, entity);
+            JPH::Vec3 jPosition(scaledPosition.x, scaledPosition.y, scaledPosition.z);
             JPH::Quat jQuat(shapeData.rotation.x, shapeData.rotation.y, shapeData.rotation.z, shapeData.rotation.w);
             JPH::RotatedTranslatedShapeSettings rtShape(jPosition, jQuat, shapeData.shape);
             JPH::ShapeSettings::ShapeResult shape_result = rtShape.Create();
@@ -773,6 +841,7 @@ bool PhysicsSystem::syncBody3DShapes(Entity entity, Body3DComponent& body){
     body.needReloadBody = false;
     body.needUpdateShapes = false;
     body.newBody = true;
+    body.loadedScale = getEntityScale(scene, entity);
 
     return true;
 }
@@ -900,11 +969,16 @@ bool PhysicsSystem::loadBody2D(Entity entity){
         body.needReloadBody = false;
         body.needUpdateShapes = true;
 
-        return syncBody2DShapes(body);
+        return syncBody2DShapes(entity, body);
+    }
+
+    Vector2 entityScale = getEntityScale2D(scene, entity);
+    if (entityScale != body.loadedScale){
+        body.needUpdateShapes = true;
     }
 
     if (body.needUpdateShapes){
-        return syncBody2DShapes(body);
+        return syncBody2DShapes(entity, body);
     }
 
     return true;
@@ -927,6 +1001,10 @@ void PhysicsSystem::destroyBody2D(Body2DComponent& body){
 
 bool PhysicsSystem::loadBody3D(Entity entity){
     Body3DComponent& body = scene->getComponent<Body3DComponent>(entity);
+    Vector3 entityScale = getEntityScale(scene, entity);
+    if (!body.body.IsInvalid() && entityScale != body.loadedScale){
+        body.needUpdateShapes = true;
+    }
 
     if (body.needReloadBody || body.needUpdateShapes || body.body.IsInvalid()){
         return syncBody3DShapes(entity, body);
@@ -2081,7 +2159,7 @@ void PhysicsSystem::update(double dt){
 		Entity entity = bodies2d->getEntity(i);
 		Signature signature = scene->getSignature(entity);
 
-        if (!b2Body_IsValid(body.body) || body.needReloadBody || body.needUpdateShapes){
+        if (!b2Body_IsValid(body.body) || body.needReloadBody || body.needUpdateShapes || getEntityScale2D(scene, entity) != body.loadedScale){
             loadBody2D(entity);
         }
 
@@ -2150,7 +2228,7 @@ void PhysicsSystem::update(double dt){
 		Entity entity = bodies3d->getEntity(i);
 		Signature signature = scene->getSignature(entity);
 
-        if (body.body.IsInvalid() || body.needReloadBody || body.needUpdateShapes){
+        if (body.body.IsInvalid() || body.needReloadBody || body.needUpdateShapes || getEntityScale(scene, entity) != body.loadedScale){
             loadBody3D(entity);
         }
 
