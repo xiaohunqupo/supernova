@@ -98,8 +98,8 @@ namespace doriax{
     };
 
     struct ParticleSizeInitializer{
-        float minSize = 0;
-        float maxSize = 0;
+        float minSize = 1;
+        float maxSize = 1;
     };
 
     struct ParticleSizeModifier{
