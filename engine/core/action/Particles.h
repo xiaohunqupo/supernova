@@ -86,4 +86,4 @@ namespace doriax{
     };
 }
 
-#endif //POINTPARTICLES_H
+#endif //PARTICLES_H
