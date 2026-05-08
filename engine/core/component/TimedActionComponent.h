@@ -16,7 +16,7 @@ namespace doriax{
         float duration = 0;
         bool loop = false;
 
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
 }

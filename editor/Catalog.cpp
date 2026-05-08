@@ -226,6 +226,7 @@ namespace {
     static const FastPropertyDescriptor kTimedActionProperties[] = {
         makeFastProperty<TimedActionComponent, float, &TimedActionComponent::duration>("duration", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<TimedActionComponent, bool, &TimedActionComponent::loop>("loop", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<TimedActionComponent, Ease, &TimedActionComponent::function>("function", PropertyType::Ease, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kPositionActionProperties[] = {
@@ -1190,7 +1191,7 @@ namespace {
         // Position Modifier
         if (propertyName == "positionModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.positionModifier.fromTime, &comp->positionModifier.fromTime};
         if (propertyName == "positionModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.positionModifier.toTime, &comp->positionModifier.toTime};
-        if (propertyName == "positionModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.positionModifier.functionType, &comp->positionModifier.functionType};
+        if (propertyName == "positionModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.positionModifier.function, &comp->positionModifier.function};
         if (propertyName == "positionModifier.fromPosition") return {PropertyType::Vector3, UpdateFlags_None, &def.positionModifier.fromPosition, &comp->positionModifier.fromPosition};
         if (propertyName == "positionModifier.toPosition") return {PropertyType::Vector3, UpdateFlags_None, &def.positionModifier.toPosition, &comp->positionModifier.toPosition};
 
@@ -1201,7 +1202,7 @@ namespace {
         // Velocity Modifier
         if (propertyName == "velocityModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.velocityModifier.fromTime, &comp->velocityModifier.fromTime};
         if (propertyName == "velocityModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.velocityModifier.toTime, &comp->velocityModifier.toTime};
-        if (propertyName == "velocityModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.velocityModifier.functionType, &comp->velocityModifier.functionType};
+        if (propertyName == "velocityModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.velocityModifier.function, &comp->velocityModifier.function};
         if (propertyName == "velocityModifier.fromVelocity") return {PropertyType::Vector3, UpdateFlags_None, &def.velocityModifier.fromVelocity, &comp->velocityModifier.fromVelocity};
         if (propertyName == "velocityModifier.toVelocity") return {PropertyType::Vector3, UpdateFlags_None, &def.velocityModifier.toVelocity, &comp->velocityModifier.toVelocity};
 
@@ -1212,7 +1213,7 @@ namespace {
         // Acceleration Modifier
         if (propertyName == "accelerationModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.accelerationModifier.fromTime, &comp->accelerationModifier.fromTime};
         if (propertyName == "accelerationModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.accelerationModifier.toTime, &comp->accelerationModifier.toTime};
-        if (propertyName == "accelerationModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.accelerationModifier.functionType, &comp->accelerationModifier.functionType};
+        if (propertyName == "accelerationModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.accelerationModifier.function, &comp->accelerationModifier.function};
         if (propertyName == "accelerationModifier.fromAcceleration") return {PropertyType::Vector3, UpdateFlags_None, &def.accelerationModifier.fromAcceleration, &comp->accelerationModifier.fromAcceleration};
         if (propertyName == "accelerationModifier.toAcceleration") return {PropertyType::Vector3, UpdateFlags_None, &def.accelerationModifier.toAcceleration, &comp->accelerationModifier.toAcceleration};
 
@@ -1224,7 +1225,7 @@ namespace {
         // Color Modifier
         if (propertyName == "colorModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.colorModifier.fromTime, &comp->colorModifier.fromTime};
         if (propertyName == "colorModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.colorModifier.toTime, &comp->colorModifier.toTime};
-        if (propertyName == "colorModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.colorModifier.functionType, &comp->colorModifier.functionType};
+        if (propertyName == "colorModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.colorModifier.function, &comp->colorModifier.function};
         if (propertyName == "colorModifier.fromColor") return {PropertyType::Vector3, UpdateFlags_None, &def.colorModifier.fromColor, &comp->colorModifier.fromColor};
         if (propertyName == "colorModifier.toColor") return {PropertyType::Vector3, UpdateFlags_None, &def.colorModifier.toColor, &comp->colorModifier.toColor};
         if (propertyName == "colorModifier.useSRGB") return {PropertyType::Bool, UpdateFlags_None, &def.colorModifier.useSRGB, &comp->colorModifier.useSRGB};
@@ -1236,7 +1237,7 @@ namespace {
         // Alpha Modifier
         if (propertyName == "alphaModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.fromTime, &comp->alphaModifier.fromTime};
         if (propertyName == "alphaModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.toTime, &comp->alphaModifier.toTime};
-        if (propertyName == "alphaModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.alphaModifier.functionType, &comp->alphaModifier.functionType};
+        if (propertyName == "alphaModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.alphaModifier.function, &comp->alphaModifier.function};
         if (propertyName == "alphaModifier.fromAlpha") return {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.fromAlpha, &comp->alphaModifier.fromAlpha};
         if (propertyName == "alphaModifier.toAlpha") return {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.toAlpha, &comp->alphaModifier.toAlpha};
 
@@ -1247,7 +1248,7 @@ namespace {
         // Size Modifier
         if (propertyName == "sizeModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.fromTime, &comp->sizeModifier.fromTime};
         if (propertyName == "sizeModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.toTime, &comp->sizeModifier.toTime};
-        if (propertyName == "sizeModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.sizeModifier.functionType, &comp->sizeModifier.functionType};
+        if (propertyName == "sizeModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.sizeModifier.function, &comp->sizeModifier.function};
         if (propertyName == "sizeModifier.fromSize") return {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.fromSize, &comp->sizeModifier.fromSize};
         if (propertyName == "sizeModifier.toSize") return {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.toSize, &comp->sizeModifier.toSize};
 
@@ -1257,7 +1258,7 @@ namespace {
         // Sprite Modifier
         if (propertyName == "spriteModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.spriteModifier.fromTime, &comp->spriteModifier.fromTime};
         if (propertyName == "spriteModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.spriteModifier.toTime, &comp->spriteModifier.toTime};
-        if (propertyName == "spriteModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.spriteModifier.functionType, &comp->spriteModifier.functionType};
+        if (propertyName == "spriteModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.spriteModifier.function, &comp->spriteModifier.function};
         if (propertyName == "spriteModifier.frames") return {PropertyType::Custom, UpdateFlags_None, &def.spriteModifier.frames, &comp->spriteModifier.frames};
 
         // Rotation Initializer
@@ -1268,7 +1269,7 @@ namespace {
         // Rotation Modifier
         if (propertyName == "rotationModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.rotationModifier.fromTime, &comp->rotationModifier.fromTime};
         if (propertyName == "rotationModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.rotationModifier.toTime, &comp->rotationModifier.toTime};
-        if (propertyName == "rotationModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.rotationModifier.functionType, &comp->rotationModifier.functionType};
+        if (propertyName == "rotationModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.rotationModifier.function, &comp->rotationModifier.function};
         if (propertyName == "rotationModifier.fromRotation") return {PropertyType::Quat, UpdateFlags_None, &def.rotationModifier.fromRotation, &comp->rotationModifier.fromRotation};
         if (propertyName == "rotationModifier.toRotation") return {PropertyType::Quat, UpdateFlags_None, &def.rotationModifier.toRotation, &comp->rotationModifier.toRotation};
         if (propertyName == "rotationModifier.shortestPath") return {PropertyType::Bool, UpdateFlags_None, &def.rotationModifier.shortestPath, &comp->rotationModifier.shortestPath};
@@ -1281,7 +1282,7 @@ namespace {
         // Scale Modifier
         if (propertyName == "scaleModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.scaleModifier.fromTime, &comp->scaleModifier.fromTime};
         if (propertyName == "scaleModifier.toTime") return {PropertyType::Float, UpdateFlags_None, &def.scaleModifier.toTime, &comp->scaleModifier.toTime};
-        if (propertyName == "scaleModifier.functionType") return {PropertyType::Enum, UpdateFlags_None, &def.scaleModifier.functionType, &comp->scaleModifier.functionType};
+        if (propertyName == "scaleModifier.function") return {PropertyType::Ease, UpdateFlags_None, &def.scaleModifier.function, &comp->scaleModifier.function};
         if (propertyName == "scaleModifier.fromScale") return {PropertyType::Vector3, UpdateFlags_None, &def.scaleModifier.fromScale, &comp->scaleModifier.fromScale};
         if (propertyName == "scaleModifier.toScale") return {PropertyType::Vector3, UpdateFlags_None, &def.scaleModifier.toScale, &comp->scaleModifier.toScale};
 
@@ -2148,7 +2149,7 @@ namespace {
         ps["positionInitializer.maxPosition"] = {PropertyType::Vector3, UpdateFlags_None, &def.positionInitializer.maxPosition, comp ? &comp->positionInitializer.maxPosition : nullptr};
         ps["positionModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.positionModifier.fromTime, comp ? &comp->positionModifier.fromTime : nullptr};
         ps["positionModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.positionModifier.toTime, comp ? &comp->positionModifier.toTime : nullptr};
-        ps["positionModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.positionModifier.functionType, comp ? &comp->positionModifier.functionType : nullptr};
+        ps["positionModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.positionModifier.function, comp ? &comp->positionModifier.function : nullptr};
         ps["positionModifier.fromPosition"] = {PropertyType::Vector3, UpdateFlags_None, &def.positionModifier.fromPosition, comp ? &comp->positionModifier.fromPosition : nullptr};
         ps["positionModifier.toPosition"] = {PropertyType::Vector3, UpdateFlags_None, &def.positionModifier.toPosition, comp ? &comp->positionModifier.toPosition : nullptr};
 
@@ -2156,7 +2157,7 @@ namespace {
         ps["velocityInitializer.maxVelocity"] = {PropertyType::Vector3, UpdateFlags_None, &def.velocityInitializer.maxVelocity, comp ? &comp->velocityInitializer.maxVelocity : nullptr};
         ps["velocityModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.velocityModifier.fromTime, comp ? &comp->velocityModifier.fromTime : nullptr};
         ps["velocityModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.velocityModifier.toTime, comp ? &comp->velocityModifier.toTime : nullptr};
-        ps["velocityModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.velocityModifier.functionType, comp ? &comp->velocityModifier.functionType : nullptr};
+        ps["velocityModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.velocityModifier.function, comp ? &comp->velocityModifier.function : nullptr};
         ps["velocityModifier.fromVelocity"] = {PropertyType::Vector3, UpdateFlags_None, &def.velocityModifier.fromVelocity, comp ? &comp->velocityModifier.fromVelocity : nullptr};
         ps["velocityModifier.toVelocity"] = {PropertyType::Vector3, UpdateFlags_None, &def.velocityModifier.toVelocity, comp ? &comp->velocityModifier.toVelocity : nullptr};
 
@@ -2164,7 +2165,7 @@ namespace {
         ps["accelerationInitializer.maxAcceleration"] = {PropertyType::Vector3, UpdateFlags_None, &def.accelerationInitializer.maxAcceleration, comp ? &comp->accelerationInitializer.maxAcceleration : nullptr};
         ps["accelerationModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.accelerationModifier.fromTime, comp ? &comp->accelerationModifier.fromTime : nullptr};
         ps["accelerationModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.accelerationModifier.toTime, comp ? &comp->accelerationModifier.toTime : nullptr};
-        ps["accelerationModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.accelerationModifier.functionType, comp ? &comp->accelerationModifier.functionType : nullptr};
+        ps["accelerationModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.accelerationModifier.function, comp ? &comp->accelerationModifier.function : nullptr};
         ps["accelerationModifier.fromAcceleration"] = {PropertyType::Vector3, UpdateFlags_None, &def.accelerationModifier.fromAcceleration, comp ? &comp->accelerationModifier.fromAcceleration : nullptr};
         ps["accelerationModifier.toAcceleration"] = {PropertyType::Vector3, UpdateFlags_None, &def.accelerationModifier.toAcceleration, comp ? &comp->accelerationModifier.toAcceleration : nullptr};
 
@@ -2173,7 +2174,7 @@ namespace {
         ps["colorInitializer.useSRGB"] = {PropertyType::Bool, UpdateFlags_None, &def.colorInitializer.useSRGB, comp ? &comp->colorInitializer.useSRGB : nullptr};
         ps["colorModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.colorModifier.fromTime, comp ? &comp->colorModifier.fromTime : nullptr};
         ps["colorModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.colorModifier.toTime, comp ? &comp->colorModifier.toTime : nullptr};
-        ps["colorModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.colorModifier.functionType, comp ? &comp->colorModifier.functionType : nullptr};
+        ps["colorModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.colorModifier.function, comp ? &comp->colorModifier.function : nullptr};
         ps["colorModifier.fromColor"] = {PropertyType::Vector3, UpdateFlags_None, &def.colorModifier.fromColor, comp ? &comp->colorModifier.fromColor : nullptr};
         ps["colorModifier.toColor"] = {PropertyType::Vector3, UpdateFlags_None, &def.colorModifier.toColor, comp ? &comp->colorModifier.toColor : nullptr};
         ps["colorModifier.useSRGB"] = {PropertyType::Bool, UpdateFlags_None, &def.colorModifier.useSRGB, comp ? &comp->colorModifier.useSRGB : nullptr};
@@ -2182,7 +2183,7 @@ namespace {
         ps["alphaInitializer.maxAlpha"] = {PropertyType::Float, UpdateFlags_None, &def.alphaInitializer.maxAlpha, comp ? &comp->alphaInitializer.maxAlpha : nullptr};
         ps["alphaModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.fromTime, comp ? &comp->alphaModifier.fromTime : nullptr};
         ps["alphaModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.toTime, comp ? &comp->alphaModifier.toTime : nullptr};
-        ps["alphaModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.alphaModifier.functionType, comp ? &comp->alphaModifier.functionType : nullptr};
+        ps["alphaModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.alphaModifier.function, comp ? &comp->alphaModifier.function : nullptr};
         ps["alphaModifier.fromAlpha"] = {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.fromAlpha, comp ? &comp->alphaModifier.fromAlpha : nullptr};
         ps["alphaModifier.toAlpha"] = {PropertyType::Float, UpdateFlags_None, &def.alphaModifier.toAlpha, comp ? &comp->alphaModifier.toAlpha : nullptr};
 
@@ -2190,14 +2191,14 @@ namespace {
         ps["sizeInitializer.maxSize"] = {PropertyType::Float, UpdateFlags_None, &def.sizeInitializer.maxSize, comp ? &comp->sizeInitializer.maxSize : nullptr};
         ps["sizeModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.fromTime, comp ? &comp->sizeModifier.fromTime : nullptr};
         ps["sizeModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.toTime, comp ? &comp->sizeModifier.toTime : nullptr};
-        ps["sizeModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.sizeModifier.functionType, comp ? &comp->sizeModifier.functionType : nullptr};
+        ps["sizeModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.sizeModifier.function, comp ? &comp->sizeModifier.function : nullptr};
         ps["sizeModifier.fromSize"] = {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.fromSize, comp ? &comp->sizeModifier.fromSize : nullptr};
         ps["sizeModifier.toSize"] = {PropertyType::Float, UpdateFlags_None, &def.sizeModifier.toSize, comp ? &comp->sizeModifier.toSize : nullptr};
 
         ps["spriteInitializer.frames"] = {PropertyType::Custom, UpdateFlags_None, &def.spriteInitializer.frames, comp ? &comp->spriteInitializer.frames : nullptr};
         ps["spriteModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.spriteModifier.fromTime, comp ? &comp->spriteModifier.fromTime : nullptr};
         ps["spriteModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.spriteModifier.toTime, comp ? &comp->spriteModifier.toTime : nullptr};
-        ps["spriteModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.spriteModifier.functionType, comp ? &comp->spriteModifier.functionType : nullptr};
+        ps["spriteModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.spriteModifier.function, comp ? &comp->spriteModifier.function : nullptr};
         ps["spriteModifier.frames"] = {PropertyType::Custom, UpdateFlags_None, &def.spriteModifier.frames, comp ? &comp->spriteModifier.frames : nullptr};
 
         ps["rotationInitializer.minRotation"] = {PropertyType::Quat, UpdateFlags_None, &def.rotationInitializer.minRotation, comp ? &comp->rotationInitializer.minRotation : nullptr};
@@ -2205,7 +2206,7 @@ namespace {
         ps["rotationInitializer.shortestPath"] = {PropertyType::Bool, UpdateFlags_None, &def.rotationInitializer.shortestPath, comp ? &comp->rotationInitializer.shortestPath : nullptr};
         ps["rotationModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.rotationModifier.fromTime, comp ? &comp->rotationModifier.fromTime : nullptr};
         ps["rotationModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.rotationModifier.toTime, comp ? &comp->rotationModifier.toTime : nullptr};
-        ps["rotationModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.rotationModifier.functionType, comp ? &comp->rotationModifier.functionType : nullptr};
+        ps["rotationModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.rotationModifier.function, comp ? &comp->rotationModifier.function : nullptr};
         ps["rotationModifier.fromRotation"] = {PropertyType::Quat, UpdateFlags_None, &def.rotationModifier.fromRotation, comp ? &comp->rotationModifier.fromRotation : nullptr};
         ps["rotationModifier.toRotation"] = {PropertyType::Quat, UpdateFlags_None, &def.rotationModifier.toRotation, comp ? &comp->rotationModifier.toRotation : nullptr};
         ps["rotationModifier.shortestPath"] = {PropertyType::Bool, UpdateFlags_None, &def.rotationModifier.shortestPath, comp ? &comp->rotationModifier.shortestPath : nullptr};
@@ -2215,7 +2216,7 @@ namespace {
         ps["scaleInitializer.linearSort"] = {PropertyType::Bool, UpdateFlags_None, &def.scaleInitializer.linearSort, comp ? &comp->scaleInitializer.linearSort : nullptr};
         ps["scaleModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.scaleModifier.fromTime, comp ? &comp->scaleModifier.fromTime : nullptr};
         ps["scaleModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.scaleModifier.toTime, comp ? &comp->scaleModifier.toTime : nullptr};
-        ps["scaleModifier.functionType"] = {PropertyType::Enum, UpdateFlags_None, &def.scaleModifier.functionType, comp ? &comp->scaleModifier.functionType : nullptr};
+        ps["scaleModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.scaleModifier.function, comp ? &comp->scaleModifier.function : nullptr};
         ps["scaleModifier.fromScale"] = {PropertyType::Vector3, UpdateFlags_None, &def.scaleModifier.fromScale, comp ? &comp->scaleModifier.fromScale : nullptr};
         ps["scaleModifier.toScale"] = {PropertyType::Vector3, UpdateFlags_None, &def.scaleModifier.toScale, comp ? &comp->scaleModifier.toScale : nullptr};
     }
@@ -3070,6 +3071,9 @@ int editor::Catalog::getChangedUpdateFlags(ComponentType compType, void* oldComp
             case PropertyType::Enum:
                 changed = *static_cast<int*>(oldProp.ref) != *static_cast<int*>(newProp.ref);
                 break;
+            case PropertyType::Ease:
+                changed = *static_cast<Ease*>(oldProp.ref) != *static_cast<Ease*>(newProp.ref);
+                break;
             case PropertyType::Texture:
                 changed = *static_cast<Texture*>(oldProp.ref) != *static_cast<Texture*>(newProp.ref);
                 break;
@@ -3571,6 +3575,12 @@ void editor::Catalog::copyPropertyValue(EntityRegistry* sourceRegistry, Entity s
         case PropertyType::Enum: {
             int* source = Catalog::getPropertyRef<int>(sourceRegistry, sourceEntity, compType, property);
             int* target = Catalog::getPropertyRef<int>(targetRegistry, targetEntity, compType, property);
+            if (source && target) *target = *source;
+            break;
+        }
+        case PropertyType::Ease: {
+            Ease* source = Catalog::getPropertyRef<Ease>(sourceRegistry, sourceEntity, compType, property);
+            Ease* target = Catalog::getPropertyRef<Ease>(targetRegistry, targetEntity, compType, property);
             if (source && target) *target = *source;
             break;
         }

@@ -78,7 +78,7 @@ namespace doriax{
 		void applyParticleInitializers(size_t idx, ParticlesComponent& particles, PointsComponent& points);
 
 		float getTimeFromParticleTime(float& time, float& fromTime, float& toTime);
-		bool getParticleModifierValue(float& particleTime, float& fromTime, float& toTime, FunctionSubscribe<float(float)>& function, float& value);
+		bool getParticleModifierValue(float& particleTime, float& fromTime, float& toTime, Ease& function, float& value);
 		float getFloatModifierValue(float& value, float& fromValue, float& toValue);
 		Vector3 getVector3ModifierValue(float& value, Vector3& fromValue, Vector3& toValue);
 		Quaternion getQuaternionModifierValue(float& value, Quaternion& fromValue, Quaternion& toValue, bool shortestPath);

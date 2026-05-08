@@ -43,6 +43,7 @@ namespace doriax::editor{
         static std::string formatRect(const Rect& r);
         static std::string formatPrimitiveType(PrimitiveType type);
         static std::string formatEaseType(EaseType type);
+        static std::string formatEase(const Ease& ease);
         static std::string formatPivotPreset(PivotPreset preset);
         static std::string formatAnchorPreset(AnchorPreset preset);
         static std::string formatContainerType(ContainerType type);

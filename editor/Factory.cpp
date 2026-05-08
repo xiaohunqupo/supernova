@@ -225,8 +225,13 @@ std::string editor::Factory::formatEaseType(EaseType type) {
         case EaseType::BOUNCE_IN: return "EaseType::BOUNCE_IN";
         case EaseType::BOUNCE_OUT: return "EaseType::BOUNCE_OUT";
         case EaseType::BOUNCE_IN_OUT: return "EaseType::BOUNCE_IN_OUT";
+        case EaseType::CUSTOM: return "EaseType::CUSTOM";
         default: return "EaseType::LINEAR";
     }
+}
+
+std::string editor::Factory::formatEase(const Ease& ease) {
+    return "Ease(" + formatEaseType(ease.getType()) + ")";
 }
 
 std::string editor::Factory::formatPivotPreset(PivotPreset preset) {
@@ -619,6 +624,10 @@ std::string editor::Factory::formatPropertyValue(const PropertyData& property, c
         case PropertyType::Enum: {
             int* value = static_cast<int*>(property.ref);
             return formatInt(*value);
+        }
+        case PropertyType::Ease: {
+            Ease* value = static_cast<Ease*>(property.ref);
+            return formatEase(*value);
         }
         case PropertyType::Material:
         case PropertyType::Texture:
@@ -1444,6 +1453,7 @@ std::string editor::Factory::createTimedActionComponent(int indentSpaces, Entity
     code << ind << "TimedActionComponent timedcomp;\n";
     code << ind << "timedcomp.duration = " << formatFloat(timed.duration) << ";\n";
     code << ind << "timedcomp.loop = " << formatBool(timed.loop) << ";\n";
+    code << ind << "timedcomp.function = " << formatEase(timed.function) << ";\n";
     addComponentCode(code, ind, sceneName, entityName, entity, "TimedActionComponent", "timedcomp", assignExisting);
     return code.str();
 }
@@ -2203,8 +2213,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.positionModifier.toTime = " << formatFloat(p.positionModifier.toTime) << ";\n";
     code << ind << "particles.positionModifier.fromPosition = " << formatVector3(p.positionModifier.fromPosition) << ";\n";
     code << ind << "particles.positionModifier.toPosition = " << formatVector3(p.positionModifier.toPosition) << ";\n";
-    code << ind << "particles.positionModifier.functionType = " << formatEaseType(p.positionModifier.functionType) << ";\n";
-    code << ind << "particles.positionModifier.function = Ease::getFunction(particles.positionModifier.functionType);\n";
+    code << ind << "particles.positionModifier.function = " << formatEase(p.positionModifier.function) << ";\n";
 
     code << ind << "particles.velocityInitializer.minVelocity = " << formatVector3(p.velocityInitializer.minVelocity) << ";\n";
     code << ind << "particles.velocityInitializer.maxVelocity = " << formatVector3(p.velocityInitializer.maxVelocity) << ";\n";
@@ -2212,8 +2221,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.velocityModifier.toTime = " << formatFloat(p.velocityModifier.toTime) << ";\n";
     code << ind << "particles.velocityModifier.fromVelocity = " << formatVector3(p.velocityModifier.fromVelocity) << ";\n";
     code << ind << "particles.velocityModifier.toVelocity = " << formatVector3(p.velocityModifier.toVelocity) << ";\n";
-    code << ind << "particles.velocityModifier.functionType = " << formatEaseType(p.velocityModifier.functionType) << ";\n";
-    code << ind << "particles.velocityModifier.function = Ease::getFunction(particles.velocityModifier.functionType);\n";
+    code << ind << "particles.velocityModifier.function = " << formatEase(p.velocityModifier.function) << ";\n";
 
     code << ind << "particles.accelerationInitializer.minAcceleration = " << formatVector3(p.accelerationInitializer.minAcceleration) << ";\n";
     code << ind << "particles.accelerationInitializer.maxAcceleration = " << formatVector3(p.accelerationInitializer.maxAcceleration) << ";\n";
@@ -2221,8 +2229,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.accelerationModifier.toTime = " << formatFloat(p.accelerationModifier.toTime) << ";\n";
     code << ind << "particles.accelerationModifier.fromAcceleration = " << formatVector3(p.accelerationModifier.fromAcceleration) << ";\n";
     code << ind << "particles.accelerationModifier.toAcceleration = " << formatVector3(p.accelerationModifier.toAcceleration) << ";\n";
-    code << ind << "particles.accelerationModifier.functionType = " << formatEaseType(p.accelerationModifier.functionType) << ";\n";
-    code << ind << "particles.accelerationModifier.function = Ease::getFunction(particles.accelerationModifier.functionType);\n";
+    code << ind << "particles.accelerationModifier.function = " << formatEase(p.accelerationModifier.function) << ";\n";
 
     code << ind << "particles.colorInitializer.minColor = " << formatVector3(p.colorInitializer.minColor) << ";\n";
     code << ind << "particles.colorInitializer.maxColor = " << formatVector3(p.colorInitializer.maxColor) << ";\n";
@@ -2231,8 +2238,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.colorModifier.toTime = " << formatFloat(p.colorModifier.toTime) << ";\n";
     code << ind << "particles.colorModifier.fromColor = " << formatVector3(p.colorModifier.fromColor) << ";\n";
     code << ind << "particles.colorModifier.toColor = " << formatVector3(p.colorModifier.toColor) << ";\n";
-    code << ind << "particles.colorModifier.functionType = " << formatEaseType(p.colorModifier.functionType) << ";\n";
-    code << ind << "particles.colorModifier.function = Ease::getFunction(particles.colorModifier.functionType);\n";
+    code << ind << "particles.colorModifier.function = " << formatEase(p.colorModifier.function) << ";\n";
     code << ind << "particles.colorModifier.useSRGB = " << formatBool(p.colorModifier.useSRGB) << ";\n";
 
     code << ind << "particles.alphaInitializer.minAlpha = " << formatFloat(p.alphaInitializer.minAlpha) << ";\n";
@@ -2241,8 +2247,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.alphaModifier.toTime = " << formatFloat(p.alphaModifier.toTime) << ";\n";
     code << ind << "particles.alphaModifier.fromAlpha = " << formatFloat(p.alphaModifier.fromAlpha) << ";\n";
     code << ind << "particles.alphaModifier.toAlpha = " << formatFloat(p.alphaModifier.toAlpha) << ";\n";
-    code << ind << "particles.alphaModifier.functionType = " << formatEaseType(p.alphaModifier.functionType) << ";\n";
-    code << ind << "particles.alphaModifier.function = Ease::getFunction(particles.alphaModifier.functionType);\n";
+    code << ind << "particles.alphaModifier.function = " << formatEase(p.alphaModifier.function) << ";\n";
 
     code << ind << "particles.sizeInitializer.minSize = " << formatFloat(p.sizeInitializer.minSize) << ";\n";
     code << ind << "particles.sizeInitializer.maxSize = " << formatFloat(p.sizeInitializer.maxSize) << ";\n";
@@ -2250,8 +2255,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.sizeModifier.toTime = " << formatFloat(p.sizeModifier.toTime) << ";\n";
     code << ind << "particles.sizeModifier.fromSize = " << formatFloat(p.sizeModifier.fromSize) << ";\n";
     code << ind << "particles.sizeModifier.toSize = " << formatFloat(p.sizeModifier.toSize) << ";\n";
-    code << ind << "particles.sizeModifier.functionType = " << formatEaseType(p.sizeModifier.functionType) << ";\n";
-    code << ind << "particles.sizeModifier.function = Ease::getFunction(particles.sizeModifier.functionType);\n";
+    code << ind << "particles.sizeModifier.function = " << formatEase(p.sizeModifier.function) << ";\n";
 
     if (!p.spriteInitializer.frames.empty()) {
         for (size_t i = 0; i < p.spriteInitializer.frames.size(); i++) {
@@ -2260,8 +2264,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     }
     code << ind << "particles.spriteModifier.fromTime = " << formatFloat(p.spriteModifier.fromTime) << ";\n";
     code << ind << "particles.spriteModifier.toTime = " << formatFloat(p.spriteModifier.toTime) << ";\n";
-    code << ind << "particles.spriteModifier.functionType = " << formatEaseType(p.spriteModifier.functionType) << ";\n";
-    code << ind << "particles.spriteModifier.function = Ease::getFunction(particles.spriteModifier.functionType);\n";
+    code << ind << "particles.spriteModifier.function = " << formatEase(p.spriteModifier.function) << ";\n";
     if (!p.spriteModifier.frames.empty()) {
         for (size_t i = 0; i < p.spriteModifier.frames.size(); i++) {
             code << ind << "particles.spriteModifier.frames.push_back(" << formatInt(p.spriteModifier.frames[i]) << ");\n";
@@ -2275,8 +2278,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.rotationModifier.toTime = " << formatFloat(p.rotationModifier.toTime) << ";\n";
     code << ind << "particles.rotationModifier.fromRotation = " << formatQuaternion(p.rotationModifier.fromRotation) << ";\n";
     code << ind << "particles.rotationModifier.toRotation = " << formatQuaternion(p.rotationModifier.toRotation) << ";\n";
-    code << ind << "particles.rotationModifier.functionType = " << formatEaseType(p.rotationModifier.functionType) << ";\n";
-    code << ind << "particles.rotationModifier.function = Ease::getFunction(particles.rotationModifier.functionType);\n";
+    code << ind << "particles.rotationModifier.function = " << formatEase(p.rotationModifier.function) << ";\n";
     code << ind << "particles.rotationModifier.shortestPath = " << formatBool(p.rotationModifier.shortestPath) << ";\n";
 
     code << ind << "particles.scaleInitializer.minScale = " << formatVector3(p.scaleInitializer.minScale) << ";\n";
@@ -2286,8 +2288,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.scaleModifier.toTime = " << formatFloat(p.scaleModifier.toTime) << ";\n";
     code << ind << "particles.scaleModifier.fromScale = " << formatVector3(p.scaleModifier.fromScale) << ";\n";
     code << ind << "particles.scaleModifier.toScale = " << formatVector3(p.scaleModifier.toScale) << ";\n";
-    code << ind << "particles.scaleModifier.functionType = " << formatEaseType(p.scaleModifier.functionType) << ";\n";
-    code << ind << "particles.scaleModifier.function = Ease::getFunction(particles.scaleModifier.functionType);\n";
+    code << ind << "particles.scaleModifier.function = " << formatEase(p.scaleModifier.function) << ";\n";
 
     addComponentCode(code, ind, sceneName, entityName, entity, "ParticlesComponent", "particles", assignExisting);
     return code.str();

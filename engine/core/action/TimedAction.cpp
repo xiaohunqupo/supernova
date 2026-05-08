@@ -24,7 +24,7 @@ void TimedAction::setAction(float duration, bool loop){
 void TimedAction::setFunctionType(EaseType functionType){
     TimedActionComponent& timedAction = getComponent<TimedActionComponent>();
 
-    timedAction.function = Ease::getFunction(functionType);
+    timedAction.function.setType(functionType);
 }
 
 float TimedAction::getValue() const{

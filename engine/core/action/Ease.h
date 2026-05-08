@@ -8,6 +8,8 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#include "util/FunctionSubscribe.h"
+
 namespace doriax {
 
     enum class EaseType{
@@ -41,12 +43,120 @@ namespace doriax {
         BACK_IN_OUT,
         BOUNCE_IN,
         BOUNCE_OUT,
-        BOUNCE_IN_OUT
+        BOUNCE_IN_OUT,
+        CUSTOM
     };
 
-    class Ease {
+    class Ease: public FunctionSubscribe<float(float)> {
+
+        using EaseFunction = FunctionSubscribe<float(float)>;
+
+        private:
+
+        EaseType functionType = EaseType::LINEAR;
 
         public:
+
+        using EaseFunction::call;
+        using EaseFunction::operator();
+        using EaseFunction::remove;
+        using EaseFunction::removeByTagSubstring;
+        using EaseFunction::clear;
+
+        Ease(): EaseFunction(std::function<float(float)>(Ease::linear)){
+        }
+
+        explicit Ease(EaseType functionType): Ease(){
+            setType(functionType);
+        }
+
+        Ease(std::function<float(float)> function): EaseFunction(function){
+            this->functionType = EaseType::CUSTOM;
+        }
+
+        Ease(lua_State *L): EaseFunction(L){
+            this->functionType = EaseType::CUSTOM;
+        }
+
+        Ease(const Ease& ease): EaseFunction(ease){
+            this->functionType = ease.functionType;
+        }
+
+        Ease& operator = (const Ease& ease){
+            EaseFunction::operator=(ease);
+            this->functionType = ease.functionType;
+
+            return *this;
+        }
+
+        Ease& operator = (std::function<float(float)> function){
+            setFunction(function);
+
+            return *this;
+        }
+
+        Ease& operator = (lua_State *L){
+            setFunction(L);
+
+            return *this;
+        }
+
+        Ease& operator = (EaseType functionType){
+            setType(functionType);
+
+            return *this;
+        }
+
+        bool operator == (const Ease& ease) const{
+            return functionType == ease.functionType;
+        }
+
+        bool operator != (const Ease& ease) const{
+            return !(*this == ease);
+        }
+
+        EaseType getType() const{
+            return functionType;
+        }
+
+        EaseType getFunctionType() const{
+            return getType();
+        }
+
+        void setType(EaseType functionType){
+            this->functionType = functionType;
+
+            if (functionType != EaseType::CUSTOM){
+                EaseFunction::clear();
+                EaseFunction::add("cFunction", getFunction(functionType));
+            }
+        }
+
+        void setFunctionType(EaseType functionType){
+            setType(functionType);
+        }
+
+        void setFunction(std::function<float(float)> function){
+            this->functionType = EaseType::CUSTOM;
+            EaseFunction::clear();
+            EaseFunction::add("cFunction", function);
+        }
+
+        void setFunction(lua_State *L){
+            this->functionType = EaseType::CUSTOM;
+            EaseFunction::clear();
+            EaseFunction::add("luaFunction", L);
+        }
+
+        bool add(const std::string& tag, lua_State *L){
+            this->functionType = EaseType::CUSTOM;
+            return EaseFunction::add(tag, L);
+        }
+
+        bool add(const std::string& tag, std::function<float(float)> function) {
+            this->functionType = EaseType::CUSTOM;
+            return EaseFunction::add(tag, function);
+        }
 
         static inline float linear(float time){
             return time;

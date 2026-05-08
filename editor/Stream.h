@@ -24,6 +24,8 @@ namespace doriax::editor {
 
         static std::string easeTypeToString(EaseType type);
         static EaseType stringToEaseType(const std::string& str);
+        static YAML::Node encodeEase(const Ease& ease);
+        static Ease decodeEase(const YAML::Node& node, const Ease* oldEase = nullptr);
 
         static std::string bufferTypeToString(BufferType type);
         static BufferType stringToBufferType(const std::string& str);

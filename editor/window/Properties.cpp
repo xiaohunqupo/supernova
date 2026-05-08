@@ -245,7 +245,8 @@ static std::vector<editor::EnumEntry> entriesEaseType = {
     { (int)EaseType::BACK_IN_OUT, "Back In Out" },
     { (int)EaseType::BOUNCE_IN, "Bounce In" },
     { (int)EaseType::BOUNCE_OUT, "Bounce Out" },
-    { (int)EaseType::BOUNCE_IN_OUT, "Bounce In Out" }
+    { (int)EaseType::BOUNCE_IN_OUT, "Bounce In Out" },
+    { (int)EaseType::CUSTOM, "Custom" }
 };
 
 namespace {
@@ -615,6 +616,15 @@ namespace {
                 return std::to_string(*static_cast<Entity*>(prop.ref));
             case editor::PropertyType::String:
                 return *static_cast<std::string*>(prop.ref);
+            case editor::PropertyType::Ease: {
+                EaseType type = static_cast<Ease*>(prop.ref)->getType();
+                for (const auto& entry : entriesEaseType) {
+                    if (entry.value == static_cast<int>(type)) {
+                        return entry.name;
+                    }
+                }
+                return "Ease";
+            }
             default:
                 return "-";
         }
@@ -2777,6 +2787,73 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         if (dif)
             ImGui::PopStyleColor();
 
+    }else if (type == RowPropertyType::Ease) {
+        Ease* value = nullptr;
+        std::map<Entity, Ease> eValue;
+        bool dif = false;
+        Ease* defValue = nullptr;
+        std::vector<EnumEntry>* enumEntries = settings.enumEntries ? settings.enumEntries : &entriesEaseType;
+        for (Entity& entity : entities){
+            PropertyData prop = Catalog::getProperty(sceneProject->scene, entity, cpType, id);
+            defValue = static_cast<Ease*>(prop.def);
+            eValue[entity] = *static_cast<Ease*>(prop.ref);
+            if (value){
+                if (*value != eValue[entity])
+                    dif = true;
+            }
+            value = &eValue[entity];
+        }
+
+        int item_current = 0;
+        EaseType currentType = value ? value->getType() : EaseType::LINEAR;
+        for (size_t i = 0; i < enumEntries->size(); ++i) {
+            if ((*enumEntries)[i].value == static_cast<int>(currentType)) {
+                item_current = static_cast<int>(i);
+                break;
+            }
+        }
+
+        int item_default = item_current;
+        bool defChanged = false;
+        if (defValue){
+            EaseType defaultType = defValue->getType();
+            for (size_t i = 0; i < enumEntries->size(); ++i) {
+                if ((*enumEntries)[i].value == static_cast<int>(defaultType)) {
+                    item_default = static_cast<int>(i);
+                    break;
+                }
+            }
+            defChanged = (currentType != defaultType);
+        }
+
+        if (propertyHeader(label, settings.secondColSize, defChanged, settings.child)){
+            for (Entity& entity : entities){
+                Ease defaultEase(static_cast<EaseType>((*enumEntries)[item_default].value));
+                cmd = new PropertyCmd<Ease>(project, sceneProject->id, entity, cpType, id, defaultEase, settings.onValueChanged);
+                CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+                finishProperty = true;
+            }
+        }
+
+        std::vector<const char*> names;
+        for (const auto& entry : *enumEntries) {
+            names.push_back(entry.name);
+        }
+
+        if (dif)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        if (ImGui::Combo(("##combo_" + id).c_str(), &item_current, names.data(), static_cast<int>(names.size()))) {
+            EaseType newType = static_cast<EaseType>((*enumEntries)[item_current].value);
+            for (Entity& entity : entities){
+                Ease newValue = eValue[entity];
+                newValue.setType(newType);
+                cmd = new PropertyCmd<Ease>(project, sceneProject->id, entity, cpType, id, newValue, settings.onValueChanged);
+                CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+            }
+        }
+        if (dif)
+            ImGui::PopStyleColor();
+
     }else if (type == RowPropertyType::Font){
         std::string* value = nullptr;
         std::map<Entity, std::string> eValue;
@@ -4140,49 +4217,6 @@ bool editor::Properties::propertyRowWithAutoButton(RowPropertyType propType, Com
     }
 
     return rowChanged;
-}
-
-editor::RowSettings editor::Properties::particleEaseSettings(SceneProject* sceneProject, const std::vector<Entity>& entities, const std::string& modifierId) const {
-    editor::RowSettings settings;
-    settings.enumEntries = &entriesEaseType;
-    settings.secondColSize = -1;
-    settings.onValueChanged = [this, sceneProject, entities, modifierId]() {
-        syncParticleModifierFunction(sceneProject, entities, modifierId);
-    };
-    return settings;
-}
-
-void editor::Properties::syncParticleModifierFunction(SceneProject* sceneProject, const std::vector<Entity>& entities, const std::string& modifierId) const {
-    if (!sceneProject || !sceneProject->scene) {
-        return;
-    }
-
-    for (Entity entity : entities) {
-        ParticlesComponent* particles = sceneProject->scene->findComponent<ParticlesComponent>(entity);
-        if (!particles) {
-            continue;
-        }
-
-        if (modifierId == "positionModifier") {
-            particles->positionModifier.function = Ease::getFunction(particles->positionModifier.functionType);
-        } else if (modifierId == "velocityModifier") {
-            particles->velocityModifier.function = Ease::getFunction(particles->velocityModifier.functionType);
-        } else if (modifierId == "accelerationModifier") {
-            particles->accelerationModifier.function = Ease::getFunction(particles->accelerationModifier.functionType);
-        } else if (modifierId == "colorModifier") {
-            particles->colorModifier.function = Ease::getFunction(particles->colorModifier.functionType);
-        } else if (modifierId == "alphaModifier") {
-            particles->alphaModifier.function = Ease::getFunction(particles->alphaModifier.functionType);
-        } else if (modifierId == "sizeModifier") {
-            particles->sizeModifier.function = Ease::getFunction(particles->sizeModifier.functionType);
-        } else if (modifierId == "spriteModifier") {
-            particles->spriteModifier.function = Ease::getFunction(particles->spriteModifier.functionType);
-        } else if (modifierId == "rotationModifier") {
-            particles->rotationModifier.function = Ease::getFunction(particles->rotationModifier.functionType);
-        } else if (modifierId == "scaleModifier") {
-            particles->scaleModifier.function = Ease::getFunction(particles->scaleModifier.functionType);
-        }
-    }
 }
 
 void editor::Properties::setParticleFrames(ComponentType cpType, const std::string& propertyId, SceneProject* sceneProject, Entity entity, const std::vector<int>& frames) {
@@ -6930,16 +6964,6 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     RowSettings settingsInt;
     settingsInt.secondColSize = 6 * ImGui::GetFontSize();
 
-    RowSettings positionEaseSettings = particleEaseSettings(sceneProject, entities, "positionModifier");
-    RowSettings velocityEaseSettings = particleEaseSettings(sceneProject, entities, "velocityModifier");
-    RowSettings accelerationEaseSettings = particleEaseSettings(sceneProject, entities, "accelerationModifier");
-    RowSettings colorEaseSettings = particleEaseSettings(sceneProject, entities, "colorModifier");
-    RowSettings alphaEaseSettings = particleEaseSettings(sceneProject, entities, "alphaModifier");
-    RowSettings sizeEaseSettings = particleEaseSettings(sceneProject, entities, "sizeModifier");
-    RowSettings spriteEaseSettings = particleEaseSettings(sceneProject, entities, "spriteModifier");
-    RowSettings rotationEaseSettings = particleEaseSettings(sceneProject, entities, "rotationModifier");
-    RowSettings scaleEaseSettings = particleEaseSettings(sceneProject, entities, "scaleModifier");
-
     beginTable(cpType, getLabelSize("Max Per Update"));
     propertyRow(RowPropertyType::UInt, cpType, "maxParticles", "Max Particles", sceneProject, entities, settingsInt);
     propertyRow(RowPropertyType::Bool, cpType, "emitter", "Emitter", sceneProject, entities);
@@ -7036,7 +7060,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("From Position"), "position_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "positionModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "positionModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "positionModifier.functionType", "Ease", sceneProject, entities, positionEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "positionModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.fromPosition", "From Position", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.toPosition", "To Position", sceneProject, entities);
         endTable();
@@ -7045,7 +7069,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("From Velocity"), "velocity_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "velocityModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "velocityModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "velocityModifier.functionType", "Ease", sceneProject, entities, velocityEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "velocityModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.fromVelocity", "From Velocity", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.toVelocity", "To Velocity", sceneProject, entities);
         endTable();
@@ -7054,7 +7078,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("From Acceleration"), "acceleration_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "accelerationModifier.functionType", "Ease", sceneProject, entities, accelerationEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "accelerationModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.fromAcceleration", "From Acceleration", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.toAcceleration", "To Acceleration", sceneProject, entities);
         endTable();
@@ -7063,7 +7087,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("Mod sRGB"), "color_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "colorModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "colorModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "colorModifier.functionType", "Ease", sceneProject, entities, colorEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "colorModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.fromColor", "From Color", sceneProject, entities);
         propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.toColor", "To Color", sceneProject, entities);
         propertyRow(RowPropertyType::Bool, cpType, "colorModifier.useSRGB", "Mod sRGB", sceneProject, entities);
@@ -7073,7 +7097,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("From Alpha"), "alpha_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "alphaModifier.functionType", "Ease", sceneProject, entities, alphaEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "alphaModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromAlpha", "From Alpha", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toAlpha", "To Alpha", sceneProject, entities, settingsFloat);
         endTable();
@@ -7082,7 +7106,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("From Size"), "size_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "sizeModifier.functionType", "Ease", sceneProject, entities, sizeEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "sizeModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromSize", "From Size", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toSize", "To Size", sceneProject, entities, settingsFloat);
         endTable();
@@ -7091,7 +7115,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("From Time"), "sprite_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "spriteModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "spriteModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "spriteModifier.functionType", "Ease", sceneProject, entities, spriteEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "spriteModifier.function", "Ease", sceneProject, entities);
         endTable();
         drawParticleFrameList(cpType, "spriteModifier.frames", "sprite_modifier_frames", sceneProject, entities);
 
@@ -7099,7 +7123,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("Mod Shortest"), "rotation_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "rotationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "rotationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "rotationModifier.functionType", "Ease", sceneProject, entities, rotationEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "rotationModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.fromRotation", "From Rotation", sceneProject, entities);
         propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.toRotation", "To Rotation", sceneProject, entities);
         propertyRow(RowPropertyType::Bool, cpType, "rotationModifier.shortestPath", "Mod Shortest", sceneProject, entities);
@@ -7109,7 +7133,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         beginTable(cpType, getLabelSize("From Scale"), "scale_modifier_table");
         propertyRow(RowPropertyType::Float, cpType, "scaleModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
         propertyRow(RowPropertyType::Float, cpType, "scaleModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-        propertyRow(RowPropertyType::Enum, cpType, "scaleModifier.functionType", "Ease", sceneProject, entities, scaleEaseSettings);
+        propertyRow(RowPropertyType::Ease, cpType, "scaleModifier.function", "Ease", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.fromScale", "From Scale", sceneProject, entities);
         propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.toScale", "To Scale", sceneProject, entities);
         endTable();
@@ -8944,6 +8968,7 @@ void editor::Properties::drawTimedActionComponent(ComponentType cpType, ScenePro
     beginTable(cpType, getLabelSize("Duration"));
     propertyRow(RowPropertyType::FloatPositive, cpType, "duration", "Duration", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
+    propertyRow(RowPropertyType::Ease, cpType, "function", "Ease", sceneProject, entities);
     endTable();
 }
 

@@ -105,14 +105,17 @@ void Particles::setPositionModifier(float fromTime, float toTime, Vector3 fromPo
 }
 
 void Particles::setPositionModifier(float fromTime, float toTime, Vector3 fromPosition, Vector3 toPosition, EaseType functionType){
+    setPositionModifier(fromTime, toTime, fromPosition, toPosition, Ease(functionType));
+}
+
+void Particles::setPositionModifier(float fromTime, float toTime, Vector3 fromPosition, Vector3 toPosition, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.positionModifier.fromTime = fromTime;
     partAnim.positionModifier.toTime = toTime;
     partAnim.positionModifier.fromPosition = fromPosition;
     partAnim.positionModifier.toPosition = toPosition;
-    partAnim.positionModifier.functionType = functionType;
-    partAnim.positionModifier.function = Ease::getFunction(functionType);
+    partAnim.positionModifier.function = function;
 }
 
 void Particles::setVelocityInitializer(Vector3 velocity){
@@ -131,14 +134,17 @@ void Particles::setVelocityModifier(float fromTime, float toTime, Vector3 fromVe
 }
 
 void Particles::setVelocityModifier(float fromTime, float toTime, Vector3 fromVelocity, Vector3 toVelocity, EaseType functionType){
+    setVelocityModifier(fromTime, toTime, fromVelocity, toVelocity, Ease(functionType));
+}
+
+void Particles::setVelocityModifier(float fromTime, float toTime, Vector3 fromVelocity, Vector3 toVelocity, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.velocityModifier.fromTime = fromTime;
     partAnim.velocityModifier.toTime = toTime;
     partAnim.velocityModifier.fromVelocity = fromVelocity;
     partAnim.velocityModifier.toVelocity = toVelocity;
-    partAnim.velocityModifier.functionType = functionType;
-    partAnim.velocityModifier.function = Ease::getFunction(functionType);
+    partAnim.velocityModifier.function = function;
 }
 
 void Particles::setAccelerationInitializer(Vector3 acceleration){
@@ -157,14 +163,17 @@ void Particles::setAccelerationModifier(float fromTime, float toTime, Vector3 fr
 }
 
 void Particles::setAccelerationModifier(float fromTime, float toTime, Vector3 fromAcceleration, Vector3 toAcceleration, EaseType functionType){
+    setAccelerationModifier(fromTime, toTime, fromAcceleration, toAcceleration, Ease(functionType));
+}
+
+void Particles::setAccelerationModifier(float fromTime, float toTime, Vector3 fromAcceleration, Vector3 toAcceleration, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.accelerationModifier.fromTime = fromTime;
     partAnim.accelerationModifier.toTime = toTime;
     partAnim.accelerationModifier.fromAcceleration = fromAcceleration;
     partAnim.accelerationModifier.toAcceleration = toAcceleration;
-    partAnim.accelerationModifier.functionType = functionType;
-    partAnim.accelerationModifier.function = Ease::getFunction(functionType);
+    partAnim.accelerationModifier.function = function;
 }
 
 void Particles::setColorInitializer(Vector3 color){
@@ -183,14 +192,17 @@ void Particles::setColorModifier(float fromTime, float toTime, Vector3 fromColor
 }
 
 void Particles::setColorModifier(float fromTime, float toTime, Vector3 fromColor, Vector3 toColor, EaseType functionType){
+    setColorModifier(fromTime, toTime, fromColor, toColor, Ease(functionType));
+}
+
+void Particles::setColorModifier(float fromTime, float toTime, Vector3 fromColor, Vector3 toColor, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.colorModifier.fromTime = fromTime;
     partAnim.colorModifier.toTime = toTime;
     partAnim.colorModifier.fromColor = fromColor;
     partAnim.colorModifier.toColor = toColor;
-    partAnim.colorModifier.functionType = functionType;
-    partAnim.colorModifier.function = Ease::getFunction(functionType);
+    partAnim.colorModifier.function = function;
 }
 
 void Particles::setAlphaInitializer(float alpha){
@@ -209,14 +221,17 @@ void Particles::setAlphaModifier(float fromTime, float toTime, float fromAlpha, 
 }
 
 void Particles::setAlphaModifier(float fromTime, float toTime, float fromAlpha, float toAlpha, EaseType functionType){
+    setAlphaModifier(fromTime, toTime, fromAlpha, toAlpha, Ease(functionType));
+}
+
+void Particles::setAlphaModifier(float fromTime, float toTime, float fromAlpha, float toAlpha, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.alphaModifier.fromTime = fromTime;
     partAnim.alphaModifier.toTime = toTime;
     partAnim.alphaModifier.fromAlpha = fromAlpha;
     partAnim.alphaModifier.toAlpha = toAlpha;
-    partAnim.alphaModifier.functionType = functionType;
-    partAnim.alphaModifier.function = Ease::getFunction(functionType);
+    partAnim.alphaModifier.function = function;
 }
 
 void Particles::setSizeInitializer(float size){
@@ -235,14 +250,17 @@ void Particles::setSizeModifier(float fromTime, float toTime, float fromSize, fl
 }
 
 void Particles::setSizeModifier(float fromTime, float toTime, float fromSize, float toSize, EaseType functionType){
+    setSizeModifier(fromTime, toTime, fromSize, toSize, Ease(functionType));
+}
+
+void Particles::setSizeModifier(float fromTime, float toTime, float fromSize, float toSize, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.sizeModifier.fromTime = fromTime;
     partAnim.sizeModifier.toTime = toTime;
     partAnim.sizeModifier.fromSize = fromSize;
     partAnim.sizeModifier.toSize = toSize;
-    partAnim.sizeModifier.functionType = functionType;
-    partAnim.sizeModifier.function = Ease::getFunction(functionType);
+    partAnim.sizeModifier.function = function;
 }
 
 void Particles::setSpriteIntializer(std::vector<int> frames){
@@ -266,13 +284,16 @@ void Particles::setSpriteModifier(float fromTime, float toTime, std::vector<int>
 }
 
 void Particles::setSpriteModifier(float fromTime, float toTime, std::vector<int> frames, EaseType functionType){
+    setSpriteModifier(fromTime, toTime, frames, Ease(functionType));
+}
+
+void Particles::setSpriteModifier(float fromTime, float toTime, std::vector<int> frames, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.spriteModifier.fromTime = fromTime;
     partAnim.spriteModifier.toTime = toTime;
     partAnim.spriteModifier.frames = frames;
-    partAnim.spriteModifier.functionType = functionType;
-    partAnim.spriteModifier.function = Ease::getFunction(functionType);
+    partAnim.spriteModifier.function = function;
 }
 
 void Particles::setRotationInitializer(Quaternion rotation){
@@ -306,25 +327,31 @@ void Particles::setRotationModifier(float fromTime, float toTime, Quaternion fro
 }
 
 void Particles::setRotationModifier(float fromTime, float toTime, float fromRotation, float toRotation, EaseType functionType){
+    setRotationModifier(fromTime, toTime, fromRotation, toRotation, Ease(functionType));
+}
+
+void Particles::setRotationModifier(float fromTime, float toTime, float fromRotation, float toRotation, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.rotationModifier.fromTime = fromTime;
     partAnim.rotationModifier.toTime = toTime;
     partAnim.rotationModifier.fromRotation = Quaternion(0, 0, fromRotation);
     partAnim.rotationModifier.toRotation = Quaternion(0, 0, toRotation);;
-    partAnim.rotationModifier.functionType = functionType;
-    partAnim.rotationModifier.function = Ease::getFunction(functionType);
+    partAnim.rotationModifier.function = function;
 }
 
 void Particles::setRotationModifier(float fromTime, float toTime, Quaternion fromRotation, Quaternion toRotation, EaseType functionType){
+    setRotationModifier(fromTime, toTime, fromRotation, toRotation, Ease(functionType));
+}
+
+void Particles::setRotationModifier(float fromTime, float toTime, Quaternion fromRotation, Quaternion toRotation, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.rotationModifier.fromTime = fromTime;
     partAnim.rotationModifier.toTime = toTime;
     partAnim.rotationModifier.fromRotation = fromRotation;
     partAnim.rotationModifier.toRotation = toRotation;
-    partAnim.rotationModifier.functionType = functionType;
-    partAnim.rotationModifier.function = Ease::getFunction(functionType);
+    partAnim.rotationModifier.function = function;
 }
 
 void Particles::setScaleInitializer(float scale){
@@ -358,13 +385,16 @@ void Particles::setScaleModifier(float fromTime, float toTime, Vector3 fromScale
 }
 
 void Particles::setScaleModifier(float fromTime, float toTime, Vector3 fromScale, Vector3 toScale, EaseType functionType){
+    setScaleModifier(fromTime, toTime, fromScale, toScale, Ease(functionType));
+}
+
+void Particles::setScaleModifier(float fromTime, float toTime, Vector3 fromScale, Vector3 toScale, Ease function){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
     partAnim.scaleModifier.fromTime = fromTime;
     partAnim.scaleModifier.toTime = toTime;
     partAnim.scaleModifier.fromScale = fromScale;
     partAnim.scaleModifier.toScale = toScale;
-    partAnim.scaleModifier.functionType = functionType;
-    partAnim.scaleModifier.function = Ease::getFunction(functionType);
+    partAnim.scaleModifier.function = function;
 }
 

@@ -30,8 +30,7 @@ namespace doriax{
         Vector3 fromPosition = Vector3(0,0,0);
         Vector3 toPosition = Vector3(0,0,0);
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
     struct ParticleVelocityInitializer{
@@ -46,8 +45,7 @@ namespace doriax{
         Vector3 fromVelocity = Vector3(0,0,0);
         Vector3 toVelocity = Vector3(0,0,0);
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
     struct ParticleAccelerationInitializer{
@@ -62,8 +60,7 @@ namespace doriax{
         Vector3 fromAcceleration = Vector3(0,0,0);
         Vector3 toAcceleration = Vector3(0,0,0);
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
     struct ParticleColorInitializer{
@@ -80,8 +77,7 @@ namespace doriax{
         Vector3 fromColor = Vector3(0,0,0);
         Vector3 toColor = Vector3(0,0,0);
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
 
         bool useSRGB = true;
     };
@@ -98,8 +94,7 @@ namespace doriax{
         float fromAlpha = 0;
         float toAlpha= 0;
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
     struct ParticleSizeInitializer{
@@ -114,8 +109,7 @@ namespace doriax{
         float fromSize = 0;
         float toSize = 0;
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
     struct ParticleSpriteInitializer{
@@ -128,8 +122,7 @@ namespace doriax{
 
         std::vector<int> frames;
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
     struct ParticleRotationInitializer{
@@ -146,8 +139,7 @@ namespace doriax{
         Quaternion fromRotation;
         Quaternion toRotation;
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
 
         bool shortestPath = false;
     };
@@ -166,8 +158,7 @@ namespace doriax{
         Vector3 fromScale = Vector3(1,1,1);
         Vector3 toScale = Vector3(1,1,1);
 
-        EaseType functionType = EaseType::LINEAR;
-        FunctionSubscribe<float(float)> function = std::function<float(float)>(Ease::linear);
+        Ease function;
     };
 
     struct ParticleData{

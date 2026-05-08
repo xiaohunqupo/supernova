@@ -486,7 +486,7 @@ float ActionSystem::getTimeFromParticleTime(float& time, float& fromTime, float&
     return -1;
 }
 
-bool ActionSystem::getParticleModifierValue(float& particleTime, float& fromTime, float& toTime, FunctionSubscribe<float(float)>& function, float& value){
+bool ActionSystem::getParticleModifierValue(float& particleTime, float& fromTime, float& toTime, Ease& function, float& value){
     float time = getTimeFromParticleTime(particleTime, fromTime, toTime);
     if (time < 0 || time > 1){
         return false;

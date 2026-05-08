@@ -105,6 +105,7 @@ namespace doriax::editor{
         Material,
         Texture,
         Enum,
+        Ease,
         Custom,
         Entity,
         EntityReference

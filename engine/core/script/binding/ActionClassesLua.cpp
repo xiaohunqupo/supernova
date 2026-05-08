@@ -63,6 +63,7 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addVariable("BOUNCE_IN", EaseType::BOUNCE_IN)
         .addVariable("BOUNCE_OUT", EaseType::BOUNCE_OUT)
         .addVariable("BOUNCE_IN_OUT", EaseType::BOUNCE_IN_OUT)
+        .addVariable("CUSTOM", EaseType::CUSTOM)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
@@ -149,43 +150,50 @@ void LuaBinding::registerActionClasses(lua_State *L){
             luabridge::overload<Vector3, Vector3>(&Particles::setPositionInitializer))
         .addFunction("setPositionModifier", 
             luabridge::overload<float, float, Vector3, Vector3>(&Particles::setPositionModifier),
-            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setPositionModifier))
+            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setPositionModifier),
+            luabridge::overload<float, float, Vector3, Vector3, Ease>(&Particles::setPositionModifier))
         .addFunction("setVelocityInitializer", 
             luabridge::overload<Vector3>(&Particles::setVelocityInitializer),
             luabridge::overload<Vector3, Vector3>(&Particles::setVelocityInitializer))
         .addFunction("setVelocityModifier", 
             luabridge::overload<float, float, Vector3, Vector3>(&Particles::setVelocityModifier),
-            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setVelocityModifier))
+            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setVelocityModifier),
+            luabridge::overload<float, float, Vector3, Vector3, Ease>(&Particles::setVelocityModifier))
         .addFunction("setAccelerationInitializer", 
             luabridge::overload<Vector3>(&Particles::setAccelerationInitializer),
             luabridge::overload<Vector3, Vector3>(&Particles::setAccelerationInitializer))
         .addFunction("setAccelerationModifier", 
             luabridge::overload<float, float, Vector3, Vector3>(&Particles::setAccelerationModifier),
-            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setAccelerationModifier))
+            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setAccelerationModifier),
+            luabridge::overload<float, float, Vector3, Vector3, Ease>(&Particles::setAccelerationModifier))
         .addFunction("setColorInitializer", 
             luabridge::overload<Vector3>(&Particles::setColorInitializer),
             luabridge::overload<Vector3, Vector3>(&Particles::setColorInitializer))
         .addFunction("setColorModifier", 
             luabridge::overload<float, float, Vector3, Vector3>(&Particles::setColorModifier),
-            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setColorModifier))
+            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setColorModifier),
+            luabridge::overload<float, float, Vector3, Vector3, Ease>(&Particles::setColorModifier))
         .addFunction("setAlphaInitializer", 
             luabridge::overload<float>(&Particles::setAlphaInitializer),
             luabridge::overload<float, float>(&Particles::setAlphaInitializer))
         .addFunction("setAlphaModifier", 
             luabridge::overload<float, float, float, float>(&Particles::setAlphaModifier),
-            luabridge::overload<float, float, float, float, EaseType>(&Particles::setAlphaModifier))
+            luabridge::overload<float, float, float, float, EaseType>(&Particles::setAlphaModifier),
+            luabridge::overload<float, float, float, float, Ease>(&Particles::setAlphaModifier))
         .addFunction("setSizeInitializer", 
             luabridge::overload<float>(&Particles::setSizeInitializer),
             luabridge::overload<float, float>(&Particles::setSizeInitializer))
         .addFunction("setSizeModifier", 
             luabridge::overload<float, float, float, float>(&Particles::setSizeModifier),
-            luabridge::overload<float, float, float, float, EaseType>(&Particles::setSizeModifier))
+            luabridge::overload<float, float, float, float, EaseType>(&Particles::setSizeModifier),
+            luabridge::overload<float, float, float, float, Ease>(&Particles::setSizeModifier))
         .addFunction("setSpriteIntializer", 
             luabridge::overload<std::vector<int>>(&Particles::setSpriteIntializer),
             luabridge::overload<int, int>(&Particles::setSpriteIntializer))
         .addFunction("setSpriteModifier", 
             luabridge::overload<float, float, std::vector<int>>(&Particles::setSpriteModifier),
-            luabridge::overload<float, float, std::vector<int>, EaseType>(&Particles::setSpriteModifier))
+            luabridge::overload<float, float, std::vector<int>, EaseType>(&Particles::setSpriteModifier),
+            luabridge::overload<float, float, std::vector<int>, Ease>(&Particles::setSpriteModifier))
         .addFunction("setRotationInitializer", 
             luabridge::overload<float>(&Particles::setRotationInitializer),
             luabridge::overload<float, float>(&Particles::setRotationInitializer),
@@ -194,8 +202,10 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addFunction("setRotationModifier", 
             luabridge::overload<float, float, float, float>(&Particles::setRotationModifier),
             luabridge::overload<float, float, float, float, EaseType>(&Particles::setRotationModifier),
+            luabridge::overload<float, float, float, float, Ease>(&Particles::setRotationModifier),
             luabridge::overload<float, float, Quaternion, Quaternion>(&Particles::setRotationModifier),
-            luabridge::overload<float, float, Quaternion, Quaternion, EaseType>(&Particles::setRotationModifier))
+            luabridge::overload<float, float, Quaternion, Quaternion, EaseType>(&Particles::setRotationModifier),
+            luabridge::overload<float, float, Quaternion, Quaternion, Ease>(&Particles::setRotationModifier))
         .addFunction("setScaleInitializer", 
             luabridge::overload<float>(&Particles::setScaleInitializer),
             luabridge::overload<Vector3>(&Particles::setScaleInitializer),
@@ -204,7 +214,8 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addFunction("setScaleModifier", 
             luabridge::overload<float, float, Vector3, Vector3>(&Particles::setScaleModifier),
             luabridge::overload<float, float, float, float>(&Particles::setScaleModifier),
-            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setScaleModifier))
+            luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setScaleModifier),
+            luabridge::overload<float, float, Vector3, Vector3, Ease>(&Particles::setScaleModifier))
         .addFunction("getParticlesomponent", &Particles::getComponent<ParticlesComponent>)
         .endClass();
 
@@ -235,7 +246,17 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<Ease>("Ease")
+        .deriveClass<Ease, FunctionSubscribe<float(float)>>("Ease")
+        .addConstructor <void (*) (void), void (*) (EaseType)> ()
+        .addFunction("__call", &Ease::call)
+        .addFunction("call", &Ease::call)
+        .addFunction("add", (bool (Ease::*)(const std::string&, lua_State*))&Ease::add)
+        .addFunction("setFunction", (void (Ease::*)(lua_State*))&Ease::setFunction)
+        .addProperty("type", &Ease::getType, &Ease::setType)
+        .addFunction("getType", &Ease::getType)
+        .addFunction("setType", &Ease::setType)
+        .addFunction("getFunctionType", &Ease::getFunctionType)
+        .addFunction("setFunctionType", &Ease::setFunctionType)
         .addStaticFunction("linear", &Ease::linear)
         .addStaticFunction("easeInQuad", &Ease::easeInQuad)
         .addStaticFunction("easeOutQuad", &Ease::easeOutQuad)
@@ -245,7 +266,7 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addStaticFunction("easeInOutCubic", &Ease::easeInOutCubic)
         .addStaticFunction("easeInQuart", &Ease::easeInQuart)
         .addStaticFunction("easeOutQuart", &Ease::easeOutQuart)
-        .addStaticFunction("easeInQuint", &Ease::easeOutQuint)
+        .addStaticFunction("easeInQuint", &Ease::easeInQuint)
         .addStaticFunction("easeOutQuint", &Ease::easeOutQuint)
         .addStaticFunction("easeInOutQuint", &Ease::easeInOutQuint)
         .addStaticFunction("easeInSine", &Ease::easeInSine)
