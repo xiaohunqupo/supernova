@@ -7,6 +7,7 @@
 #include "util/ProjectUtils.h"
 #include "render/SceneRender2D.h"
 
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <set>
@@ -106,6 +107,88 @@ PrimitiveType editor::Stream::stringToPrimitiveType(const std::string& str) {
     if (str == "points") return PrimitiveType::POINTS;
     if (str == "lines") return PrimitiveType::LINES;
     return PrimitiveType::TRIANGLES; // Default
+}
+
+std::string editor::Stream::easeTypeToString(EaseType type) {
+    switch (type) {
+        case EaseType::LINEAR: return "LINEAR";
+        case EaseType::QUAD_IN: return "QUAD_IN";
+        case EaseType::QUAD_OUT: return "QUAD_OUT";
+        case EaseType::QUAD_IN_OUT: return "QUAD_IN_OUT";
+        case EaseType::CUBIC_IN: return "CUBIC_IN";
+        case EaseType::CUBIC_OUT: return "CUBIC_OUT";
+        case EaseType::CUBIC_IN_OUT: return "CUBIC_IN_OUT";
+        case EaseType::QUART_IN: return "QUART_IN";
+        case EaseType::QUART_OUT: return "QUART_OUT";
+        case EaseType::QUART_IN_OUT: return "QUART_IN_OUT";
+        case EaseType::QUINT_IN: return "QUINT_IN";
+        case EaseType::QUINT_OUT: return "QUINT_OUT";
+        case EaseType::QUINT_IN_OUT: return "QUINT_IN_OUT";
+        case EaseType::SINE_IN: return "SINE_IN";
+        case EaseType::SINE_OUT: return "SINE_OUT";
+        case EaseType::SINE_IN_OUT: return "SINE_IN_OUT";
+        case EaseType::EXPO_IN: return "EXPO_IN";
+        case EaseType::EXPO_OUT: return "EXPO_OUT";
+        case EaseType::EXPO_IN_OUT: return "EXPO_IN_OUT";
+        case EaseType::CIRC_IN: return "CIRC_IN";
+        case EaseType::CIRC_OUT: return "CIRC_OUT";
+        case EaseType::CIRC_IN_OUT: return "CIRC_IN_OUT";
+        case EaseType::ELASTIC_IN: return "ELASTIC_IN";
+        case EaseType::ELASTIC_OUT: return "ELASTIC_OUT";
+        case EaseType::ELASTIC_IN_OUT: return "ELASTIC_IN_OUT";
+        case EaseType::BACK_IN: return "BACK_IN";
+        case EaseType::BACK_OUT: return "BACK_OUT";
+        case EaseType::BACK_IN_OUT: return "BACK_IN_OUT";
+        case EaseType::BOUNCE_IN: return "BOUNCE_IN";
+        case EaseType::BOUNCE_OUT: return "BOUNCE_OUT";
+        case EaseType::BOUNCE_IN_OUT: return "BOUNCE_IN_OUT";
+        default: return "LINEAR";
+    }
+}
+
+EaseType editor::Stream::stringToEaseType(const std::string& str) {
+    std::string normalized;
+    normalized.reserve(str.size());
+    for (char ch : str) {
+        if (ch == '-') {
+            normalized.push_back('_');
+        } else {
+            normalized.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+        }
+    }
+
+    if (normalized == "LINEAR") return EaseType::LINEAR;
+    if (normalized == "QUAD_IN") return EaseType::QUAD_IN;
+    if (normalized == "QUAD_OUT") return EaseType::QUAD_OUT;
+    if (normalized == "QUAD_IN_OUT") return EaseType::QUAD_IN_OUT;
+    if (normalized == "CUBIC_IN") return EaseType::CUBIC_IN;
+    if (normalized == "CUBIC_OUT") return EaseType::CUBIC_OUT;
+    if (normalized == "CUBIC_IN_OUT") return EaseType::CUBIC_IN_OUT;
+    if (normalized == "QUART_IN") return EaseType::QUART_IN;
+    if (normalized == "QUART_OUT") return EaseType::QUART_OUT;
+    if (normalized == "QUART_IN_OUT") return EaseType::QUART_IN_OUT;
+    if (normalized == "QUINT_IN") return EaseType::QUINT_IN;
+    if (normalized == "QUINT_OUT") return EaseType::QUINT_OUT;
+    if (normalized == "QUINT_IN_OUT") return EaseType::QUINT_IN_OUT;
+    if (normalized == "SINE_IN") return EaseType::SINE_IN;
+    if (normalized == "SINE_OUT") return EaseType::SINE_OUT;
+    if (normalized == "SINE_IN_OUT") return EaseType::SINE_IN_OUT;
+    if (normalized == "EXPO_IN") return EaseType::EXPO_IN;
+    if (normalized == "EXPO_OUT") return EaseType::EXPO_OUT;
+    if (normalized == "EXPO_IN_OUT") return EaseType::EXPO_IN_OUT;
+    if (normalized == "CIRC_IN") return EaseType::CIRC_IN;
+    if (normalized == "CIRC_OUT") return EaseType::CIRC_OUT;
+    if (normalized == "CIRC_IN_OUT") return EaseType::CIRC_IN_OUT;
+    if (normalized == "ELASTIC_IN") return EaseType::ELASTIC_IN;
+    if (normalized == "ELASTIC_OUT") return EaseType::ELASTIC_OUT;
+    if (normalized == "ELASTIC_IN_OUT") return EaseType::ELASTIC_IN_OUT;
+    if (normalized == "BACK_IN") return EaseType::BACK_IN;
+    if (normalized == "BACK_OUT") return EaseType::BACK_OUT;
+    if (normalized == "BACK_IN_OUT") return EaseType::BACK_IN_OUT;
+    if (normalized == "BOUNCE_IN") return EaseType::BOUNCE_IN;
+    if (normalized == "BOUNCE_OUT") return EaseType::BOUNCE_OUT;
+    if (normalized == "BOUNCE_IN_OUT") return EaseType::BOUNCE_IN_OUT;
+    return EaseType::LINEAR;
 }
 
 std::string editor::Stream::bufferTypeToString(BufferType type) {
@@ -4961,6 +5044,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     posMod["toTime"] = particles.positionModifier.toTime;
     posMod["fromPosition"] = encodeVector3(particles.positionModifier.fromPosition);
     posMod["toPosition"] = encodeVector3(particles.positionModifier.toPosition);
+    posMod["functionType"] = easeTypeToString(particles.positionModifier.functionType);
     node["positionModifier"] = posMod;
 
     YAML::Node velInit;
@@ -4973,6 +5057,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     velMod["toTime"] = particles.velocityModifier.toTime;
     velMod["fromVelocity"] = encodeVector3(particles.velocityModifier.fromVelocity);
     velMod["toVelocity"] = encodeVector3(particles.velocityModifier.toVelocity);
+    velMod["functionType"] = easeTypeToString(particles.velocityModifier.functionType);
     node["velocityModifier"] = velMod;
 
     YAML::Node accelInit;
@@ -4985,6 +5070,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     accelMod["toTime"] = particles.accelerationModifier.toTime;
     accelMod["fromAcceleration"] = encodeVector3(particles.accelerationModifier.fromAcceleration);
     accelMod["toAcceleration"] = encodeVector3(particles.accelerationModifier.toAcceleration);
+    accelMod["functionType"] = easeTypeToString(particles.accelerationModifier.functionType);
     node["accelerationModifier"] = accelMod;
 
     YAML::Node colorInit;
@@ -4998,6 +5084,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     colorMod["toTime"] = particles.colorModifier.toTime;
     colorMod["fromColor"] = encodeVector3(particles.colorModifier.fromColor);
     colorMod["toColor"] = encodeVector3(particles.colorModifier.toColor);
+    colorMod["functionType"] = easeTypeToString(particles.colorModifier.functionType);
     colorMod["useSRGB"] = particles.colorModifier.useSRGB;
     node["colorModifier"] = colorMod;
 
@@ -5011,6 +5098,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     alphaMod["toTime"] = particles.alphaModifier.toTime;
     alphaMod["fromAlpha"] = particles.alphaModifier.fromAlpha;
     alphaMod["toAlpha"] = particles.alphaModifier.toAlpha;
+    alphaMod["functionType"] = easeTypeToString(particles.alphaModifier.functionType);
     node["alphaModifier"] = alphaMod;
 
     YAML::Node sizeInit;
@@ -5023,6 +5111,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     sizeMod["toTime"] = particles.sizeModifier.toTime;
     sizeMod["fromSize"] = particles.sizeModifier.fromSize;
     sizeMod["toSize"] = particles.sizeModifier.toSize;
+    sizeMod["functionType"] = easeTypeToString(particles.sizeModifier.functionType);
     node["sizeModifier"] = sizeMod;
 
     YAML::Node spriteInit;
@@ -5034,6 +5123,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     YAML::Node spriteMod;
     spriteMod["fromTime"] = particles.spriteModifier.fromTime;
     spriteMod["toTime"] = particles.spriteModifier.toTime;
+    spriteMod["functionType"] = easeTypeToString(particles.spriteModifier.functionType);
     YAML::Node spriteModFrames;
     for (int f : particles.spriteModifier.frames) spriteModFrames.push_back(f);
     spriteMod["frames"] = spriteModFrames;
@@ -5050,12 +5140,14 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     rotMod["toTime"] = particles.rotationModifier.toTime;
     rotMod["fromRotation"] = encodeQuaternion(particles.rotationModifier.fromRotation);
     rotMod["toRotation"] = encodeQuaternion(particles.rotationModifier.toRotation);
+    rotMod["functionType"] = easeTypeToString(particles.rotationModifier.functionType);
     rotMod["shortestPath"] = particles.rotationModifier.shortestPath;
     node["rotationModifier"] = rotMod;
 
     YAML::Node scaleInit;
     scaleInit["minScale"] = encodeVector3(particles.scaleInitializer.minScale);
     scaleInit["maxScale"] = encodeVector3(particles.scaleInitializer.maxScale);
+    scaleInit["linearSort"] = particles.scaleInitializer.linearSort;
     node["scaleInitializer"] = scaleInit;
 
     YAML::Node scaleMod;
@@ -5063,6 +5155,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     scaleMod["toTime"] = particles.scaleModifier.toTime;
     scaleMod["fromScale"] = encodeVector3(particles.scaleModifier.fromScale);
     scaleMod["toScale"] = encodeVector3(particles.scaleModifier.toScale);
+    scaleMod["functionType"] = easeTypeToString(particles.scaleModifier.functionType);
     node["scaleModifier"] = scaleMod;
 
     return node;
@@ -5094,6 +5187,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.positionModifier.toTime = n["toTime"].as<float>();
         if (n["fromPosition"]) particles.positionModifier.fromPosition = decodeVector3(n["fromPosition"]);
         if (n["toPosition"]) particles.positionModifier.toPosition = decodeVector3(n["toPosition"]);
+        if (n["functionType"]) {
+            particles.positionModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.positionModifier.function = Ease::getFunction(particles.positionModifier.functionType);
+        }
     }
     if (node["velocityInitializer"]) {
         const YAML::Node& n = node["velocityInitializer"];
@@ -5106,6 +5203,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.velocityModifier.toTime = n["toTime"].as<float>();
         if (n["fromVelocity"]) particles.velocityModifier.fromVelocity = decodeVector3(n["fromVelocity"]);
         if (n["toVelocity"]) particles.velocityModifier.toVelocity = decodeVector3(n["toVelocity"]);
+        if (n["functionType"]) {
+            particles.velocityModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.velocityModifier.function = Ease::getFunction(particles.velocityModifier.functionType);
+        }
     }
     if (node["accelerationInitializer"]) {
         const YAML::Node& n = node["accelerationInitializer"];
@@ -5118,6 +5219,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.accelerationModifier.toTime = n["toTime"].as<float>();
         if (n["fromAcceleration"]) particles.accelerationModifier.fromAcceleration = decodeVector3(n["fromAcceleration"]);
         if (n["toAcceleration"]) particles.accelerationModifier.toAcceleration = decodeVector3(n["toAcceleration"]);
+        if (n["functionType"]) {
+            particles.accelerationModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.accelerationModifier.function = Ease::getFunction(particles.accelerationModifier.functionType);
+        }
     }
     if (node["colorInitializer"]) {
         const YAML::Node& n = node["colorInitializer"];
@@ -5131,6 +5236,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.colorModifier.toTime = n["toTime"].as<float>();
         if (n["fromColor"]) particles.colorModifier.fromColor = decodeVector3(n["fromColor"]);
         if (n["toColor"]) particles.colorModifier.toColor = decodeVector3(n["toColor"]);
+        if (n["functionType"]) {
+            particles.colorModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.colorModifier.function = Ease::getFunction(particles.colorModifier.functionType);
+        }
         if (n["useSRGB"]) particles.colorModifier.useSRGB = n["useSRGB"].as<bool>();
     }
     if (node["alphaInitializer"]) {
@@ -5144,6 +5253,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.alphaModifier.toTime = n["toTime"].as<float>();
         if (n["fromAlpha"]) particles.alphaModifier.fromAlpha = n["fromAlpha"].as<float>();
         if (n["toAlpha"]) particles.alphaModifier.toAlpha = n["toAlpha"].as<float>();
+        if (n["functionType"]) {
+            particles.alphaModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.alphaModifier.function = Ease::getFunction(particles.alphaModifier.functionType);
+        }
     }
     if (node["sizeInitializer"]) {
         const YAML::Node& n = node["sizeInitializer"];
@@ -5156,6 +5269,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.sizeModifier.toTime = n["toTime"].as<float>();
         if (n["fromSize"]) particles.sizeModifier.fromSize = n["fromSize"].as<float>();
         if (n["toSize"]) particles.sizeModifier.toSize = n["toSize"].as<float>();
+        if (n["functionType"]) {
+            particles.sizeModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.sizeModifier.function = Ease::getFunction(particles.sizeModifier.functionType);
+        }
     }
     if (node["spriteInitializer"]) {
         const YAML::Node& n = node["spriteInitializer"];
@@ -5168,6 +5285,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         const YAML::Node& n = node["spriteModifier"];
         if (n["fromTime"]) particles.spriteModifier.fromTime = n["fromTime"].as<float>();
         if (n["toTime"]) particles.spriteModifier.toTime = n["toTime"].as<float>();
+        if (n["functionType"]) {
+            particles.spriteModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.spriteModifier.function = Ease::getFunction(particles.spriteModifier.functionType);
+        }
         if (n["frames"]) {
             particles.spriteModifier.frames.clear();
             for (const YAML::Node& f : n["frames"]) particles.spriteModifier.frames.push_back(f.as<int>());
@@ -5185,12 +5306,17 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.rotationModifier.toTime = n["toTime"].as<float>();
         if (n["fromRotation"]) particles.rotationModifier.fromRotation = decodeQuaternion(n["fromRotation"]);
         if (n["toRotation"]) particles.rotationModifier.toRotation = decodeQuaternion(n["toRotation"]);
+        if (n["functionType"]) {
+            particles.rotationModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.rotationModifier.function = Ease::getFunction(particles.rotationModifier.functionType);
+        }
         if (n["shortestPath"]) particles.rotationModifier.shortestPath = n["shortestPath"].as<bool>();
     }
     if (node["scaleInitializer"]) {
         const YAML::Node& n = node["scaleInitializer"];
         if (n["minScale"]) particles.scaleInitializer.minScale = decodeVector3(n["minScale"]);
         if (n["maxScale"]) particles.scaleInitializer.maxScale = decodeVector3(n["maxScale"]);
+        if (n["linearSort"]) particles.scaleInitializer.linearSort = n["linearSort"].as<bool>();
     }
     if (node["scaleModifier"]) {
         const YAML::Node& n = node["scaleModifier"];
@@ -5198,6 +5324,10 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toTime"]) particles.scaleModifier.toTime = n["toTime"].as<float>();
         if (n["fromScale"]) particles.scaleModifier.fromScale = decodeVector3(n["fromScale"]);
         if (n["toScale"]) particles.scaleModifier.toScale = decodeVector3(n["toScale"]);
+        if (n["functionType"]) {
+            particles.scaleModifier.functionType = stringToEaseType(n["functionType"].as<std::string>());
+            particles.scaleModifier.function = Ease::getFunction(particles.scaleModifier.functionType);
+        }
     }
 
     // Reset runtime fields

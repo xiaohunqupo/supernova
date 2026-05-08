@@ -214,6 +214,40 @@ static std::vector<editor::EnumEntry> entriesActionState = {
     { (int)ActionState::Stopped, "Stopped" }
 };
 
+static std::vector<editor::EnumEntry> entriesEaseType = {
+    { (int)EaseType::LINEAR, "Linear" },
+    { (int)EaseType::QUAD_IN, "Quad In" },
+    { (int)EaseType::QUAD_OUT, "Quad Out" },
+    { (int)EaseType::QUAD_IN_OUT, "Quad In Out" },
+    { (int)EaseType::CUBIC_IN, "Cubic In" },
+    { (int)EaseType::CUBIC_OUT, "Cubic Out" },
+    { (int)EaseType::CUBIC_IN_OUT, "Cubic In Out" },
+    { (int)EaseType::QUART_IN, "Quart In" },
+    { (int)EaseType::QUART_OUT, "Quart Out" },
+    { (int)EaseType::QUART_IN_OUT, "Quart In Out" },
+    { (int)EaseType::QUINT_IN, "Quint In" },
+    { (int)EaseType::QUINT_OUT, "Quint Out" },
+    { (int)EaseType::QUINT_IN_OUT, "Quint In Out" },
+    { (int)EaseType::SINE_IN, "Sine In" },
+    { (int)EaseType::SINE_OUT, "Sine Out" },
+    { (int)EaseType::SINE_IN_OUT, "Sine In Out" },
+    { (int)EaseType::EXPO_IN, "Expo In" },
+    { (int)EaseType::EXPO_OUT, "Expo Out" },
+    { (int)EaseType::EXPO_IN_OUT, "Expo In Out" },
+    { (int)EaseType::CIRC_IN, "Circ In" },
+    { (int)EaseType::CIRC_OUT, "Circ Out" },
+    { (int)EaseType::CIRC_IN_OUT, "Circ In Out" },
+    { (int)EaseType::ELASTIC_IN, "Elastic In" },
+    { (int)EaseType::ELASTIC_OUT, "Elastic Out" },
+    { (int)EaseType::ELASTIC_IN_OUT, "Elastic In Out" },
+    { (int)EaseType::BACK_IN, "Back In" },
+    { (int)EaseType::BACK_OUT, "Back Out" },
+    { (int)EaseType::BACK_IN_OUT, "Back In Out" },
+    { (int)EaseType::BOUNCE_IN, "Bounce In" },
+    { (int)EaseType::BOUNCE_OUT, "Bounce Out" },
+    { (int)EaseType::BOUNCE_IN_OUT, "Bounce In Out" }
+};
+
 namespace {
     enum class ScenePropertyInputType {
         Checkbox,
@@ -4108,6 +4142,119 @@ bool editor::Properties::propertyRowWithAutoButton(RowPropertyType propType, Com
     return rowChanged;
 }
 
+editor::RowSettings editor::Properties::particleEaseSettings(SceneProject* sceneProject, const std::vector<Entity>& entities, const std::string& modifierId) const {
+    editor::RowSettings settings;
+    settings.enumEntries = &entriesEaseType;
+    settings.secondColSize = -1;
+    settings.onValueChanged = [this, sceneProject, entities, modifierId]() {
+        syncParticleModifierFunction(sceneProject, entities, modifierId);
+    };
+    return settings;
+}
+
+void editor::Properties::syncParticleModifierFunction(SceneProject* sceneProject, const std::vector<Entity>& entities, const std::string& modifierId) const {
+    if (!sceneProject || !sceneProject->scene) {
+        return;
+    }
+
+    for (Entity entity : entities) {
+        ParticlesComponent* particles = sceneProject->scene->findComponent<ParticlesComponent>(entity);
+        if (!particles) {
+            continue;
+        }
+
+        if (modifierId == "positionModifier") {
+            particles->positionModifier.function = Ease::getFunction(particles->positionModifier.functionType);
+        } else if (modifierId == "velocityModifier") {
+            particles->velocityModifier.function = Ease::getFunction(particles->velocityModifier.functionType);
+        } else if (modifierId == "accelerationModifier") {
+            particles->accelerationModifier.function = Ease::getFunction(particles->accelerationModifier.functionType);
+        } else if (modifierId == "colorModifier") {
+            particles->colorModifier.function = Ease::getFunction(particles->colorModifier.functionType);
+        } else if (modifierId == "alphaModifier") {
+            particles->alphaModifier.function = Ease::getFunction(particles->alphaModifier.functionType);
+        } else if (modifierId == "sizeModifier") {
+            particles->sizeModifier.function = Ease::getFunction(particles->sizeModifier.functionType);
+        } else if (modifierId == "spriteModifier") {
+            particles->spriteModifier.function = Ease::getFunction(particles->spriteModifier.functionType);
+        } else if (modifierId == "rotationModifier") {
+            particles->rotationModifier.function = Ease::getFunction(particles->rotationModifier.functionType);
+        } else if (modifierId == "scaleModifier") {
+            particles->scaleModifier.function = Ease::getFunction(particles->scaleModifier.functionType);
+        }
+    }
+}
+
+void editor::Properties::setParticleFrames(ComponentType cpType, const std::string& propertyId, SceneProject* sceneProject, Entity entity, const std::vector<int>& frames) {
+    editor::PropertyCmd<std::vector<int>>* frameCmd = new editor::PropertyCmd<std::vector<int>>(project, sceneProject->id, entity, cpType, propertyId, frames);
+    frameCmd->setNoMerge();
+    CommandHandle::get(project->getSelectedSceneId())->addCommand(frameCmd);
+}
+
+void editor::Properties::drawParticleFrameList(ComponentType cpType, const std::string& propertyId, const std::string& tableId, SceneProject* sceneProject, const std::vector<Entity>& entities) {
+    if (entities.size() != 1) {
+        ImGui::TextDisabled("Select a single entity to edit sprite frames");
+        return;
+    }
+
+    Entity entity = entities[0];
+    PropertyData prop = Catalog::getProperty(sceneProject->scene, entity, cpType, propertyId);
+    std::vector<int>* frames = static_cast<std::vector<int>*>(prop.ref);
+    std::vector<int>* defFrames = static_cast<std::vector<int>*>(prop.def);
+    if (!frames) {
+        return;
+    }
+
+    bool defChanged = defFrames && *frames != *defFrames;
+    beginTable(cpType, getLabelSize("Frames"), tableId + "_header");
+    if (propertyHeader("Frames", -1, defChanged, false) && defFrames) {
+        setParticleFrames(cpType, propertyId, sceneProject, entity, *defFrames);
+        finishProperty = true;
+    }
+    ImGui::Text("%zu", frames->size());
+    endTable();
+
+    if (ImGui::Button((ICON_FA_PLUS " Add Frame##" + tableId).c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+        std::vector<int> newFrames = *frames;
+        newFrames.push_back(newFrames.empty() ? 0 : newFrames.back() + 1);
+        setParticleFrames(cpType, propertyId, sceneProject, entity, newFrames);
+    }
+
+    if (frames->empty()) {
+        return;
+    }
+
+    beginTable(cpType, getLabelSize("Frame 000"), tableId + "_values");
+    for (size_t i = 0; i < frames->size(); i++) {
+        ImGui::PushID(static_cast<int>(i));
+        propertyHeader("Frame " + std::to_string(i), -1, false, false);
+
+        float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SetNextItemWidth(-deleteButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+        int newValue = (*frames)[i];
+        if (ImGui::InputInt(("##particle_frame_value_" + tableId).c_str(), &newValue)) {
+            std::vector<int> newFrames = *frames;
+            newFrames[i] = newValue;
+            setParticleFrames(cpType, propertyId, sceneProject, entity, newFrames);
+        }
+
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        if (ImGui::Button((ICON_FA_TRASH_CAN "##particle_frame_delete_" + tableId).c_str())) {
+            std::vector<int> newFrames = *frames;
+            newFrames.erase(newFrames.begin() + static_cast<std::ptrdiff_t>(i));
+            setParticleFrames(cpType, propertyId, sceneProject, entity, newFrames);
+            ImGui::PopStyleColor(2);
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopStyleColor(2);
+        ImGui::PopID();
+    }
+    endTable();
+}
+
 void editor::Properties::drawTransform(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     // Add this code to calculate appropriate step size based on selected scene
     RowSettings settingsPos;
@@ -6238,9 +6385,9 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
         ImGui::Indent(indentation);
 
         // Custom styling for script headers
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.25f, 0.3f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.3f, 0.3f, 0.35f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.35f, 0.35f, 0.4f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Header, App::ThemeColors::NestedHeader);
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, App::ThemeColors::NestedHeaderHovered);
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, App::ThemeColors::NestedHeaderActive);
 
         // Add icon to distinguish from component headers
         std::string headerText = ICON_FA_FILE_CODE " " + scriptLabel + typeLabel;
@@ -6783,6 +6930,16 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     RowSettings settingsInt;
     settingsInt.secondColSize = 6 * ImGui::GetFontSize();
 
+    RowSettings positionEaseSettings = particleEaseSettings(sceneProject, entities, "positionModifier");
+    RowSettings velocityEaseSettings = particleEaseSettings(sceneProject, entities, "velocityModifier");
+    RowSettings accelerationEaseSettings = particleEaseSettings(sceneProject, entities, "accelerationModifier");
+    RowSettings colorEaseSettings = particleEaseSettings(sceneProject, entities, "colorModifier");
+    RowSettings alphaEaseSettings = particleEaseSettings(sceneProject, entities, "alphaModifier");
+    RowSettings sizeEaseSettings = particleEaseSettings(sceneProject, entities, "sizeModifier");
+    RowSettings spriteEaseSettings = particleEaseSettings(sceneProject, entities, "spriteModifier");
+    RowSettings rotationEaseSettings = particleEaseSettings(sceneProject, entities, "rotationModifier");
+    RowSettings scaleEaseSettings = particleEaseSettings(sceneProject, entities, "scaleModifier");
+
     beginTable(cpType, getLabelSize("Max Per Update"));
     propertyRow(RowPropertyType::UInt, cpType, "maxParticles", "Max Particles", sceneProject, entities, settingsInt);
     propertyRow(RowPropertyType::Bool, cpType, "emitter", "Emitter", sceneProject, entities);
@@ -6791,95 +6948,175 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     propertyRow(RowPropertyType::Int, cpType, "maxPerUpdate", "Max Per Update", sceneProject, entities, settingsInt);
     endTable();
 
-    ImGui::SeparatorText("Life");
-    beginTable(cpType, getLabelSize("Max Life"), "life_table");
-    propertyRow(RowPropertyType::Float, cpType, "lifeInitializer.minLife", "Min Life", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "lifeInitializer.maxLife", "Max Life", sceneProject, entities, settingsFloat);
-    endTable();
+    const float subsectionIndent = 10.0f;
 
-    ImGui::SeparatorText("Position");
-    beginTable(cpType, getLabelSize("From Position"), "position_table");
-    propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.minPosition", "Min Position", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.maxPosition", "Max Position", sceneProject, entities);
-    propertyRow(RowPropertyType::Float, cpType, "positionModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "positionModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.fromPosition", "From Position", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.toPosition", "To Position", sceneProject, entities);
-    endTable();
+    ImGui::Indent(subsectionIndent);
+    ImGui::PushStyleColor(ImGuiCol_Header, App::ThemeColors::NestedHeader);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, App::ThemeColors::NestedHeaderHovered);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, App::ThemeColors::NestedHeaderActive);
+    bool initializersOpen = ImGui::CollapsingHeader("Initializers");
+    ImGui::PopStyleColor(3);
+    if (initializersOpen) {
+        ImGui::Unindent(subsectionIndent);
 
-    ImGui::SeparatorText("Velocity");
-    beginTable(cpType, getLabelSize("From Velocity"), "velocity_table");
-    propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.minVelocity", "Min Velocity", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.maxVelocity", "Max Velocity", sceneProject, entities);
-    propertyRow(RowPropertyType::Float, cpType, "velocityModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "velocityModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.fromVelocity", "From Velocity", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.toVelocity", "To Velocity", sceneProject, entities);
-    endTable();
+        ImGui::SeparatorText("Life");
+        beginTable(cpType, getLabelSize("Max Life"), "life_table");
+        propertyRow(RowPropertyType::Float, cpType, "lifeInitializer.minLife", "Min Life", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "lifeInitializer.maxLife", "Max Life", sceneProject, entities, settingsFloat);
+        endTable();
 
-    ImGui::SeparatorText("Acceleration");
-    beginTable(cpType, getLabelSize("From Acceleration"), "acceleration_table");
-    propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.minAcceleration", "Min Acceleration", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.maxAcceleration", "Max Acceleration", sceneProject, entities);
-    propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.fromAcceleration", "From Acceleration", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.toAcceleration", "To Acceleration", sceneProject, entities);
-    endTable();
+        ImGui::SeparatorText("Position");
+        beginTable(cpType, getLabelSize("Max Position"), "position_initializer_table");
+        propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.minPosition", "Min Position", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.maxPosition", "Max Position", sceneProject, entities);
+        endTable();
 
-    ImGui::SeparatorText("Color");
-    beginTable(cpType, getLabelSize("From Color"), "color_table");
-    propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.minColor", "Min Color", sceneProject, entities);
-    propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.maxColor", "Max Color", sceneProject, entities);
-    propertyRow(RowPropertyType::Bool, cpType, "colorInitializer.useSRGB", "Use sRGB", sceneProject, entities);
-    propertyRow(RowPropertyType::Float, cpType, "colorModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "colorModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.fromColor", "From Color", sceneProject, entities);
-    propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.toColor", "To Color", sceneProject, entities);
-    propertyRow(RowPropertyType::Bool, cpType, "colorModifier.useSRGB", "Mod sRGB", sceneProject, entities);
-    endTable();
+        ImGui::SeparatorText("Velocity");
+        beginTable(cpType, getLabelSize("Max Velocity"), "velocity_initializer_table");
+        propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.minVelocity", "Min Velocity", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "velocityInitializer.maxVelocity", "Max Velocity", sceneProject, entities);
+        endTable();
 
-    ImGui::SeparatorText("Alpha");
-    beginTable(cpType, getLabelSize("From Alpha"), "alpha_table");
-    propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.minAlpha", "Min Alpha", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.maxAlpha", "Max Alpha", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromAlpha", "From Alpha", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toAlpha", "To Alpha", sceneProject, entities, settingsFloat);
-    endTable();
+        ImGui::SeparatorText("Acceleration");
+        beginTable(cpType, getLabelSize("Max Acceleration"), "acceleration_initializer_table");
+        propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.minAcceleration", "Min Acceleration", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "accelerationInitializer.maxAcceleration", "Max Acceleration", sceneProject, entities);
+        endTable();
 
-    ImGui::SeparatorText("Size");
-    beginTable(cpType, getLabelSize("From Size"), "size_table");
-    propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.minSize", "Min Size", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.maxSize", "Max Size", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromSize", "From Size", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toSize", "To Size", sceneProject, entities, settingsFloat);
-    endTable();
+        ImGui::SeparatorText("Color");
+        beginTable(cpType, getLabelSize("Use sRGB"), "color_initializer_table");
+        propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.minColor", "Min Color", sceneProject, entities);
+        propertyRow(RowPropertyType::Color3L, cpType, "colorInitializer.maxColor", "Max Color", sceneProject, entities);
+        propertyRow(RowPropertyType::Bool, cpType, "colorInitializer.useSRGB", "Use sRGB", sceneProject, entities);
+        endTable();
 
-    ImGui::SeparatorText("Rotation");
-    beginTable(cpType, getLabelSize("Shortest Path"), "rotation_table");
-    propertyRow(RowPropertyType::Quat, cpType, "rotationInitializer.minRotation", "Min Rotation", sceneProject, entities);
-    propertyRow(RowPropertyType::Quat, cpType, "rotationInitializer.maxRotation", "Max Rotation", sceneProject, entities);
-    propertyRow(RowPropertyType::Bool, cpType, "rotationInitializer.shortestPath", "Shortest Path", sceneProject, entities);
-    propertyRow(RowPropertyType::Float, cpType, "rotationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "rotationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.fromRotation", "From Rotation", sceneProject, entities);
-    propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.toRotation", "To Rotation", sceneProject, entities);
-    propertyRow(RowPropertyType::Bool, cpType, "rotationModifier.shortestPath", "Mod Shortest", sceneProject, entities);
-    endTable();
+        ImGui::SeparatorText("Alpha");
+        beginTable(cpType, getLabelSize("Max Alpha"), "alpha_initializer_table");
+        propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.minAlpha", "Min Alpha", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "alphaInitializer.maxAlpha", "Max Alpha", sceneProject, entities, settingsFloat);
+        endTable();
 
-    ImGui::SeparatorText("Scale");
-    beginTable(cpType, getLabelSize("From Scale"), "scale_table");
-    propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.minScale", "Min Scale", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.maxScale", "Max Scale", sceneProject, entities);
-    propertyRow(RowPropertyType::Float, cpType, "scaleModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Float, cpType, "scaleModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
-    propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.fromScale", "From Scale", sceneProject, entities);
-    propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.toScale", "To Scale", sceneProject, entities);
-    endTable();
+        ImGui::SeparatorText("Size");
+        beginTable(cpType, getLabelSize("Max Size"), "size_initializer_table");
+        propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.minSize", "Min Size", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "sizeInitializer.maxSize", "Max Size", sceneProject, entities, settingsFloat);
+        endTable();
+
+        ImGui::SeparatorText("Sprite");
+        drawParticleFrameList(cpType, "spriteInitializer.frames", "sprite_initializer_frames", sceneProject, entities);
+
+        ImGui::SeparatorText("Rotation");
+        beginTable(cpType, getLabelSize("Shortest Path"), "rotation_initializer_table");
+        propertyRow(RowPropertyType::Quat, cpType, "rotationInitializer.minRotation", "Min Rotation", sceneProject, entities);
+        propertyRow(RowPropertyType::Quat, cpType, "rotationInitializer.maxRotation", "Max Rotation", sceneProject, entities);
+        propertyRow(RowPropertyType::Bool, cpType, "rotationInitializer.shortestPath", "Shortest Path", sceneProject, entities);
+        endTable();
+
+        ImGui::SeparatorText("Scale");
+        beginTable(cpType, getLabelSize("Max Scale"), "scale_initializer_table");
+        propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.minScale", "Min Scale", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "scaleInitializer.maxScale", "Max Scale", sceneProject, entities);
+        propertyRow(RowPropertyType::Bool, cpType, "scaleInitializer.linearSort", "Linear Sort", sceneProject, entities);
+        endTable();
+
+        ImGui::Indent(subsectionIndent);
+    }
+    ImGui::Unindent(subsectionIndent);
+
+    ImGui::Indent(subsectionIndent);
+    ImGui::PushStyleColor(ImGuiCol_Header, App::ThemeColors::NestedHeader);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, App::ThemeColors::NestedHeaderHovered);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, App::ThemeColors::NestedHeaderActive);
+    bool modifiersOpen = ImGui::CollapsingHeader("Modifiers");
+    ImGui::PopStyleColor(3);
+    if (modifiersOpen) {
+        ImGui::Unindent(subsectionIndent);
+
+        ImGui::SeparatorText("Position");
+        beginTable(cpType, getLabelSize("From Position"), "position_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "positionModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "positionModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "positionModifier.functionType", "Ease", sceneProject, entities, positionEaseSettings);
+        propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.fromPosition", "From Position", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "positionModifier.toPosition", "To Position", sceneProject, entities);
+        endTable();
+
+        ImGui::SeparatorText("Velocity");
+        beginTable(cpType, getLabelSize("From Velocity"), "velocity_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "velocityModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "velocityModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "velocityModifier.functionType", "Ease", sceneProject, entities, velocityEaseSettings);
+        propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.fromVelocity", "From Velocity", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "velocityModifier.toVelocity", "To Velocity", sceneProject, entities);
+        endTable();
+
+        ImGui::SeparatorText("Acceleration");
+        beginTable(cpType, getLabelSize("From Acceleration"), "acceleration_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "accelerationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "accelerationModifier.functionType", "Ease", sceneProject, entities, accelerationEaseSettings);
+        propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.fromAcceleration", "From Acceleration", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "accelerationModifier.toAcceleration", "To Acceleration", sceneProject, entities);
+        endTable();
+
+        ImGui::SeparatorText("Color");
+        beginTable(cpType, getLabelSize("Mod sRGB"), "color_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "colorModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "colorModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "colorModifier.functionType", "Ease", sceneProject, entities, colorEaseSettings);
+        propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.fromColor", "From Color", sceneProject, entities);
+        propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.toColor", "To Color", sceneProject, entities);
+        propertyRow(RowPropertyType::Bool, cpType, "colorModifier.useSRGB", "Mod sRGB", sceneProject, entities);
+        endTable();
+
+        ImGui::SeparatorText("Alpha");
+        beginTable(cpType, getLabelSize("From Alpha"), "alpha_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "alphaModifier.functionType", "Ease", sceneProject, entities, alphaEaseSettings);
+        propertyRow(RowPropertyType::Float, cpType, "alphaModifier.fromAlpha", "From Alpha", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "alphaModifier.toAlpha", "To Alpha", sceneProject, entities, settingsFloat);
+        endTable();
+
+        ImGui::SeparatorText("Size");
+        beginTable(cpType, getLabelSize("From Size"), "size_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "sizeModifier.functionType", "Ease", sceneProject, entities, sizeEaseSettings);
+        propertyRow(RowPropertyType::Float, cpType, "sizeModifier.fromSize", "From Size", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "sizeModifier.toSize", "To Size", sceneProject, entities, settingsFloat);
+        endTable();
+
+        ImGui::SeparatorText("Sprite");
+        beginTable(cpType, getLabelSize("From Time"), "sprite_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "spriteModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "spriteModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "spriteModifier.functionType", "Ease", sceneProject, entities, spriteEaseSettings);
+        endTable();
+        drawParticleFrameList(cpType, "spriteModifier.frames", "sprite_modifier_frames", sceneProject, entities);
+
+        ImGui::SeparatorText("Rotation");
+        beginTable(cpType, getLabelSize("Mod Shortest"), "rotation_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "rotationModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "rotationModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "rotationModifier.functionType", "Ease", sceneProject, entities, rotationEaseSettings);
+        propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.fromRotation", "From Rotation", sceneProject, entities);
+        propertyRow(RowPropertyType::Quat, cpType, "rotationModifier.toRotation", "To Rotation", sceneProject, entities);
+        propertyRow(RowPropertyType::Bool, cpType, "rotationModifier.shortestPath", "Mod Shortest", sceneProject, entities);
+        endTable();
+
+        ImGui::SeparatorText("Scale");
+        beginTable(cpType, getLabelSize("From Scale"), "scale_modifier_table");
+        propertyRow(RowPropertyType::Float, cpType, "scaleModifier.fromTime", "From Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Float, cpType, "scaleModifier.toTime", "To Time", sceneProject, entities, settingsFloat);
+        propertyRow(RowPropertyType::Enum, cpType, "scaleModifier.functionType", "Ease", sceneProject, entities, scaleEaseSettings);
+        propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.fromScale", "From Scale", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "scaleModifier.toScale", "To Scale", sceneProject, entities);
+        endTable();
+
+        ImGui::Indent(subsectionIndent);
+    }
+    ImGui::Unindent(subsectionIndent);
 }
 
 void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){

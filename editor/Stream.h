@@ -4,6 +4,7 @@
 #include "Scene.h"
 #include "ecs/Entity.h"
 #include "Project.h"
+#include "action/Ease.h"
 #include "math/Vector3.h"
 #include "math/Quaternion.h"
 #include "math/Matrix4.h"
@@ -20,6 +21,9 @@ namespace doriax::editor {
 
         static std::string primitiveTypeToString(PrimitiveType type);
         static PrimitiveType stringToPrimitiveType(const std::string& str);
+
+        static std::string easeTypeToString(EaseType type);
+        static EaseType stringToEaseType(const std::string& str);
 
         static std::string bufferTypeToString(BufferType type);
         static BufferType stringToBufferType(const std::string& str);

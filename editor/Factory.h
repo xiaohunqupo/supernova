@@ -2,6 +2,7 @@
 
 #include "Scene.h"
 #include "Catalog.h"
+#include "action/Ease.h"
 #include <string>
 #include <sstream>
 #include <filesystem>
@@ -41,6 +42,7 @@ namespace doriax::editor{
         static std::string formatVector4(const Vector4& v);
         static std::string formatRect(const Rect& r);
         static std::string formatPrimitiveType(PrimitiveType type);
+        static std::string formatEaseType(EaseType type);
         static std::string formatPivotPreset(PivotPreset preset);
         static std::string formatAnchorPreset(AnchorPreset preset);
         static std::string formatContainerType(ContainerType type);

@@ -111,6 +111,7 @@ void Particles::setPositionModifier(float fromTime, float toTime, Vector3 fromPo
     partAnim.positionModifier.toTime = toTime;
     partAnim.positionModifier.fromPosition = fromPosition;
     partAnim.positionModifier.toPosition = toPosition;
+    partAnim.positionModifier.functionType = functionType;
     partAnim.positionModifier.function = Ease::getFunction(functionType);
 }
 
@@ -136,6 +137,7 @@ void Particles::setVelocityModifier(float fromTime, float toTime, Vector3 fromVe
     partAnim.velocityModifier.toTime = toTime;
     partAnim.velocityModifier.fromVelocity = fromVelocity;
     partAnim.velocityModifier.toVelocity = toVelocity;
+    partAnim.velocityModifier.functionType = functionType;
     partAnim.velocityModifier.function = Ease::getFunction(functionType);
 }
 
@@ -161,6 +163,7 @@ void Particles::setAccelerationModifier(float fromTime, float toTime, Vector3 fr
     partAnim.accelerationModifier.toTime = toTime;
     partAnim.accelerationModifier.fromAcceleration = fromAcceleration;
     partAnim.accelerationModifier.toAcceleration = toAcceleration;
+    partAnim.accelerationModifier.functionType = functionType;
     partAnim.accelerationModifier.function = Ease::getFunction(functionType);
 }
 
@@ -186,6 +189,7 @@ void Particles::setColorModifier(float fromTime, float toTime, Vector3 fromColor
     partAnim.colorModifier.toTime = toTime;
     partAnim.colorModifier.fromColor = fromColor;
     partAnim.colorModifier.toColor = toColor;
+    partAnim.colorModifier.functionType = functionType;
     partAnim.colorModifier.function = Ease::getFunction(functionType);
 }
 
@@ -211,6 +215,7 @@ void Particles::setAlphaModifier(float fromTime, float toTime, float fromAlpha, 
     partAnim.alphaModifier.toTime = toTime;
     partAnim.alphaModifier.fromAlpha = fromAlpha;
     partAnim.alphaModifier.toAlpha = toAlpha;
+    partAnim.alphaModifier.functionType = functionType;
     partAnim.alphaModifier.function = Ease::getFunction(functionType);
 }
 
@@ -236,6 +241,7 @@ void Particles::setSizeModifier(float fromTime, float toTime, float fromSize, fl
     partAnim.sizeModifier.toTime = toTime;
     partAnim.sizeModifier.fromSize = fromSize;
     partAnim.sizeModifier.toSize = toSize;
+    partAnim.sizeModifier.functionType = functionType;
     partAnim.sizeModifier.function = Ease::getFunction(functionType);
 }
 
@@ -265,6 +271,7 @@ void Particles::setSpriteModifier(float fromTime, float toTime, std::vector<int>
     partAnim.spriteModifier.fromTime = fromTime;
     partAnim.spriteModifier.toTime = toTime;
     partAnim.spriteModifier.frames = frames;
+    partAnim.spriteModifier.functionType = functionType;
     partAnim.spriteModifier.function = Ease::getFunction(functionType);
 }
 
@@ -305,6 +312,7 @@ void Particles::setRotationModifier(float fromTime, float toTime, float fromRota
     partAnim.rotationModifier.toTime = toTime;
     partAnim.rotationModifier.fromRotation = Quaternion(0, 0, fromRotation);
     partAnim.rotationModifier.toRotation = Quaternion(0, 0, toRotation);;
+    partAnim.rotationModifier.functionType = functionType;
     partAnim.rotationModifier.function = Ease::getFunction(functionType);
 }
 
@@ -315,6 +323,7 @@ void Particles::setRotationModifier(float fromTime, float toTime, Quaternion fro
     partAnim.rotationModifier.toTime = toTime;
     partAnim.rotationModifier.fromRotation = fromRotation;
     partAnim.rotationModifier.toRotation = toRotation;
+    partAnim.rotationModifier.functionType = functionType;
     partAnim.rotationModifier.function = Ease::getFunction(functionType);
 }
 
@@ -355,6 +364,7 @@ void Particles::setScaleModifier(float fromTime, float toTime, Vector3 fromScale
     partAnim.scaleModifier.toTime = toTime;
     partAnim.scaleModifier.fromScale = fromScale;
     partAnim.scaleModifier.toScale = toScale;
+    partAnim.scaleModifier.functionType = functionType;
     partAnim.scaleModifier.function = Ease::getFunction(functionType);
 }
 

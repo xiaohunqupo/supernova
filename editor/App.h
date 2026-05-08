@@ -126,6 +126,9 @@ namespace doriax::editor{
             static ImVec4 ExtEntityButton;
             static ImVec4 ExtEntityButtonHovered;
             static ImVec4 ExtEntityButtonActive;
+            static ImVec4 NestedHeader;
+            static ImVec4 NestedHeaderHovered;
+            static ImVec4 NestedHeaderActive;
         };
 
         App();

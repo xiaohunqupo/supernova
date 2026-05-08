@@ -188,6 +188,10 @@ namespace doriax::editor{
         bool propertyHeader(std::string label, float secondColSize = -1, bool defChanged = false, bool child = false);
         bool propertyRow(RowPropertyType type, ComponentType cpType, std::string id, std::string label, SceneProject* sceneProject, std::vector<Entity> entities, RowSettings settings = RowSettings());
         bool propertyRowWithAutoButton(RowPropertyType propType, ComponentType cpType, std::string id, std::string label, std::string autoId, std::string autoLabel, SceneProject* sceneProject, std::vector<Entity> entities, RowSettings settings = RowSettings());
+        RowSettings particleEaseSettings(SceneProject* sceneProject, const std::vector<Entity>& entities, const std::string& modifierId) const;
+        void syncParticleModifierFunction(SceneProject* sceneProject, const std::vector<Entity>& entities, const std::string& modifierId) const;
+        void setParticleFrames(ComponentType cpType, const std::string& propertyId, SceneProject* sceneProject, Entity entity, const std::vector<int>& frames);
+        void drawParticleFrameList(ComponentType cpType, const std::string& propertyId, const std::string& tableId, SceneProject* sceneProject, const std::vector<Entity>& entities);
         void drawTransform(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawModelComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

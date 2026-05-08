@@ -39,6 +39,9 @@ ImVec4 editor::App::ThemeColors::filenameLabel;
 ImVec4 editor::App::ThemeColors::ExtEntityButton;
 ImVec4 editor::App::ThemeColors::ExtEntityButtonHovered;
 ImVec4 editor::App::ThemeColors::ExtEntityButtonActive;
+ImVec4 editor::App::ThemeColors::NestedHeader;
+ImVec4 editor::App::ThemeColors::NestedHeaderHovered;
+ImVec4 editor::App::ThemeColors::NestedHeaderActive;
 
 editor::App::App(){
     propertiesWindow = new Properties(&project);
@@ -1187,6 +1190,9 @@ void editor::App::kewtStyleTheme(){
     ThemeColors::ExtEntityButton = ImVec4(colors[ImGuiCol_Button].x * 0.85f, colors[ImGuiCol_Button].y * 0.9f, colors[ImGuiCol_Button].z * 1.15f, colors[ImGuiCol_Button].w);
     ThemeColors::ExtEntityButtonHovered = ImVec4(colors[ImGuiCol_ButtonHovered].x * 0.85f, colors[ImGuiCol_ButtonHovered].y * 0.9f, colors[ImGuiCol_ButtonHovered].z * 1.15f, colors[ImGuiCol_ButtonHovered].w);
     ThemeColors::ExtEntityButtonActive = ImVec4(colors[ImGuiCol_ButtonActive].x * 0.85f, colors[ImGuiCol_ButtonActive].y * 0.9f, colors[ImGuiCol_ButtonActive].z * 1.15f, colors[ImGuiCol_ButtonActive].w);
+    ThemeColors::NestedHeader = ImVec4(0.25f, 0.25f, 0.30f, 1.00f);
+    ThemeColors::NestedHeaderHovered = ImVec4(0.30f, 0.30f, 0.35f, 1.00f);
+    ThemeColors::NestedHeaderActive = ImVec4(0.35f, 0.35f, 0.40f, 1.00f);
 
     // main
     style.WindowPadding = ImVec2(8, 8);
