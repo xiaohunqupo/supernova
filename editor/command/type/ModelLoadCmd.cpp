@@ -4,6 +4,7 @@
 #include "util/ProjectUtils.h"
 #include "subsystem/MeshSystem.h"
 #include "io/FileData.h"
+#include "Backend.h"
 
 using namespace doriax;
 
@@ -29,6 +30,11 @@ editor::ModelLoadCmd::ModelLoadCmd(Project* project, uint32_t sceneId, const std
 }
 
 editor::ModelLoadCmd::~ModelLoadCmd(){
+    if (cancelFlag) cancelFlag->store(true);
+    if (asyncPending){
+        Scene* scene = project->getScene(sceneId)->scene;
+        scene->getSystem<MeshSystem>()->cancelAsyncModelLoad(entity, modelPath);
+    }
     if (oldSubEntitiesDeleteCmd) {
         delete oldSubEntitiesDeleteCmd;
         oldSubEntitiesDeleteCmd = nullptr;
@@ -47,6 +53,56 @@ std::vector<Entity> editor::ModelLoadCmd::collectModelDeleteRoots(const ModelCom
 
     roots.insert(roots.end(), model.animations.begin(), model.animations.end());
     return roots;
+}
+
+bool editor::ModelLoadCmd::tryLoad(){
+    Scene* scene = project->getScene(sceneId)->scene;
+    std::shared_ptr<MeshSystem> meshSys = scene->getSystem<MeshSystem>();
+    bool useAsync = MeshSystem::isAsyncModelLoading();
+    std::string ext = FileData::getFilePathExtension(modelPath);
+    if (ext == "obj"){
+        return meshSys->loadOBJ(entity, modelPath, useAsync);
+    }
+    return meshSys->loadGLTF(entity, modelPath, useAsync, false, isNewModel);
+}
+
+void editor::ModelLoadCmd::finalizeLoad(){
+    SceneProject* sceneProject = project->getScene(sceneId);
+    Scene* scene = sceneProject->scene;
+
+    ModelComponent& newModel = scene->getComponent<ModelComponent>(entity);
+    newModel.needUpdateModel = false;
+
+    std::vector<Entity> newSubEntities;
+    ProjectUtils::collectModelEntities(scene, newModel, newSubEntities);
+    for (const auto& e : newSubEntities){
+        sceneProject->entities.push_back(e);
+    }
+
+    sceneProject->isModified = true;
+
+    if (project->isEntityInBundle(sceneId, entity)){
+        project->bundlePropertyChanged(sceneId, entity, ComponentType::ModelComponent, {"filename"});
+    }
+}
+
+void editor::ModelLoadCmd::schedulePoll(){
+    auto cancel = cancelFlag;
+    Backend::getApp().enqueueMainThreadTask([this, cancel]() {
+        if (cancel->load()) return;
+        if (tryLoad()){
+            asyncPending = false;
+            finalizeLoad();
+            return;
+        }
+        Scene* scene = project->getScene(sceneId)->scene;
+        if (scene->getSystem<MeshSystem>()->isAsyncModelLoadPending(entity, modelPath)){
+            schedulePoll();
+        } else {
+            // Terminal worker failure — drop pending state; rollback happens via the next undo
+            asyncPending = false;
+        }
+    });
 }
 
 bool editor::ModelLoadCmd::execute(){
@@ -78,7 +134,7 @@ bool editor::ModelLoadCmd::execute(){
     MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
     ModelComponent& model = scene->getComponent<ModelComponent>(entity);
 
-    bool isNewModel = model.filename.empty();
+    isNewModel = model.filename.empty();
 
     // Save old component state
     oldTransform = Stream::encodeTransform(transform);
@@ -101,62 +157,50 @@ bool editor::ModelLoadCmd::execute(){
     model.bonesNameMapping.clear();
     model.animations.clear();
 
-    // Load the new model
-    std::shared_ptr<MeshSystem> meshSys = scene->getSystem<MeshSystem>();
-    std::string ext = FileData::getFilePathExtension(modelPath);
-    bool ret = false;
-    if (ext == "obj"){
-        ret = meshSys->loadOBJ(entity, modelPath, false);
-    }else{
-        ret = meshSys->loadGLTF(entity, modelPath, false, false, isNewModel);
+    if (tryLoad()){
+        finalizeLoad();
+        return true;
     }
 
-    if (!ret){
-        // Restore old state on failure
-        scene->getComponent<Transform>(entity) = Stream::decodeTransform(oldTransform);
-        scene->getComponent<MeshComponent>(entity) = Stream::decodeMeshComponent(oldMesh);
-        scene->getComponent<ModelComponent>(entity) = Stream::decodeModelComponent(oldModel);
-        if (oldSubEntitiesDeleteCmd) {
-            oldSubEntitiesDeleteCmd->undo();
-            delete oldSubEntitiesDeleteCmd;
-            oldSubEntitiesDeleteCmd = nullptr;
-        }
-        if (createEntityCmd) {
-            createEntityCmd->undo();
-        }
-        return false;
+    if (MeshSystem::isAsyncModelLoading()){
+        // Load is in progress on a worker thread — accept the command and finalize when ready
+        asyncPending = true;
+        cancelFlag = std::make_shared<std::atomic<bool>>(false);
+        schedulePoll();
+        return true;
     }
 
-    // Track new model sub-entities in scene
-    {
-        ModelComponent& newModel = scene->getComponent<ModelComponent>(entity);
-        newModel.needUpdateModel = false;
-        std::vector<Entity> newSubEntities;
-        ProjectUtils::collectModelEntities(scene, newModel, newSubEntities);
-        for (const auto& e : newSubEntities){
-            sceneProject->entities.push_back(e);
-        }
+    // Synchronous failure — restore old state
+    scene->getComponent<Transform>(entity) = Stream::decodeTransform(oldTransform);
+    scene->getComponent<MeshComponent>(entity) = Stream::decodeMeshComponent(oldMesh);
+    scene->getComponent<ModelComponent>(entity) = Stream::decodeModelComponent(oldModel);
+    if (oldSubEntitiesDeleteCmd) {
+        oldSubEntitiesDeleteCmd->undo();
+        delete oldSubEntitiesDeleteCmd;
+        oldSubEntitiesDeleteCmd = nullptr;
     }
-
-    sceneProject->isModified = true;
-
-    if (project->isEntityInBundle(sceneId, entity)){
-        project->bundlePropertyChanged(sceneId, entity, ComponentType::ModelComponent, {"filename"});
+    if (createEntityCmd) {
+        createEntityCmd->undo();
     }
-
-    return true;
+    return false;
 }
 
 void editor::ModelLoadCmd::undo(){
     SceneProject* sceneProject = project->getScene(sceneId);
     Scene* scene = sceneProject->scene;
 
-    ModelComponent& model = scene->getComponent<ModelComponent>(entity);
-
-    std::vector<Entity> newSubEntityRoots = collectModelDeleteRoots(model);
-    if (!newSubEntityRoots.empty()) {
-        DeleteEntityCmd newSubEntitiesDeleteCmd(project, sceneId, newSubEntityRoots, true);
-        newSubEntitiesDeleteCmd.execute();
+    if (asyncPending) {
+        // Async load still in flight — cancel it; no sub-entities have been created yet
+        if (cancelFlag) cancelFlag->store(true);
+        scene->getSystem<MeshSystem>()->cancelAsyncModelLoad(entity, modelPath);
+        asyncPending = false;
+    } else {
+        ModelComponent& model = scene->getComponent<ModelComponent>(entity);
+        std::vector<Entity> newSubEntityRoots = collectModelDeleteRoots(model);
+        if (!newSubEntityRoots.empty()) {
+            DeleteEntityCmd newSubEntitiesDeleteCmd(project, sceneId, newSubEntityRoots, true);
+            newSubEntitiesDeleteCmd.execute();
+        }
     }
 
     // Restore old components

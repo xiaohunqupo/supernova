@@ -7,6 +7,9 @@
 #include "math/Vector3.h"
 #include "yaml-cpp/yaml.h"
 
+#include <atomic>
+#include <memory>
+
 namespace doriax::editor{
 
     class ModelLoadCmd: public Command{
@@ -25,8 +28,15 @@ namespace doriax::editor{
         std::string modelPath;
 
         bool wasModified;
+        bool isNewModel = false;
+        bool asyncPending = false;
+        std::shared_ptr<std::atomic<bool>> cancelFlag;
 
         static std::vector<Entity> collectModelDeleteRoots(const ModelComponent& model);
+
+        bool tryLoad();
+        void finalizeLoad();
+        void schedulePoll();
 
     public:
         ModelLoadCmd(Project* project, uint32_t sceneId, Entity entity, const std::string& modelPath);

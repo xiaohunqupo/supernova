@@ -106,6 +106,9 @@ namespace doriax{
         static void setAsyncModelLoading(bool enable);
         static bool isAsyncModelLoading();
 
+        bool isAsyncModelLoadPending(Entity entity, const std::string& filename) const;
+        void cancelAsyncModelLoad(Entity entity, const std::string& filename);
+
         bool createOrUpdateSprite(SpriteComponent& sprite, MeshComponent& mesh);
         bool createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent& mesh, Transform& transform);
         bool createOrUpdateMeshPolygon(MeshPolygonComponent& polygon, MeshComponent& mesh);

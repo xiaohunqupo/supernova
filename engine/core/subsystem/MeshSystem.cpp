@@ -605,6 +605,25 @@ std::string MeshSystem::getAsyncModelLoadKey(Entity entity, const std::string& f
     return key.str();
 }
 
+bool MeshSystem::isAsyncModelLoadPending(Entity entity, const std::string& filename) const{
+    const std::string key = getAsyncModelLoadKey(entity, filename);
+    std::lock_guard<std::mutex> lock(asyncModelMutex);
+    return pendingModelLoads.find(key) != pendingModelLoads.end();
+}
+
+void MeshSystem::cancelAsyncModelLoad(Entity entity, const std::string& filename){
+    const std::string key = getAsyncModelLoadKey(entity, filename);
+    const uint64_t buildId = std::hash<std::string>{}(key);
+    bool erased = false;
+    {
+        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        erased = pendingModelLoads.erase(key) > 0;
+    }
+    if (erased){
+        ResourceProgress::failBuild(buildId);
+    }
+}
+
 std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::loadModelFileOnWorker(const std::string& filename, bool obj, uint64_t buildId){
     auto result = std::make_shared<AsyncModelLoadResult>();
     result->obj = obj;
