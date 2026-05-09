@@ -10,9 +10,12 @@
 #include "io/FileData.h"
 #include "io/Data.h"
 #include "thread/ResourceProgress.h"
+#include "thread/ThreadPoolManager.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -23,6 +26,30 @@
 
 using namespace doriax;
 
+struct MeshSystem::AsyncModelLoadResult {
+    bool obj = false;
+    bool success = false;
+    std::string filename;
+    std::string warn;
+    std::string err;
+    std::shared_ptr<tinygltf::Model> gltfModel;
+    tinyobj::attrib_t objAttrib;
+    std::vector<tinyobj::shape_t> objShapes;
+    std::vector<tinyobj::material_t> objMaterials;
+};
+
+bool MeshSystem::asyncModelLoading = false;
+std::mutex MeshSystem::asyncModelMutex;
+std::unordered_map<std::string, std::shared_future<std::shared_ptr<MeshSystem::AsyncModelLoadResult>>> MeshSystem::pendingModelLoads;
+
+
+void MeshSystem::setAsyncModelLoading(bool enable){
+    asyncModelLoading = enable;
+}
+
+bool MeshSystem::isAsyncModelLoading(){
+    return asyncModelLoading;
+}
 
 MeshSystem::MeshSystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<MeshComponent>());
@@ -570,6 +597,125 @@ bool MeshSystem::getFileSizeInBytes(size_t *filesize_out, std::string *err, cons
     (*filesize_out) = static_cast<size_t>(filedata.length());
 
     return true;
+}
+
+std::string MeshSystem::getAsyncModelLoadKey(Entity entity, const std::string& filename) const{
+    std::ostringstream key;
+    key << reinterpret_cast<uintptr_t>(scene) << '|' << entity << '|' << filename;
+    return key.str();
+}
+
+std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::loadModelFileOnWorker(const std::string& filename, bool obj, uint64_t buildId){
+    auto result = std::make_shared<AsyncModelLoadResult>();
+    result->obj = obj;
+    result->filename = filename;
+
+    try {
+        ResourceProgress::updateProgress(buildId, 0.1f);
+
+        if (obj){
+            tinyobj::FileReader::externalFunc = readFileToString;
+            std::string baseDir = FileData::getBaseDir(filename);
+            result->success = tinyobj::LoadObj(&result->objAttrib, &result->objShapes, &result->objMaterials, &result->warn, &result->err, filename.c_str(), baseDir.c_str());
+        }else{
+            result->gltfModel = std::make_shared<tinygltf::Model>();
+
+            tinygltf::TinyGLTF loader;
+            loader.SetFsCallbacks({&fileExists, &tinygltf::ExpandFilePath, &readWholeFile, &tinygltf::WriteWholeFile, &getFileSizeInBytes});
+
+            std::string ext = FileData::getFilePathExtension(filename);
+            if (ext.compare("glb") == 0) {
+                result->success = loader.LoadBinaryFromFile(result->gltfModel.get(), &result->err, &result->warn, filename);
+            }else{
+                result->success = loader.LoadASCIIFromFile(result->gltfModel.get(), &result->err, &result->warn, filename);
+            }
+        }
+
+        if (!result->err.empty() || !result->success){
+            ResourceProgress::failBuild(buildId);
+            return result;
+        }
+
+        ResourceProgress::updateProgress(buildId, 0.3f);
+    } catch (const std::exception& e) {
+        result->success = false;
+        result->err = e.what();
+        ResourceProgress::failBuild(buildId);
+    }
+
+    return result;
+}
+
+std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::pollOrStartAsyncModelLoad(Entity entity, const std::string& filename, bool obj){
+    const std::string key = getAsyncModelLoadKey(entity, filename);
+    const uint64_t buildId = std::hash<std::string>{}(key);
+
+    std::shared_future<std::shared_ptr<AsyncModelLoadResult>> future;
+    {
+        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        auto it = pendingModelLoads.find(key);
+        if (it == pendingModelLoads.end()){
+            std::filesystem::path filePath(filename);
+            ResourceProgress::startBuild(buildId, ResourceType::Model, filePath.filename().string());
+
+            pendingModelLoads[key] = ThreadPoolManager::getInstance().enqueue(
+                [filename, obj, buildId]() {
+                    return MeshSystem::loadModelFileOnWorker(filename, obj, buildId);
+                }
+            ).share();
+
+            return nullptr;
+        }
+
+        future = it->second;
+    }
+
+    if (!future.valid()){
+        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        pendingModelLoads.erase(key);
+        ResourceProgress::failBuild(buildId);
+        return nullptr;
+    }
+
+    if (future.wait_for(std::chrono::seconds(0)) != std::future_status::ready){
+        return nullptr;
+    }
+
+    std::shared_ptr<AsyncModelLoadResult> result = future.get();
+    {
+        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        pendingModelLoads.erase(key);
+    }
+
+    if (!result){
+        ResourceProgress::failBuild(buildId);
+        return nullptr;
+    }
+
+    if (!result->warn.empty()){
+        if (obj){
+            Log::warn("Loading OBJ model (%s): %s", filename.c_str(), result->warn.c_str());
+        }else{
+            Log::warn("Loading GLTF model (%s): %s", filename.c_str(), result->warn.c_str());
+        }
+    }
+
+    if (!result->err.empty()){
+        if (obj){
+            Log::error("Can't load OBJ model (%s): %s", filename.c_str(), result->err.c_str());
+        }else{
+            Log::error("Can't load GLTF model (%s): %s", filename.c_str(), result->err.c_str());
+        }
+    }
+
+    if (!result->success){
+        if (!obj && result->err.empty()){
+            Log::verbose("Failed to load glTF: %s", filename.c_str());
+        }
+        return result;
+    }
+
+    return result;
 }
 
 void MeshSystem::addSubmeshAttribute(Submesh& submesh, const std::string& bufferName, AttributeType attribute, unsigned int elements, AttributeDataType dataType, size_t size, size_t offset, bool normalized){
@@ -1985,6 +2131,14 @@ void MeshSystem::createTorus(MeshComponent& mesh, float radius, float ringRadius
 }
 
 bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncLoad, bool skipEntities, bool changeRootTransform){
+    std::shared_ptr<AsyncModelLoadResult> asyncResult;
+    if (asyncLoad){
+        asyncResult = pollOrStartAsyncModelLoad(entity, filename, false);
+        if (!asyncResult || !asyncResult->success || !asyncResult->gltfModel){
+            return false;
+        }
+    }
+
     MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
     ModelComponent& model = scene->getComponent<ModelComponent>(entity);
     Transform& transform = scene->getComponent<Transform>(entity);
@@ -1993,14 +2147,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
     model.filename = filename;
 
-    std::string modelName;
-    uint64_t buildId = 0;
-    if (asyncLoad) {
-        std::filesystem::path filePath(filename);
-        modelName = filePath.filename().string();
-        buildId = std::hash<std::string>{}(filename);
-        ResourceProgress::startBuild(buildId, ResourceType::Model, modelName);
-    }
+    uint64_t buildId = asyncLoad ? std::hash<std::string>{}(getAsyncModelLoadKey(entity, filename)) : 0;
 
     mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
     mesh.numSubmeshes = 1;
@@ -2008,7 +2155,6 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     if (!model.gltfModel)
         model.gltfModel = new tinygltf::Model();
 
-    tinygltf::TinyGLTF loader;
     std::string err;
     std::string warn;
 
@@ -2017,44 +2163,36 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
     mesh.numExternalBuffers = 0;
 
-    loader.SetFsCallbacks({&fileExists, &tinygltf::ExpandFilePath, &readWholeFile, &tinygltf::WriteWholeFile, &getFileSizeInBytes});
-
-    std::string ext = FileData::getFilePathExtension(filename);
-
     bool res = false;
 
-    if (asyncLoad) {
-        ResourceProgress::updateProgress(buildId, 0.1f); // File reading started
-    }
-
-    if (ext.compare("glb") == 0) {
-        res = loader.LoadBinaryFromFile(model.gltfModel, &err, &warn, filename); // for binary glTF(.glb)
+    if (asyncLoad){
+        *model.gltfModel = *asyncResult->gltfModel;
+        res = true;
     }else{
-        res = loader.LoadASCIIFromFile(model.gltfModel, &err, &warn, filename);
-    }
+        tinygltf::TinyGLTF loader;
+        loader.SetFsCallbacks({&fileExists, &tinygltf::ExpandFilePath, &readWholeFile, &tinygltf::WriteWholeFile, &getFileSizeInBytes});
 
-    if (!warn.empty()) {
-        Log::warn("Loading GLTF model (%s): %s", filename.c_str(), warn.c_str());
-    }
+        std::string ext = FileData::getFilePathExtension(filename);
 
-    if (!err.empty()) {
-        Log::error("Can't load GLTF model (%s): %s", filename.c_str(), err.c_str());
-        if (asyncLoad) {
-            ResourceProgress::failBuild(buildId);
+        if (ext.compare("glb") == 0) {
+            res = loader.LoadBinaryFromFile(model.gltfModel, &err, &warn, filename); // for binary glTF(.glb)
+        }else{
+            res = loader.LoadASCIIFromFile(model.gltfModel, &err, &warn, filename);
         }
-        return false;
-    }
 
-    if (!res) {
-        Log::verbose("Failed to load glTF: %s", filename.c_str());
-        if (asyncLoad) {
-            ResourceProgress::failBuild(buildId);
+        if (!warn.empty()) {
+            Log::warn("Loading GLTF model (%s): %s", filename.c_str(), warn.c_str());
         }
-        return false;
-    }
 
-    if (asyncLoad) {
-        ResourceProgress::updateProgress(buildId, 0.3f); // File loaded, starting processing
+        if (!err.empty()) {
+            Log::error("Can't load GLTF model (%s): %s", filename.c_str(), err.c_str());
+            return false;
+        }
+
+        if (!res) {
+            Log::verbose("Failed to load glTF: %s", filename.c_str());
+            return false;
+        }
     }
 
     int meshNode = -1;
@@ -2805,6 +2943,14 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 }
 
 bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLoad){
+    std::shared_ptr<AsyncModelLoadResult> asyncResult;
+    if (asyncLoad){
+        asyncResult = pollOrStartAsyncModelLoad(entity, filename, true);
+        if (!asyncResult || !asyncResult->success){
+            return false;
+        }
+    }
+
     MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
     ModelComponent& model = scene->getComponent<ModelComponent>(entity);
     Transform& transform = scene->getComponent<Transform>(entity);
@@ -2813,14 +2959,7 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
     model.filename = filename;
 
-    std::string modelName;
-    uint64_t buildId = 0;
-    if (asyncLoad) {
-        std::filesystem::path filePath(filename);
-        modelName = filePath.filename().string();
-        buildId = std::hash<std::string>{}(filename);
-        ResourceProgress::startBuild(buildId, ResourceType::Model, modelName);
-    }
+    uint64_t buildId = asyncLoad ? std::hash<std::string>{}(getAsyncModelLoadKey(entity, filename)) : 0;
 
     mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
     mesh.numSubmeshes = 1;
@@ -2836,33 +2975,26 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
     std::string baseDir = FileData::getBaseDir(filename);
 
-    if (asyncLoad) {
-        ResourceProgress::updateProgress(buildId, 0.1f); // Loading started
-    }
+    bool ret = true;
+    if (asyncLoad){
+        attrib = asyncResult->objAttrib;
+        shapes = asyncResult->objShapes;
+        materials = asyncResult->objMaterials;
+    }else{
+        ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename.c_str(), baseDir.c_str());
 
-    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename.c_str(), baseDir.c_str());
-
-    if (!warn.empty()) {
-        Log::warn("Loading OBJ model (%s): %s", filename.c_str(), warn.c_str());
-    }
-
-    if (!err.empty()) {
-        Log::error("Can't load OBJ model (%s): %s", filename.c_str(), err.c_str());
-        if (asyncLoad) {
-            ResourceProgress::failBuild(buildId);
+        if (!warn.empty()) {
+            Log::warn("Loading OBJ model (%s): %s", filename.c_str(), warn.c_str());
         }
-        return false;
-    }
 
-    if (!ret) {
-        if (asyncLoad) {
-            ResourceProgress::failBuild(buildId);
+        if (!err.empty()) {
+            Log::error("Can't load OBJ model (%s): %s", filename.c_str(), err.c_str());
+            return false;
         }
-        return false;
-    }
 
-    if (asyncLoad) {
-        ResourceProgress::updateProgress(buildId, 0.3f); // File loaded
+        if (!ret) {
+            return false;
+        }
     }
 
     mesh.buffer.clear();
@@ -3223,9 +3355,9 @@ bool MeshSystem::createOrUpdateModel(Entity entity, ModelComponent& model, MeshC
             bool skipEntities = !model.filename.empty() && (!model.bonesIdMapping.empty() || !model.animations.empty());
             bool ret = false;
             if (ext == "obj"){
-                ret = loadOBJ(entity, model.filename, false);
+                ret = loadOBJ(entity, model.filename, asyncModelLoading);
             }else{
-                ret = loadGLTF(entity, model.filename, false, skipEntities, false);
+                ret = loadGLTF(entity, model.filename, asyncModelLoading, skipEntities, false);
             }
 
             if (ret){

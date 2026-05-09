@@ -106,9 +106,9 @@ bool editor::ModelLoadCmd::execute(){
     std::string ext = FileData::getFilePathExtension(modelPath);
     bool ret = false;
     if (ext == "obj"){
-        ret = meshSys->loadOBJ(entity, modelPath, true);
+        ret = meshSys->loadOBJ(entity, modelPath, false);
     }else{
-        ret = meshSys->loadGLTF(entity, modelPath, true, false, isNewModel);
+        ret = meshSys->loadGLTF(entity, modelPath, false, false, isNewModel);
     }
 
     if (!ret){

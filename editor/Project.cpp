@@ -1488,6 +1488,7 @@ void editor::Project::loadScene(fs::path filepath, bool opened, bool isNewScene,
         }
 
         YAML::Node sceneNode = YAML::LoadFile(fullPath.string());
+
         SceneProject* targetScene = nullptr;
 
         if (isNewScene) {
@@ -2409,6 +2410,7 @@ bool editor::Project::loadProject(const std::filesystem::path path) {
 
         // Load and parse project file
         YAML::Node projectNode = YAML::LoadFile(projectFile.string());
+
         Stream::decodeProject(this, projectNode);
 
         // Create a default scene if no scenes were loaded

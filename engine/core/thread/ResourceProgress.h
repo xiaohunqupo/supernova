@@ -18,8 +18,7 @@ namespace doriax {
         Shader,
         Texture,
         Model,
-        Sound,
-        Material
+        Sound
     };
 
     struct ResourceBuildInfo {

@@ -18,11 +18,22 @@
 #include "component/Transform.h"
 #include "math/Ray.h"
 
+#include <future>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+
 namespace doriax{
 
     class DORIAX_API MeshSystem : public SubSystem {
 
     private:
+        struct AsyncModelLoadResult;
+
+        static bool asyncModelLoading;
+        static std::mutex asyncModelMutex;
+        static std::unordered_map<std::string, std::shared_future<std::shared_ptr<AsyncModelLoadResult>>> pendingModelLoads;
+
         bool createSprite(SpriteComponent& sprite, MeshComponent& mesh, CameraComponent& camera);
         bool createMeshPolygon(MeshPolygonComponent& polygon, MeshComponent& mesh);
         bool createTilemap(TilemapComponent& tilemap, MeshComponent& mesh);
@@ -39,6 +50,9 @@ namespace doriax{
         static bool fileExists(const std::string &abs_filename, void *);
         static bool readWholeFile(std::vector<unsigned char> *out, std::string *err, const std::string &filepath, void *);
         static bool getFileSizeInBytes(size_t *filesize_out, std::string *err, const std::string &filepath, void *userdata);
+        std::string getAsyncModelLoadKey(Entity entity, const std::string& filename) const;
+        std::shared_ptr<AsyncModelLoadResult> pollOrStartAsyncModelLoad(Entity entity, const std::string& filename, bool obj);
+        static std::shared_ptr<AsyncModelLoadResult> loadModelFileOnWorker(const std::string& filename, bool obj, uint64_t buildId);
         template<typename T>
         static bool isValidGLTFIndex(int index, const std::vector<T>& values) {
             return index >= 0 && static_cast<size_t>(index) < values.size();
@@ -88,6 +102,9 @@ namespace doriax{
         void resetModelToBindPose(ModelComponent& model);
 
         bool raycastTerrainSurface(const Ray& ray, TerrainComponent& terrain, Transform& transform, Vector3& worldPoint);
+
+        static void setAsyncModelLoading(bool enable);
+        static bool isAsyncModelLoading();
 
         bool createOrUpdateSprite(SpriteComponent& sprite, MeshComponent& mesh);
         bool createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent& mesh, Transform& transform);

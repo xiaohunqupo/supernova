@@ -992,6 +992,7 @@ void editor::App::engineInit(int argc, char** argv) {
     }
 
     Engine::systemInit(argc, argv, new editor::Platform(&project));
+
     Engine::pauseGameEvents(true);
 
     ShaderPool::setShaderBuilder([this](doriax::ShaderKey shaderKey) -> doriax::ShaderBuildResult {
@@ -1000,6 +1001,7 @@ void editor::App::engineInit(int argc, char** argv) {
     });
 
     TextureDataPool::setAsyncLoading(true);
+    MeshSystem::setAsyncModelLoading(true);
 }
 
 void editor::App::engineViewLoaded(){
@@ -1035,6 +1037,7 @@ void editor::App::engineRender(){
 
             if (lastActivatedScene != sceneProject.id || sceneProject.needUpdateRender){
                 sceneProject.sceneRender->activate();
+
                 project.restoreRuntimeLayers(sceneProject.id);
                 if (lastActivatedScene != sceneProject.id) {
                     lastActivatedScene = sceneProject.id;

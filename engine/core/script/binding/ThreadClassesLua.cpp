@@ -22,7 +22,6 @@ void LuaBinding::registerThreadClasses(lua_State *L){
         .addVariable("Texture", ResourceType::Texture)
         .addVariable("Model", ResourceType::Model)
         .addVariable("Sound", ResourceType::Sound)
-        .addVariable("Material", ResourceType::Material)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)

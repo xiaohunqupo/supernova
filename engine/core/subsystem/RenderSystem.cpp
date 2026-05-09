@@ -49,7 +49,7 @@ void RenderSystem::load(){
     hasMultipleCameras = false;
 
     createEmptyTextures();
-        
+
     update(0); // first update
 }
 
