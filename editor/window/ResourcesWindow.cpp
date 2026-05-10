@@ -1537,9 +1537,10 @@ void editor::ResourcesWindow::thumbnailWorker() {
                     Material material = Stream::decodeMaterial(materialNode);
                     materialRender.applyMaterial(material);
 
-                    Engine::startAsyncThread();
-                    Engine::executeSceneOnce(materialRender.getScene());
-                    Engine::endAsyncThread();
+                    {
+                        Engine::AsyncThreadScope asyncThreadScope;
+                        Engine::executeSceneOnce(materialRender.getScene());
+                    }
 
                     // Set the pending flag before executing the scene
                     {
@@ -1570,10 +1571,10 @@ void editor::ResourcesWindow::thumbnailWorker() {
                     modelRender.fixDarkMaterials();
                     modelRender.positionCameraForModel();
 
-
-                    Engine::startAsyncThread();
-                    Engine::executeSceneOnce(modelRender.getScene());
-                    Engine::endAsyncThread();
+                    {
+                        Engine::AsyncThreadScope asyncThreadScope;
+                        Engine::executeSceneOnce(modelRender.getScene());
+                    }
 
                     {
                         std::lock_guard<std::mutex> lock(modelRenderMutex);

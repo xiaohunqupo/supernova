@@ -53,7 +53,7 @@ namespace doriax::editor {
         bool setupShaderArgs(shadercompiler::args_t& args, ShaderType shaderType, uint32_t properties);
         std::string getLangSuffix(shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform);
 
-        ShaderData buildShaderInternal(ShaderKey shaderKey, Project* project);
+        ShaderData buildShaderInternal(ShaderKey shaderKey, Project* project, bool trackProgress);
         std::string getShaderDisplayName(ShaderKey key);
 
         static std::filesystem::path getShaderCachePath(ShaderKey shaderKey, Project* project);

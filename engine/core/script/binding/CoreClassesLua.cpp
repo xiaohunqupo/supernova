@@ -213,6 +213,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticProperty("openGL", &Engine::isOpenGL)
         .addStaticProperty("framerate", &Engine::getFramerate)
         .addStaticProperty("deltatime", &Engine::getDeltatime)
+        .addStaticProperty("asyncLoading", &Engine::isAsyncLoading, &Engine::setAsyncLoading)
         .addStaticFunction("startAsyncThread", &Engine::startAsyncThread)
         .addStaticFunction("commitThreadQueue", &Engine::commitThreadQueue)
         .addStaticFunction("endAsyncThread", &Engine::endAsyncThread)

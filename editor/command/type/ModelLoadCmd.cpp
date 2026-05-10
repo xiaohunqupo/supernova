@@ -2,6 +2,7 @@
 
 #include "Stream.h"
 #include "util/ProjectUtils.h"
+#include "Engine.h"
 #include "subsystem/MeshSystem.h"
 #include "io/FileData.h"
 #include "Backend.h"
@@ -58,7 +59,7 @@ std::vector<Entity> editor::ModelLoadCmd::collectModelDeleteRoots(const ModelCom
 bool editor::ModelLoadCmd::tryLoad(){
     Scene* scene = project->getScene(sceneId)->scene;
     std::shared_ptr<MeshSystem> meshSys = scene->getSystem<MeshSystem>();
-    bool useAsync = MeshSystem::isAsyncModelLoading();
+    bool useAsync = Engine::isAsyncLoading();
     std::string ext = FileData::getFilePathExtension(modelPath);
     if (ext == "obj"){
         return meshSys->loadOBJ(entity, modelPath, useAsync);
@@ -162,7 +163,7 @@ bool editor::ModelLoadCmd::execute(){
         return true;
     }
 
-    if (MeshSystem::isAsyncModelLoading()){
+    if (Engine::isAsyncLoading()){
         // Load is in progress on a worker thread — accept the command and finalize when ready
         asyncPending = true;
         cancelFlag = std::make_shared<std::atomic<bool>>(false);

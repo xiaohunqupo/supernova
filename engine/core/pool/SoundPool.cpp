@@ -17,7 +17,6 @@
 
 using namespace doriax;
 
-bool SoundPool::asyncLoading = false;
 std::unordered_map<std::string, std::future<std::shared_ptr<SoLoud::Wav>>> SoundPool::pendingBuilds;
 std::mutex SoundPool::cacheMutex;
 std::atomic<bool> SoundPool::shutdownRequested{false};
@@ -41,7 +40,7 @@ SoundLoadResult SoundPool::loadFromFile(const std::string& id, const std::string
         return result;
     }
 
-    if (asyncLoading) {
+    if (Engine::isAsyncLoading()) {
         std::lock_guard<std::mutex> lock(cacheMutex);
 
         if (shutdownRequested.load()) {
@@ -88,12 +87,12 @@ SoundLoadResult SoundPool::loadFromFile(const std::string& id, const std::string
 
         pendingBuilds[id] = ThreadPoolManager::getInstance().enqueue(
             [id, filename]() {
-                return loadSoundInternal(id, filename);
+                return loadSoundInternal(id, filename, true);
             }
         );
     } else {
         try {
-            shared = loadSoundInternal(id, filename);
+            shared = loadSoundInternal(id, filename, false);
 
             result.state = ResourceLoadState::Finished;
             result.data = shared;
@@ -109,10 +108,10 @@ SoundLoadResult SoundPool::loadFromFile(const std::string& id, const std::string
     return result;
 }
 
-std::shared_ptr<SoLoud::Wav> SoundPool::loadSoundInternal(const std::string& id, const std::string& filename){
+std::shared_ptr<SoLoud::Wav> SoundPool::loadSoundInternal(const std::string& id, const std::string& filename, bool trackProgress){
     uint64_t buildId = std::hash<std::string>{}(id);
 
-    if (asyncLoading) {
+    if (trackProgress) {
         if (shutdownRequested.load()) {
             ResourceProgress::failBuild(buildId);
             throw std::runtime_error("Shutdown requested");
@@ -123,12 +122,14 @@ std::shared_ptr<SoLoud::Wav> SoundPool::loadSoundInternal(const std::string& id,
     Data filedata;
 
     if (filedata.open(filename.c_str()) != FileErrors::FILEDATA_OK){
-        ResourceProgress::failBuild(buildId);
+        if (trackProgress) {
+            ResourceProgress::failBuild(buildId);
+        }
         Log::error("Sound file not found: %s", filename.c_str());
         throw std::runtime_error("Sound file not found: " + filename);
     }
 
-    if (asyncLoading) {
+    if (trackProgress) {
         if (shutdownRequested.load()) {
             ResourceProgress::failBuild(buildId);
             throw std::runtime_error("Shutdown requested");
@@ -140,15 +141,21 @@ std::shared_ptr<SoLoud::Wav> SoundPool::loadSoundInternal(const std::string& id,
     SoLoud::result res = sound->loadMem(filedata.getMemPtr(), filedata.length(), false, false);
 
     if (res == SoLoud::SOLOUD_ERRORS::FILE_LOAD_FAILED){
-        ResourceProgress::failBuild(buildId);
+        if (trackProgress) {
+            ResourceProgress::failBuild(buildId);
+        }
         Log::error("Sound file type of '%s' could not be loaded", filename.c_str());
         throw std::runtime_error("Sound file type of '" + filename + "' could not be loaded");
     }else if (res == SoLoud::SOLOUD_ERRORS::OUT_OF_MEMORY){
-        ResourceProgress::failBuild(buildId);
+        if (trackProgress) {
+            ResourceProgress::failBuild(buildId);
+        }
         Log::error("Out of memory when loading '%s'", filename.c_str());
         throw std::runtime_error("Out of memory when loading '" + filename + "'");
     }else if (res == SoLoud::SOLOUD_ERRORS::UNKNOWN_ERROR){
-        ResourceProgress::failBuild(buildId);
+        if (trackProgress) {
+            ResourceProgress::failBuild(buildId);
+        }
         Log::error("Unknown error when loading '%s'", filename.c_str());
         throw std::runtime_error("Unknown error when loading '" + filename + "'");
     }
@@ -156,7 +163,7 @@ std::shared_ptr<SoLoud::Wav> SoundPool::loadSoundInternal(const std::string& id,
     sound->setSingleInstance(true);
     sound->setVolume(1.0);
 
-    if (asyncLoading) {
+    if (trackProgress) {
         if (shutdownRequested.load()) {
             ResourceProgress::failBuild(buildId);
             throw std::runtime_error("Shutdown requested");
@@ -173,10 +180,6 @@ std::string SoundPool::getSoundDisplayName(const std::string& path){
     return filePath.filename().string();
 }
 
-void SoundPool::setAsyncLoading(bool enable){
-    asyncLoading = enable;
-}
-
 void SoundPool::requestShutdown(){
     std::lock_guard<std::mutex> lock(cacheMutex);
     shutdownRequested = true;
@@ -191,7 +194,7 @@ void SoundPool::requestShutdown(){
 
 void SoundPool::remove(const std::string& id){
     bool removedPending = false;
-    if (asyncLoading) {
+    {
         std::lock_guard<std::mutex> lock(cacheMutex);
         auto pendingIt = pendingBuilds.find(id);
         if (pendingIt != pendingBuilds.end()) {
@@ -217,7 +220,7 @@ void SoundPool::remove(const std::string& id){
 }
 
 void SoundPool::clear(){
-    if (asyncLoading) {
+    {
         std::lock_guard<std::mutex> lock(cacheMutex);
         for (auto& [id, future] : pendingBuilds) {
             if (future.valid()) {

@@ -187,6 +187,8 @@ namespace doriax {
 
         static std::atomic<bool> viewLoaded;
         static std::atomic<bool> paused;
+        static std::atomic<bool> asyncLoading;
+        thread_local static unsigned int asyncThreadDepth;
 
         static CursorType mouseCursorType;
         static bool showCursor;
@@ -200,6 +202,15 @@ namespace doriax {
         static void includeScene(size_t index, Scene* scene);
         
     public:
+        class AsyncThreadScope {
+        public:
+            AsyncThreadScope() { Engine::startAsyncThread(); }
+            ~AsyncThreadScope() { Engine::endAsyncThread(); }
+
+            AsyncThreadScope(const AsyncThreadScope&) = delete;
+            AsyncThreadScope& operator=(const AsyncThreadScope&) = delete;
+        };
+
         //Engine();
         //virtual ~Engine();
         
@@ -270,6 +281,9 @@ namespace doriax {
         static bool isOpenGL();
         static float getFramerate();
         static float getDeltatime();
+
+        static void setAsyncLoading(bool enable);
+        static bool isAsyncLoading();
 
         static void startAsyncThread();
         static void commitThreadQueue();

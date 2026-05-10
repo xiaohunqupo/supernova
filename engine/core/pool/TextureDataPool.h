@@ -39,12 +39,11 @@ namespace doriax{
     private:
         static texturesdata_t& getMap();
 
-        static bool asyncLoading;
         static std::unordered_map<std::string, std::future<std::array<TextureData,6>>> pendingBuilds;
         static std::mutex cacheMutex;
         static std::atomic<bool> shutdownRequested;
 
-        static std::array<TextureData,6> loadTextureInternal(const std::string& id, const std::array<std::string, 6>& paths, size_t numFaces);
+        static std::array<TextureData,6> loadTextureInternal(const std::string& id, const std::array<std::string, 6>& paths, size_t numFaces, bool trackProgress);
         static std::string getTextureDisplayName(const std::string& path);
         static std::string validateTextureFaces(std::array<TextureData,6>& data, size_t numFaces);
 
@@ -53,9 +52,6 @@ namespace doriax{
         static std::shared_ptr<std::array<TextureData,6>> get(const std::string& id, std::array<TextureData,6> data);
 
         static TextureLoadResult loadFromFile(const std::string& id, const std::array<std::string, 6>& paths, size_t numFaces);
-
-        static void setAsyncLoading(bool enable);
-        static bool isAsyncLoading();
 
         static void requestShutdown();
 

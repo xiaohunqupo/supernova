@@ -38,18 +38,8 @@ struct MeshSystem::AsyncModelLoadResult {
     std::vector<tinyobj::material_t> objMaterials;
 };
 
-bool MeshSystem::asyncModelLoading = false;
 std::mutex MeshSystem::asyncModelMutex;
 std::unordered_map<std::string, std::shared_future<std::shared_ptr<MeshSystem::AsyncModelLoadResult>>> MeshSystem::pendingModelLoads;
-
-
-void MeshSystem::setAsyncModelLoading(bool enable){
-    asyncModelLoading = enable;
-}
-
-bool MeshSystem::isAsyncModelLoading(){
-    return asyncModelLoading;
-}
 
 MeshSystem::MeshSystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<MeshComponent>());
@@ -3427,11 +3417,12 @@ bool MeshSystem::createOrUpdateModel(Entity entity, ModelComponent& model, MeshC
         if (!model.filename.empty()){
             std::string ext = FileData::getFilePathExtension(model.filename);
             bool skipEntities = !model.filename.empty() && (!model.bonesIdMapping.empty() || !model.animations.empty());
+            bool asyncLoading = Engine::isAsyncLoading();
             bool ret = false;
             if (ext == "obj"){
-                ret = loadOBJ(entity, model.filename, asyncModelLoading);
+                ret = loadOBJ(entity, model.filename, asyncLoading);
             }else{
-                ret = loadGLTF(entity, model.filename, asyncModelLoading, skipEntities, false);
+                ret = loadGLTF(entity, model.filename, asyncLoading, skipEntities, false);
             }
 
             if (ret){

@@ -34,18 +34,15 @@ namespace doriax{
     private:
         static sounds_t& getMap();
 
-        static bool asyncLoading;
         static std::unordered_map<std::string, std::future<std::shared_ptr<SoLoud::Wav>>> pendingBuilds;
         static std::mutex cacheMutex;
         static std::atomic<bool> shutdownRequested;
 
-        static std::shared_ptr<SoLoud::Wav> loadSoundInternal(const std::string& id, const std::string& filename);
+        static std::shared_ptr<SoLoud::Wav> loadSoundInternal(const std::string& id, const std::string& filename, bool trackProgress);
         static std::string getSoundDisplayName(const std::string& path);
 
     public:
         static SoundLoadResult loadFromFile(const std::string& id, const std::string& filename);
-
-        static void setAsyncLoading(bool enable);
 
         static void requestShutdown();
 

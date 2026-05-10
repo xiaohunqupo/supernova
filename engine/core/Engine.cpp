@@ -3,6 +3,7 @@
 //
 
 #include "Engine.h"
+#include "Log.h"
 #include "Scene.h"
 #include "Input.h"
 #include "render/SystemRender.h"
@@ -20,8 +21,6 @@
 #endif
 
 #include "sokol_time.h"
-
-thread_local static bool asyncThread = false;
 
 using namespace doriax;
 
@@ -60,6 +59,8 @@ double Engine::updateTime = 1.0 / 60.0; //60Hz
 
 std::atomic<bool> Engine::viewLoaded = false;
 std::atomic<bool> Engine::paused = false;
+std::atomic<bool> Engine::asyncLoading = false;
+thread_local unsigned int Engine::asyncThreadDepth = 0;
 
 CursorType Engine::mouseCursorType = CursorType::ARROW;
 bool Engine::showCursor = true;
@@ -100,7 +101,7 @@ FunctionSubscribe<void()>& Engine::getOnInit() {
 }
 
 void Engine::setScene(Scene* scene){
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.acquire();
 
     if (mainScene){
@@ -118,7 +119,7 @@ void Engine::setScene(Scene* scene){
         mainScene = scene;
     }
 
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.release();
 }
 
@@ -127,7 +128,7 @@ Scene* Engine::getScene(){
 }
 
 void Engine::addSceneLayer(Scene* scene){
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.acquire();
 
     auto it = std::find(scenes.begin(), scenes.end(), scene);
@@ -136,12 +137,12 @@ void Engine::addSceneLayer(Scene* scene){
         includeScene(scenes.size()-1, scene);
     }
 
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.release();
 }
 
 void Engine::executeSceneOnce(Scene* scene) {
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.acquire();
 
     auto it = std::find(scenes.begin(), scenes.end(), scene);
@@ -152,12 +153,12 @@ void Engine::executeSceneOnce(Scene* scene) {
 
     oneTimeScenes.insert(scene);
 
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.release();
 }
 
 void Engine::removeScene(Scene* scene){
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.acquire();
 
     if (scene){
@@ -172,12 +173,12 @@ void Engine::removeScene(Scene* scene){
         }
     }
 
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.release();
 }
 
 void Engine::removeAllSceneLayers(bool removeOneTimeScenes){
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.acquire();
 
     scenes.erase(
@@ -197,18 +198,18 @@ void Engine::removeAllSceneLayers(bool removeOneTimeScenes){
         scenes.end()
     );
 
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.release();
 }
 
 void Engine::removeAllScenes(){
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.acquire();
 
         scenes.clear();
         mainScene = NULL;
 
-    if (asyncThread)
+    if (Engine::isAsyncThread())
         drawSemaphore.release();
 }
 
@@ -454,9 +455,28 @@ float Engine::getDeltatime(){
     return deltatime;
 }
 
+void Engine::setAsyncLoading(bool enable){
+    #ifndef NO_THREAD_SUPPORT
+        asyncLoading = enable;
+    #else
+        if (enable){
+            Log::warn("Threads are not available");
+        }
+        asyncLoading = false;
+    #endif
+}
+
+bool Engine::isAsyncLoading(){
+    #ifndef NO_THREAD_SUPPORT
+        return asyncLoading;
+    #else
+        return false;
+    #endif
+}
+
 void Engine::startAsyncThread(){
     #ifndef NO_THREAD_SUPPORT
-        asyncThread = true;
+        asyncThreadDepth++;
     #else
         Log::warn("Threads are not available");
     #endif
@@ -467,12 +487,21 @@ void Engine::commitThreadQueue(){
 }
 
 void Engine::endAsyncThread(){
-    commitThreadQueue();
-    asyncThread = false;
+    #ifndef NO_THREAD_SUPPORT
+        if (asyncThreadDepth == 0){
+            Log::warn("Engine::endAsyncThread called without matching startAsyncThread");
+            return;
+        }
+
+        asyncThreadDepth--;
+        if (asyncThreadDepth == 0){
+            commitThreadQueue();
+        }
+    #endif
 }
 
 bool Engine::isAsyncThread(){
-    return asyncThread;
+    return asyncThreadDepth > 0;
 }
 
 bool Engine::isViewLoaded(){
@@ -631,7 +660,7 @@ void Engine::systemViewLoaded(){
         System::instance().setShowCursor(showCursor);
     }
 
-    asyncThread = false;
+    asyncThreadDepth = 0;
 
     viewLoaded = true;
     onViewLoaded.call();

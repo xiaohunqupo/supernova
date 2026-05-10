@@ -2,6 +2,7 @@
 
 #include "ShaderDataSerializer.h"
 #include "App.h"
+#include "Engine.h"
 
 #include "thread/ResourceProgress.h"
 #include "thread/ThreadPoolManager.h"
@@ -323,6 +324,22 @@ ShaderBuildResult editor::ShaderBuilder::buildShader(ShaderKey shaderKey, Projec
         }
     }
 
+    if (!Engine::isAsyncLoading()) {
+        try {
+            lock.unlock();
+            ShaderData data = buildShaderInternal(shaderKey, project, false);
+            lock.lock();
+            shaderDataCache[shaderKey] = data;
+            lock.unlock();
+
+            (void)saveShaderDataCache(shaderKey, project, data);
+
+            return ShaderBuildResult(data, ResourceLoadState::Finished);
+        } catch (const std::exception& e) {
+            return ShaderBuildResult({}, ResourceLoadState::Failed);
+        }
+    }
+
     // Start new async build
     std::string shaderName = getShaderDisplayName(shaderKey);
     ResourceProgress::startBuild(shaderKey, ResourceType::Shader, shaderName);
@@ -330,7 +347,7 @@ ShaderBuildResult editor::ShaderBuilder::buildShader(ShaderKey shaderKey, Projec
     // Use thread pool instead of std::async
     pendingBuilds[shaderKey] = ThreadPoolManager::getInstance().enqueue(
         [this, shaderKey, project]() {
-            return buildShaderInternal(shaderKey, project);
+            return buildShaderInternal(shaderKey, project, true);
         }
     );
 
@@ -403,11 +420,13 @@ std::string editor::ShaderBuilder::getLangSuffix(shadercompiler::lang_type_t lan
     return "";
 }
 
-ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Project* project){
+ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Project* project, bool trackProgress){
     if (shutdownRequested) {
         throw std::runtime_error("Shutdown requested");
     }
-    ResourceProgress::updateProgress(shaderKey, 0.1f); // Starting
+    if (trackProgress) {
+        ResourceProgress::updateProgress(shaderKey, 0.1f); // Starting
+    }
 
     ShaderType shaderType = ShaderPool::getShaderTypeFromKey(shaderKey);
     uint32_t properties = ShaderPool::getPropertiesFromKey(shaderKey);
@@ -421,51 +440,67 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
     args.version = 410;
 
     if (!setupShaderArgs(args, shaderType, properties)) {
-        ResourceProgress::failBuild(shaderKey);
+        if (trackProgress) {
+            ResourceProgress::failBuild(shaderKey);
+        }
         throw std::runtime_error("Unknown shader type");
     }
 
     if (shutdownRequested) {
         throw std::runtime_error("Shutdown requested");
     }
-    ResourceProgress::updateProgress(shaderKey, 0.3f); // Setup complete
+    if (trackProgress) {
+        ResourceProgress::updateProgress(shaderKey, 0.3f); // Setup complete
+    }
 
     if (!shadercompiler::load_input(inputs, args)) {
         //printf("Error loading shader input\n");
-        ResourceProgress::failBuild(shaderKey);
+        if (trackProgress) {
+            ResourceProgress::failBuild(shaderKey);
+        }
         throw std::runtime_error("Error loading shader input");
     }
 
     if (shutdownRequested) {
         throw std::runtime_error("Shutdown requested");
     }
-    ResourceProgress::updateProgress(shaderKey, 0.5f); // Input loaded
+    if (trackProgress) {
+        ResourceProgress::updateProgress(shaderKey, 0.5f); // Input loaded
+    }
 
     std::vector<shadercompiler::spirv_t> spirvvec;
     spirvvec.resize(inputs.size());
     if (!shadercompiler::compile_to_spirv(spirvvec, inputs, args)) {
         //printf("Error compiling to SPIRV\n");
-        ResourceProgress::failBuild(shaderKey);
+        if (trackProgress) {
+            ResourceProgress::failBuild(shaderKey);
+        }
         throw std::runtime_error("Error compiling to SPIRV");
     }
 
     if (shutdownRequested) {
         throw std::runtime_error("Shutdown requested");
     }
-    ResourceProgress::updateProgress(shaderKey, 0.8f); // SPIRV compiled
+    if (trackProgress) {
+        ResourceProgress::updateProgress(shaderKey, 0.8f); // SPIRV compiled
+    }
 
     std::vector<shadercompiler::spirvcross_t> spirvcrossvec;
     spirvcrossvec.resize(inputs.size());
     if (!shadercompiler::compile_to_lang(spirvcrossvec, spirvvec, inputs, args)) {
         //printf("Error cross-compiling\n");
-        ResourceProgress::failBuild(shaderKey);
+        if (trackProgress) {
+            ResourceProgress::failBuild(shaderKey);
+        }
         throw std::runtime_error("Error cross-compiling");
     }
 
     if (shutdownRequested) {
         throw std::runtime_error("Shutdown requested");
     }
-    ResourceProgress::updateProgress(shaderKey, 0.9f); // Cross-compilation done
+    if (trackProgress) {
+        ResourceProgress::updateProgress(shaderKey, 0.9f); // Cross-compilation done
+    }
 
     // Use a deterministic basename for stage naming and disk cache
     args.output_basename = ShaderPool::getShaderStr(shaderType, properties) + getLangSuffix(args.lang, args.version, args.es, args.platform);
@@ -474,8 +509,10 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
     if (shutdownRequested) {
         throw std::runtime_error("Shutdown requested");
     }
-    ResourceProgress::updateProgress(shaderKey, 1.0f); // Complete
-    ResourceProgress::completeBuild(shaderKey);
+    if (trackProgress) {
+        ResourceProgress::updateProgress(shaderKey, 1.0f); // Complete
+        ResourceProgress::completeBuild(shaderKey);
+    }
 
     printf("Shader (%s, %s, %u) generated successfully\n", args.vert_file.c_str(), args.frag_file.c_str(), properties);
 

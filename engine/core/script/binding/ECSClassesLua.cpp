@@ -137,7 +137,6 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addFunction("loadOBJ", &MeshSystem::loadOBJ)
         .addFunction("createInstancedMesh", &MeshSystem::createInstancedMesh)
         .addFunction("removeInstancedMesh", &MeshSystem::removeInstancedMesh)
-        .addStaticProperty("asyncModelLoading", &MeshSystem::isAsyncModelLoading, &MeshSystem::setAsyncModelLoading)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

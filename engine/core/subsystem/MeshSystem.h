@@ -30,7 +30,6 @@ namespace doriax{
     private:
         struct AsyncModelLoadResult;
 
-        static bool asyncModelLoading;
         static std::mutex asyncModelMutex;
         static std::unordered_map<std::string, std::shared_future<std::shared_ptr<AsyncModelLoadResult>>> pendingModelLoads;
 
@@ -104,9 +103,6 @@ namespace doriax{
         void resetModelToBindPose(ModelComponent& model);
 
         bool raycastTerrainSurface(const Ray& ray, TerrainComponent& terrain, Transform& transform, Vector3& worldPoint);
-
-        static void setAsyncModelLoading(bool enable);
-        static bool isAsyncModelLoading();
 
         bool hasPendingAsyncModelLoads() const;
         void cancelAsyncModelLoads();
