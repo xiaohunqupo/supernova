@@ -1976,6 +1976,11 @@ void editor::Project::deleteSceneProject(SceneProject* sceneProject){
         }
     }
 
+    if (sceneProject->scene) {
+        if (auto meshSystem = sceneProject->scene->getSystem<MeshSystem>())
+            meshSystem->cancelAsyncModelLoads();
+    }
+
     if (sceneProject->sceneRender)
         delete sceneProject->sceneRender;
     if (sceneProject->scene)

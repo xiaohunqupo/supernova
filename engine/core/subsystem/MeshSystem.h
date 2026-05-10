@@ -50,6 +50,8 @@ namespace doriax{
         static bool fileExists(const std::string &abs_filename, void *);
         static bool readWholeFile(std::vector<unsigned char> *out, std::string *err, const std::string &filepath, void *);
         static bool getFileSizeInBytes(size_t *filesize_out, std::string *err, const std::string &filepath, void *userdata);
+        static std::string getAsyncModelLoadScenePrefix(const Scene* scene);
+        static std::string getAsyncModelLoadKey(const Scene* scene, Entity entity, const std::string& filename);
         std::string getAsyncModelLoadKey(Entity entity, const std::string& filename) const;
         std::shared_ptr<AsyncModelLoadResult> pollOrStartAsyncModelLoad(Entity entity, const std::string& filename, bool obj);
         static std::shared_ptr<AsyncModelLoadResult> loadModelFileOnWorker(const std::string& filename, bool obj, uint64_t buildId);
@@ -106,6 +108,9 @@ namespace doriax{
         static void setAsyncModelLoading(bool enable);
         static bool isAsyncModelLoading();
 
+        bool hasPendingAsyncModelLoads() const;
+        void cancelAsyncModelLoads();
+        static void cancelAllAsyncModelLoads();
         bool isAsyncModelLoadPending(Entity entity, const std::string& filename) const;
         void cancelAsyncModelLoad(Entity entity, const std::string& filename);
 

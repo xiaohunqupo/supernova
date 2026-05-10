@@ -20,6 +20,7 @@
 #include "util/DefaultFont.h"
 
 #include "shader/ShaderBuilder.h"
+#include "subsystem/MeshSystem.h"
 
 #include <filesystem>
 #include <cstdlib>
@@ -1017,6 +1018,14 @@ void editor::App::engineRender(){
 
     for (auto& sceneProject : project.getScenes()) {
         if (!sceneProject.opened) continue;
+        if (!sceneProject.scene || !sceneProject.sceneRender) continue;
+
+        auto meshSystem = sceneProject.scene->getSystem<MeshSystem>();
+        bool hasPendingModelLoads = meshSystem && meshSystem->hasPendingAsyncModelLoads();
+        if (hasPendingModelLoads && !sceneProject.needUpdateRender && sceneProject.id != project.getSelectedSceneId()) {
+            meshSystem->update(0);
+            continue;
+        }
 
         if (sceneProject.needUpdateRender || sceneProject.id == project.getSelectedSceneId()){
             int width = sceneWindow->getWidth(sceneProject.id);
@@ -1120,6 +1129,7 @@ void editor::App::clearSceneWindowState(uint32_t sceneId) {
 }
 
 void editor::App::prepareForProjectSwitch() {
+    MeshSystem::cancelAllAsyncModelLoads();
     codeEditor->closeAll();
     sceneWindow->resetProjectState();
     dockspaceNeedsRebuild = true;

@@ -56,7 +56,7 @@ MeshSystem::MeshSystem(Scene* scene): SubSystem(scene){
 }
 
 MeshSystem::~MeshSystem(){
-
+    cancelAsyncModelLoads();
 }
 
 void MeshSystem::applyDefaultGLTFMaterial(Material& material) {
@@ -599,10 +599,65 @@ bool MeshSystem::getFileSizeInBytes(size_t *filesize_out, std::string *err, cons
     return true;
 }
 
-std::string MeshSystem::getAsyncModelLoadKey(Entity entity, const std::string& filename) const{
+std::string MeshSystem::getAsyncModelLoadScenePrefix(const Scene* scene){
     std::ostringstream key;
-    key << reinterpret_cast<uintptr_t>(scene) << '|' << entity << '|' << filename;
+    key << reinterpret_cast<uintptr_t>(scene) << '|';
     return key.str();
+}
+
+std::string MeshSystem::getAsyncModelLoadKey(const Scene* scene, Entity entity, const std::string& filename){
+    std::ostringstream key;
+    key << getAsyncModelLoadScenePrefix(scene) << entity << '|' << filename;
+    return key.str();
+}
+
+std::string MeshSystem::getAsyncModelLoadKey(Entity entity, const std::string& filename) const{
+    return getAsyncModelLoadKey(scene, entity, filename);
+}
+
+bool MeshSystem::hasPendingAsyncModelLoads() const{
+    const std::string scenePrefix = getAsyncModelLoadScenePrefix(scene);
+    std::lock_guard<std::mutex> lock(asyncModelMutex);
+    for (const auto& [key, future] : pendingModelLoads) {
+        if (key.rfind(scenePrefix, 0) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void MeshSystem::cancelAsyncModelLoads(){
+    const std::string scenePrefix = getAsyncModelLoadScenePrefix(scene);
+    std::vector<uint64_t> buildIds;
+    {
+        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        for (auto it = pendingModelLoads.begin(); it != pendingModelLoads.end();) {
+            if (it->first.rfind(scenePrefix, 0) == 0) {
+                buildIds.push_back(std::hash<std::string>{}(it->first));
+                it = pendingModelLoads.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (uint64_t buildId : buildIds) {
+        ResourceProgress::failBuild(buildId);
+    }
+}
+
+void MeshSystem::cancelAllAsyncModelLoads(){
+    std::vector<uint64_t> buildIds;
+    {
+        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        buildIds.reserve(pendingModelLoads.size());
+        for (const auto& [key, future] : pendingModelLoads) {
+            buildIds.push_back(std::hash<std::string>{}(key));
+        }
+        pendingModelLoads.clear();
+    }
+    for (uint64_t buildId : buildIds) {
+        ResourceProgress::failBuild(buildId);
+    }
 }
 
 bool MeshSystem::isAsyncModelLoadPending(Entity entity, const std::string& filename) const{
