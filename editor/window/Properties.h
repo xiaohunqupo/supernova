@@ -11,6 +11,8 @@
 #include "imgui.h"
 #include "yaml-cpp/yaml.h"
 #include "ecs/Signature.h"
+#include "soloud.h"
+#include "soloud_wav.h"
 
 namespace doriax::editor{
 
@@ -113,6 +115,44 @@ namespace doriax::editor{
 
         std::unordered_map<std::string, Texture> thumbnailTextures;
 
+        // Dirty material deferred-write state
+        enum class ScenePropertyInputType {
+            Checkbox,
+            DragFloat,
+            SliderFloat,
+            ColorRGB,
+            ColorRGBA,
+            Combo
+        };
+
+        struct DirtyMaterialEntry {
+            unsigned int sceneId;
+            Entity entity;
+            int submeshIndex;
+            std::string relativePath;
+            float timer;
+        };
+
+        static std::vector<DirtyMaterialEntry> dirtyMaterials;
+        static constexpr float materialWriteDelaySec = 0.3f;
+
+        // Sound preview state
+        struct SoundPreviewRuntime {
+            SoLoud::Wav sample;
+            bool loaded = false;
+            bool active = false;
+            bool playing = false;
+            Entity entity = NULL_ENTITY;
+            uint32_t sceneId = 0;
+            unsigned int handle = 0;
+            std::string filename;
+            std::string error;
+            double length = 0.0;
+            double time = 0.0;
+        };
+
+        SoundPreviewRuntime soundPreviewRuntime;
+
         // Action preview state
         bool actionPreviewPlaying = false;
         bool actionPreviewing = false;
@@ -127,6 +167,28 @@ namespace doriax::editor{
 
         void startActionPreview(Entity entity, Scene* scene, SceneProject* sceneProject);
         void stopActionPreview(Scene* scene, SceneProject* sceneProject);
+        void updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles);
+
+        // Dirty material helpers
+        void markMaterialDirty(unsigned int sceneId, Entity entity, int submeshIndex, const std::string& relativePath);
+        void flushDirtyMaterials(float deltaTime);
+        template<typename T>
+        void drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue = 0.0f, float maxValue = 1.0f);
+
+        // Sound preview helpers
+        SoundPreviewRuntime& soundPreview();
+        bool ensureSoundPreviewInitialized();
+        void stopSoundPreview(bool unload = false);
+        std::filesystem::path resolveSoundPreviewPath(const std::string& filename);
+        void applySoundPreviewSettings(const SoundComponent& audio);
+        bool loadSoundPreview(SceneProject* sceneProject, Entity entity, const SoundComponent& audio);
+        bool startSoundPreview(SceneProject* sceneProject, Entity entity, const SoundComponent& audio);
+        void pauseSoundPreview();
+        bool seekSoundPreview(SceneProject* sceneProject, Entity entity, const SoundComponent& audio, double time);
+        void updateSoundPreview(const SoundComponent& audio);
+
+        // Property label formatting
+        std::string formatPropertyLabelValue(const PropertyData& prop);
 
         // For entity picker popup
         char entityPickerSearchBuffer[128] = {};

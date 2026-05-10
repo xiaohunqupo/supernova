@@ -249,402 +249,348 @@ static std::vector<editor::EnumEntry> entriesEaseType = {
     { (int)EaseType::CUSTOM, "Custom" }
 };
 
-namespace {
-    enum class ScenePropertyInputType {
-        Checkbox,
-        DragFloat,
-        SliderFloat,
-        ColorRGB,
-        ColorRGBA,
-        Combo
-    };
+std::vector<editor::Properties::DirtyMaterialEntry> editor::Properties::dirtyMaterials;
 
-    struct DirtyMaterialEntry {
-        unsigned int sceneId;
-        Entity entity;
-        int submeshIndex;
-        std::string relativePath;
-        float timer;
-    };
-
-    static std::vector<DirtyMaterialEntry> dirtyMaterials;
-    static constexpr float materialWriteDelaySec = 0.3f;
-
-    void markMaterialDirty(unsigned int sceneId, Entity entity, int submeshIndex, const std::string& relativePath) {
-        for (auto& entry : dirtyMaterials) {
-            if (entry.sceneId == sceneId && entry.entity == entity && entry.submeshIndex == submeshIndex) {
-                entry.timer = 0.0f;
-                entry.relativePath = relativePath;
-                return;
-            }
-        }
-
-        dirtyMaterials.push_back({sceneId, entity, submeshIndex, relativePath, 0.0f});
-    }
-
-    void flushDirtyMaterials(editor::Project* project, float deltaTime) {
-        if (dirtyMaterials.empty()) {
+void editor::Properties::markMaterialDirty(unsigned int sceneId, Entity entity, int submeshIndex, const std::string& relativePath) {
+    for (auto& entry : dirtyMaterials) {
+        if (entry.sceneId == sceneId && entry.entity == entity && entry.submeshIndex == submeshIndex) {
+            entry.timer = 0.0f;
+            entry.relativePath = relativePath;
             return;
         }
+    }
 
-        auto it = dirtyMaterials.begin();
-        while (it != dirtyMaterials.end()) {
-            it->timer += deltaTime;
-            if (it->timer < materialWriteDelaySec) {
-                ++it;
-                continue;
-            }
+    dirtyMaterials.push_back({sceneId, entity, submeshIndex, relativePath, 0.0f});
+}
 
-            editor::SceneProject* sp = project->getScene(it->sceneId);
-            if (sp) {
-                MeshComponent* mesh = sp->scene->findComponent<MeshComponent>(it->entity);
-                if (mesh && it->submeshIndex < mesh->numSubmeshes) {
-                    Material& material = mesh->submeshes[it->submeshIndex].material;
-                    std::filesystem::path absolutePath = project->getProjectPath() / it->relativePath;
+void editor::Properties::flushDirtyMaterials(float deltaTime) {
+    if (dirtyMaterials.empty()) {
+        return;
+    }
 
-                    try {
-                        std::ofstream out(absolutePath, std::ios::binary | std::ios::trunc);
-                        if (out.is_open()) {
-                            std::string payload = YAML::Dump(editor::Stream::encodeMaterial(material));
-                            out.write(payload.c_str(), payload.size());
-                            out.close();
+    auto it = dirtyMaterials.begin();
+    while (it != dirtyMaterials.end()) {
+        it->timer += deltaTime;
+        if (it->timer < materialWriteDelaySec) {
+            ++it;
+            continue;
+        }
 
-                            project->linkMaterialFile(it->sceneId, it->entity, it->submeshIndex, it->relativePath);
-                            project->refreshLinkedMaterials(true);
+        SceneProject* sp = project->getScene(it->sceneId);
+        if (sp) {
+            MeshComponent* mesh = sp->scene->findComponent<MeshComponent>(it->entity);
+            if (mesh && it->submeshIndex < mesh->numSubmeshes) {
+                Material& material = mesh->submeshes[it->submeshIndex].material;
+                std::filesystem::path absolutePath = project->getProjectPath() / it->relativePath;
 
-                            if (editor::ResourcesWindow* resourcesWindow = editor::Backend::getApp().getResourcesWindow()) {
-                                resourcesWindow->notifyResourceFileChanged(absolutePath);
-                            }
+                try {
+                    std::ofstream out(absolutePath, std::ios::binary | std::ios::trunc);
+                    if (out.is_open()) {
+                        std::string payload = YAML::Dump(Stream::encodeMaterial(material));
+                        out.write(payload.c_str(), payload.size());
+                        out.close();
+
+                        project->linkMaterialFile(it->sceneId, it->entity, it->submeshIndex, it->relativePath);
+                        project->refreshLinkedMaterials(true);
+
+                        if (ResourcesWindow* resourcesWindow = Backend::getApp().getResourcesWindow()) {
+                            resourcesWindow->notifyResourceFileChanged(absolutePath);
                         }
-                    } catch (const std::exception& e) {
-                        editor::Out::error("Error saving linked material file '%s': %s", absolutePath.string().c_str(), e.what());
                     }
+                } catch (const std::exception& e) {
+                    Out::error("Error saving linked material file '%s': %s", absolutePath.string().c_str(), e.what());
                 }
             }
-
-            it = dirtyMaterials.erase(it);
         }
+
+        it = dirtyMaterials.erase(it);
     }
+}
 
-    template<typename T>
-    void drawScenePropertyRow(editor::SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue = 0.0f, float maxValue = 1.0f) {
-        T value = doriax::editor::Catalog::getSceneProperty<T>(sceneProject->scene, propertyName);
-        bool changed = false;
+template<typename T>
+void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue, float maxValue) {
+    T value = Catalog::getSceneProperty<T>(sceneProject->scene, propertyName);
+    bool changed = false;
 
-        editor::Command* cmd = nullptr;
+    Command* cmd = nullptr;
 
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::Text("%s", label);
-        ImGui::TableSetColumnIndex(1);
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("%s", label);
+    ImGui::TableSetColumnIndex(1);
 
-        switch (inputType) {
-            case ScenePropertyInputType::Checkbox:
-                if constexpr (std::is_same_v<T, bool>) {
-                    changed = ImGui::Checkbox(("##" + propertyName).c_str(), &value);
-                }
-                break;
-            case ScenePropertyInputType::DragFloat:
-                if constexpr (std::is_same_v<T, float>) {
-                    changed = ImGui::DragFloat(("##" + propertyName).c_str(), &value, 0.01f);
-                } else if constexpr (std::is_same_v<T, Vector3>) {
-                    changed = ImGui::DragFloat3(("##" + propertyName).c_str(), (float*)&value.x);
-                } else if constexpr (std::is_same_v<T, Vector4>) {
-                    changed = ImGui::DragFloat4(("##" + propertyName).c_str(), (float*)&value.x);
-                }
-                break;
-            case ScenePropertyInputType::SliderFloat:
-                if constexpr (std::is_same_v<T, float>) {
-                    ImGui::SetNextItemWidth(-1);
-                    changed = ImGui::SliderFloat(("##" + propertyName).c_str(), &value, minValue, maxValue);
-                }
-                break;
-            case ScenePropertyInputType::ColorRGB:
-                if constexpr (std::is_same_v<T, Vector3>) {
-                    changed = ImGui::ColorEdit3(("##" + propertyName).c_str(), (float*)&value.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
-                }
-                break;
-            case ScenePropertyInputType::ColorRGBA:
-                if constexpr (std::is_same_v<T, Vector4>) {
-                    changed = ImGui::ColorEdit4(("##" + propertyName).c_str(), (float*)&value.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
-                }
-                break;
-            case ScenePropertyInputType::Combo:
-                if constexpr (std::is_same_v<T, LightState>) {
-                    const char* lightStateNames[] = { "Off", "On", "Auto" };
-                    int currentItem = static_cast<int>(value);
-                    changed = ImGui::Combo(("##" + propertyName).c_str(), &currentItem, lightStateNames, IM_ARRAYSIZE(lightStateNames));
-                    if (changed) {
-                        value = static_cast<LightState>(currentItem);
-                    }
-                }
-                break;
-        }
-
-        if (changed) {
-            cmd = new editor::ScenePropertyCmd<T>(sceneProject, propertyName, value);
-            editor::CommandHandle::get(sceneProject->id)->addCommand(cmd);
-        }
-
-        if (ImGui::IsItemDeactivatedAfterEdit()) {
-            if (cmd) {
-                cmd->setNoMerge();
-                cmd = nullptr;
+    switch (inputType) {
+        case ScenePropertyInputType::Checkbox:
+            if constexpr (std::is_same_v<T, bool>) {
+                changed = ImGui::Checkbox(("##" + propertyName).c_str(), &value);
             }
-        }
+            break;
+        case ScenePropertyInputType::DragFloat:
+            if constexpr (std::is_same_v<T, float>) {
+                changed = ImGui::DragFloat(("##" + propertyName).c_str(), &value, 0.01f);
+            } else if constexpr (std::is_same_v<T, Vector3>) {
+                changed = ImGui::DragFloat3(("##" + propertyName).c_str(), (float*)&value.x);
+            } else if constexpr (std::is_same_v<T, Vector4>) {
+                changed = ImGui::DragFloat4(("##" + propertyName).c_str(), (float*)&value.x);
+            }
+            break;
+        case ScenePropertyInputType::SliderFloat:
+            if constexpr (std::is_same_v<T, float>) {
+                ImGui::SetNextItemWidth(-1);
+                changed = ImGui::SliderFloat(("##" + propertyName).c_str(), &value, minValue, maxValue);
+            }
+            break;
+        case ScenePropertyInputType::ColorRGB:
+            if constexpr (std::is_same_v<T, Vector3>) {
+                changed = ImGui::ColorEdit3(("##" + propertyName).c_str(), (float*)&value.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
+            }
+            break;
+        case ScenePropertyInputType::ColorRGBA:
+            if constexpr (std::is_same_v<T, Vector4>) {
+                changed = ImGui::ColorEdit4(("##" + propertyName).c_str(), (float*)&value.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
+            }
+            break;
+        case ScenePropertyInputType::Combo:
+            if constexpr (std::is_same_v<T, LightState>) {
+                const char* lightStateNames[] = { "Off", "On", "Auto" };
+                int currentItem = static_cast<int>(value);
+                changed = ImGui::Combo(("##" + propertyName).c_str(), &currentItem, lightStateNames, IM_ARRAYSIZE(lightStateNames));
+                if (changed) {
+                    value = static_cast<LightState>(currentItem);
+                }
+            }
+            break;
     }
 
-    struct SoundPreviewRuntime {
-        SoLoud::Wav sample;
-        bool loaded = false;
-        bool active = false;
-        bool playing = false;
-        Entity entity = NULL_ENTITY;
-        uint32_t sceneId = 0;
-        unsigned int handle = 0;
-        std::string filename;
-        std::string error;
-        double length = 0.0;
-        double time = 0.0;
-    };
-
-    // Heap-allocated so the preview sample outlives audio callbacks while sharing
-    // AudioSystem's Soloud singleton instead of creating a second audio backend.
-    SoundPreviewRuntime& soundPreview() {
-        static SoundPreviewRuntime* instance = new SoundPreviewRuntime();
-        return *instance;
+    if (changed) {
+        cmd = new ScenePropertyCmd<T>(sceneProject, propertyName, value);
+        CommandHandle::get(sceneProject->id)->addCommand(cmd);
     }
 
-    bool ensureSoundPreviewInitialized() {
-        SoundPreviewRuntime& ap = soundPreview();
-        if (!AudioSystem::init()) {
-            ap.error = "Failed to initialize audio preview output.";
-            return false;
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+        if (cmd) {
+            cmd->setNoMerge();
+            cmd = nullptr;
         }
+    }
+}
 
+editor::Properties::SoundPreviewRuntime& editor::Properties::soundPreview() {
+    return soundPreviewRuntime;
+}
+
+bool editor::Properties::ensureSoundPreviewInitialized() {
+    SoundPreviewRuntime& ap = soundPreview();
+    if (!AudioSystem::init()) {
+        ap.error = "Failed to initialize audio preview output.";
+        return false;
+    }
+
+    return true;
+}
+
+void editor::Properties::stopSoundPreview(bool unload) {
+    SoundPreviewRuntime& ap = soundPreview();
+    if (ap.handle != 0) {
+        AudioSystem::getSoloud().stop(ap.handle);
+    }
+
+    ap.active = false;
+    ap.playing = false;
+    ap.handle = 0;
+    ap.time = 0.0;
+
+    if (unload) {
+        ap.loaded = false;
+        ap.filename.clear();
+        ap.length = 0.0;
+        ap.entity = NULL_ENTITY;
+        ap.sceneId = 0;
+    }
+}
+
+std::filesystem::path editor::Properties::resolveSoundPreviewPath(const std::string& filename) {
+    std::filesystem::path audioPath(filename);
+    if (audioPath.is_relative()) {
+        audioPath = project->getProjectPath() / audioPath;
+    }
+    return audioPath.lexically_normal();
+}
+
+void editor::Properties::applySoundPreviewSettings(const SoundComponent& audio) {
+    SoundPreviewRuntime& ap = soundPreview();
+    if (!ap.active || ap.handle == 0) {
+        return;
+    }
+
+    SoLoud::Soloud& soloud = AudioSystem::getSoloud();
+    soloud.setVolume(ap.handle, static_cast<float>(audio.volume));
+    soloud.setRelativePlaySpeed(ap.handle, audio.speed);
+    soloud.setPan(ap.handle, audio.pan);
+    // Preview should always terminate even if the runtime sound is configured to loop.
+    soloud.setLooping(ap.handle, false);
+    soloud.setLoopPoint(ap.handle, audio.loopingPoint);
+    soloud.setProtectVoice(ap.handle, audio.protectVoice);
+    soloud.setInaudibleBehavior(ap.handle, audio.inaudibleBehaviorMustTick, audio.inaudibleBehaviorKill);
+}
+
+bool editor::Properties::loadSoundPreview(SceneProject* sceneProject, Entity entity, const SoundComponent& audio) {
+    SoundPreviewRuntime& ap = soundPreview();
+    if (audio.filename.empty()) {
+        ap.error = "Select a sound file before previewing.";
+        return false;
+    }
+
+    if (!ensureSoundPreviewInitialized()) {
+        return false;
+    }
+
+    if (ap.loaded && ap.sceneId == sceneProject->id && ap.entity == entity && ap.filename == audio.filename) {
         return true;
     }
 
-    void stopSoundPreview(bool unload = false) {
-        SoundPreviewRuntime& ap = soundPreview();
-        if (ap.handle != 0) {
-            AudioSystem::getSoloud().stop(ap.handle);
-        }
+    stopSoundPreview(true);
 
-        ap.active = false;
-        ap.playing = false;
-        ap.handle = 0;
-        ap.time = 0.0;
-
-        if (unload) {
-            ap.loaded = false;
-            ap.filename.clear();
-            ap.length = 0.0;
-            ap.entity = NULL_ENTITY;
-            ap.sceneId = 0;
-        }
+    std::filesystem::path audioPath = resolveSoundPreviewPath(audio.filename);
+    SoLoud::result result = ap.sample.load(audioPath.string().c_str());
+    if (result != SoLoud::SOLOUD_ERRORS::SO_NO_ERROR) {
+        ap.error = "Failed to load audio preview file:\n" + audioPath.string();
+        return false;
     }
 
-    std::filesystem::path resolveSoundPreviewPath(editor::Project* project, const std::string& filename) {
-        std::filesystem::path audioPath(filename);
-        if (audioPath.is_relative()) {
-            audioPath = project->getProjectPath() / audioPath;
-        }
-        return audioPath.lexically_normal();
+    ap.sample.setSingleInstance(true);
+    ap.sample.setVolume(1.0f);
+    ap.loaded = true;
+    ap.sceneId = sceneProject->id;
+    ap.entity = entity;
+    ap.filename = audio.filename;
+    ap.length = ap.sample.getLength();
+    ap.error.clear();
+
+    return true;
+}
+
+bool editor::Properties::startSoundPreview(SceneProject* sceneProject, Entity entity, const SoundComponent& audio) {
+    if (!loadSoundPreview(sceneProject, entity, audio)) {
+        return false;
     }
 
-    void applySoundPreviewSettings(const SoundComponent& audio) {
-        SoundPreviewRuntime& ap = soundPreview();
-        if (!ap.active || ap.handle == 0) {
-            return;
-        }
-
-        SoLoud::Soloud& soloud = AudioSystem::getSoloud();
-        soloud.setVolume(ap.handle, static_cast<float>(audio.volume));
-        soloud.setRelativePlaySpeed(ap.handle, audio.speed);
-        soloud.setPan(ap.handle, audio.pan);
-        // Preview should always terminate even if the runtime sound is configured to loop.
-        soloud.setLooping(ap.handle, false);
-        soloud.setLoopPoint(ap.handle, audio.loopingPoint);
-        soloud.setProtectVoice(ap.handle, audio.protectVoice);
-        soloud.setInaudibleBehavior(ap.handle, audio.inaudibleBehaviorMustTick, audio.inaudibleBehaviorKill);
-    }
-
-    bool loadSoundPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const SoundComponent& audio) {
-        SoundPreviewRuntime& ap = soundPreview();
-        if (audio.filename.empty()) {
-            ap.error = "Select a sound file before previewing.";
-            return false;
-        }
-
-        if (!ensureSoundPreviewInitialized()) {
-            return false;
-        }
-
-        if (ap.loaded && ap.sceneId == sceneProject->id && ap.entity == entity && ap.filename == audio.filename) {
-            return true;
-        }
-
-        stopSoundPreview(true);
-
-        std::filesystem::path audioPath = resolveSoundPreviewPath(project, audio.filename);
-        SoLoud::result result = ap.sample.load(audioPath.string().c_str());
-        if (result != SoLoud::SOLOUD_ERRORS::SO_NO_ERROR) {
-            ap.error = "Failed to load audio preview file:\n" + audioPath.string();
-            return false;
-        }
-
-        ap.sample.setSingleInstance(true);
-        ap.sample.setVolume(1.0f);
-        ap.loaded = true;
-        ap.sceneId = sceneProject->id;
-        ap.entity = entity;
-        ap.filename = audio.filename;
-        ap.length = ap.sample.getLength();
-        ap.error.clear();
-
+    SoundPreviewRuntime& ap = soundPreview();
+    if (ap.active && ap.handle != 0) {
+        AudioSystem::getSoloud().setPause(ap.handle, false);
+        ap.playing = true;
+        applySoundPreviewSettings(audio);
         return true;
     }
 
-    bool startSoundPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const SoundComponent& audio) {
-        if (!loadSoundPreview(project, sceneProject, entity, audio)) {
-            return false;
-        }
+    ap.handle = AudioSystem::getSoloud().play(ap.sample);
+    if (ap.handle == 0) {
+        ap.error = "Failed to start audio preview.";
+        return false;
+    }
 
-        SoundPreviewRuntime& ap = soundPreview();
-        if (ap.active && ap.handle != 0) {
-            AudioSystem::getSoloud().setPause(ap.handle, false);
-            ap.playing = true;
-            applySoundPreviewSettings(audio);
-            return true;
-        }
+    ap.active = true;
+    ap.playing = true;
+    ap.time = 0.0;
+    applySoundPreviewSettings(audio);
 
+    return true;
+}
+
+void editor::Properties::pauseSoundPreview() {
+    SoundPreviewRuntime& ap = soundPreview();
+    if (!ap.active || ap.handle == 0) {
+        return;
+    }
+
+    AudioSystem::getSoloud().setPause(ap.handle, true);
+    ap.playing = false;
+}
+
+bool editor::Properties::seekSoundPreview(SceneProject* sceneProject, Entity entity, const SoundComponent& audio, double time) {
+    if (!loadSoundPreview(sceneProject, entity, audio)) {
+        return false;
+    }
+
+    SoundPreviewRuntime& ap = soundPreview();
+    bool shouldKeepPlaying = ap.active && ap.playing;
+    if (!ap.active || ap.handle == 0) {
         ap.handle = AudioSystem::getSoloud().play(ap.sample);
         if (ap.handle == 0) {
             ap.error = "Failed to start audio preview.";
             return false;
         }
-
         ap.active = true;
-        ap.playing = true;
-        ap.time = 0.0;
-        applySoundPreviewSettings(audio);
-
-        return true;
-    }
-
-    void pauseSoundPreview() {
-        SoundPreviewRuntime& ap = soundPreview();
-        if (!ap.active || ap.handle == 0) {
-            return;
-        }
-
-        AudioSystem::getSoloud().setPause(ap.handle, true);
         ap.playing = false;
+        shouldKeepPlaying = false;
     }
 
-    bool seekSoundPreview(editor::Project* project, editor::SceneProject* sceneProject, Entity entity, const SoundComponent& audio, double time) {
-        if (!loadSoundPreview(project, sceneProject, entity, audio)) {
-            return false;
-        }
-
-        SoundPreviewRuntime& ap = soundPreview();
-        bool shouldKeepPlaying = ap.active && ap.playing;
-        if (!ap.active || ap.handle == 0) {
-            ap.handle = AudioSystem::getSoloud().play(ap.sample);
-            if (ap.handle == 0) {
-                ap.error = "Failed to start audio preview.";
-                return false;
-            }
-            ap.active = true;
-            ap.playing = false;
-            shouldKeepPlaying = false;
-        }
-
-        SoLoud::Soloud& soloud = AudioSystem::getSoloud();
-        SoLoud::result result = soloud.seek(ap.handle, time);
-        if (result != SoLoud::SOLOUD_ERRORS::SO_NO_ERROR) {
-            ap.error = "Failed to seek audio preview.";
-            return false;
-        }
-
-        ap.time = time;
-        ap.playing = shouldKeepPlaying;
-        soloud.setPause(ap.handle, !shouldKeepPlaying);
-        applySoundPreviewSettings(audio);
-
-        return true;
+    SoLoud::Soloud& soloud = AudioSystem::getSoloud();
+    SoLoud::result result = soloud.seek(ap.handle, time);
+    if (result != SoLoud::SOLOUD_ERRORS::SO_NO_ERROR) {
+        ap.error = "Failed to seek audio preview.";
+        return false;
     }
 
-    void updateSoundPreview(const SoundComponent& audio) {
-        SoundPreviewRuntime& ap = soundPreview();
-        if (!ap.active || ap.handle == 0) {
-            return;
-        }
+    ap.time = time;
+    ap.playing = shouldKeepPlaying;
+    soloud.setPause(ap.handle, !shouldKeepPlaying);
+    applySoundPreviewSettings(audio);
 
-        SoLoud::Soloud& soloud = AudioSystem::getSoloud();
-        if (!soloud.isValidVoiceHandle(ap.handle)) {
-            stopSoundPreview();
-            return;
-        }
+    return true;
+}
 
-        applySoundPreviewSettings(audio);
-        ap.time = soloud.getStreamTime(ap.handle);
+void editor::Properties::updateSoundPreview(const SoundComponent& audio) {
+    SoundPreviewRuntime& ap = soundPreview();
+    if (!ap.active || ap.handle == 0) {
+        return;
     }
 
-    void updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles) {
-        const std::string componentName = editor::Catalog::getComponentName(editor::ComponentType::ParticlesComponent, true);
-
-        // Full re-encode so any future fields are automatically preserved.
-        YAML::Node encoded = editor::Stream::encodeParticlesComponent(particles);
-
-        // "emitter" is mutated by the runtime (forced true on actionStart, forced false when a
-        // non-looping system runs out). Restoring the live runtime value would silently switch
-        // off an authored emitter. Keep the pre-preview authored value from the original snapshot.
-        const YAML::Node& originalNode = components[componentName];
-        if (originalNode && !originalNode.IsNull() && originalNode["emitter"]) {
-            encoded["emitter"] = originalNode["emitter"];
-        }
-
-        components[componentName] = encoded;
+    SoLoud::Soloud& soloud = AudioSystem::getSoloud();
+    if (!soloud.isValidVoiceHandle(ap.handle)) {
+        stopSoundPreview();
+        return;
     }
 
-    std::string formatPropertyLabelValue(const editor::PropertyData& prop) {
-        if (!prop.ref) {
-            return "-";
-        }
+    applySoundPreviewSettings(audio);
+    ap.time = soloud.getStreamTime(ap.handle);
+}
 
-        char buffer[64];
-        switch (prop.type) {
-            case editor::PropertyType::Bool:
-                return (*static_cast<bool*>(prop.ref)) ? "true" : "false";
-            case editor::PropertyType::Float:
-                snprintf(buffer, sizeof(buffer), "%.3f", *static_cast<float*>(prop.ref));
-                return buffer;
-            case editor::PropertyType::Double:
-                snprintf(buffer, sizeof(buffer), "%.3f", *static_cast<double*>(prop.ref));
-                return buffer;
-            case editor::PropertyType::Int:
-                return std::to_string(*static_cast<int*>(prop.ref));
-            case editor::PropertyType::UInt:
-                return std::to_string(*static_cast<unsigned int*>(prop.ref));
-            case editor::PropertyType::Entity:
-            case editor::PropertyType::EntityReference:
-                return std::to_string(*static_cast<Entity*>(prop.ref));
-            case editor::PropertyType::String:
-                return *static_cast<std::string*>(prop.ref);
-            case editor::PropertyType::Ease: {
-                EaseType type = static_cast<Ease*>(prop.ref)->getType();
-                for (const auto& entry : entriesEaseType) {
-                    if (entry.value == static_cast<int>(type)) {
-                        return entry.name;
-                    }
+std::string editor::Properties::formatPropertyLabelValue(const PropertyData& prop) {
+    if (!prop.ref) {
+        return "-";
+    }
+
+    char buffer[64];
+    switch (prop.type) {
+        case PropertyType::Bool:
+            return (*static_cast<bool*>(prop.ref)) ? "true" : "false";
+        case PropertyType::Float:
+            snprintf(buffer, sizeof(buffer), "%.3f", *static_cast<float*>(prop.ref));
+            return buffer;
+        case PropertyType::Double:
+            snprintf(buffer, sizeof(buffer), "%.3f", *static_cast<double*>(prop.ref));
+            return buffer;
+        case PropertyType::Int:
+            return std::to_string(*static_cast<int*>(prop.ref));
+        case PropertyType::UInt:
+            return std::to_string(*static_cast<unsigned int*>(prop.ref));
+        case PropertyType::Entity:
+        case PropertyType::EntityReference:
+            return std::to_string(*static_cast<Entity*>(prop.ref));
+        case PropertyType::String:
+            return *static_cast<std::string*>(prop.ref);
+        case PropertyType::Ease: {
+            EaseType type = static_cast<Ease*>(prop.ref)->getType();
+            for (const auto& entry : entriesEaseType) {
+                if (entry.value == static_cast<int>(type)) {
+                    return entry.name;
                 }
-                return "Ease";
             }
-            default:
-                return "-";
+            return "Ease";
         }
+        default:
+            return "-";
     }
 }
 
@@ -5592,7 +5538,7 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
             }
         } else {
             if (ImGui::Button(ICON_FA_PLAY "##audio_play")) {
-                if (!startSoundPreview(project, sceneProject, entity, audio)) {
+                if (!startSoundPreview(sceneProject, entity, audio)) {
                     ImGui::OpenPopup("Sound Preview Error");
                 } else {
                     isThisPreview = true;
@@ -5629,7 +5575,7 @@ void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* 
             float mouseX = ImGui::GetIO().MousePos.x;
             float clickFraction = std::clamp((mouseX - timelinePos.x) / timelineWidth, 0.0f, 1.0f);
             double seekTime = clickFraction * previewLength;
-            if (!seekSoundPreview(project, sceneProject, entity, audio, seekTime)) {
+            if (!seekSoundPreview(sceneProject, entity, audio, seekTime)) {
                 ImGui::OpenPopup("Sound Preview Error");
             } else {
                 isThisPreview = true;
@@ -8721,6 +8667,23 @@ void editor::Properties::startActionPreview(Entity entity, Scene* scene, ScenePr
     actionPreviewing = true;
 }
 
+void editor::Properties::updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles) {
+    const std::string componentName = Catalog::getComponentName(ComponentType::ParticlesComponent, true);
+
+    // Full re-encode so any future fields are automatically preserved.
+    YAML::Node encoded = Stream::encodeParticlesComponent(particles);
+
+    // "emitter" is mutated by the runtime (forced true on actionStart, forced false when a
+    // non-looping system runs out). Restoring the live runtime value would silently switch
+    // off an authored emitter. Keep the pre-preview authored value from the original snapshot.
+    const YAML::Node& originalNode = components[componentName];
+    if (originalNode && !originalNode.IsNull() && originalNode["emitter"]) {
+        encoded["emitter"] = originalNode["emitter"];
+    }
+
+    components[componentName] = encoded;
+}
+
 void editor::Properties::stopActionPreview(Scene* scene, SceneProject* sceneProject) {
     if (!actionPreviewing) return;
 
@@ -9992,7 +9955,7 @@ void editor::Properties::drawMorphTracksComponent(ComponentType cpType, ScenePro
 
 void editor::Properties::show(){
     // Flush any debounced material file writes
-    flushDirtyMaterials(project, ImGui::GetIO().DeltaTime);
+    flushDirtyMaterials(ImGui::GetIO().DeltaTime);
 
     if (!windowOpen) {
         return;
