@@ -5393,6 +5393,7 @@ InstancedMeshComponent editor::Stream::decodeInstancedMeshComponent(const YAML::
     }
 
     // Reset runtime fields
+    instmesh.renderInstances.clear();
     instmesh.numVisible = 0;
     instmesh.needUpdateBuffer = false;
     instmesh.needUpdateInstances = true;
@@ -5466,6 +5467,8 @@ PointsComponent editor::Stream::decodePointsComponent(const YAML::Node& node, co
     }
 
     // Reset runtime fields
+    points.renderPoints.clear();
+    points.numVisible = 0;
     points.loaded = false;
     points.loadCalled = false;
     points.needUpdate = true;
