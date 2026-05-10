@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1721303B2FB012BD00390DC2 /* SoundPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1721303A2FB012BD00390DC2 /* SoundPool.cpp */; };
+		1721303C2FB012BD00390DC2 /* SoundPool.h in Headers */ = {isa = PBXBuildFile; fileRef = 172130392FB012BD00390DC2 /* SoundPool.h */; };
+		1721303D2FB012BD00390DC2 /* SoundPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1721303A2FB012BD00390DC2 /* SoundPool.cpp */; };
 		1787AD8E2F673CE000DB1D75 /* BundleComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 1787AD8D2F673CE000DB1D75 /* BundleComponent.h */; };
 		1787AD942F6C333300DB1D75 /* SceneManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD922F6C333300DB1D75 /* SceneManager.cpp */; };
 		1787AD952F6C333300DB1D75 /* BundleManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD902F6C333300DB1D75 /* BundleManager.cpp */; };
@@ -1280,6 +1283,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		172130392FB012BD00390DC2 /* SoundPool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SoundPool.h; sourceTree = "<group>"; };
+		1721303A2FB012BD00390DC2 /* SoundPool.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SoundPool.cpp; sourceTree = "<group>"; };
 		1787AD8D2F673CE000DB1D75 /* BundleComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleComponent.h; sourceTree = "<group>"; };
 		1787AD8F2F6C333300DB1D75 /* BundleManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleManager.h; sourceTree = "<group>"; };
 		1787AD902F6C333300DB1D75 /* BundleManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = BundleManager.cpp; sourceTree = "<group>"; };
@@ -3481,7 +3486,7 @@
 		7162FC6225962A0E0075B97D /* object */ = {
 			isa = PBXGroup;
 			children = (
-				717AD965290B6602007D7DB5 /* audio */,
+				717AD965290B6602007D7DB5 /* sound */,
 				7170A3CE2818A8A30003E965 /* Bone.cpp */,
 				7170A3CD2818A8A30003E965 /* Bone.h */,
 				7162FC6425962A0E0075B97D /* Camera.cpp */,
@@ -4016,14 +4021,16 @@
 		71BE623325B1DB9E006D6E02 /* pool */ = {
 			isa = PBXGroup;
 			children = (
-				7157764D2B050C230049C970 /* FontPool.cpp */,
 				7157764C2B050C230049C970 /* FontPool.h */,
-				71BE623525B1DB9E006D6E02 /* ShaderPool.cpp */,
+				7157764D2B050C230049C970 /* FontPool.cpp */,
 				71BE623725B1DB9E006D6E02 /* ShaderPool.h */,
-				714741FA2B029F7D00C891FF /* TextureDataPool.cpp */,
+				71BE623525B1DB9E006D6E02 /* ShaderPool.cpp */,
+				172130392FB012BD00390DC2 /* SoundPool.h */,
+				1721303A2FB012BD00390DC2 /* SoundPool.cpp */,
 				714741F92B029F7D00C891FF /* TextureDataPool.h */,
-				71BE623425B1DB9E006D6E02 /* TexturePool.cpp */,
+				714741FA2B029F7D00C891FF /* TextureDataPool.cpp */,
 				71BE623625B1DB9E006D6E02 /* TexturePool.h */,
+				71BE623425B1DB9E006D6E02 /* TexturePool.cpp */,
 			);
 			path = pool;
 			sourceTree = "<group>";
@@ -4350,6 +4357,7 @@
 				71F225452C58736B006ED3CA /* InstancedMeshComponent.h in Headers */,
 				7105CAA92AD61BD5007C91BA /* Box2DAux.h in Headers */,
 				71AD5E752EAECC69004951AB /* CrashGuard.h in Headers */,
+				1721303C2FB012BD00390DC2 /* SoundPool.h in Headers */,
 				71E824912A9C23A600C8E6F2 /* Body2D.h in Headers */,
 				718FDDFA2837CA9A00AF314C /* hlsl5.h in Headers */,
 				7170A3D82818A8A30003E965 /* Fog.h in Headers */,
@@ -5569,6 +5577,7 @@
 				71F2254F2C58740F006ED3CA /* Points.cpp in Sources */,
 				71451BD2270CA17F00712643 /* SpriteAnimation.cpp in Sources */,
 				71D74954296731F200348AB8 /* Tilemap.cpp in Sources */,
+				1721303B2FB012BD00390DC2 /* SoundPool.cpp in Sources */,
 				715CB118288CD40E0049344B /* Terrain.cpp in Sources */,
 				7128D08725BB033D00965B51 /* Input.cpp in Sources */,
 				713D82AB259D307F00567F9F /* Texture.cpp in Sources */,
@@ -5743,6 +5752,7 @@
 				71F2254E2C58740F006ED3CA /* Points.cpp in Sources */,
 				71BE623825B1DB9E006D6E02 /* LuaBinding.cpp in Sources */,
 				71D74953296731F200348AB8 /* Tilemap.cpp in Sources */,
+				1721303D2FB012BD00390DC2 /* SoundPool.cpp in Sources */,
 				71451BD1270CA17F00712643 /* SpriteAnimation.cpp in Sources */,
 				715CB117288CD40E0049344B /* Terrain.cpp in Sources */,
 				7128D08625BB033D00965B51 /* Input.cpp in Sources */,
