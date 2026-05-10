@@ -592,6 +592,23 @@ namespace {
         ap.time = soloud.getStreamTime(ap.handle);
     }
 
+    void updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles) {
+        const std::string componentName = editor::Catalog::getComponentName(editor::ComponentType::ParticlesComponent, true);
+
+        // Full re-encode so any future fields are automatically preserved.
+        YAML::Node encoded = editor::Stream::encodeParticlesComponent(particles);
+
+        // "emitter" is mutated by the runtime (forced true on actionStart, forced false when a
+        // non-looping system runs out). Restoring the live runtime value would silently switch
+        // off an authored emitter. Keep the pre-preview authored value from the original snapshot.
+        const YAML::Node& originalNode = components[componentName];
+        if (originalNode && !originalNode.IsNull() && originalNode["emitter"]) {
+            encoded["emitter"] = originalNode["emitter"];
+        }
+
+        components[componentName] = encoded;
+    }
+
     std::string formatPropertyLabelValue(const editor::PropertyData& prop) {
         if (!prop.ref) {
             return "-";
@@ -8729,6 +8746,9 @@ void editor::Properties::stopActionPreview(Scene* scene, SceneProject* sceneProj
         }
         if (auto* comp = scene->findComponent<AlphaActionComponent>(state.entity)) {
             state.components[Catalog::getComponentName(ComponentType::AlphaActionComponent, true)] = Stream::encodeAlphaActionComponent(*comp);
+        }
+        if (auto* comp = scene->findComponent<ParticlesComponent>(state.entity)) {
+            updateParticlePreviewSnapshot(state.components, *comp);
         }
     }
 
