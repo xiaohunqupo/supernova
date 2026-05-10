@@ -2232,6 +2232,8 @@ bool editor::Project::createTempProject(std::string projectName, bool deleteIfEx
     }
 
     try {
+        Backend::getApp().prepareForProjectSwitch();
+
         resetConfigs();
 
         // Clear the last project path in settings when creating a new temp project
@@ -2392,17 +2394,13 @@ bool editor::Project::loadProject(const std::filesystem::path path) {
         return false;
     }
 
-    resetConfigs();
-
-    projectPath = path;
-
     try {
-        if (!std::filesystem::exists(projectPath)) {
-            Out::error("Project directory does not exist: \"%s\"", projectPath.string().c_str());
+        if (!std::filesystem::exists(path)) {
+            Out::error("Project directory does not exist: \"%s\"", path.string().c_str());
             return false;
         }
 
-        std::filesystem::path projectFile = projectPath / "project.yaml";
+        std::filesystem::path projectFile = path / "project.yaml";
         if (!std::filesystem::exists(projectFile)) {
             Out::error("Project file does not exist: %s", projectFile.string().c_str());
             return false;
@@ -2410,6 +2408,11 @@ bool editor::Project::loadProject(const std::filesystem::path path) {
 
         // Load and parse project file
         YAML::Node projectNode = YAML::LoadFile(projectFile.string());
+
+        Backend::getApp().prepareForProjectSwitch();
+
+        resetConfigs();
+        projectPath = path;
 
         Stream::decodeProject(this, projectNode);
 

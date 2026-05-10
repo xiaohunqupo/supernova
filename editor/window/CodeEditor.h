@@ -73,6 +73,7 @@ namespace doriax::editor {
 
         std::vector<fs::path> getOpenPaths() const;
         bool isFocused() const;
+        void closeAll();
 
         bool save(const std::string& filepath);
         bool save(EditorInstance& instance);

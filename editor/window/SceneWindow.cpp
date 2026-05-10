@@ -70,6 +70,20 @@ bool editor::SceneWindow::isFocused() const {
     return windowFocused;
 }
 
+void editor::SceneWindow::resetProjectState() {
+    windowFocused = false;
+    mouseLeftDown = false;
+    mouseLeftDraggedInside = false;
+    draggingMouse.clear();
+    suppressLeftMouseUntilRelease.clear();
+    walkSpeed.clear();
+    width.clear();
+    height.clear();
+    hasNotification.clear();
+    lastPlayState.clear();
+    closeSceneQueue.clear();
+}
+
 void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
     draggingMouse.erase(sceneId);
     suppressLeftMouseUntilRelease.erase(sceneId);

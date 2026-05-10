@@ -77,6 +77,7 @@ namespace doriax::editor{
         LoadingWindow* loadingWindow;
 
         bool isInitialized;
+        bool dockspaceNeedsRebuild;
 
         AlertData alert;
         ProjectSaveDialog projectSaveDialog;
@@ -146,6 +147,7 @@ namespace doriax::editor{
         void addNewSceneToDock(uint32_t sceneId);
         void addNewCodeWindowToDock(fs::path path);
         void clearSceneWindowState(uint32_t sceneId);
+        void prepareForProjectSwitch();
 
         void handleExternalDrop(const std::vector<std::string>& paths);
         void handleExternalDragEnter();
@@ -153,6 +155,7 @@ namespace doriax::editor{
 
         void resetLastActivatedScene();
         void updateResourcesPath();
+        void requestDockspaceRebuild();
 
         void registerAlert(std::string title, std::string message);
         void registerConfirmAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr);

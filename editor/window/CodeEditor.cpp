@@ -955,6 +955,15 @@ bool editor::CodeEditor::isFocused() const {
     return windowFocused;
 }
 
+void editor::CodeEditor::closeAll() {
+    if (symbolParseThread.joinable()) {
+        symbolParseThread.join();
+    }
+    editors.clear();
+    changedFilesQueue.clear();
+    lastFocused = nullptr;
+}
+
 bool editor::CodeEditor::save(EditorInstance& instance) {
     try {
         fs::path fullPath = resolveFilepath(instance.filepath);

@@ -59,6 +59,7 @@ namespace doriax::editor {
 
         void show();
         bool isFocused() const;
+        void resetProjectState();
         void clearSceneState(uint32_t sceneId);
 
         void focusOnEntities(SceneProject* sceneProject, const std::vector<Entity>& entities);

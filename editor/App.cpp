@@ -55,6 +55,7 @@ editor::App::App(){
     terrainEditWindow = new TerrainEditWindow(&project);
 
     isInitialized = false;
+    dockspaceNeedsRebuild = false;
 
     lastFocusedWindow = LastFocusedWindow::None;
 
@@ -941,8 +942,9 @@ void editor::App::show(){
 
     isInitialized = true;
 
-    if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
+    if (dockspaceNeedsRebuild || ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
         buildDockspace();
+        dockspaceNeedsRebuild = false;
     }
 
     ImGui::DockSpaceOverViewport(dockspace_id, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
@@ -1117,6 +1119,12 @@ void editor::App::clearSceneWindowState(uint32_t sceneId) {
     }
 }
 
+void editor::App::prepareForProjectSwitch() {
+    codeEditor->closeAll();
+    sceneWindow->resetProjectState();
+    dockspaceNeedsRebuild = true;
+}
+
 void editor::App::addNewCodeWindowToDock(fs::path path){
     if (isInitialized){
         ImGui::DockBuilderDockWindow(("###" + path.string()).c_str(), dock_id_middle_top);
@@ -1268,6 +1276,10 @@ void editor::App::updateResourcesPath(){
         resourcesWindow->notifyProjectPathChange();
     }
     resourcesWindow->cleanupThumbnails();
+}
+
+void editor::App::requestDockspaceRebuild() {
+    dockspaceNeedsRebuild = true;
 }
 
 void editor::App::registerAlert(std::string title, std::string message) {
