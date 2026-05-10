@@ -46,7 +46,7 @@ int Sound::loadSound(const std::string& filename){
     audio.filename = filename;
 
     if (Engine::isViewLoaded())
-        return scene->getSystem<AudioSystem>()->loadSound(audio, entity);
+        return scene->getSystem<AudioSystem>()->loadSound(audio);
     else
         return false;
 }

@@ -4,9 +4,9 @@
 
 #include "AudioSystem.h"
 
+#include "pool/SoundPool.h"
 #include "Scene.h"
 
-#include "io/Data.h"
 #include "soloud.h"
 #include "soloud_thread.h"
 #include "soloud_wav.h"
@@ -57,47 +57,65 @@ void AudioSystem::deInit(){
     }
 }
 
-bool AudioSystem::loadSound(SoundComponent& audio, Entity entity){
+bool AudioSystem::loadSoundSample(SoundComponent& audio){
     if (audio.filename.empty()) {
         return false;
     }
 
-    Data filedata;
-
-    if (filedata.open(audio.filename.c_str()) != FileErrors::FILEDATA_OK){
-        Log::error("Sound file not found: %s", audio.filename.c_str());
-        return false;
-    }
-
     if (!audio.sample){
-        audio.sample = new SoLoud::Wav();
+        SoundLoadResult result = SoundPool::loadFromFile(audio.filename, audio.filename);
+        if (result.state == ResourceLoadState::Loading) {
+            return false;
+        }
+        if (result.state == ResourceLoadState::Failed) {
+            audio.loaded = false;
+            audio.length = 0;
+            audio.startTrigger = false;
+            audio.state = SoundState::Stopped;
+            audio.sample.reset();
+            return false;
+        }
+
+        audio.sample = result.data;
+        if (!audio.sample) {
+            return false;
+        }
     }
-
-    SoLoud::result res = audio.sample->loadMem(filedata.getMemPtr(), filedata.length(), false, false);
-
-    if (res == SoLoud::SOLOUD_ERRORS::FILE_LOAD_FAILED){
-        Log::error("Sound file type of '%s' could not be loaded", audio.filename.c_str());
-        return false;
-    }else if (res == SoLoud::SOLOUD_ERRORS::OUT_OF_MEMORY){
-        Log::error("Out of memory when loading '%s'", audio.filename.c_str());
-        return false;
-    }else if (res == SoLoud::SOLOUD_ERRORS::UNKNOWN_ERROR){
-        Log::error("Unknown error when loading '%s'", audio.filename.c_str());
-        return false;
-    }
-
-    audio.sample->setSingleInstance(true);
-    audio.sample->setVolume(1.0);
 
     audio.length = audio.sample->getLength();
+    audio.loaded = true;
+
+    return true;
+}
+
+bool AudioSystem::loadSound(SoundComponent& audio){
+    if (!loadSoundSample(audio)) {
+        return false;
+    }
 
     if (!init()) {
         return false;
     }
 
-    audio.loaded = true;
-
     return true;
+}
+
+void AudioSystem::preloadSoundAssets(){
+    auto audios = scene->getComponentArray<SoundComponent>();
+    for (int i = 0; i < audios->size(); i++) {
+        SoundComponent& audio = audios->getComponentFromIndex(i);
+
+        if (audio.filename.empty()) {
+            if (audio.loaded || audio.handle != 0 || audio.sample) {
+                destroySound(audio);
+            }
+            continue;
+        }
+
+        if (!audio.loaded) {
+            loadSoundSample(audio);
+        }
+    }
 }
 
 void AudioSystem::destroySound(SoundComponent& audio){
@@ -112,9 +130,9 @@ void AudioSystem::destroySound(SoundComponent& audio){
     audio.stopTrigger = false;
     audio.loaded = false;
     audio.length = 0;
-    if (audio.sample){
-        delete audio.sample;
-        audio.sample = NULL;
+    audio.sample.reset();
+    if (!audio.filename.empty()) {
+        SoundPool::remove(audio.filename);
     }
 }
 
@@ -195,12 +213,15 @@ float AudioSystem::getGlobalVolume(){
 }
 
 void AudioSystem::load(){
+    preloadSoundAssets();
 }
 
 void AudioSystem::destroy(){
 }
 
 void AudioSystem::update(double dt){
+    preloadSoundAssets();
+
     if (paused) {
         return;
     }
@@ -231,7 +252,7 @@ void AudioSystem::update(double dt){
 
         if (audio.state == SoundState::Playing || pendingStart){
             if (!audio.loaded){
-                loadSound(audio, entity);
+                loadSound(audio);
             }
         }
 

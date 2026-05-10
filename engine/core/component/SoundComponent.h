@@ -7,6 +7,8 @@
 
 #include "Engine.h"
 
+#include <memory>
+
 namespace SoLoud{
     class Wav;
 }
@@ -27,7 +29,7 @@ namespace doriax{
     };
 
     struct DORIAX_API SoundComponent{
-        SoLoud::Wav* sample = nullptr;
+        std::shared_ptr<SoLoud::Wav> sample = nullptr;
         unsigned int handle = 0; //Soloud handle
 
         SoundState state = SoundState::Stopped;

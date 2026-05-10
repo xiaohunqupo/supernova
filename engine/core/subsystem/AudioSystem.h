@@ -26,6 +26,9 @@ namespace doriax{
 
 		Vector3 cameraLastPosition;
 
+        bool loadSoundSample(SoundComponent& audio);
+        void preloadSoundAssets();
+
 	public:
 		AudioSystem(Scene* scene);
 
@@ -40,7 +43,7 @@ namespace doriax{
 		static void setGlobalVolume(float volume);
 		static float getGlobalVolume();
 
-        bool loadSound(SoundComponent& audio, Entity entity);
+        bool loadSound(SoundComponent& audio);
 		void destroySound(SoundComponent& audio);
 		void stopSceneSounds();
 		bool seekSound(SoundComponent& audio, double time);

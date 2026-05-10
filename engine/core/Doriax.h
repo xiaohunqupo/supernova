@@ -145,6 +145,7 @@
 
 //#include "pool/FontPool.h"
 #include "pool/ShaderPool.h"
+#include "pool/SoundPool.h"
 #include "pool/TextureDataPool.h"
 #include "pool/TexturePool.h"
 

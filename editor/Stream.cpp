@@ -4,6 +4,7 @@
 #include "Catalog.h"
 #include "Factory.h"
 #include "Out.h"
+#include "pool/SoundPool.h"
 #include "util/ProjectUtils.h"
 #include "render/SceneRender2D.h"
 
@@ -3884,6 +3885,10 @@ SoundComponent editor::Stream::decodeSoundComponent(const YAML::Node& node, cons
     if (node["dopplerFactor"]) audio.dopplerFactor = node["dopplerFactor"].as<float>();
 
     bool keepLoadedSample = oldAudio && oldFilename == audio.filename && oldAudio->sample && oldAudio->loaded;
+    if (!keepLoadedSample && oldAudio && !oldFilename.empty()) {
+        audio.sample.reset();
+        SoundPool::remove(oldFilename);
+    }
     audio.loaded = keepLoadedSample;
     audio.length = keepLoadedSample ? oldAudio->length : 0;
     audio.handle = 0;

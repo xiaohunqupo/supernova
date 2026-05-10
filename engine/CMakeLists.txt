@@ -600,6 +600,7 @@ set(DORIAX_SRCS
     core/object/ui/UILayout.cpp
     core/pool/FontPool.cpp
     core/pool/ShaderPool.cpp
+    core/pool/SoundPool.cpp
     core/pool/TextureDataPool.cpp
     core/pool/TexturePool.cpp
     core/registry/EntityRegistry.cpp

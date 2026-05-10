@@ -1000,6 +1000,7 @@ void editor::App::engineInit(int argc, char** argv) {
         return builder.buildShader(shaderKey, &project);
     });
 
+    SoundPool::setAsyncLoading(true);
     TextureDataPool::setAsyncLoading(true);
     MeshSystem::setAsyncModelLoading(true);
 }

@@ -11,6 +11,7 @@
 #include "subsystem/RenderSystem.h"
 #include "subsystem/UISystem.h"
 #include "pool/TexturePool.h"
+#include "pool/SoundPool.h"
 #include "pool/TextureDataPool.h"
 #include "pool/ShaderPool.h"
 #include "pool/FontPool.h"
@@ -794,6 +795,7 @@ void Engine::systemDraw(){
 }
 
 void Engine::systemViewDestroyed(){
+    SoundPool::requestShutdown();
     TextureDataPool::requestShutdown();
 
     drawSemaphore.acquire();
@@ -811,6 +813,7 @@ void Engine::systemViewDestroyed(){
     SystemRender::shutdown();
 
     TexturePool::clear();
+    SoundPool::clear();
     TextureDataPool::clear();
     ShaderPool::clear();
     FontPool::clear();
