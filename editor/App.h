@@ -100,7 +100,8 @@ namespace doriax::editor{
         } lastFocusedWindow;
 
         void saveFunc();
-        void saveAllFunc();
+        void saveAllFunc(std::function<void(bool)> callback = nullptr);
+        void saveAllAndProject(std::function<void()> onSuccess);
         void openProjectFunc();
 
         void showMenu();

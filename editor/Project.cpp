@@ -1039,16 +1039,9 @@ void editor::Project::checkUnsavedAndExecute(uint32_t sceneId, std::function<voi
             "Unsaved Changes",
             "There are unsaved changes. Do you want to save first?",
             [this, sceneId, action]() {
-                // Yes callback - save and then execute action
-                SceneProject* sceneProject = getScene(sceneId);
-                if (sceneProject && !sceneProject->filepath.empty()) {
-                    // Scene has filepath, save synchronously and execute action
-                    saveScene(sceneId);
-                    if (action) action();
-                } else {
-                    // Scene needs save dialog, pass action as callback
-                    Backend::getApp().registerSaveSceneDialog(sceneId, action);
-                }
+                saveScene(sceneId, [action](bool success) {
+                    if (success && action) action();
+                });
             },
             [action]() {
                 // No callback - execute action without saving
@@ -2499,37 +2492,89 @@ bool editor::Project::openProject() {
     }
 }
 
-void editor::Project::saveScene(uint32_t sceneId) {
+void editor::Project::saveScene(uint32_t sceneId, std::function<void(bool)> callback) {
     SceneProject* sceneProject = getScene(sceneId);
     if (!sceneProject) {
         Out::error("Cannot save scene - invalid scene ID: %u", sceneId);
+        if (callback) callback(false);
         return;
     }
 
-    // If filepath is already set, just save to that path
-    if (!sceneProject->filepath.empty()) {
-        saveSceneToPath(sceneId, sceneProject->filepath);
-    } else {
-        // Otherwise show save dialog through the App
-        Backend::getApp().registerSaveSceneDialog(sceneId);
+    if (sceneProject->playState != ScenePlayState::STOPPED) {
+        Out::warning("Cannot save scene '%s' while it is busy.", sceneProject->name.c_str());
+        if (callback) callback(false);
+        return;
     }
 
-    // Also save modified child scenes that are loaded inline
-    for (uint32_t childId : sceneProject->childScenes) {
-        const SceneProject* childScene = getScene(childId);
-        if (childScene && childScene->expandedInline && childScene->scene && hasSceneUnsavedChanges(childId)) {
-            saveScene(childId);
+    auto finishWithChildren = [this, sceneId, callback](bool success) {
+        if (!success) {
+            if (callback) callback(false);
+            return;
         }
+
+        saveModifiedChildScenes(sceneId, callback);
+    };
+
+    if (!sceneProject->filepath.empty()) {
+        saveSceneToPathAsync(sceneId, sceneProject->filepath, finishWithChildren);
+    } else {
+        Backend::getApp().registerSaveSceneDialog(sceneId, [finishWithChildren]() {
+            finishWithChildren(true);
+        });
     }
 }
 
-bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::filesystem::path& path) {
+void editor::Project::saveSceneListSequentially(std::vector<uint32_t> sceneIds, std::function<void(bool)> callback) {
+    auto ids = std::make_shared<std::vector<uint32_t>>(std::move(sceneIds));
+    auto index = std::make_shared<size_t>(0);
+    auto saveNext = std::make_shared<std::function<void(bool)>>();
+    *saveNext = [this, ids, index, callback, saveNext](bool previousSuccess) {
+        if (!previousSuccess) {
+            if (callback) callback(false);
+            return;
+        }
+
+        while (*index < ids->size()) {
+            uint32_t id = (*ids)[(*index)++];
+            if (hasSceneUnsavedChanges(id)) {
+                saveScene(id, *saveNext);
+                return;
+            }
+        }
+
+        if (callback) callback(true);
+    };
+
+    (*saveNext)(true);
+}
+
+void editor::Project::saveModifiedChildScenes(uint32_t sceneId, std::function<void(bool)> callback) {
+    SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject) {
+        if (callback) callback(true);
+        return;
+    }
+
+    std::vector<uint32_t> childIds;
+    for (uint32_t childId : sceneProject->childScenes) {
+        const SceneProject* childScene = getScene(childId);
+        if (childScene && childScene->expandedInline && childScene->scene && hasSceneUnsavedChanges(childId)) {
+            childIds.push_back(childId);
+        }
+    }
+
+    saveSceneListSequentially(std::move(childIds), std::move(callback));
+}
+
+bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::filesystem::path& path, bool stopTransientPreviews) {
     if (!sceneProject || path.empty()) {
         return false;
     }
 
-    if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
-        propertiesWindow->stopTransientPreviews();
+    if (stopTransientPreviews) {
+        if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
+            propertiesWindow->stopTransientPreviews();
+        }
     }
 
     fs::path fullPath = path;
@@ -2583,10 +2628,18 @@ bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::files
     return true;
 }
 
-void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::path& path) {
+bool editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::path& path, bool stopTransientPreviews) {
+    if (!writeSceneToPath(sceneId, path, stopTransientPreviews)) {
+        return false;
+    }
+
+    return saveProject();
+}
+
+bool editor::Project::writeSceneToPath(uint32_t sceneId, const std::filesystem::path& path, bool stopTransientPreviews) {
     SceneProject* sceneProject = getScene(sceneId);
     if (!sceneProject) {
-        return;
+        return false;
     }
 
     fs::path fullPath = path;
@@ -2595,8 +2648,8 @@ void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::p
     }
 
     std::string oldFilepath = sceneProject->filepath.string();
-    if (!saveSceneFile(sceneProject, path)) {
-        return;
+    if (!saveSceneFile(sceneProject, path, stopTransientPreviews)) {
+        return false;
     }
 
     // Update tabs: if filepath changed, update existing tab entry
@@ -2606,8 +2659,6 @@ void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::p
         }
         addTab(TabType::SCENE, sceneProject->filepath.string());
     }
-
-    saveProject();
 
     std::vector<BundleInstanceInfo> bundleInstances = generator.writeBundleSources(entityBundles, sceneId, getProjectPath(),getProjectInternalPath());
     generator.writeSceneSource(sceneProject->scene, sceneProject->name, sceneProject->entities, getSceneCamera(sceneProject), getProjectPath(), getProjectInternalPath(), bundleInstances);
@@ -2626,18 +2677,67 @@ void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::p
     generator.configure(scenesToConfig, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight);
 
     Out::info("Scene saved to: \"%s\"", fullPath.string().c_str());
+
+    return true;
 }
 
-void editor::Project::saveAllScenes() {
+void editor::Project::saveSceneToPathAsync(uint32_t sceneId, const std::filesystem::path& path, std::function<void(bool)> callback) {
+    SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject) {
+        if (callback) callback(false);
+        return;
+    }
+
+    if (sceneProject->playState != ScenePlayState::STOPPED) {
+        Out::warning("Cannot save scene '%s' while it is busy.", sceneProject->name.c_str());
+        if (callback) callback(false);
+        return;
+    }
+
+    if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
+        propertiesWindow->stopTransientPreviews();
+    }
+
+    sceneProject->playState = ScenePlayState::SAVING;
+    fs::path savePath = path;
+
+    std::thread([this, sceneId, savePath, callback = std::move(callback)]() mutable {
+        bool success = false;
+        try {
+            success = writeSceneToPath(sceneId, savePath, false);
+        } catch (const std::exception& e) {
+            Out::error("Failed to save scene in background: %s", e.what());
+        }
+
+        Backend::getApp().enqueueMainThreadTask([this, sceneId, success, callback = std::move(callback)]() mutable {
+            if (success) {
+                success = saveProject();
+            }
+
+            if (SceneProject* sceneProject = getScene(sceneId)) {
+                if (sceneProject->playState == ScenePlayState::SAVING) {
+                    sceneProject->playState = ScenePlayState::STOPPED;
+                }
+            }
+
+            if (callback) callback(success);
+        });
+    }).detach();
+}
+
+void editor::Project::saveAllScenes(std::function<void(bool)> callback) {
+    std::vector<uint32_t> sceneIds;
     for (auto& sceneProject : scenes) {
-        if (sceneProject.isModified) {
-            saveScene(sceneProject.id);
+        if (hasSceneUnsavedChanges(sceneProject.id)) {
+            sceneIds.push_back(sceneProject.id);
         }
     }
+
+    saveSceneListSequentially(std::move(sceneIds), std::move(callback));
 }
 
-void editor::Project::saveLastSelectedScene(){
-    saveScene(selectedScene);
+void editor::Project::saveLastSelectedScene(std::function<void(bool)> callback){
+    saveScene(selectedScene, callback);
 }
 
 Ray editor::Project::screenToRayFromCamera(const CameraComponent& camera, float x, float y) const{
@@ -5002,6 +5102,15 @@ bool editor::Project::isAnyScenePlaying() const{
     return false;
 }
 
+bool editor::Project::isAnySceneSaving() const{
+    for (const auto& sceneProject : scenes) {
+        if (sceneProject.playState == ScenePlayState::SAVING) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void editor::Project::failPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const std::string& message,
                                       const std::string& alertTitle, const std::string& alertMessage) {
     Backend::getApp().enqueueMainThreadTask([this, session, sceneId, message, alertTitle, alertMessage]() {
@@ -5043,7 +5152,7 @@ bool editor::Project::saveSceneForPlayStartup(SceneProject* sceneProject) {
         return false;
     }
 
-    return saveSceneFile(sceneProject, sceneProject->filepath);
+    return saveSceneFile(sceneProject, sceneProject->filepath, false);
 }
 
 void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId) {
@@ -5466,6 +5575,10 @@ void editor::Project::start(uint32_t sceneId) {
     {
         std::scoped_lock lock(playSessionMutex);
         activePlaySession = session;
+    }
+
+    if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
+        propertiesWindow->stopTransientPreviews();
     }
 
     sceneProject->playState = ScenePlayState::LOADING;

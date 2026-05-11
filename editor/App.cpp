@@ -75,9 +75,16 @@ void editor::App::saveFunc(){
     }
 }
 
-void editor::App::saveAllFunc(){
-    project.saveAllScenes();
+void editor::App::saveAllFunc(std::function<void(bool)> callback){
     codeEditor->saveAll();
+    project.saveAllScenes(callback);
+}
+
+void editor::App::saveAllAndProject(std::function<void()> onSuccess){
+    saveAllFunc([this, onSuccess](bool success) {
+        if (!success) return;
+        project.saveProject(true, onSuccess);
+    });
 }
 
 void editor::App::openProjectFunc(){
@@ -91,11 +98,8 @@ void editor::App::openProjectFunc(){
             "Unsaved Changes",
             "There are unsaved changes. Do you want to save them before opening another project?",
             [this]() {
-                // Yes callback - save all and then continue
-                saveAllFunc();
-                project.saveProject(true,
-                    [this]() {
-                        this->project.openProject();
+                saveAllAndProject([this]() {
+                    this->project.openProject();
                 });
             },
             [this]() {
@@ -117,10 +121,11 @@ void editor::App::showMenu(){
     bool isPlaying = hasSelectedScene && selectedScene->playState == ScenePlayState::PLAYING;
     bool isPaused = hasSelectedScene && selectedScene->playState == ScenePlayState::PAUSED;
     bool isLoading = hasSelectedScene && selectedScene->playState == ScenePlayState::LOADING;
+    bool isSaving = hasSelectedScene && selectedScene->playState == ScenePlayState::SAVING;
     bool canRun = hasSelectedScene && !isProjectBusy;
     bool canPause = hasSelectedScene && isPlaying;
     bool canResume = hasSelectedScene && isPaused;
-    bool canStop = hasSelectedScene && (isPlaying || isPaused || isLoading);
+    bool canStop = hasSelectedScene && !isSaving && (isPlaying || isPaused || isLoading);
     bool canRemove = hasSelectedScene && !isProjectBusy && project.getScenes().size() > 1;
 
     // Remove menu bar border
@@ -138,10 +143,7 @@ void editor::App::showMenu(){
                         "Unsaved Changes",
                         "There are unsaved changes. Do you want to save them before creating a new project?",
                         [this, projectName]() {
-                            // Yes callback - save all and then reset
-                            saveAllFunc();
-                            project.saveProject(true,
-                                [this, projectName]() {
+                            saveAllAndProject([this, projectName]() {
                                 project.createTempProject(projectName, true);
                             });
                         },
@@ -191,11 +193,8 @@ void editor::App::showMenu(){
                                     "Unsaved Changes",
                                     "There are unsaved changes. Do you want to save them before opening another project?",
                                     [this, path]() {
-                                        // Yes callback - save all and then contin
-                                        saveAllFunc();
-                                        project.saveProject(true,
-                                            [this, path]() {
-                                                this->project.loadProject(path);
+                                        saveAllAndProject([this, path]() {
+                                            this->project.loadProject(path);
                                         });
                                     },
                                     [this, path]() {
@@ -228,9 +227,9 @@ void editor::App::showMenu(){
             if (lastFocusedWindow == LastFocusedWindow::Code) {
                 canSave = codeEditor->hasLastFocusedUnsavedChanges();
             }else{
-                canSave = project.hasSelectedSceneUnsavedChanges();
+                canSave = !isProjectBusy && project.hasSelectedSceneUnsavedChanges();
             }
-            bool canSaveAll = project.hasScenesUnsavedChanges() || codeEditor->hasUnsavedChanges();
+            bool canSaveAll = !isProjectBusy && (project.hasScenesUnsavedChanges() || codeEditor->hasUnsavedChanges());
 
             ImGui::BeginDisabled(!canSave);
             if (ImGui::MenuItem("Save")) {
@@ -436,11 +435,13 @@ void editor::App::showFooter(){
         const bool hasSelectedScene = selectedScene != nullptr;
         const bool isPlaying = hasSelectedScene && selectedScene->playState == ScenePlayState::PLAYING;
         const bool isPaused = hasSelectedScene && selectedScene->playState == ScenePlayState::PAUSED;
+        const bool isSaving = hasSelectedScene && selectedScene->playState == ScenePlayState::SAVING;
         const bool isLoading = hasSelectedScene && selectedScene->playState == ScenePlayState::LOADING;
         const bool isStopped = !hasSelectedScene || selectedScene->playState == ScenePlayState::STOPPED;
         const bool isCancelling = hasSelectedScene && selectedScene->playState == ScenePlayState::CANCELLING;
-        const bool canPlayPause = hasSelectedScene && !isLoading && !isCancelling && (isPlaying || isPaused || (isStopped && !project.isAnyScenePlaying()));
-        const bool canStop = hasSelectedScene && !isStopped && !isCancelling;
+        const bool isAnySaving = project.isAnySceneSaving();
+        const bool canPlayPause = hasSelectedScene && !isSaving && !isLoading && !isCancelling && (isPlaying || isPaused || (isStopped && !project.isAnyScenePlaying()));
+        const bool canStop = hasSelectedScene && !isSaving && !isStopped && !isCancelling;
         const ImVec4 footerButtonHovered = ImVec4(1.0f, 1.0f, 1.0f, 0.08f);
         const ImVec4 footerButtonActive = ImVec4(1.0f, 1.0f, 1.0f, 0.14f);
 
@@ -461,7 +462,10 @@ void editor::App::showFooter(){
 
         // Left side: Status
         bool statusShown = false;
-        if (isLoading) {
+        if (isSaving || isAnySaving) {
+            ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), ICON_FA_FLOPPY_DISK " Saving scene");
+            statusShown = true;
+        } else if (isLoading) {
             ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), ICON_FA_SPINNER " Loading scene");
             statusShown = true;
         } else if (isCancelling) {
@@ -1027,7 +1031,7 @@ void editor::App::engineRender(){
     for (auto& sceneProject : project.getScenes()) {
         if (!sceneProject.opened) continue;
         if (!sceneProject.scene || !sceneProject.sceneRender) continue;
-        if (sceneProject.playState == ScenePlayState::LOADING || sceneProject.playState == ScenePlayState::CANCELLING) continue;
+        if (sceneProject.playState == ScenePlayState::SAVING || sceneProject.playState == ScenePlayState::LOADING || sceneProject.playState == ScenePlayState::CANCELLING) continue;
 
         auto meshSystem = sceneProject.scene->getSystem<MeshSystem>();
         bool hasPendingModelLoads = meshSystem && meshSystem->hasPendingAsyncModelLoads();
@@ -1474,6 +1478,7 @@ void editor::App::processNextSaveDialog() {
             defaultName,
             // Save callback
             [this, sceneId, completionCallback](const fs::path& fullPath) {
+                bool saveStarted = false;
                 SceneProject* sceneProject = project.getScene(sceneId);
                 if (sceneProject) {
                     // Create directory if it doesn't exist
@@ -1487,20 +1492,23 @@ void editor::App::processNextSaveDialog() {
                         Backend::getApp().registerAlert("Error", "Scene file must be inside the project folder.");
                     } else {
                         sceneProject->filepath = relPath;
-                        project.saveSceneToPath(sceneId, fullPath);
+                        saveStarted = true;
+                        project.saveSceneToPathAsync(sceneId, fullPath, [this, completionCallback](bool success) {
+                            saveDialogQueue.pop();
+
+                            if (success && completionCallback) {
+                                completionCallback();
+                            }
+
+                            processNextSaveDialog();
+                        });
                     }
                 }
 
-                // Remove this item from the queue
-                saveDialogQueue.pop();
-
-                // Execute the completion callback if provided
-                if (completionCallback) {
-                    completionCallback();
+                if (!saveStarted) {
+                    saveDialogQueue.pop();
+                    processNextSaveDialog();
                 }
-
-                // Process the next item if available
-                processNextSaveDialog();
             },
             // Cancel callback
             [this, completionCallback]() {
@@ -1606,16 +1614,18 @@ void editor::App::exit() {
         return;
     }
 
+    if (project.isAnySceneSaving()) {
+        registerAlert("Saving Scene", "Wait for the current scene save to finish before exiting.");
+        return;
+    }
+
     if (project.hasScenesUnsavedChanges() || codeEditor->hasUnsavedChanges() || project.isTempUnsavedProject()) {
         registerThreeButtonAlert(
             "Unsaved Changes",
             "There are unsaved changes. Do you want to save them before exiting?",
             [this]() {
-                // Yes callback - save all and exit when done
-                saveAllFunc();
-                project.saveProject(true,
-                    [this]() {
-                        closeWindow();
+                saveAllAndProject([this]() {
+                    closeWindow();
                 });
             },
             [this]() {

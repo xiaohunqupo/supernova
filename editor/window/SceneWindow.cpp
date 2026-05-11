@@ -530,7 +530,7 @@ void editor::SceneWindow::handleTileRectDragDrop(SceneProject* sceneProject) {
 }
 
 void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
-    if (sceneProject->playState == ScenePlayState::LOADING || sceneProject->playState == ScenePlayState::CANCELLING) {
+    if (sceneProject->playState == ScenePlayState::SAVING || sceneProject->playState == ScenePlayState::LOADING || sceneProject->playState == ScenePlayState::CANCELLING) {
         return;
     }
 
@@ -1169,11 +1169,12 @@ void editor::SceneWindow::show() {
             bool isPlaying = (sceneProject.playState == ScenePlayState::PLAYING);
             bool isPaused = (sceneProject.playState == ScenePlayState::PAUSED);
             bool isStopped = (sceneProject.playState == ScenePlayState::STOPPED);
+            bool isSaving = (sceneProject.playState == ScenePlayState::SAVING);
             bool isLoading = (sceneProject.playState == ScenePlayState::LOADING);
             bool isCancelling = (sceneProject.playState == ScenePlayState::CANCELLING);
 
             // Play button - disabled when already playing
-            ImGui::BeginDisabled(isPlaying || isLoading || isCancelling || (isStopped && project->isAnyScenePlaying()));
+            ImGui::BeginDisabled(isPlaying || isSaving || isLoading || isCancelling || (isStopped && project->isAnyScenePlaying()));
             if (ImGui::Button(ICON_FA_PLAY " Play")) {
                 if (!isPaused) {
                     project->start(sceneProject.id);
@@ -1184,7 +1185,7 @@ void editor::SceneWindow::show() {
             ImGui::EndDisabled();
 
             // Pause/Resume button - disabled when stopped
-            ImGui::BeginDisabled(isStopped || isPaused || isLoading || isCancelling);
+            ImGui::BeginDisabled(isStopped || isPaused || isSaving || isLoading || isCancelling);
             ImGui::SameLine();
             if (ImGui::Button(ICON_FA_PAUSE " Pause")) {
                 project->pause(sceneProject.id);
@@ -1192,7 +1193,7 @@ void editor::SceneWindow::show() {
             ImGui::EndDisabled();
 
             // Stop button - disabled when stopped
-            ImGui::BeginDisabled(isStopped || isCancelling);
+            ImGui::BeginDisabled(isStopped || isSaving || isCancelling);
             ImGui::SameLine();
             if (ImGui::Button(ICON_FA_STOP " Stop")) {
                 project->stop(sceneProject.id);

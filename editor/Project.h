@@ -32,6 +32,7 @@ namespace doriax::editor{
 
     enum class ScenePlayState {
         STOPPED,
+        SAVING,
         LOADING,
         PLAYING,
         PAUSED,
@@ -243,8 +244,11 @@ namespace doriax::editor{
         void runPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId);
         void failPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const std::string& message,
                      const std::string& alertTitle = "", const std::string& alertMessage = "");
-        bool saveSceneFile(SceneProject* sceneProject, const std::filesystem::path& path);
+        bool saveSceneFile(SceneProject* sceneProject, const std::filesystem::path& path, bool stopTransientPreviews = true);
         bool saveSceneForPlayStartup(SceneProject* sceneProject);
+        bool writeSceneToPath(uint32_t sceneId, const std::filesystem::path& path, bool stopTransientPreviews = true);
+        void saveModifiedChildScenes(uint32_t sceneId, std::function<void(bool)> callback = nullptr);
+        void saveSceneListSequentially(std::vector<uint32_t> sceneIds, std::function<void(bool)> callback);
 
         void collectInvolvedScenes(uint32_t sceneId, std::vector<uint32_t>& involvedSceneIds);
 
@@ -327,10 +331,11 @@ namespace doriax::editor{
 
         void checkUnsavedAndExecute(uint32_t sceneId, std::function<void()> action);
 
-        void saveScene(uint32_t sceneId);
-        void saveSceneToPath(uint32_t sceneId, const std::filesystem::path& path);
-        void saveAllScenes();
-        void saveLastSelectedScene();
+        void saveScene(uint32_t sceneId, std::function<void(bool)> callback = nullptr);
+        bool saveSceneToPath(uint32_t sceneId, const std::filesystem::path& path, bool stopTransientPreviews = true);
+        void saveSceneToPathAsync(uint32_t sceneId, const std::filesystem::path& path, std::function<void(bool)> callback = nullptr);
+        void saveAllScenes(std::function<void(bool)> callback = nullptr);
+        void saveLastSelectedScene(std::function<void(bool)> callback = nullptr);
 
         uint32_t createNewScene(std::string sceneName, SceneType type);
         void loadScene(fs::path filepath, bool opened, bool isNewScene = true, bool loadSceneData = true);
@@ -447,6 +452,7 @@ namespace doriax::editor{
         YAML::Node changeEntitiesNode(Entity& firstEntity, YAML::Node node);
 
         bool isAnyScenePlaying() const;
+        bool isAnySceneSaving() const;
 
         void start(uint32_t sceneId);
         void pause(uint32_t sceneId);
