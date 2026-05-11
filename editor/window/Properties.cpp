@@ -613,11 +613,16 @@ void editor::Properties::setOpen(bool open){
     }
 
     if (windowOpen) {
-        stopSoundPreview();
+        stopTransientPreviews();
     }
 
     windowOpen = false;
     focusRequested = false;
+}
+
+void editor::Properties::stopTransientPreviews() {
+    stopSoundPreview();
+    stopActionPreviewIfActive();
 }
 
 bool editor::Properties::isOpen() const{
@@ -8617,12 +8622,12 @@ void editor::Properties::drawJoint3DComponent(ComponentType cpType, SceneProject
 void editor::Properties::startActionPreview(Entity entity, Scene* scene, SceneProject* sceneProject) {
     if (actionPreviewing) return;
 
+    ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
+    if (!actionComp) return;
+
     actionPreviewStates.clear();
     actionPreviewEntity = entity;
     actionPreviewSceneId = sceneProject->id;
-
-    ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
-    if (!actionComp) return;
 
     // Collect all entities that will be affected by the preview
     std::unordered_set<Entity> collected;
@@ -8665,6 +8670,24 @@ void editor::Properties::startActionPreview(Entity entity, Scene* scene, ScenePr
     actionComp->startTrigger = true;
 
     actionPreviewing = true;
+}
+
+void editor::Properties::stopActionPreviewIfActive() {
+    if (!actionPreviewing) {
+        return;
+    }
+
+    SceneProject* previewSceneProject = project ? project->getScene(actionPreviewSceneId) : nullptr;
+    if (previewSceneProject && previewSceneProject->scene) {
+        stopActionPreview(previewSceneProject->scene, previewSceneProject);
+        return;
+    }
+
+    actionPreviewStates.clear();
+    actionPreviewing = false;
+    actionPreviewPlaying = false;
+    actionPreviewEntity = NULL_ENTITY;
+    actionPreviewSceneId = 0;
 }
 
 void editor::Properties::updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles) {
@@ -8730,6 +8753,8 @@ void editor::Properties::stopActionPreview(Scene* scene, SceneProject* sceneProj
     actionPreviewStates.clear();
     actionPreviewing = false;
     actionPreviewPlaying = false;
+    actionPreviewEntity = NULL_ENTITY;
+    actionPreviewSceneId = 0;
     if (sceneProject) {
         sceneProject->needUpdateRender = true;
     }
@@ -9982,11 +10007,21 @@ void editor::Properties::show(){
         sceneProject = project->getSelectedScene();
     }
     if (!sceneProject) {
+        stopTransientPreviews();
         ImGui::End();
         return;
     }
 
     std::vector<Entity> entities = project->getSelectedEntities(sceneProject->id);
+
+    const bool previewSelectionMatches = actionPreviewing
+            && sceneProject->id == actionPreviewSceneId
+            && sceneProject->playState == ScenePlayState::STOPPED
+            && entities.size() == 1
+            && entities[0] == actionPreviewEntity;
+    if (actionPreviewing && !previewSelectionMatches) {
+        stopActionPreviewIfActive();
+    }
 
     std::vector<ComponentType> components;
     Scene* scene = sceneProject->scene;

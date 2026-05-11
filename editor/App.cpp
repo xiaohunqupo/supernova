@@ -1423,6 +1423,10 @@ const editor::Project* editor::App::getProject() const{
     return &project;
 }
 
+editor::Properties* editor::App::getPropertiesWindow() const{
+    return propertiesWindow;
+}
+
 editor::CodeEditor* editor::App::getCodeEditor() const{
     return codeEditor;
 }

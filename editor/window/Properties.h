@@ -167,6 +167,7 @@ namespace doriax::editor{
 
         void startActionPreview(Entity entity, Scene* scene, SceneProject* sceneProject);
         void stopActionPreview(Scene* scene, SceneProject* sceneProject);
+        void stopActionPreviewIfActive();
         void updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles);
 
         // Dirty material helpers
@@ -304,6 +305,7 @@ namespace doriax::editor{
         Properties(Project* project);
 
         void show();
+        void stopTransientPreviews();
         void setOpen(bool open);
         bool isOpen() const;
     };

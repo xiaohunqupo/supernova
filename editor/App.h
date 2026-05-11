@@ -176,6 +176,7 @@ namespace doriax::editor{
         Project* getProject();
         const Project* getProject() const;
 
+        Properties* getPropertiesWindow() const;
         CodeEditor* getCodeEditor() const;
         ResourcesWindow* getResourcesWindow() const;
         AnimationWindow* getAnimationWindow() const;

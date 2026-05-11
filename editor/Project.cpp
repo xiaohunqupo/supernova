@@ -2528,6 +2528,10 @@ bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::files
         return false;
     }
 
+    if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
+        propertiesWindow->stopTransientPreviews();
+    }
+
     fs::path fullPath = path;
     if (fullPath.is_relative()) {
         fullPath = getProjectPath() / fullPath;
