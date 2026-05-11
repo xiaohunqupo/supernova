@@ -18,6 +18,7 @@
 
 #include "Jolt/Jolt.h"
 #include "Jolt/Core/JobSystemThreadPool.h"
+#include "Jolt/Physics/Body/MotionQuality.h"
 #include "Jolt/Physics/PhysicsSystem.h"
 #include "Jolt/Physics/Collision/BroadPhase/BroadPhaseLayerInterfaceMask.h"
 #include "Jolt/Physics/Collision/BroadPhase/ObjectVsBroadPhaseLayerFilterMask.h"
@@ -83,6 +84,8 @@ namespace doriax{
 
         void setLock3DBodies(bool lock3DBodies);
         bool isLock3DBodies() const;
+
+		static JPH::EMotionQuality getBody3DMotionQualityToJolt(Body3DMotionQuality motionQuality);
 
 		FunctionSubscribe<void(Body2D, unsigned long, Body2D, unsigned long)> beginContact2D;
 		FunctionSubscribe<void(Body2D, unsigned long, Body2D, unsigned long)> endContact2D;

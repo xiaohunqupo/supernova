@@ -50,6 +50,7 @@ namespace doriax::editor{
         static std::string formatLightType(LightType type);
         static std::string formatFogType(FogType type);
         static std::string formatBodyType(BodyType type);
+        static std::string formatBody3DMotionQuality(Body3DMotionQuality motionQuality);
         static std::string formatShape2DType(Shape2DType type);
         static std::string formatShape3DType(Shape3DType type);
         static std::string formatShape3DSource(Shape3DSource source);

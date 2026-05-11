@@ -139,6 +139,11 @@ static std::vector<editor::EnumEntry> entriesBodyType = {
     { (int)BodyType::DYNAMIC, "Dynamic" }
 };
 
+static std::vector<editor::EnumEntry> entriesBody3DMotionQuality = {
+    { (int)Body3DMotionQuality::DISCRETE, "Discrete" },
+    { (int)Body3DMotionQuality::LINEAR_CAST, "Linear Cast" }
+};
+
 static std::vector<editor::EnumEntry> entriesShape2DType = {
     { (int)Shape2DType::POLYGON, "Polygon" },
     { (int)Shape2DType::CIRCLE, "Circle" },
@@ -7829,10 +7834,14 @@ void editor::Properties::drawBody3DComponent(ComponentType cpType, SceneProject*
     RowSettings settingsBodyType;
     settingsBodyType.enumEntries = &entriesBodyType;
 
+    RowSettings settingsMotionQuality;
+    settingsMotionQuality.enumEntries = &entriesBody3DMotionQuality;
+
     RowSettings settingsBodyValue;
 
-    beginTable(cpType, getLabelSize("Override Mass"));
+    beginTable(cpType, getLabelSize("Motion Quality"));
     propertyRow(RowPropertyType::Enum, cpType, "type", "Body Type", sceneProject, entities, settingsBodyType);
+    propertyRow(RowPropertyType::Enum, cpType, "motionQuality", "Motion Quality", sceneProject, entities, settingsMotionQuality);
     propertyRow(RowPropertyType::Bool, cpType, "overrideMassProperties", "Override Mass", sceneProject, entities, settingsBodyValue);
 
     if (body.overrideMassProperties) {

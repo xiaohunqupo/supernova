@@ -33,6 +33,11 @@ namespace doriax{
         ENTITY_HEIGHTFIELD
     };
 
+    enum class Body3DMotionQuality{
+        DISCRETE,
+        LINEAR_CAST
+    };
+
     struct DORIAX_API Shape3D{
         JPH::ShapeRefC shape = NULL;
         Vector3 position = Vector3::ZERO;
@@ -74,6 +79,7 @@ namespace doriax{
         float solidBoxDensity;
         
         BodyType type = BodyType::STATIC;
+        Body3DMotionQuality motionQuality = Body3DMotionQuality::DISCRETE;
         bool newBody = true;
         Vector3 loadedScale = Vector3::UNIT_SCALE;
     };

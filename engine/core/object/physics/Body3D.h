@@ -71,6 +71,9 @@ namespace doriax{
         void setType(BodyType type);
         BodyType getType() const;
 
+        void setMotionQuality(Body3DMotionQuality motionQuality);
+        Body3DMotionQuality getMotionQuality() const;
+
         bool canBeKinematicOrDynamic() const;
 
         void activate();

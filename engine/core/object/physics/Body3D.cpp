@@ -396,7 +396,11 @@ void Body3D::setType(BodyType type){
             activation = JPH::EActivation::Activate;
         }
 
-        getBodyInterface().SetMotionType(body.body, getBodyTypeToJolt(type), activation);
+        JPH::BodyInterface& bodyInterface = getBodyInterface();
+        bodyInterface.SetMotionType(body.body, getBodyTypeToJolt(type), activation);
+        if (type != BodyType::STATIC){
+            bodyInterface.SetMotionQuality(body.body, PhysicsSystem::getBody3DMotionQualityToJolt(body.motionQuality));
+        }
     }
 }
 
@@ -405,6 +409,22 @@ BodyType Body3D::getType() const{
 
     checkBody(body);
     return getJoltToBodyType(getBodyInterface().GetMotionType(body.body));
+}
+
+void Body3D::setMotionQuality(Body3DMotionQuality motionQuality){
+    Body3DComponent& body = getComponent<Body3DComponent>();
+
+    body.motionQuality = motionQuality;
+
+    if (!body.body.IsInvalid()){
+        getBodyInterface().SetMotionQuality(body.body, PhysicsSystem::getBody3DMotionQualityToJolt(motionQuality));
+    }
+}
+
+Body3DMotionQuality Body3D::getMotionQuality() const{
+    Body3DComponent& body = getComponent<Body3DComponent>();
+
+    return body.motionQuality;
 }
 
 bool Body3D::canBeKinematicOrDynamic() const{

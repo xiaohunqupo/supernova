@@ -4069,6 +4069,19 @@ BodyType editor::Stream::stringToBodyType(const std::string& str) {
     return BodyType::STATIC;
 }
 
+std::string editor::Stream::body3DMotionQualityToString(Body3DMotionQuality motionQuality) {
+    switch (motionQuality) {
+        case Body3DMotionQuality::LINEAR_CAST: return "linear_cast";
+        case Body3DMotionQuality::DISCRETE:
+        default: return "discrete";
+    }
+}
+
+Body3DMotionQuality editor::Stream::stringToBody3DMotionQuality(const std::string& str) {
+    if (str == "linear_cast") return Body3DMotionQuality::LINEAR_CAST;
+    return Body3DMotionQuality::DISCRETE;
+}
+
 std::string editor::Stream::shape2DTypeToString(Shape2DType type) {
     switch (type) {
         case Shape2DType::POLYGON: return "polygon";
@@ -4277,6 +4290,7 @@ YAML::Node editor::Stream::encodeBody3DComponent(const Body3DComponent& body) {
     YAML::Node node;
 
     node["type"] = bodyTypeToString(body.type);
+    node["motionQuality"] = body3DMotionQualityToString(body.motionQuality);
     node["numShapes"] = static_cast<unsigned int>(body.numShapes);
 
     YAML::Node shapesNode;
@@ -4333,6 +4347,7 @@ Body3DComponent editor::Stream::decodeBody3DComponent(const YAML::Node& node, co
     }
 
     if (node["type"]) body.type = stringToBodyType(node["type"].as<std::string>());
+    if (node["motionQuality"]) body.motionQuality = stringToBody3DMotionQuality(node["motionQuality"].as<std::string>());
     if (node["numShapes"]) body.numShapes = node["numShapes"].as<unsigned int>();
 
     if (node["shapes"]) {

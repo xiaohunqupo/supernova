@@ -50,6 +50,16 @@ float PhysicsSystem::maxScaleXYZ(const Vector3& scale){
     return std::max(scale.x, std::max(scale.y, scale.z));
 }
 
+JPH::EMotionQuality PhysicsSystem::getBody3DMotionQualityToJolt(Body3DMotionQuality motionQuality){
+    switch (motionQuality){
+        case Body3DMotionQuality::LINEAR_CAST:
+            return JPH::EMotionQuality::LinearCast;
+        case Body3DMotionQuality::DISCRETE:
+        default:
+            return JPH::EMotionQuality::Discrete;
+    }
+}
+
 
 PhysicsSystem::PhysicsSystem(Scene* scene): SubSystem(scene){
 	signature.set(scene->getComponentId<Body2DComponent>());
@@ -870,6 +880,7 @@ void PhysicsSystem::createGenericJoltBody(Entity entity, Body3DComponent& body, 
     }
 
     JPH::BodyCreationSettings settings(shape, JPH::Vec3(0.0, 0.0, 0.0), JPH::Quat::sIdentity(), joltType, layer);
+    settings.mMotionQuality = getBody3DMotionQualityToJolt(body.motionQuality);
 
     JPH::BodyInterface &body_interface = world3D.GetBodyInterface();
 

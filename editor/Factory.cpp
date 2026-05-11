@@ -1183,6 +1183,14 @@ std::string editor::Factory::formatShape2DType(Shape2DType type) {
     }
 }
 
+std::string editor::Factory::formatBody3DMotionQuality(Body3DMotionQuality motionQuality) {
+    switch (motionQuality) {
+        case Body3DMotionQuality::LINEAR_CAST: return "Body3DMotionQuality::LINEAR_CAST";
+        case Body3DMotionQuality::DISCRETE:
+        default: return "Body3DMotionQuality::DISCRETE";
+    }
+}
+
 std::string editor::Factory::formatShape3DType(Shape3DType type) {
     switch (type) {
         case Shape3DType::SPHERE: return "Shape3DType::SPHERE";
@@ -1294,6 +1302,7 @@ std::string editor::Factory::createBody3DComponent(int indentSpaces, EntityRegis
     const std::string ind = indentation(indentSpaces);
     code << ind << "Body3DComponent body3d;\n";
     code << ind << "body3d.type = " << formatBodyType(body.type) << ";\n";
+    code << ind << "body3d.motionQuality = " << formatBody3DMotionQuality(body.motionQuality) << ";\n";
     code << ind << "body3d.needReloadBody = " << formatBool(body.needReloadBody) << ";\n";
     code << ind << "body3d.needUpdateShapes = " << formatBool(body.needUpdateShapes) << ";\n";
     code << ind << "body3d.newBody = " << formatBool(body.newBody) << ";\n";

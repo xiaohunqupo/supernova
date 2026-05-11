@@ -102,6 +102,12 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
+        .beginNamespace("Body3DMotionQuality")
+        .addVariable("DISCRETE", Body3DMotionQuality::DISCRETE)
+        .addVariable("LINEAR_CAST", Body3DMotionQuality::LINEAR_CAST)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
         .beginNamespace("Joint2DType")
         .addVariable("DISTANCE", Joint2DType::DISTANCE)
         .addVariable("REVOLUTE", Joint2DType::REVOLUTE)
@@ -1049,6 +1055,7 @@ void LuaBinding::registerObjectClasses(lua_State *L){
             luabridge::overload<>(&Body3D::getShapeDensity),
             luabridge::overload<size_t>(&Body3D::getShapeDensity))
         .addProperty("type", &Body3D::getType, &Body3D::setType)
+        .addProperty("motionQuality", &Body3D::getMotionQuality, &Body3D::setMotionQuality)
         .addFunction("canBeKinematicOrDynamic", &Body3D::canBeKinematicOrDynamic)
         .addFunction("activate", &Body3D::activate)
         .addFunction("deactivate", &Body3D::deactivate)
