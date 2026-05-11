@@ -26,6 +26,19 @@ namespace doriax::editor{
 
     struct BodyObjects{
         Lines* lines = nullptr;
+
+        struct MeshEdgeCache {
+            Entity sourceEntity = NULL_ENTITY;
+            const void* vbufPtr = nullptr;
+            const void* ibufPtr = nullptr;
+            size_t vertexCount = 0;
+            size_t indexCount = 0;
+            Vector3 sourceScale = Vector3::ZERO;
+            // Unique mesh edges in local space, already pre-multiplied by sourceScale
+            // so per-frame work is just two matrix transforms + addLine per edge.
+            std::vector<std::pair<Vector3, Vector3>> edges;
+        };
+        std::vector<MeshEdgeCache> meshEdgeCaches;
     };
 
     class SceneRender3D: public SceneRender{

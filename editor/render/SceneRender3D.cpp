@@ -804,43 +804,6 @@ void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transfo
         return drew;
     };
 
-    auto drawEntityMeshTriangleLines = [&](const Shape3D& shapeData, const Matrix4& shapeMatrix) {
-        bool drewLines = false;
-        bool resolvedMesh = forEachEntityMeshSubmesh(shapeData, [&](Buffer* vbuf, Attribute vattr, Buffer* ibuf, Attribute iattr, const Vector3& sourceScale) {
-            if (!vbuf) return;
-
-            auto emitTri = [&](unsigned int a, unsigned int b, unsigned int c) {
-                if (a >= vattr.getCount() || b >= vattr.getCount() || c >= vattr.getCount()) return;
-                Vector3 p0 = vbuf->getVector3(&vattr, a) * sourceScale;
-                Vector3 p1 = vbuf->getVector3(&vattr, b) * sourceScale;
-                Vector3 p2 = vbuf->getVector3(&vattr, c) * sourceScale;
-                addTransformedLine(shapeMatrix, p0, p1);
-                addTransformedLine(shapeMatrix, p1, p2);
-                addTransformedLine(shapeMatrix, p2, p0);
-                drewLines = true;
-            };
-
-            if (!ibuf) {
-                int triCount = int(vattr.getCount() / 3);
-                for (int t = 0; t < triCount; t++) emitTri(t * 3, t * 3 + 1, t * 3 + 2);
-                return;
-            }
-
-            int triCount = int(iattr.getCount() / 3);
-            auto readIndex = [&](unsigned int idx) -> uint32_t {
-                if (iattr.getDataType() == AttributeDataType::UNSIGNED_INT) return ibuf->getUInt32(&iattr, idx);
-                if (iattr.getDataType() == AttributeDataType::UNSIGNED_SHORT) return ibuf->getUInt16(&iattr, idx);
-                return UINT32_MAX;
-            };
-            for (int t = 0; t < triCount; t++) {
-                uint32_t i0 = readIndex(t * 3), i1 = readIndex(t * 3 + 1), i2 = readIndex(t * 3 + 2);
-                if (i0 == UINT32_MAX || i1 == UINT32_MAX || i2 == UINT32_MAX) continue;
-                emitTri(i0, i1, i2);
-            }
-        });
-        return resolvedMesh && drewLines;
-    };
-
     for (size_t i = 0; i < body.numShapes; i++) {
         const Shape3D& shapeData = body.shapes[i];
 
@@ -905,8 +868,92 @@ void editor::SceneRender3D::createOrUpdateBodyLines(Entity entity, const Transfo
             }
         } else if (shapeData.type == Shape3DType::MESH) {
             if (shapeData.source == Shape3DSource::ENTITY_MESH) {
-                if (!drawEntityMeshTriangleLines(shapeData, shapeMatrix)) {
-                    continue;
+                // Cache unique mesh edges in local space (pre-scaled by the source
+                // transform scale). Per-frame work is then just two matrix transforms
+                // + addLine per unique edge, so a 100k-tri mesh costs ~150k addLine
+                // calls instead of 300k, and we no longer re-read the vertex buffer
+                // and re-dedup edges every frame.
+                if (bo.meshEdgeCaches.size() != body.numShapes) {
+                    bo.meshEdgeCaches.assign(body.numShapes, BodyObjects::MeshEdgeCache{});
+                }
+                BodyObjects::MeshEdgeCache& cache = bo.meshEdgeCaches[i];
+
+                Entity meshEntity = shapeData.sourceEntity == NULL_ENTITY ? entity : shapeData.sourceEntity;
+                MeshComponent* sourceMesh = scene->findComponent<MeshComponent>(meshEntity);
+                Transform* sourceTransform = scene->findComponent<Transform>(meshEntity);
+
+                if (sourceMesh && sourceTransform) {
+                    const void* vbufPtr = static_cast<const void*>(&sourceMesh->buffer);
+                    const void* ibufPtr = sourceMesh->indices.getSize() > 0 ? static_cast<const void*>(&sourceMesh->indices) : nullptr;
+                    size_t vertexCount = sourceMesh->buffer.getCount();
+                    size_t indexCount = sourceMesh->indices.getCount();
+                    Vector3 sourceScale = sourceTransform->scale;
+
+                    bool cacheValid = cache.sourceEntity == meshEntity
+                        && cache.vbufPtr == vbufPtr
+                        && cache.ibufPtr == ibufPtr
+                        && cache.vertexCount == vertexCount
+                        && cache.indexCount == indexCount
+                        && cache.sourceScale == sourceScale;
+
+                    if (!cacheValid) {
+                        cache.edges.clear();
+                        cache.sourceEntity = meshEntity;
+                        cache.vbufPtr = vbufPtr;
+                        cache.ibufPtr = ibufPtr;
+                        cache.vertexCount = vertexCount;
+                        cache.indexCount = indexCount;
+                        cache.sourceScale = sourceScale;
+
+                        // Each interior edge is shared by 2 triangles, so dedup
+                        // by index pair roughly halves the line count vs. drawing
+                        // 3 edges per triangle.
+                        std::unordered_set<uint64_t> seenEdges;
+                        forEachEntityMeshSubmesh(shapeData, [&](Buffer* vbuf, Attribute vattr, Buffer* ibuf, Attribute iattr, const Vector3& submeshScale) {
+                            if (!vbuf) return;
+                            uint32_t vcount = uint32_t(vattr.getCount());
+                            auto pushEdge = [&](uint32_t a, uint32_t b) {
+                                if (a == b || a >= vcount || b >= vcount) return;
+                                uint32_t lo = std::min(a, b);
+                                uint32_t hi = std::max(a, b);
+                                uint64_t key = (uint64_t(lo) << 32) | hi;
+                                if (!seenEdges.insert(key).second) return;
+                                Vector3 p0 = vbuf->getVector3(&vattr, lo) * submeshScale;
+                                Vector3 p1 = vbuf->getVector3(&vattr, hi) * submeshScale;
+                                cache.edges.emplace_back(p0, p1);
+                            };
+
+                            if (!ibuf) {
+                                uint32_t triCount = vcount / 3;
+                                for (uint32_t t = 0; t < triCount; t++) {
+                                    uint32_t a = t * 3, b = a + 1, c = a + 2;
+                                    pushEdge(a, b);
+                                    pushEdge(b, c);
+                                    pushEdge(c, a);
+                                }
+                                return;
+                            }
+                            uint32_t triCount = uint32_t(iattr.getCount() / 3);
+                            auto readIndex = [&](uint32_t idx) -> uint32_t {
+                                if (iattr.getDataType() == AttributeDataType::UNSIGNED_INT) return ibuf->getUInt32(&iattr, idx);
+                                if (iattr.getDataType() == AttributeDataType::UNSIGNED_SHORT) return ibuf->getUInt16(&iattr, idx);
+                                return UINT32_MAX;
+                            };
+                            for (uint32_t t = 0; t < triCount; t++) {
+                                uint32_t i0 = readIndex(t * 3);
+                                uint32_t i1 = readIndex(t * 3 + 1);
+                                uint32_t i2 = readIndex(t * 3 + 2);
+                                if (i0 == UINT32_MAX || i1 == UINT32_MAX || i2 == UINT32_MAX) continue;
+                                pushEdge(i0, i1);
+                                pushEdge(i1, i2);
+                                pushEdge(i2, i0);
+                            }
+                        });
+                    }
+
+                    for (const auto& e : cache.edges) {
+                        addTransformedLine(shapeMatrix, e.first, e.second);
+                    }
                 }
             } else if (shapeData.numVertices >= 3 && shapeData.numIndices >= 3) {
                 int triangles = int(shapeData.numIndices / 3);

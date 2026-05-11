@@ -1022,6 +1022,7 @@ void editor::App::engineViewLoaded(){
 void editor::App::engineRender(){
     processMainThreadTasks();
     project.refreshLinkedMaterials();
+    const uint32_t selectedSceneId = project.getSelectedSceneId();
 
     for (auto& sceneProject : project.getScenes()) {
         if (!sceneProject.opened) continue;
@@ -1030,12 +1031,12 @@ void editor::App::engineRender(){
 
         auto meshSystem = sceneProject.scene->getSystem<MeshSystem>();
         bool hasPendingModelLoads = meshSystem && meshSystem->hasPendingAsyncModelLoads();
-        if (hasPendingModelLoads && !sceneProject.needUpdateRender && sceneProject.id != project.getSelectedSceneId()) {
+        if (hasPendingModelLoads && !sceneProject.needUpdateRender && sceneProject.id != selectedSceneId) {
             meshSystem->update(0);
             continue;
         }
 
-        if (sceneProject.needUpdateRender || sceneProject.id == project.getSelectedSceneId()){
+        if (sceneProject.needUpdateRender || sceneProject.id == selectedSceneId){
             int width = sceneWindow->getWidth(sceneProject.id);
             int height = sceneWindow->getHeight(sceneProject.id);
 

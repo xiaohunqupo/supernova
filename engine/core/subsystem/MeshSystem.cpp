@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <limits>
 #include <sstream>
+#include <utility>
 #include "tiny_obj_loader.h"
 #include "tiny_gltf.h"
 
@@ -2230,7 +2231,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     bool res = false;
 
     if (asyncLoad){
-        *model.gltfModel = *asyncResult->gltfModel;
+        *model.gltfModel = std::move(*asyncResult->gltfModel);
         res = true;
     }else{
         tinygltf::TinyGLTF loader;
@@ -3028,9 +3029,13 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
     mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
     mesh.numSubmeshes = 1;
 
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
+    tinyobj::attrib_t localAttrib;
+    std::vector<tinyobj::shape_t> localShapes;
+    std::vector<tinyobj::material_t> localMaterials;
+
+    tinyobj::attrib_t* attrib = &localAttrib;
+    std::vector<tinyobj::shape_t>* shapes = &localShapes;
+    std::vector<tinyobj::material_t>* materials = &localMaterials;
 
     std::string warn;
     std::string err;
@@ -3041,11 +3046,11 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
     bool ret = true;
     if (asyncLoad){
-        attrib = asyncResult->objAttrib;
-        shapes = asyncResult->objShapes;
-        materials = asyncResult->objMaterials;
+        attrib = &asyncResult->objAttrib;
+        shapes = &asyncResult->objShapes;
+        materials = &asyncResult->objMaterials;
     }else{
-        ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename.c_str(), baseDir.c_str());
+        ret = tinyobj::LoadObj(attrib, shapes, materials, &warn, &err, filename.c_str(), baseDir.c_str());
 
         if (!warn.empty()) {
             Log::warn("Loading OBJ model (%s): %s", filename.c_str(), warn.c_str());
@@ -3067,8 +3072,8 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
     mesh.buffer.addAttribute(AttributeType::NORMAL, 3);
     mesh.buffer.addAttribute(AttributeType::COLOR, 4);
 
-    if (materials.size() > 0){
-        mesh.numSubmeshes = materials.size();
+    if (materials->size() > 0){
+        mesh.numSubmeshes = materials->size();
 
     }
 
@@ -3081,7 +3086,7 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
         ResourceProgress::updateProgress(buildId, 0.4f); // Materials setup
     }
 
-    const bool hasMaterials = !materials.empty();
+    const bool hasMaterials = !materials->empty();
 
     for (size_t i = 0; i < mesh.numSubmeshes; i++) {
         // Update progress for material processing
@@ -3099,9 +3104,10 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
         // Convert the blinn-phong model to the pbr metallic-roughness model
         // Based on https://github.com/CesiumGS/obj2gltf
-        const float specularIntensity = materials[i].specular[0] * 0.2125 + materials[i].specular[1] * 0.7154 + materials[i].specular[2] * 0.0721; //luminance
+        const tinyobj::material_t& objMaterial = (*materials)[i];
+        const float specularIntensity = objMaterial.specular[0] * 0.2125 + objMaterial.specular[1] * 0.7154 + objMaterial.specular[2] * 0.0721; //luminance
 
-        float roughnessFactor = materials[i].shininess;
+        float roughnessFactor = objMaterial.shininess;
         roughnessFactor = roughnessFactor / 1000.0;
         roughnessFactor = 1.0 - roughnessFactor;
         roughnessFactor = std::min(std::max(roughnessFactor, 0.0f), 1.0f); //clamp
@@ -3112,31 +3118,26 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
         const float metallicFactor = 0.0;
 
-        materials[i].specular[0] = metallicFactor;
-        materials[i].specular[1] = metallicFactor;
-        materials[i].specular[2] = metallicFactor;
-
-        materials[i].shininess = roughnessFactor;
         // ------ End convertion
 
-        mesh.submeshes[i].material.baseColorFactor = Vector4(materials[i].diffuse[0], materials[i].diffuse[1], materials[i].diffuse[2], 1.0);
-        mesh.submeshes[i].material.emissiveFactor = Vector3(materials[i].emission[0], materials[i].emission[1], materials[i].emission[2]);
-        mesh.submeshes[i].material.metallicFactor = materials[i].specular[0];
-        mesh.submeshes[i].material.roughnessFactor = materials[i].shininess;
+        mesh.submeshes[i].material.baseColorFactor = Vector4(objMaterial.diffuse[0], objMaterial.diffuse[1], objMaterial.diffuse[2], 1.0);
+        mesh.submeshes[i].material.emissiveFactor = Vector3(objMaterial.emission[0], objMaterial.emission[1], objMaterial.emission[2]);
+        mesh.submeshes[i].material.metallicFactor = metallicFactor;
+        mesh.submeshes[i].material.roughnessFactor = roughnessFactor;
 
-        if (!materials[i].diffuse_texname.empty())
-            mesh.submeshes[i].material.baseColorTexture.setPath(baseDir+materials[i].diffuse_texname);
-        if (!materials[i].normal_texname.empty())
-            mesh.submeshes[i].material.normalTexture.setPath(baseDir+materials[i].normal_texname);
-        if (!materials[i].emissive_texname.empty())
-            mesh.submeshes[i].material.emissiveTexture.setPath(baseDir+materials[i].emissive_texname);
-        if (!materials[i].ambient_texname.empty())
-            mesh.submeshes[i].material.occlusionTexture.setPath(baseDir+materials[i].ambient_texname);
+        if (!objMaterial.diffuse_texname.empty())
+            mesh.submeshes[i].material.baseColorTexture.setPath(baseDir+objMaterial.diffuse_texname);
+        if (!objMaterial.normal_texname.empty())
+            mesh.submeshes[i].material.normalTexture.setPath(baseDir+objMaterial.normal_texname);
+        if (!objMaterial.emissive_texname.empty())
+            mesh.submeshes[i].material.emissiveTexture.setPath(baseDir+objMaterial.emissive_texname);
+        if (!objMaterial.ambient_texname.empty())
+            mesh.submeshes[i].material.occlusionTexture.setPath(baseDir+objMaterial.ambient_texname);
 
         //TODO: occlusionFactor (Ka)
         //TODO: metallicroughnessTexture (map_Ks + map_Ns)
 
-        if (materials[i].dissolve < 1){
+        if (objMaterial.dissolve < 1){
             mesh.transparent = true;
         }
     }
@@ -3151,55 +3152,55 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
     Attribute* attColor = mesh.buffer.getAttribute(AttributeType::COLOR);
 
     std::vector<std::vector<uint16_t>> indexMap;
-    if (materials.size() > 0) {
-        indexMap.resize(materials.size());
+    if (materials->size() > 0) {
+        indexMap.resize(materials->size());
     }else{
         indexMap.resize(1);
     }
 
-    for (size_t i = 0; i < shapes.size(); i++) {
+    for (size_t i = 0; i < shapes->size(); i++) {
         // Update progress for shape processing
         if (asyncLoad) {
-            float shapeProgress = 0.6f + (0.3f * (float(i) / float(shapes.size())));
+            float shapeProgress = 0.6f + (0.3f * (float(i) / float(shapes->size())));
             ResourceProgress::updateProgress(buildId, shapeProgress);
         }
 
         size_t index_offset = 0;
-        for (size_t f = 0; f < shapes[i].mesh.num_face_vertices.size(); f++) {
-            size_t fnum = shapes[i].mesh.num_face_vertices[f];
+        for (size_t f = 0; f < (*shapes)[i].mesh.num_face_vertices.size(); f++) {
+            size_t fnum = (*shapes)[i].mesh.num_face_vertices[f];
 
-            int material_id = shapes[i].mesh.material_ids[f];
+            int material_id = (*shapes)[i].mesh.material_ids[f];
             if (material_id < 0 || material_id >= static_cast<int>(indexMap.size()))
                 material_id = 0;
 
             // For each vertex in the face
             for (size_t v = 0; v < fnum; v++) {
-                tinyobj::index_t idx = shapes[i].mesh.indices[index_offset + v];
+                tinyobj::index_t idx = (*shapes)[i].mesh.indices[index_offset + v];
 
                 indexMap[material_id].push_back(mesh.buffer.getCount());
 
                     mesh.buffer.addVector3(attVertex,
-                                        Vector3(attrib.vertices[3*idx.vertex_index+0],
-                                                attrib.vertices[3*idx.vertex_index+1],
-                                                attrib.vertices[3*idx.vertex_index+2]));
+                                        Vector3(attrib->vertices[3*idx.vertex_index+0],
+                                                attrib->vertices[3*idx.vertex_index+1],
+                                                attrib->vertices[3*idx.vertex_index+2]));
 
-                if (attrib.texcoords.size() > 0) {
+                if (attrib->texcoords.size() > 0) {
                         mesh.buffer.addVector2(attTexcoord,
-                                            Vector2(attrib.texcoords[2 * idx.texcoord_index + 0],
-                                                    1.0f - attrib.texcoords[2 * idx.texcoord_index + 1]));
+                                            Vector2(attrib->texcoords[2 * idx.texcoord_index + 0],
+                                                    1.0f - attrib->texcoords[2 * idx.texcoord_index + 1]));
                 }
-                if (attrib.normals.size() > 0) {
+                if (attrib->normals.size() > 0) {
                         mesh.buffer.addVector3(attNormal,
-                                            Vector3(attrib.normals[3 * idx.normal_index + 0],
-                                                    attrib.normals[3 * idx.normal_index + 1],
-                                                    attrib.normals[3 * idx.normal_index + 2]));
+                                            Vector3(attrib->normals[3 * idx.normal_index + 0],
+                                                    attrib->normals[3 * idx.normal_index + 1],
+                                                    attrib->normals[3 * idx.normal_index + 2]));
                 }
 
-                if (attrib.colors.size() > 0){
+                if (attrib->colors.size() > 0){
                         mesh.buffer.addVector4(attColor,
-                                            Vector4(attrib.colors[3 * idx.vertex_index + 0],
-                                                    attrib.colors[3 * idx.vertex_index + 1],
-                                                    attrib.colors[3 * idx.vertex_index + 2],
+                                            Vector4(attrib->colors[3 * idx.vertex_index + 0],
+                                                    attrib->colors[3 * idx.vertex_index + 1],
+                                                    attrib->colors[3 * idx.vertex_index + 2],
                                                     1.0));
                 }else{
                         mesh.buffer.addVector4(attColor, Vector4(1.0, 1.0, 1.0, 1.0));
