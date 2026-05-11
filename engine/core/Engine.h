@@ -188,7 +188,6 @@ namespace doriax {
         static std::atomic<bool> viewLoaded;
         static std::atomic<bool> paused;
         static std::atomic<bool> asyncLoading;
-        thread_local static unsigned int asyncThreadDepth;
 
         static CursorType mouseCursorType;
         static bool showCursor;

@@ -24,6 +24,13 @@
 
 using namespace doriax;
 
+// thread_local cannot be a data member of a DLL-exported class (MSVC C2492).
+// Keep the TLS counter as file-local storage and expose it via a plain function.
+static unsigned int& getAsyncThreadDepthStorage() {
+    thread_local unsigned int asyncThreadDepth = 0;
+    return asyncThreadDepth;
+}
+
 //-----Doriax user config-----
 std::vector<Scene*> Engine::scenes;
 std::unordered_set<Scene*> Engine::oneTimeScenes;
@@ -60,7 +67,6 @@ double Engine::updateTime = 1.0 / 60.0; //60Hz
 std::atomic<bool> Engine::viewLoaded = false;
 std::atomic<bool> Engine::paused = false;
 std::atomic<bool> Engine::asyncLoading = false;
-thread_local unsigned int Engine::asyncThreadDepth = 0;
 
 CursorType Engine::mouseCursorType = CursorType::ARROW;
 bool Engine::showCursor = true;
@@ -476,7 +482,7 @@ bool Engine::isAsyncLoading(){
 
 void Engine::startAsyncThread(){
     #ifndef NO_THREAD_SUPPORT
-        asyncThreadDepth++;
+        getAsyncThreadDepthStorage()++;
     #else
         Log::warn("Threads are not available");
     #endif
@@ -488,6 +494,7 @@ void Engine::commitThreadQueue(){
 
 void Engine::endAsyncThread(){
     #ifndef NO_THREAD_SUPPORT
+        unsigned int& asyncThreadDepth = getAsyncThreadDepthStorage();
         if (asyncThreadDepth == 0){
             Log::warn("Engine::endAsyncThread called without matching startAsyncThread");
             return;
@@ -501,7 +508,7 @@ void Engine::endAsyncThread(){
 }
 
 bool Engine::isAsyncThread(){
-    return asyncThreadDepth > 0;
+    return getAsyncThreadDepthStorage() > 0;
 }
 
 bool Engine::isViewLoaded(){
@@ -660,7 +667,7 @@ void Engine::systemViewLoaded(){
         System::instance().setShowCursor(showCursor);
     }
 
-    asyncThreadDepth = 0;
+    getAsyncThreadDepthStorage() = 0;
 
     viewLoaded = true;
     onViewLoaded.call();
