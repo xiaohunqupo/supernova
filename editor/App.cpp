@@ -116,10 +116,11 @@ void editor::App::showMenu(){
     bool isProjectBusy = project.isAnyScenePlaying();
     bool isPlaying = hasSelectedScene && selectedScene->playState == ScenePlayState::PLAYING;
     bool isPaused = hasSelectedScene && selectedScene->playState == ScenePlayState::PAUSED;
+    bool isLoading = hasSelectedScene && selectedScene->playState == ScenePlayState::LOADING;
     bool canRun = hasSelectedScene && !isProjectBusy;
     bool canPause = hasSelectedScene && isPlaying;
     bool canResume = hasSelectedScene && isPaused;
-    bool canStop = hasSelectedScene && (isPlaying || isPaused);
+    bool canStop = hasSelectedScene && (isPlaying || isPaused || isLoading);
     bool canRemove = hasSelectedScene && !isProjectBusy && project.getScenes().size() > 1;
 
     // Remove menu bar border
@@ -435,9 +436,10 @@ void editor::App::showFooter(){
         const bool hasSelectedScene = selectedScene != nullptr;
         const bool isPlaying = hasSelectedScene && selectedScene->playState == ScenePlayState::PLAYING;
         const bool isPaused = hasSelectedScene && selectedScene->playState == ScenePlayState::PAUSED;
+        const bool isLoading = hasSelectedScene && selectedScene->playState == ScenePlayState::LOADING;
         const bool isStopped = !hasSelectedScene || selectedScene->playState == ScenePlayState::STOPPED;
         const bool isCancelling = hasSelectedScene && selectedScene->playState == ScenePlayState::CANCELLING;
-        const bool canPlayPause = hasSelectedScene && !isCancelling && (isPlaying || isPaused || (!isStopped || !project.isAnyScenePlaying()));
+        const bool canPlayPause = hasSelectedScene && !isLoading && !isCancelling && (isPlaying || isPaused || (isStopped && !project.isAnyScenePlaying()));
         const bool canStop = hasSelectedScene && !isStopped && !isCancelling;
         const ImVec4 footerButtonHovered = ImVec4(1.0f, 1.0f, 1.0f, 0.08f);
         const ImVec4 footerButtonActive = ImVec4(1.0f, 1.0f, 1.0f, 0.14f);
@@ -459,7 +461,13 @@ void editor::App::showFooter(){
 
         // Left side: Status
         bool statusShown = false;
-        if (queuedResources > 0) {
+        if (isLoading) {
+            ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), ICON_FA_SPINNER " Loading scene");
+            statusShown = true;
+        } else if (isCancelling) {
+            ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), ICON_FA_STOP " Stopping");
+            statusShown = true;
+        } else if (queuedResources > 0) {
             ImGui::Text(ICON_FA_SPINNER " Loading resources: %zu", queuedResources);
             statusShown = true;
         } else {
@@ -795,6 +803,7 @@ void editor::App::show(){
         bool hasSelectedScene = selectedScene != nullptr;
         bool isPlaying = hasSelectedScene && selectedScene->playState == ScenePlayState::PLAYING;
         bool isPaused = hasSelectedScene && selectedScene->playState == ScenePlayState::PAUSED;
+        bool isLoading = hasSelectedScene && selectedScene->playState == ScenePlayState::LOADING;
 
         if (ImGui::IsKeyPressed(ImGuiKey_F5)) {
             if (hasSelectedScene && !project.isAnyScenePlaying()) {
@@ -809,7 +818,7 @@ void editor::App::show(){
             }
         }
         if (ImGui::IsKeyPressed(ImGuiKey_F7)) {
-            if (isPlaying || isPaused) {
+            if (isPlaying || isPaused || isLoading) {
                 project.stop(selectedSceneId);
             }
         }
@@ -1017,6 +1026,7 @@ void editor::App::engineRender(){
     for (auto& sceneProject : project.getScenes()) {
         if (!sceneProject.opened) continue;
         if (!sceneProject.scene || !sceneProject.sceneRender) continue;
+        if (sceneProject.playState == ScenePlayState::LOADING || sceneProject.playState == ScenePlayState::CANCELLING) continue;
 
         auto meshSystem = sceneProject.scene->getSystem<MeshSystem>();
         bool hasPendingModelLoads = meshSystem && meshSystem->hasPendingAsyncModelLoads();
@@ -1621,7 +1631,8 @@ void editor::App::closeWindow(){
     // Stop all playing scenes before shutdown to properly cleanup script instances
     for (auto& sceneProject : project.getScenes()) {
         if (sceneProject.playState == ScenePlayState::PLAYING || 
-            sceneProject.playState == ScenePlayState::PAUSED) {
+            sceneProject.playState == ScenePlayState::PAUSED ||
+            sceneProject.playState == ScenePlayState::LOADING) {
             project.stop(sceneProject.id);
         }
     }

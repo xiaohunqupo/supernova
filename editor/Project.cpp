@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <limits>
+#include <thread>
 
 #include "render/SceneRender2D.h"
 #include "render/SceneRender3D.h"
@@ -1465,7 +1466,13 @@ void editor::Project::cleanupPlaySession(const std::shared_ptr<PlaySession>& ses
         return;
     }
 
-    for (const auto& entry : session->runtimeScenes) {
+    std::vector<PlayRuntimeScene> runtimeScenes;
+    {
+        std::scoped_lock lock(playSessionMutex);
+        runtimeScenes.swap(session->runtimeScenes);
+    }
+
+    for (const auto& entry : runtimeScenes) {
         SceneProject* runtime = entry.runtime;
         if (!runtime) {
             continue;
@@ -2152,6 +2159,7 @@ void editor::Project::finalizeStart(SceneProject* mainSceneProject, std::vector<
     Engine::systemViewChanged();
 
     if (mainSceneProject) {
+        mainSceneProject->playState = ScenePlayState::PLAYING;
         Out::success("Scene '%s' started", mainSceneProject->name.c_str());
     }
 }
@@ -4962,6 +4970,282 @@ bool editor::Project::isAnyScenePlaying() const{
     return false;
 }
 
+void editor::Project::failPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const std::string& message,
+                                      const std::string& alertTitle, const std::string& alertMessage) {
+    Backend::getApp().enqueueMainThreadTask([this, session, sceneId, message, alertTitle, alertMessage]() {
+        if (session->cancelled.load(std::memory_order_acquire)) {
+            session->startupThreadDone.store(true, std::memory_order_release);
+            return;
+        }
+
+        if (!message.empty()) {
+            Out::error("%s", message.c_str());
+        }
+
+        cleanupPlaySession(session);
+        SceneManager::clearAll();
+        BundleManager::clearAll();
+        doriax::FunctionSubscribeGlobal::getCrashHandler() = nullptr;
+
+        if (SceneProject* sceneProject = getScene(sceneId)) {
+            sceneProject->playState = ScenePlayState::STOPPED;
+        }
+
+        {
+            std::scoped_lock lock(playSessionMutex);
+            if (activePlaySession == session) {
+                activePlaySession.reset();
+            }
+        }
+
+        session->startupThreadDone.store(true, std::memory_order_release);
+
+        if (!alertTitle.empty()) {
+            Backend::getApp().registerAlert(alertTitle, alertMessage);
+        }
+    });
+}
+
+bool editor::Project::saveSceneForPlayStartup(SceneProject* sceneProject) {
+    if (!sceneProject || sceneProject->filepath.empty()) {
+        return false;
+    }
+
+    fs::path fullPath = sceneProject->filepath;
+    if (fullPath.is_relative()) {
+        fullPath = getProjectPath() / fullPath;
+    }
+
+    std::error_code ec;
+    fs::path relPath = fs::relative(fullPath, getProjectPath(), ec);
+    if (ec || relPath.empty()) {
+        Out::error("Scene filepath must be relative to project path: %s", sceneProject->filepath.string().c_str());
+        return false;
+    }
+
+    for (const auto& [filepath, bundle] : entityBundles) {
+        if (bundle.instances.find(sceneProject->id) != bundle.instances.end() && bundle.isModified) {
+            saveEntityBundleToDisk(filepath);
+        }
+    }
+
+    SceneMaxValues maxValues;
+    calculateSceneMaxValues(sceneProject, maxValues);
+    sceneProject->maxValues = maxValues;
+
+    std::set<ShaderKey> shaderKeys;
+    collectSceneShaderKeys(sceneProject, shaderKeys);
+    sceneProject->shaderKeys = std::move(shaderKeys);
+
+    updateSceneCppScripts(sceneProject);
+    updateSceneBundles(sceneProject);
+
+    try {
+        YAML::Node root = Stream::encodeSceneProject(this, sceneProject);
+        std::ofstream fout(fullPath.string());
+        if (!fout) {
+            Out::error("Failed to open scene file for writing: %s", fullPath.string().c_str());
+            return false;
+        }
+
+        fout << YAML::Dump(root);
+        fout.close();
+
+        sceneProject->filepath = relPath;
+        sceneProject->isModified = false;
+        TerrainEditWindow::cleanUnusedTerrainMaps(this);
+    } catch (const std::exception& e) {
+        Out::error("Failed to save scene for play startup: %s", e.what());
+        return false;
+    }
+
+    return true;
+}
+
+void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId) {
+    auto isCancelled = [session]() {
+        return session->cancelled.load(std::memory_order_acquire);
+    };
+
+    auto markStartupDone = [session]() {
+        session->startupThreadDone.store(true, std::memory_order_release);
+    };
+
+    try {
+        SceneProject* mainSceneProject = getScene(sceneId);
+        if (!mainSceneProject) {
+            failPlayStartup(session, sceneId, "Failed to find scene to start");
+            return;
+        }
+
+        std::vector<uint32_t> involvedMainSceneIds;
+        collectInvolvedScenes(sceneId, involvedMainSceneIds);
+
+        std::vector<editor::SceneBuildInfo> scenesToGenerate;
+        for (SceneProject& currentSceneProject : scenes) {
+            if (isCancelled()) {
+                markStartupDone();
+                return;
+            }
+
+            bool isInvolvedScene = std::find(involvedMainSceneIds.begin(), involvedMainSceneIds.end(), currentSceneProject.id) != involvedMainSceneIds.end();
+
+            if (currentSceneProject.opened || (isInvolvedScene && currentSceneProject.scene)) {
+                updateAllScriptsProperties(currentSceneProject.id);
+
+                if (currentSceneProject.isModified && !currentSceneProject.filepath.empty()) {
+                    if (!saveSceneForPlayStartup(&currentSceneProject)) {
+                        failPlayStartup(session, sceneId, "Failed to save modified scene before play startup");
+                        return;
+                    }
+                } else {
+                    updateSceneCppScripts(&currentSceneProject);
+                    updateSceneBundles(&currentSceneProject);
+                }
+            }
+
+            if (isInvolvedScene) {
+                PlayRuntimeScene entry;
+                entry.sourceSceneId = currentSceneProject.id;
+
+                if (currentSceneProject.id == sceneId) {
+                    entry.runtime = &currentSceneProject;
+                    entry.ownedRuntime = false;
+                } else {
+                    entry.runtime = createRuntimeCloneFromSource(&currentSceneProject);
+                    entry.ownedRuntime = true;
+                }
+
+                if (!entry.runtime) {
+                    failPlayStartup(session, sceneId, "Failed to create runtime scene for play startup");
+                    return;
+                }
+
+                if (isCancelled()) {
+                    if (entry.ownedRuntime) {
+                        deleteSceneProject(entry.runtime);
+                        delete entry.runtime;
+                    }
+                    markStartupDone();
+                    return;
+                }
+
+                std::vector<BundleInstanceInfo> bundleInstances = generator.writeBundleSources(entityBundles, sceneId, getProjectPath(), getProjectInternalPath());
+                generator.writeSceneSource(entry.runtime->scene, entry.runtime->name, entry.runtime->entities, getSceneCamera(entry.runtime), getProjectPath(), getProjectInternalPath(), bundleInstances);
+
+                {
+                    std::scoped_lock lock(playSessionMutex);
+                    session->runtimeScenes.push_back(entry);
+                }
+            }
+
+            bool isMain = (sceneId == currentSceneProject.id);
+            std::vector<uint32_t> involvedSceneIds;
+            collectInvolvedScenes(currentSceneProject.id, involvedSceneIds);
+            scenesToGenerate.push_back({currentSceneProject.id, currentSceneProject.name, involvedSceneIds, isMain});
+        }
+
+        if (isCancelled()) {
+            markStartupDone();
+            return;
+        }
+
+        registerSceneManager();
+        registerBundleManager();
+
+        YAML::Node playSnapshot = Stream::encodeSceneProject(nullptr, mainSceneProject);
+
+        if (isCancelled()) {
+            markStartupDone();
+            return;
+        }
+
+        std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
+        std::vector<BundleSceneInfo> bundleBuildInfos = collectAllBundles();
+        generator.configure(scenesToGenerate, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight);
+
+        const bool hasCppScripts = !mergedCppScripts.empty();
+
+        if (hasCppScripts) {
+            std::string missingTools = Generator::checkBuildTools();
+            if (!missingTools.empty()) {
+                failPlayStartup(session, sceneId, "Cannot build C++ scripts: missing build tools", "Missing Build Tools",
+                    "C++ scripts require build tools that were not found on your system:\n\n" + missingTools +
+                    "\nPlease install the missing tools and try again.");
+                return;
+            }
+
+            fs::path buildPath = getProjectInternalPath() / "build";
+            generator.build(getProjectPath(), getProjectInternalPath(), buildPath, cmakeCCompiler, cmakeCxxCompiler, cmakeGenerator);
+            generator.waitForBuildToComplete();
+
+            if (isCancelled()) { markStartupDone(); return; }
+
+            if (!generator.didLastBuildSucceed()) {
+                failPlayStartup(session, sceneId, "C++ script build failed");
+                return;
+            }
+
+            if (!conector.connect(buildPath, libName)) {
+                failPlayStartup(session, sceneId, "Failed to connect to library");
+                return;
+            }
+        }
+
+        if (isCancelled()) { markStartupDone(); return; }
+
+        // Final initialization runs on the main/GL thread so that script
+        // constructors observing a current GL context behave correctly,
+        // and so that finalizeStart is invoked from the UI thread.
+        Backend::getApp().enqueueMainThreadTask(
+            [this, session, sceneId, hasCppScripts, playSnapshot = std::move(playSnapshot)]() mutable {
+                if (session->cancelled.load(std::memory_order_acquire)) {
+                    session->startupThreadDone.store(true, std::memory_order_release);
+                    return;
+                }
+
+                SceneProject* sceneProject = getScene(sceneId);
+                if (!sceneProject) {
+                    cleanupPlaySession(session);
+                    {
+                        std::scoped_lock lock(playSessionMutex);
+                        if (activePlaySession == session) activePlaySession.reset();
+                    }
+                    session->startupThreadDone.store(true, std::memory_order_release);
+                    return;
+                }
+
+                sceneProject->playStateSnapshot = std::move(playSnapshot);
+
+                std::vector<PlayRuntimeScene> runtimeScenesToInitialize;
+                {
+                    std::scoped_lock lock(playSessionMutex);
+                    runtimeScenesToInitialize = session->runtimeScenes;
+                }
+
+                for (const auto& entry : runtimeScenesToInitialize) {
+                    if (entry.runtime && entry.runtime->scene) {
+                        SceneManager::setScenePtr(entry.sourceSceneId, entry.runtime->scene);
+                    }
+                }
+                for (const auto& entry : runtimeScenesToInitialize) {
+                    if (!entry.runtime) continue;
+                    if (hasCppScripts) {
+                        conector.init(entry.runtime->scene);
+                    } else {
+                        LuaBinding::initializeLuaScripts(entry.runtime->scene);
+                    }
+                }
+
+                finalizeStart(sceneProject, session->runtimeScenes);
+                session->startupSucceeded.store(true, std::memory_order_release);
+                session->startupThreadDone.store(true, std::memory_order_release);
+            });
+    } catch (const std::exception& e) {
+        failPlayStartup(session, sceneId, std::string("Failed to start scene: ") + e.what());
+    }
+}
+
 void editor::Project::registerSceneManager() {
     SceneManager::clearAll();
     for (SceneProject& sceneProject : scenes) {
@@ -5195,189 +5479,18 @@ void editor::Project::start(uint32_t sceneId) {
     auto session = std::make_shared<PlaySession>();
     session->mainSceneId = sceneId;
 
-    std::vector<uint32_t> involvedMainSceneIds;
-    collectInvolvedScenes(sceneId, involvedMainSceneIds);
-
-    std::vector<editor::SceneBuildInfo> scenesToGenerate;
-    for (SceneProject& sceneProject : scenes) {
-        bool savedNow = false;
-        bool isInvolvedScene = std::find(involvedMainSceneIds.begin(), involvedMainSceneIds.end(), sceneProject.id) != involvedMainSceneIds.end();
-
-        if (sceneProject.opened || (isInvolvedScene && sceneProject.scene)) {
-            updateAllScriptsProperties(sceneProject.id);
-
-            if (sceneProject.isModified && !sceneProject.filepath.empty()) {
-                saveScene(sceneProject.id);
-                savedNow = true;
-            } else {
-                updateSceneCppScripts(&sceneProject);
-                updateSceneBundles(&sceneProject);
-            }
-        }
-
-        // Just create runtime for main scene and its children
-        if (isInvolvedScene) {
-            PlayRuntimeScene entry;
-            entry.sourceSceneId = sceneProject.id;
-
-            if (sceneProject.id == sceneId) {
-                // Main scene plays in-place
-                entry.runtime = &sceneProject;
-                entry.ownedRuntime = false;
-                //entry.manageSourceState = true;
-            } else {
-                // Child scene: clone for runtime to keep standalone tab independent
-                entry.runtime = createRuntimeCloneFromSource(&sceneProject);
-                entry.ownedRuntime = true;
-                //entry.manageSourceState = false;
-            }
-
-            if (!entry.runtime) {
-                Log::error("Failed to create runtime for scene %u", sceneProject.id);
-                continue;
-            }
-
-            if (!savedNow) {
-                std::vector<BundleInstanceInfo> bundleInstances = generator.writeBundleSources(entityBundles, sceneId, getProjectPath(),getProjectInternalPath());
-                generator.writeSceneSource(entry.runtime->scene, entry.runtime->name, entry.runtime->entities, getSceneCamera(entry.runtime), getProjectPath(), getProjectInternalPath(), bundleInstances);
-            }
-
-            session->runtimeScenes.push_back(entry);
-        }
-
-        bool isMain = (sceneId == sceneProject.id);
-        std::vector<uint32_t> involvedSceneIds;
-        collectInvolvedScenes(sceneProject.id, involvedSceneIds);
-        scenesToGenerate.push_back({sceneProject.id, sceneProject.name, involvedSceneIds, isMain});
-    }
-
     {
         std::scoped_lock lock(playSessionMutex);
         activePlaySession = session;
     }
 
-    registerSceneManager();
-    registerBundleManager();
-
-    // Save current scene state before starting
-    sceneProject->playStateSnapshot = Stream::encodeSceneProject(nullptr, sceneProject);
-    sceneProject->playState = ScenePlayState::PLAYING;
-
+    sceneProject->playState = ScenePlayState::LOADING;
     Backend::getApp().getCodeEditor()->saveAll();
 
-    std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
-    std::vector<BundleSceneInfo> bundleBuildInfos = collectAllBundles();
-    generator.configure(scenesToGenerate, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight);
-
-    // Check if we have C++ scripts that need building
-    bool hasCppScripts = !mergedCppScripts.empty();
-
-    if (hasCppScripts) {
-        std::string missingTools = Generator::checkBuildTools();
-        if (!missingTools.empty()) {
-            Out::error("Cannot build C++ scripts: missing build tools");
-            Backend::getApp().registerAlert("Missing Build Tools",
-                "C++ scripts require build tools that were not found on your system:\n\n" + missingTools +
-                "\nPlease install the missing tools and try again.");
-            cleanupPlaySession(session);
-            {
-                std::scoped_lock lock(playSessionMutex);
-                if (activePlaySession == session) activePlaySession.reset();
-            }
-            sceneProject->playState = ScenePlayState::STOPPED;
-            return;
-        }
-
-        fs::path buildPath = getProjectInternalPath() / "build";
-
-        generator.build(getProjectPath(), getProjectInternalPath(), buildPath, cmakeCCompiler, cmakeCxxCompiler, cmakeGenerator);
-
-        std::thread connectThread([this, session, sceneId, buildPath]() {
-            generator.waitForBuildToComplete();
-
-            if (session->cancelled.load(std::memory_order_acquire)) {
-                session->startupThreadDone.store(true, std::memory_order_release);
-                return;
-            }
-
-            SceneProject* mainSceneProject = getScene(sceneId);
-
-            if (!generator.didLastBuildSucceed()) {
-                cleanupPlaySession(session);
-                {
-                    std::scoped_lock lock(playSessionMutex);
-                    if (activePlaySession == session) activePlaySession.reset();
-                }
-                mainSceneProject->playState = ScenePlayState::STOPPED;
-                session->startupThreadDone.store(true, std::memory_order_release);
-                return;
-            }
-
-            if (session->cancelled.load(std::memory_order_acquire)) {
-                session->startupThreadDone.store(true, std::memory_order_release);
-                return;
-            }
-
-            if (conector.connect(buildPath, libName)) {
-                // Register all runtime scenes so cross-scene entity references can resolve
-                for (const auto& entry : session->runtimeScenes) {
-                    if (entry.runtime && entry.runtime->scene) {
-                        SceneManager::setScenePtr(entry.sourceSceneId, entry.runtime->scene);
-                    }
-                }
-
-                for (const auto& entry : session->runtimeScenes) {
-                    if (entry.runtime){
-                        conector.init(entry.runtime->scene);
-                    }
-                }
-
-                if (session->cancelled.load(std::memory_order_acquire)) {
-                    session->startupThreadDone.store(true, std::memory_order_release);
-                    return;
-                }
-
-                // Enqueue scene finalization to the main/GL thread so that
-                // engine, scene, and render state is accessed with a valid GL context.
-                Backend::getApp().enqueueMainThreadTask([this, session, sceneId]() {
-                    SceneProject* msp = getScene(sceneId);
-                    finalizeStart(msp, session->runtimeScenes);
-                    session->startupSucceeded.store(true, std::memory_order_release);
-                    session->startupThreadDone.store(true, std::memory_order_release);
-                });
-            } else {
-                Out::error("Failed to connect to library");
-                cleanupPlaySession(session);
-                {
-                    std::scoped_lock lock(playSessionMutex);
-                    if (activePlaySession == session) activePlaySession.reset();
-                }
-                mainSceneProject->playState = ScenePlayState::STOPPED;
-                session->startupThreadDone.store(true, std::memory_order_release);
-            }
-        });
-        connectThread.detach();
-    } else {
-        // No C++ scripts, just initialize Lua scripts directly
-        // Register all runtime scenes so cross-scene entity references can resolve
-        for (const auto& entry : session->runtimeScenes) {
-            if (entry.runtime && entry.runtime->scene) {
-                SceneManager::setScenePtr(entry.sourceSceneId, entry.runtime->scene);
-            }
-        }
-
-        for (const auto& entry : session->runtimeScenes) {
-            if (entry.runtime){
-                LuaBinding::initializeLuaScripts(entry.runtime->scene);
-            }
-        }
-
-        SceneProject* mainSceneProject = getScene(sceneId);
-
-        finalizeStart(mainSceneProject, session->runtimeScenes);
-        session->startupSucceeded.store(true, std::memory_order_release);
-        session->startupThreadDone.store(true, std::memory_order_release);
-    }
+    std::thread startupThread([this, session, sceneId]() {
+        runPlayStartup(session, sceneId);
+    });
+    startupThread.detach();
 }
 
 void editor::Project::pause(uint32_t sceneId) {
@@ -5459,6 +5572,15 @@ void editor::Project::stop(uint32_t sceneId) {
         return;
     }
 
+    if (sceneProject->playState == ScenePlayState::STOPPED) {
+        Out::warning("Scene %u is not currently playing", sceneId);
+        return;
+    }
+
+    if (sceneProject->playState == ScenePlayState::CANCELLING) {
+        return;
+    }
+
     std::shared_ptr<PlaySession> session;
     {
         std::scoped_lock lock(playSessionMutex);
@@ -5478,93 +5600,82 @@ void editor::Project::stop(uint32_t sceneId) {
     session->cancelled.store(true, std::memory_order_release);
     sceneProject->playState = ScenePlayState::CANCELLING;
 
-    //Should be called before conector disconnects to allow scripts to receive the event
-    Engine::onViewDestroyed.call();
-    Engine::onShutdown.call();
-    Engine::pauseGameEvents(true);
-
-    Engine::clearAllSubscriptions(true);
+    const bool startupSucceededAtStop = session->startupSucceeded.load(std::memory_order_acquire);
+    if (startupSucceededAtStop) {
+        // Notify scripts/engine before tearing the runtime down so that
+        // shutdown handlers still see a valid engine state.
+        Engine::onViewDestroyed.call();
+        Engine::onShutdown.call();
+        Engine::pauseGameEvents(true);
+        Engine::clearAllSubscriptions(true);
+    }
 
     // Clear crash handler when stopping
     doriax::FunctionSubscribeGlobal::getCrashHandler() = nullptr;
 
-    // Check if we have C++ library connected
-    bool hasLibraryConnected = conector.isLibraryConnected();
     // Request cancellation asynchronously (returns a future we can wait on later if needed)
     auto cancelFuture = generator.cancelBuild();
 
-    std::vector<PlayRuntimeScene> runtimeScenesCopy;
-    {
-        std::scoped_lock lock(playSessionMutex);
-        runtimeScenesCopy = session->runtimeScenes;
-    }
-
-    if (hasLibraryConnected) {
-        // Cleanup script instances / disconnect if the library is currently connected.
-        for (const auto& entry : runtimeScenesCopy) {
-            if (entry.runtime) {
-                conector.cleanup(entry.runtime->scene);
-            }
+    std::thread finalizeStopThread([this, session, sceneId, startupSucceededAtStop, cancelFuture = std::move(cancelFuture)]() mutable {
+        if (cancelFuture.valid()) {
+            cancelFuture.wait();
         }
-        conector.disconnect();
+        generator.waitForBuildToComplete();
 
-        // After cancellation completes perform the rest of the stop work on a background thread
-        std::thread finalizeStopThread([this, session, sceneId, cancelFuture = std::move(cancelFuture), runtimeScenesCopy]() mutable {
-            if (cancelFuture.valid()) {
-                // wait for cancellation to finish
-                cancelFuture.wait();
-            }
+        // Wait for the connect/startup thread to finish to avoid races
+        while (!session->startupThreadDone.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
 
-            generator.waitForBuildToComplete();
-
-            // Wait for the connect/startup thread to finish to avoid races
-            while (!session->startupThreadDone.load(std::memory_order_acquire)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            }
-
-            // Enqueue scene restoration to the main/GL thread so that
-            // texture and image creation happens with a valid GL context.
-            Backend::getApp().enqueueMainThreadTask([this, session, sceneId, runtimeScenesCopy]() {
-                SceneProject* mainSceneProject = getScene(sceneId);
-                if (session->startupSucceeded.load(std::memory_order_acquire)) {
-                    finalizeStop(mainSceneProject, runtimeScenesCopy);
-                } else {
-                    // Build was cancelled before startup succeeded, reset playState manually
-                    if (mainSceneProject) {
-                        mainSceneProject->playState = ScenePlayState::STOPPED;
-                    }
-                }
-                {
-                    std::scoped_lock lock(playSessionMutex);
-                    if (activePlaySession == session) activePlaySession.reset();
-                }
-            });
-        });
-        finalizeStopThread.detach();
-    } else {
-        Backend::getApp().enqueueMainThreadTask([this, session, sceneId, runtimeScenesCopy]() {
-            for (const auto& entry : runtimeScenesCopy) {
-                if (entry.runtime) {
-                    LuaBinding::cleanupLuaScripts(entry.runtime->scene);
-                }
-            }
-
-            // No C++ library connected, just finalize directly
+        // All teardown happens on the main/GL thread so that script
+        // destructors and engine resource cleanup run with a valid GL context.
+        Backend::getApp().enqueueMainThreadTask([this, session, sceneId, startupSucceededAtStop]() {
             SceneProject* mainSceneProject = getScene(sceneId);
-            if (session->startupSucceeded.load(std::memory_order_acquire)) {
-                finalizeStop(mainSceneProject, runtimeScenesCopy);
+            const bool startupSucceeded = session->startupSucceeded.load(std::memory_order_acquire);
+
+            if (startupSucceeded && !startupSucceededAtStop) {
+                Engine::onViewDestroyed.call();
+                Engine::onShutdown.call();
+                Engine::pauseGameEvents(true);
+                Engine::clearAllSubscriptions(true);
+            }
+
+            std::vector<PlayRuntimeScene> runtimeScenes;
+            {
+                std::scoped_lock lock(playSessionMutex);
+                runtimeScenes = session->runtimeScenes;
+            }
+
+            if (conector.isLibraryConnected()) {
+                for (const auto& entry : runtimeScenes) {
+                    if (entry.runtime) conector.cleanup(entry.runtime->scene);
+                }
+                conector.disconnect();
+            } else if (startupSucceeded) {
+                for (const auto& entry : runtimeScenes) {
+                    if (entry.runtime) LuaBinding::cleanupLuaScripts(entry.runtime->scene);
+                }
+            }
+
+            if (startupSucceeded) {
+                finalizeStop(mainSceneProject, runtimeScenes);
             } else {
-                // Build was cancelled before startup succeeded, reset playState manually
+                cleanupPlaySession(session);
+                SceneManager::clearAll();
+                BundleManager::clearAll();
+                Backend::getApp().resetLastActivatedScene();
                 if (mainSceneProject) {
                     mainSceneProject->playState = ScenePlayState::STOPPED;
                 }
             }
+
             {
                 std::scoped_lock lock(playSessionMutex);
                 if (activePlaySession == session) activePlaySession.reset();
             }
         });
-    }
+    });
+    finalizeStopThread.detach();
 }
 
 void editor::Project::waitForPlaySessionToFinish() {

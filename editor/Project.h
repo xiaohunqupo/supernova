@@ -19,6 +19,8 @@
 #include <map>
 #include <set>
 #include <tuple>
+#include <atomic>
+#include <mutex>
 
 namespace doriax::editor{
 
@@ -30,6 +32,7 @@ namespace doriax::editor{
 
     enum class ScenePlayState {
         STOPPED,
+        LOADING,
         PLAYING,
         PAUSED,
         CANCELLING
@@ -237,6 +240,10 @@ namespace doriax::editor{
 
         void finalizeStart(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene>& runtimeScenes);
         void finalizeStop(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene> runtimeScenes);
+        void runPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId);
+        void failPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const std::string& message,
+                     const std::string& alertTitle = "", const std::string& alertMessage = "");
+        bool saveSceneForPlayStartup(SceneProject* sceneProject);
 
         void collectInvolvedScenes(uint32_t sceneId, std::vector<uint32_t>& involvedSceneIds);
 
