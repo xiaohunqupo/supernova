@@ -30,6 +30,7 @@ namespace doriax{
 
         std::string filename;
 
+        std::string loadedFilename;
         bool needUpdateModel = true;
     };
 

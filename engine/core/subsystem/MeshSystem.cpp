@@ -42,6 +42,10 @@ struct MeshSystem::AsyncModelLoadResult {
 std::mutex MeshSystem::asyncModelMutex;
 std::unordered_map<std::string, std::shared_future<std::shared_ptr<MeshSystem::AsyncModelLoadResult>>> MeshSystem::pendingModelLoads;
 
+std::string MeshSystem::getModelFilenameKey(const std::string& filename){
+    return std::filesystem::path(filename).lexically_normal().generic_string();
+}
+
 MeshSystem::MeshSystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<MeshComponent>());
 }
@@ -3004,6 +3008,8 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         ResourceProgress::completeBuild(buildId);
     }
 
+    model.loadedFilename = getModelFilenameKey(filename);
+
     return true;
 }
 
@@ -3239,6 +3245,8 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
         ResourceProgress::completeBuild(buildId);
     }
 
+    model.loadedFilename = getModelFilenameKey(filename);
+
     return true;
 }
 
@@ -3298,6 +3306,7 @@ void MeshSystem::destroyModel(ModelComponent& model){
     model.morphNameMapping.clear();
 
     model.filename = "";
+    model.loadedFilename.clear();
 }
 
 void MeshSystem::resetModelToBindPose(ModelComponent& model){
@@ -3416,6 +3425,11 @@ bool MeshSystem::createOrUpdateTilemap(TilemapComponent& tilemap, MeshComponent&
 bool MeshSystem::createOrUpdateModel(Entity entity, ModelComponent& model, MeshComponent& mesh){
     if (model.needUpdateModel){
         if (!model.filename.empty()){
+            if (getModelFilenameKey(model.filename) == model.loadedFilename){
+                model.needUpdateModel = false;
+                return true;
+            }
+
             std::string ext = FileData::getFilePathExtension(model.filename);
             bool skipEntities = !model.filename.empty() && (!model.bonesIdMapping.empty() || !model.animations.empty());
             bool asyncLoading = Engine::isAsyncLoading();
@@ -3432,6 +3446,7 @@ bool MeshSystem::createOrUpdateModel(Entity entity, ModelComponent& model, MeshC
                 return false;
             }
         }else{
+            model.loadedFilename.clear();
             model.needUpdateModel = false;
         }
     }
