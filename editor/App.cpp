@@ -405,8 +405,8 @@ void editor::App::showFooter(){
         return;
     }
 
-    const float fontScale = 0.8f;
-    const float footerHeight = (ImGui::GetTextLineHeight() * fontScale) + 6.0f;
+    const float fontScale = 0.9f;
+    const float footerHeight = (ImGui::GetTextLineHeight() * fontScale) + 10.0f;
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
                             ImGuiWindowFlags_NoMove |
                             ImGuiWindowFlags_NoDocking |
@@ -421,7 +421,7 @@ void editor::App::showFooter(){
     ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, footerHeight));
     ImGui::SetNextWindowBgAlpha(1.0f);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 3));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_Border));
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.60f, 0.60f, 0.60f, 1.00f));
 
