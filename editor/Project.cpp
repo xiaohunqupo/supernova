@@ -2523,10 +2523,9 @@ void editor::Project::saveScene(uint32_t sceneId) {
     }
 }
 
-void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::path& path) {
-    SceneProject* sceneProject = getScene(sceneId);
-    if (!sceneProject) {
-        return;
+bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::filesystem::path& path) {
+    if (!sceneProject || path.empty()) {
+        return false;
     }
 
     fs::path fullPath = path;
@@ -2538,42 +2537,71 @@ void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::p
     fs::path relPath = fs::relative(fullPath, getProjectPath(), ec);
     if (ec || relPath.empty()) {
         Out::error("Scene filepath must be relative to project path: %s", path.string().c_str());
-        return;
+        return false;
     }
 
-    // Check if this scene has entities in bundles and save them first
     for (const auto& [filepath, bundle] : entityBundles) {
-        if (bundle.instances.find(sceneId) != bundle.instances.end()) {
-            if (bundle.isModified) {
-                saveEntityBundleToDisk(filepath);
-            }
+        if (bundle.instances.find(sceneProject->id) != bundle.instances.end() && bundle.isModified) {
+            saveEntityBundleToDisk(filepath);
         }
     }
 
-    calculateSceneMaxValues(sceneProject, sceneProject->maxValues);
-    collectSceneShaderKeys(sceneProject, sceneProject->shaderKeys);
+    SceneMaxValues maxValues;
+    calculateSceneMaxValues(sceneProject, maxValues);
+    sceneProject->maxValues = maxValues;
+
+    std::set<ShaderKey> shaderKeys;
+    collectSceneShaderKeys(sceneProject, shaderKeys);
+    sceneProject->shaderKeys = std::move(shaderKeys);
 
     updateSceneCppScripts(sceneProject);
     updateSceneBundles(sceneProject);
 
-    YAML::Node root = Stream::encodeSceneProject(this, sceneProject);
-    std::ofstream fout(fullPath.string());
-    fout << YAML::Dump(root);
-    fout.close();
+    try {
+        YAML::Node root = Stream::encodeSceneProject(this, sceneProject);
+        std::ofstream fout(fullPath.string());
+        if (!fout) {
+            Out::error("Failed to open scene file for writing: %s", fullPath.string().c_str());
+            return false;
+        }
+
+        fout << YAML::Dump(root);
+        fout.close();
+
+        sceneProject->filepath = relPath;
+        sceneProject->isModified = false;
+        TerrainEditWindow::cleanUnusedTerrainMaps(this);
+    } catch (const std::exception& e) {
+        Out::error("Failed to save scene file: %s", e.what());
+        return false;
+    }
+
+    return true;
+}
+
+void editor::Project::saveSceneToPath(uint32_t sceneId, const std::filesystem::path& path) {
+    SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject) {
+        return;
+    }
+
+    fs::path fullPath = path;
+    if (fullPath.is_relative()) {
+        fullPath = getProjectPath() / fullPath;
+    }
 
     std::string oldFilepath = sceneProject->filepath.string();
-    sceneProject->filepath = relPath;
-    sceneProject->isModified = false;
+    if (!saveSceneFile(sceneProject, path)) {
+        return;
+    }
 
     // Update tabs: if filepath changed, update existing tab entry
     if (sceneProject->opened) {
-        if (!oldFilepath.empty() && oldFilepath != relPath.string()) {
+        if (!oldFilepath.empty() && oldFilepath != sceneProject->filepath.string()) {
             removeTab(TabType::SCENE, oldFilepath);
         }
-        addTab(TabType::SCENE, relPath.string());
+        addTab(TabType::SCENE, sceneProject->filepath.string());
     }
-
-    TerrainEditWindow::cleanUnusedTerrainMaps(this);
 
     saveProject();
 
@@ -5011,55 +5039,7 @@ bool editor::Project::saveSceneForPlayStartup(SceneProject* sceneProject) {
         return false;
     }
 
-    fs::path fullPath = sceneProject->filepath;
-    if (fullPath.is_relative()) {
-        fullPath = getProjectPath() / fullPath;
-    }
-
-    std::error_code ec;
-    fs::path relPath = fs::relative(fullPath, getProjectPath(), ec);
-    if (ec || relPath.empty()) {
-        Out::error("Scene filepath must be relative to project path: %s", sceneProject->filepath.string().c_str());
-        return false;
-    }
-
-    for (const auto& [filepath, bundle] : entityBundles) {
-        if (bundle.instances.find(sceneProject->id) != bundle.instances.end() && bundle.isModified) {
-            saveEntityBundleToDisk(filepath);
-        }
-    }
-
-    SceneMaxValues maxValues;
-    calculateSceneMaxValues(sceneProject, maxValues);
-    sceneProject->maxValues = maxValues;
-
-    std::set<ShaderKey> shaderKeys;
-    collectSceneShaderKeys(sceneProject, shaderKeys);
-    sceneProject->shaderKeys = std::move(shaderKeys);
-
-    updateSceneCppScripts(sceneProject);
-    updateSceneBundles(sceneProject);
-
-    try {
-        YAML::Node root = Stream::encodeSceneProject(this, sceneProject);
-        std::ofstream fout(fullPath.string());
-        if (!fout) {
-            Out::error("Failed to open scene file for writing: %s", fullPath.string().c_str());
-            return false;
-        }
-
-        fout << YAML::Dump(root);
-        fout.close();
-
-        sceneProject->filepath = relPath;
-        sceneProject->isModified = false;
-        TerrainEditWindow::cleanUnusedTerrainMaps(this);
-    } catch (const std::exception& e) {
-        Out::error("Failed to save scene for play startup: %s", e.what());
-        return false;
-    }
-
-    return true;
+    return saveSceneFile(sceneProject, sceneProject->filepath);
 }
 
 void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId) {

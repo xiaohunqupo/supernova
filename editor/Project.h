@@ -243,6 +243,7 @@ namespace doriax::editor{
         void runPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId);
         void failPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const std::string& message,
                      const std::string& alertTitle = "", const std::string& alertMessage = "");
+        bool saveSceneFile(SceneProject* sceneProject, const std::filesystem::path& path);
         bool saveSceneForPlayStartup(SceneProject* sceneProject);
 
         void collectInvolvedScenes(uint32_t sceneId, std::vector<uint32_t>& involvedSceneIds);
