@@ -135,6 +135,17 @@ AABB editor::SceneRender::getAABB(Entity entity, bool local){
 }
 
 AABB editor::SceneRender::getFamilyAABB(Entity entity, float offset){
+    Signature signature = scene->getSignature(entity);
+    if (!signature.test(scene->getComponentId<Transform>())) {
+        AABB entityAABB = getAABB(entity, false);
+        if (!entityAABB.isNull() && !entityAABB.isInfinite()) {
+            Vector3 min = entityAABB.getMinimum() - Vector3(offset);
+            Vector3 max = entityAABB.getMaximum() + Vector3(offset);
+            entityAABB.setExtents(min, max);
+        }
+        return entityAABB;
+    }
+
     auto transforms = scene->getComponentArray<Transform>();
     size_t index = transforms->getIndex(entity);
 
@@ -263,6 +274,15 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
 }
 
 OBB editor::SceneRender::getFamilyOBB(Entity entity, float offset){
+    Signature signature = scene->getSignature(entity);
+    if (!signature.test(scene->getComponentId<Transform>())) {
+        OBB entityOBB = getOBB(entity, false);
+        if (!entityOBB.isNull()) {
+            entityOBB.setHalfExtents(entityOBB.getHalfExtents() + Vector3(offset));
+        }
+        return entityOBB;
+    }
+
     auto transforms = scene->getComponentArray<Transform>();
     size_t index = transforms->getIndex(entity);
 
