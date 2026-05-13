@@ -5155,6 +5155,18 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     colorMod["useSRGB"] = particles.colorModifier.useSRGB;
     node["colorModifier"] = colorMod;
 
+    YAML::Node colorGrad;
+    colorGrad["useSRGB"] = particles.colorGradient.useSRGB;
+    YAML::Node colorGradStops;
+    for (const auto& s : particles.colorGradient.stops) {
+        YAML::Node sn;
+        sn["time"] = s.time;
+        sn["color"] = encodeVector3(s.color);
+        colorGradStops.push_back(sn);
+    }
+    colorGrad["stops"] = colorGradStops;
+    node["colorGradient"] = colorGrad;
+
     YAML::Node alphaInit;
     alphaInit["minAlpha"] = particles.alphaInitializer.minAlpha;
     alphaInit["maxAlpha"] = particles.alphaInitializer.maxAlpha;
@@ -5313,6 +5325,20 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
         if (n["toColor"]) particles.colorModifier.toColor = decodeVector3(n["toColor"]);
         if (n["function"]) particles.colorModifier.function = decodeEase(n["function"], oldParticles ? &oldParticles->colorModifier.function : nullptr);
         if (n["useSRGB"]) particles.colorModifier.useSRGB = n["useSRGB"].as<bool>();
+    }
+    if (node["colorGradient"]) {
+        const YAML::Node& n = node["colorGradient"];
+        if (n["useSRGB"]) particles.colorGradient.useSRGB = n["useSRGB"].as<bool>();
+        if (n["stops"] && n["stops"].IsSequence()) {
+            particles.colorGradient.stops.clear();
+            for (const auto& sn : n["stops"]) {
+                ParticleColorGradientStop s;
+                if (sn["time"]) s.time = sn["time"].as<float>();
+                if (sn["color"]) s.color = decodeVector3(sn["color"]);
+                particles.colorGradient.stops.push_back(s);
+            }
+            particles.colorGradient.normalize();
+        }
     }
     if (node["alphaInitializer"]) {
         const YAML::Node& n = node["alphaInitializer"];

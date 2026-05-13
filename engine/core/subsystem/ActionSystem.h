@@ -75,6 +75,8 @@ namespace doriax{
 		Vector3 samplePositionInitializer(ParticlePositionInitializer& init);
 		int sampleBurstCount(ParticleBurst& burst);
 		void sortParticleBursts(ParticlesComponent& particles);
+		void sortParticleColorGradient(ParticlesComponent& particles);
+		Vector3 sampleParticleColorGradient(const ParticleColorGradient& gradient, float time, float life);
 		float getParticleCycleDuration(ParticlesComponent& particles);
 		Vector3 getParticleSimulationPosition(ParticlesComponent& particles, Transform* targetTransform, Vector3 position);
 		Vector3 getParticleSimulationDirection(ParticlesComponent& particles, Transform* targetTransform, Vector3 direction);

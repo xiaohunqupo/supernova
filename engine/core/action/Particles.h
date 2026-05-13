@@ -74,6 +74,11 @@ namespace doriax{
         void setColorModifier(float fromTime, float toTime, Vector3 fromColor, Vector3 toColor, EaseType functionType);
         void setColorModifier(float fromTime, float toTime, Vector3 fromColor, Vector3 toColor, Ease function);
 
+        void addColorGradientStop(float time, Vector3 color);
+        void setColorGradient(std::vector<ParticleColorGradientStop> stops);
+        void clearColorGradient();
+        void setColorGradientUseSRGB(bool useSRGB);
+
         void setAlphaInitializer(float alpha);
         void setAlphaInitializer(float minAlpha, float maxAlpha);
         void setAlphaModifier(float fromTime, float toTime, float fromAlpha, float toAlpha);

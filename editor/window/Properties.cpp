@@ -4212,6 +4212,14 @@ void editor::Properties::setParticleBursts(ComponentType cpType, SceneProject* s
     CommandHandle::get(project->getSelectedSceneId())->addCommand(burstCmd);
 }
 
+void editor::Properties::setParticleColorGradient(ComponentType cpType, SceneProject* sceneProject, Entity entity, const ParticleColorGradient& gradient) {
+    ParticleColorGradient normalizedGradient = gradient;
+    normalizedGradient.normalize();
+    editor::PropertyCmd<ParticleColorGradient>* gradCmd = new editor::PropertyCmd<ParticleColorGradient>(project, sceneProject->id, entity, cpType, "colorGradient", normalizedGradient);
+    gradCmd->setNoMerge();
+    CommandHandle::get(project->getSelectedSceneId())->addCommand(gradCmd);
+}
+
 void editor::Properties::drawParticleFrameList(ComponentType cpType, const std::string& propertyId, const std::string& tableId, SceneProject* sceneProject, const std::vector<Entity>& entities) {
     if (entities.size() != 1) {
         ImGui::TextDisabled("Select a single entity to edit sprite frames");
@@ -7165,6 +7173,81 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         propertyRow(RowPropertyType::Color3L, cpType, "colorModifier.toColor", "To Color", sceneProject, entities);
         propertyRow(RowPropertyType::Bool, cpType, "colorModifier.useSRGB", "Mod sRGB", sceneProject, entities);
         endTable();
+
+        if (entities.size() == 1) {
+            Scene* gradScene = sceneProject->scene;
+            ParticlesComponent* gp = gradScene ? gradScene->findComponent<ParticlesComponent>(entities[0]) : nullptr;
+            if (gp) {
+                Entity entity = entities[0];
+                ImGui::SeparatorText("Color Gradient");
+                if (ImGui::Button((ICON_FA_PLUS " Add Stop##particle_grad_add"), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+                    ParticleColorGradient newGrad = gp->colorGradient;
+                    ParticleColorGradientStop stop;
+                    if (!newGrad.stops.empty()) {
+                        float last = newGrad.stops.back().time;
+                        stop.time = std::min(1.0f, last + 0.25f);
+                        stop.color = newGrad.stops.back().color;
+                    }
+                    newGrad.stops.push_back(stop);
+                    setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                }
+                if (!gp->colorGradient.stops.empty()) {
+                    beginTable(cpType, getLabelSize("Color N"), "particle_gradient_table");
+                    for (size_t i = 0; i < gp->colorGradient.stops.size(); i++) {
+                        ImGui::PushID((int)(2000 + i));
+                        ParticleColorGradientStop stop = gp->colorGradient.stops[i];
+
+                        propertyHeader("Time " + std::to_string(i), -1, false, false);
+                        float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                        ImGui::SetNextItemWidth(-deleteButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+                        if (ImGui::SliderFloat("##particle_grad_time", &stop.time, 0.0f, 1.0f)) {
+                            ParticleColorGradient newGrad = gp->colorGradient;
+                            newGrad.stops[i] = stop;
+                            setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                        }
+                        ImGui::SameLine();
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+                        bool removed = ImGui::Button(ICON_FA_TRASH_CAN "##particle_grad_delete");
+                        ImGui::PopStyleColor(2);
+
+                        propertyHeader("Color " + std::to_string(i), -1, false, false);
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        float col[3] = { stop.color.x, stop.color.y, stop.color.z };
+                        if (ImGui::ColorEdit3("##particle_grad_color", col)) {
+                            stop.color = Vector3(col[0], col[1], col[2]);
+                            ParticleColorGradient newGrad = gp->colorGradient;
+                            newGrad.stops[i] = stop;
+                            setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                        }
+
+                        ImGui::PopID();
+
+                        if (removed) {
+                            ParticleColorGradient newGrad = gp->colorGradient;
+                            newGrad.stops.erase(newGrad.stops.begin() + (std::ptrdiff_t)i);
+                            setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                            break;
+                        }
+                    }
+                    endTable();
+
+                    beginTable(cpType, getLabelSize("Grad sRGB"), "particle_gradient_options_table");
+                    propertyHeader("Grad sRGB", -1, false, false);
+                    bool useSRGB = gp->colorGradient.useSRGB;
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::Checkbox("##particle_grad_srgb", &useSRGB)) {
+                        ParticleColorGradient newGrad = gp->colorGradient;
+                        newGrad.useSRGB = useSRGB;
+                        setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                    }
+                    endTable();
+                }
+            }
+        } else {
+            ImGui::SeparatorText("Color Gradient");
+            ImGui::TextDisabled("Select a single entity to edit color gradient");
+        }
 
         ImGui::SeparatorText("Alpha");
         beginTable(cpType, getLabelSize("From Alpha"), "alpha_modifier_table");

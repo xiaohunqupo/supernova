@@ -190,6 +190,10 @@ void LuaBinding::registerActionClasses(lua_State *L){
             luabridge::overload<float, float, Vector3, Vector3>(&Particles::setColorModifier),
             luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setColorModifier),
             luabridge::overload<float, float, Vector3, Vector3, Ease>(&Particles::setColorModifier))
+        .addFunction("addColorGradientStop", &Particles::addColorGradientStop)
+        .addFunction("setColorGradient", &Particles::setColorGradient)
+        .addFunction("clearColorGradient", &Particles::clearColorGradient)
+        .addFunction("setColorGradientUseSRGB", &Particles::setColorGradientUseSRGB)
         .addFunction("setAlphaInitializer", 
             luabridge::overload<float>(&Particles::setAlphaInitializer),
             luabridge::overload<float, float>(&Particles::setAlphaInitializer))

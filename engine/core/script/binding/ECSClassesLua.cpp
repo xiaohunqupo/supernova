@@ -472,6 +472,18 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
+        .beginClass<ParticleColorGradientStop>("ParticleColorGradientStop")
+        .addProperty("time", &ParticleColorGradientStop::time)
+        .addProperty("color", &ParticleColorGradientStop::color)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<ParticleColorGradient>("ParticleColorGradient")
+        .addProperty("stops", &ParticleColorGradient::stops)
+        .addProperty("useSRGB", &ParticleColorGradient::useSRGB)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
         .beginClass<ParticleAlphaInitializer>("ParticleAlphaInitializer")
         .addProperty("minAlpha", &ParticleAlphaInitializer::minAlpha)
         .addProperty("maxAlpha", &ParticleAlphaInitializer::maxAlpha)
@@ -566,6 +578,7 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("accelerationModifier", &ParticlesComponent::accelerationModifier)
         .addProperty("colorInitializer", &ParticlesComponent::colorInitializer)
         .addProperty("colorModifier", &ParticlesComponent::colorModifier)
+        .addProperty("colorGradient", &ParticlesComponent::colorGradient)
         .addProperty("alphaInitializer", &ParticlesComponent::alphaInitializer)
         .addProperty("alphaModifier", &ParticlesComponent::alphaModifier)
         .addProperty("sizeInitializer", &ParticlesComponent::sizeInitializer)

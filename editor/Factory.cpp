@@ -2263,6 +2263,13 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.colorModifier.function = " << formatEase(p.colorModifier.function) << ";\n";
     code << ind << "particles.colorModifier.useSRGB = " << formatBool(p.colorModifier.useSRGB) << ";\n";
 
+    code << ind << "particles.colorGradient.useSRGB = " << formatBool(p.colorGradient.useSRGB) << ";\n";
+    for (size_t i = 0; i < p.colorGradient.stops.size(); i++) {
+        code << ind << "{ ParticleColorGradientStop s; s.time = " << formatFloat(p.colorGradient.stops[i].time)
+             << "; s.color = " << formatVector3(p.colorGradient.stops[i].color)
+             << "; particles.colorGradient.stops.push_back(s); }\n";
+    }
+
     code << ind << "particles.alphaInitializer.minAlpha = " << formatFloat(p.alphaInitializer.minAlpha) << ";\n";
     code << ind << "particles.alphaInitializer.maxAlpha = " << formatFloat(p.alphaInitializer.maxAlpha) << ";\n";
     code << ind << "particles.alphaModifier.fromTime = " << formatFloat(p.alphaModifier.fromTime) << ";\n";

@@ -1240,6 +1240,9 @@ namespace {
         if (propertyName == "colorModifier.toColor") return {PropertyType::Vector3, UpdateFlags_None, &def.colorModifier.toColor, &comp->colorModifier.toColor};
         if (propertyName == "colorModifier.useSRGB") return {PropertyType::Bool, UpdateFlags_None, &def.colorModifier.useSRGB, &comp->colorModifier.useSRGB};
 
+        // Color Gradient (overrides colorModifier when non-empty)
+        if (propertyName == "colorGradient") return {PropertyType::Custom, UpdateFlags_None, &def.colorGradient, &comp->colorGradient};
+
         // Alpha Initializer
         if (propertyName == "alphaInitializer.minAlpha") return {PropertyType::Float, UpdateFlags_None, &def.alphaInitializer.minAlpha, &comp->alphaInitializer.minAlpha};
         if (propertyName == "alphaInitializer.maxAlpha") return {PropertyType::Float, UpdateFlags_None, &def.alphaInitializer.maxAlpha, &comp->alphaInitializer.maxAlpha};
@@ -2196,6 +2199,8 @@ namespace {
         ps["colorModifier.fromColor"] = {PropertyType::Vector3, UpdateFlags_None, &def.colorModifier.fromColor, comp ? &comp->colorModifier.fromColor : nullptr};
         ps["colorModifier.toColor"] = {PropertyType::Vector3, UpdateFlags_None, &def.colorModifier.toColor, comp ? &comp->colorModifier.toColor : nullptr};
         ps["colorModifier.useSRGB"] = {PropertyType::Bool, UpdateFlags_None, &def.colorModifier.useSRGB, comp ? &comp->colorModifier.useSRGB : nullptr};
+
+        ps["colorGradient"] = {PropertyType::Custom, UpdateFlags_None, &def.colorGradient, comp ? &comp->colorGradient : nullptr};
 
         ps["alphaInitializer.minAlpha"] = {PropertyType::Float, UpdateFlags_None, &def.alphaInitializer.minAlpha, comp ? &comp->alphaInitializer.minAlpha : nullptr};
         ps["alphaInitializer.maxAlpha"] = {PropertyType::Float, UpdateFlags_None, &def.alphaInitializer.maxAlpha, comp ? &comp->alphaInitializer.maxAlpha : nullptr};

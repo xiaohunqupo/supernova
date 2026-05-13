@@ -192,6 +192,54 @@ void ActionSystem::sortParticleBursts(ParticlesComponent& particles){
     });
 }
 
+void ActionSystem::sortParticleColorGradient(ParticlesComponent& particles){
+    particles.colorGradient.normalize();
+}
+
+Vector3 ActionSystem::sampleParticleColorGradient(const ParticleColorGradient& gradient, float time, float life){
+    const std::vector<ParticleColorGradientStop>& stops = gradient.stops;
+    if (stops.empty()){
+        return Vector3(1,1,1);
+    }
+
+    float normalizedTime = (life > 0.0f) ? (time / life) : 0.0f;
+    if (normalizedTime < 0.0f) normalizedTime = 0.0f;
+    if (normalizedTime > 1.0f) normalizedTime = 1.0f;
+
+    const ParticleColorGradientStop* previousStop = nullptr;
+    const ParticleColorGradientStop* nextStop = nullptr;
+    float previousTime = 0.0f;
+    float nextTime = 0.0f;
+
+    for (const ParticleColorGradientStop& stop : stops){
+        float stopTime = stop.time;
+        if (stopTime < 0.0f) stopTime = 0.0f;
+        if (stopTime > 1.0f) stopTime = 1.0f;
+
+        if (stopTime <= normalizedTime && (!previousStop || stopTime >= previousTime)){
+            previousStop = &stop;
+            previousTime = stopTime;
+        }
+        if (stopTime >= normalizedTime && (!nextStop || stopTime <= nextTime)){
+            nextStop = &stop;
+            nextTime = stopTime;
+        }
+    }
+
+    Vector3 color;
+    if (!previousStop){
+        color = nextStop ? nextStop->color : stops.front().color;
+    } else if (!nextStop){
+        color = previousStop->color;
+    } else {
+        float span = nextTime - previousTime;
+        float value = (span > 0.0f) ? (normalizedTime - previousTime) / span : 0.0f;
+        color = previousStop->color + (nextStop->color - previousStop->color) * value;
+    }
+    if (gradient.useSRGB) color = Color::sRGBToLinear(color);
+    return color;
+}
+
 float ActionSystem::getParticleCycleDuration(ParticlesComponent& particles){
     float cycleDuration = 0.0f;
     if (particles.rate > 0){
@@ -767,11 +815,15 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
         particles.particles[idx].acceleration = getParticleSimulationDirection(particles, targetTransform, getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration));
     }
 
-    ParticleColorModifier& colMod = particles.colorModifier;
-    if (getParticleModifierValue(particleTime, colMod.fromTime, colMod.toTime, colMod.function, value)){
-        instmesh.instances[idx].color = getVector3ModifierValue(value, colMod.fromColor, colMod.toColor);
-        if (colMod.useSRGB){
-            instmesh.instances[idx].color = Color::sRGBToLinear(instmesh.instances[idx].color);
+    if (!particles.colorGradient.stops.empty()){
+        instmesh.instances[idx].color = sampleParticleColorGradient(particles.colorGradient, particleTime, particles.particles[idx].life);
+    } else {
+        ParticleColorModifier& colMod = particles.colorModifier;
+        if (getParticleModifierValue(particleTime, colMod.fromTime, colMod.toTime, colMod.function, value)){
+            instmesh.instances[idx].color = getVector3ModifierValue(value, colMod.fromColor, colMod.toColor);
+            if (colMod.useSRGB){
+                instmesh.instances[idx].color = Color::sRGBToLinear(instmesh.instances[idx].color);
+            }
         }
     }
 
@@ -820,11 +872,15 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
         particles.particles[idx].acceleration = getParticleSimulationDirection(particles, targetTransform, getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration));
     }
 
-    ParticleColorModifier& colMod = particles.colorModifier;
-    if (getParticleModifierValue(particleTime, colMod.fromTime, colMod.toTime, colMod.function, value)){
-        points.points[idx].color = getVector3ModifierValue(value, colMod.fromColor, colMod.toColor);
-        if (colMod.useSRGB){
-            points.points[idx].color = Color::sRGBToLinear(points.points[idx].color);
+    if (!particles.colorGradient.stops.empty()){
+        points.points[idx].color = sampleParticleColorGradient(particles.colorGradient, particleTime, particles.particles[idx].life);
+    } else {
+        ParticleColorModifier& colMod = particles.colorModifier;
+        if (getParticleModifierValue(particleTime, colMod.fromTime, colMod.toTime, colMod.function, value)){
+            points.points[idx].color = getVector3ModifierValue(value, colMod.fromColor, colMod.toColor);
+            if (colMod.useSRGB){
+                points.points[idx].color = Color::sRGBToLinear(points.points[idx].color);
+            }
         }
     }
 
@@ -936,6 +992,7 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, InstancedM
     particles.newParticlesCount = 0;
     particles.lastUsedParticle = 0;
     sortParticleBursts(particles);
+    sortParticleColorGradient(particles);
     particles.currentBurst = 0;
 }
 
@@ -970,6 +1027,7 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, PointsComp
     particles.newParticlesCount = 0;
     particles.lastUsedParticle = 0;
     sortParticleBursts(particles);
+    sortParticleColorGradient(particles);
     particles.currentBurst = 0;
 }
 

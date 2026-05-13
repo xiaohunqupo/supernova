@@ -303,6 +303,35 @@ void Particles::setColorModifier(float fromTime, float toTime, Vector3 fromColor
     partAnim.colorModifier.function = function;
 }
 
+void Particles::addColorGradientStop(float time, Vector3 color){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    ParticleColorGradientStop stop;
+    stop.time = time;
+    stop.color = color;
+    partAnim.colorGradient.stops.push_back(stop);
+    partAnim.colorGradient.normalize();
+}
+
+void Particles::setColorGradient(std::vector<ParticleColorGradientStop> stops){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.colorGradient.stops = stops;
+    partAnim.colorGradient.normalize();
+}
+
+void Particles::clearColorGradient(){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.colorGradient.stops.clear();
+}
+
+void Particles::setColorGradientUseSRGB(bool useSRGB){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.colorGradient.useSRGB = useSRGB;
+}
+
 void Particles::setAlphaInitializer(float alpha){
     setAlphaInitializer(alpha, alpha);
 }

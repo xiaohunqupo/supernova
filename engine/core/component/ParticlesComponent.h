@@ -12,6 +12,8 @@
 #include "buffer/ExternalBuffer.h"
 #include "math/Matrix4.h"
 
+#include <algorithm>
+
 namespace doriax{
 
     enum class ParticleEmitterShape{
@@ -110,6 +112,34 @@ namespace doriax{
         Ease function;
 
         bool useSRGB = true;
+    };
+
+    struct ParticleColorGradientStop{
+        float time = 0.0f; // normalized [0,1] over particle lifetime
+        Vector3 color = Vector3(1,1,1);
+
+        bool operator==(const ParticleColorGradientStop& other) const{
+            return time == other.time && color == other.color;
+        }
+    };
+
+    struct ParticleColorGradient{
+        std::vector<ParticleColorGradientStop> stops;
+        bool useSRGB = true;
+
+        void normalize(){
+            for (ParticleColorGradientStop& stop : stops){
+                if (stop.time < 0.0f) stop.time = 0.0f;
+                if (stop.time > 1.0f) stop.time = 1.0f;
+            }
+            std::stable_sort(stops.begin(), stops.end(), [](const ParticleColorGradientStop& first, const ParticleColorGradientStop& second){
+                return first.time < second.time;
+            });
+        }
+
+        bool operator==(const ParticleColorGradient& other) const{
+            return useSRGB == other.useSRGB && stops == other.stops;
+        }
     };
 
     struct ParticleAlphaInitializer{
@@ -239,6 +269,7 @@ namespace doriax{
 
         ParticleColorInitializer colorInitializer;
         ParticleColorModifier colorModifier;
+        ParticleColorGradient colorGradient;
 
         ParticleAlphaInitializer alphaInitializer;
         ParticleAlphaModifier alphaModifier;
