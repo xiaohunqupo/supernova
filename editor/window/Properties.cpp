@@ -1436,6 +1436,27 @@ void editor::Properties::endTable(){
     ImGui::EndTable();
 }
 
+bool editor::Properties::drawSummaryAddButton(const std::string& label, float trailingReservedWidth, bool enabled, const char* disabledTooltip) {
+    ImGui::SameLine();
+    float buttonWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x - trailingReservedWidth);
+
+    if (!enabled) {
+        ImGui::BeginDisabled();
+    }
+
+    bool clicked = ImGui::Button(label.c_str(), ImVec2(buttonWidth, 0));
+
+    if (!enabled && disabledTooltip && ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", disabledTooltip);
+    }
+
+    if (!enabled) {
+        ImGui::EndDisabled();
+    }
+
+    return clicked;
+}
+
 editor::Properties::EntityPickerResult editor::Properties::drawEntityPickerPopup(
         const std::string& popupId, const Signature& filter,
         SceneProject* owningScene, bool includeChildScenes,
@@ -4560,6 +4581,7 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
         }
         if (hasGeneratedSubmeshes) break;
     }
+
     if (!hasGeneratedSubmeshes && ImGui::Button(ICON_FA_PLUS " Add Submesh", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
         for (Entity& entity : entities) {
             MeshComponent meshComp = sceneProject->scene->getComponent<MeshComponent>(entity);
@@ -5101,8 +5123,7 @@ void editor::Properties::drawSpriteComponent(ComponentType cpType, SceneProject*
         int activeFrameCount = (int)sprite.numFramesRect;
 
         // Sprite slicer tool button
-        float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-        if (ImGui::Button(ICON_FA_GRIP " Slicer Tool", ImVec2(buttonWidth, 0))) {
+        if (ImGui::Button(ICON_FA_GRIP " Slicer Tool", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
             textureSlicerToolDialog.open(
                 previewTexture,
                 static_cast<int>(sprite.width),
@@ -5155,10 +5176,11 @@ void editor::Properties::drawSpriteComponent(ComponentType cpType, SceneProject*
             );
         }
 
-        ImGui::SameLine();
-
-        // Add frame button
-        if (ImGui::Button(ICON_FA_PLUS " Add Frame", ImVec2(buttonWidth, 0))) {
+        beginTable(cpType, getLabelSize("Frames"), "sprite_frames_header");
+        propertyHeader("Frames", -1, false, false);
+        ImGui::Text("%d", activeFrameCount);
+        float spriteFramesArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+        if (drawSummaryAddButton(ICON_FA_PLUS " Add Frame##sprite_frames_add", spriteFramesArrowWidth)) {
             int freeSlot = (int)sprite.numFramesRect;
             if (freeSlot < (int)sprite.framesRect.size()) {
                 editor::MultiPropertyCmd* multiCmd = new editor::MultiPropertyCmd();
@@ -5171,10 +5193,6 @@ void editor::Properties::drawSpriteComponent(ComponentType cpType, SceneProject*
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
             }
         }
-
-        beginTable(cpType, getLabelSize("Frames"), "sprite_frames_header");
-        propertyHeader("Frames", -1, false, false);
-        ImGui::Text("%d", activeFrameCount);
         ImGui::SameLine();
         if (ImGui::ArrowButton("##toggle_all_frames", spriteFramesExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
             spriteFramesExpanded = !spriteFramesExpanded;
@@ -5736,10 +5754,8 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
 
         int activeTileRectCount = (int)tilemap.numTilesRect;
 
-        float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-
         // Slicer tool button
-        if (ImGui::Button(ICON_FA_TABLE_CELLS " Slicer Tool", ImVec2(buttonWidth, 0))) {
+        if (ImGui::Button(ICON_FA_TABLE_CELLS " Slicer Tool", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
             textureSlicerToolDialog.openTileset(
                 submeshInfos,
                 static_cast<int>(tilemap.width),
@@ -5814,10 +5830,13 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
             );
         }
 
-        ImGui::SameLine();
+        ImGui::TextDisabled(ICON_FA_GRIP_VERTICAL " Drag rect preview to Scene to place tile");
 
-        // Add tile rect button
-        if (ImGui::Button(ICON_FA_PLUS " Add Tile Rect", ImVec2(buttonWidth, 0))) {
+        beginTable(cpType, getLabelSize("Tile Rects"), "tilemap_rects_header");
+        propertyHeader("Tile Rects", -1, false, false);
+        ImGui::Text("%d", activeTileRectCount);
+        float tileRectsArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+        if (drawSummaryAddButton(ICON_FA_PLUS " Add Tile Rect##tile_rects_add", tileRectsArrowWidth)) {
             int freeSlot = (int)tilemap.numTilesRect;
             if (freeSlot < (int)tilemap.tilesRect.size()) {
                 editor::MultiPropertyCmd* multiCmd = new editor::MultiPropertyCmd();
@@ -5832,12 +5851,6 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
             }
         }
-
-        ImGui::TextDisabled(ICON_FA_GRIP_VERTICAL " Drag rect preview to Scene to place tile");
-
-        beginTable(cpType, getLabelSize("Tile Rects"), "tilemap_rects_header");
-        propertyHeader("Tile Rects", -1, false, false);
-        ImGui::Text("%d", activeTileRectCount);
         ImGui::SameLine();
         if (ImGui::ArrowButton("##toggle_all_rects", tilemapRectsExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
             tilemapRectsExpanded = !tilemapRectsExpanded;
@@ -6047,8 +6060,11 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
 
         int activeTileCount = (int)tilemap.numTiles;
 
-        // Add tile button
-        if (ImGui::Button(ICON_FA_PLUS " Add Tile", ImVec2(buttonWidth, 0))) {
+        beginTable(cpType, getLabelSize("Tiles"), "tilemap_tiles_header");
+        propertyHeader("Tiles", -1, false, false);
+        ImGui::Text("%d", activeTileCount);
+        float tilesArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+        if (drawSummaryAddButton(ICON_FA_PLUS " Add Tile##tilemap_tiles_add", tilesArrowWidth)) {
             int freeSlot = (int)tilemap.numTiles;
             if (freeSlot < (int)tilemap.tiles.size()) {
                 float defaultWidth = 100.0f;
@@ -6071,10 +6087,6 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
             }
         }
-
-        beginTable(cpType, getLabelSize("Tiles"), "tilemap_tiles_header");
-        propertyHeader("Tiles", -1, false, false);
-        ImGui::Text("%d", activeTileCount);
         ImGui::SameLine();
         if (ImGui::ArrowButton("##toggle_all_tiles", tilemapTilesExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
             tilemapTilesExpanded = !tilemapTilesExpanded;
@@ -6845,7 +6857,11 @@ void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneP
 
     ImGui::SeparatorText("Instances");
 
-    if (ImGui::Button(ICON_FA_PLUS " Add Instance", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+    beginTable(cpType, getLabelSize("Instances"), "instanced_mesh_instances_header");
+    propertyHeader("Instances", -1, false, false);
+    ImGui::Text("%zu", instmesh.instances.size());
+    float instancesArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    if (drawSummaryAddButton(ICON_FA_PLUS " Add Instance##instanced_mesh_add", instancesArrowWidth)) {
         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
         for (const Entity& selectedEntity : entities) {
             if (InstancedMeshComponent* instComp = sceneProject->scene->findComponent<InstancedMeshComponent>(selectedEntity)) {
@@ -6861,10 +6877,6 @@ void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneP
         multiCmd->setNoMerge();
         CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
     }
-
-    beginTable(cpType, getLabelSize("Instances"), "instanced_mesh_instances_header");
-    propertyHeader("Instances", -1, false, false);
-    ImGui::Text("%zu", instmesh.instances.size());
     ImGui::SameLine();
     if (ImGui::ArrowButton("##toggle_instances", instancesExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
         instancesExpanded = !instancesExpanded;
@@ -7366,7 +7378,11 @@ void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject*
 
     ImGui::SeparatorText("Points");
 
-    if (ImGui::Button(ICON_FA_PLUS " Add Point", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+    beginTable(cpType, getLabelSize("Points"), "points_header");
+    propertyHeader("Points", -1, false, false);
+    ImGui::Text("%zu", pts.points.size());
+    float pointsArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    if (drawSummaryAddButton(ICON_FA_PLUS " Add Point##points_add", pointsArrowWidth)) {
         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
         for (const Entity& selectedEntity : entities) {
             if (PointsComponent* ptsComp = sceneProject->scene->findComponent<PointsComponent>(selectedEntity)) {
@@ -7382,10 +7398,6 @@ void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject*
         multiCmd->setNoMerge();
         CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
     }
-
-    beginTable(cpType, getLabelSize("Points"), "points_header");
-    propertyHeader("Points", -1, false, false);
-    ImGui::Text("%zu", pts.points.size());
     ImGui::SameLine();
     if (ImGui::ArrowButton("##toggle_points", pointsExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
         pointsExpanded = !pointsExpanded;
@@ -7492,7 +7504,11 @@ void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* 
 
     ImGui::SeparatorText("Lines");
 
-    if (ImGui::Button(ICON_FA_PLUS " Add Line", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+    beginTable(cpType, getLabelSize("Lines"), "lines_header");
+    propertyHeader("Lines", -1, false, false);
+    ImGui::Text("%zu", lines.lines.size());
+    float linesArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    if (drawSummaryAddButton(ICON_FA_PLUS " Add Line##lines_add", linesArrowWidth)) {
         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
         for (const Entity& selectedEntity : entities) {
             if (LinesComponent* linesComp = sceneProject->scene->findComponent<LinesComponent>(selectedEntity)) {
@@ -7500,7 +7516,7 @@ void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* 
                 LineData newLine;
                 if (!newLines.empty()) {
                     newLine = newLines.back();
-                }else{
+                } else {
                     newLine.pointB = Vector3(1.0f, 0.0f, 0.0f);
                 }
                 newLines.push_back(newLine);
@@ -7510,10 +7526,6 @@ void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* 
         multiCmd->setNoMerge();
         CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
     }
-
-    beginTable(cpType, getLabelSize("Lines"), "lines_header");
-    propertyHeader("Lines", -1, false, false);
-    ImGui::Text("%zu", lines.lines.size());
     ImGui::SameLine();
     if (ImGui::ArrowButton("##toggle_lines", linesExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
         linesExpanded = !linesExpanded;
@@ -8776,7 +8788,8 @@ void editor::Properties::drawJoint3DComponent(ComponentType cpType, SceneProject
         ImGui::TextUnformatted("Points");
         ImGui::TableSetColumnIndex(1);
 
-        if (ImGui::Button("Add Point")){
+        ImGui::Text("%zu", joint.pathPoints.size());
+        if (drawSummaryAddButton("Add Point##joint3d_path_add")) {
             MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
             for (Entity entity : entities){
                 if (Joint3DComponent* jointComp = sceneProject->scene->findComponent<Joint3DComponent>(entity)){
@@ -9621,8 +9634,16 @@ void editor::Properties::drawSpriteAnimationComponent(ComponentType cpType, Scen
 
     ImGui::SeparatorText("Animation Frames");
 
-    ImGui::BeginDisabled(!canAddFrame);
-    if (ImGui::Button(ICON_FA_PLUS " Add Frame", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+    beginTable(cpType, getLabelSize("Animation Frames"), "sprite_animation_frames_header");
+    propertyHeader("Animation Frames", -1, false, false);
+    ImGui::Text("%u", visibleFrameCount);
+    if (!countsMatch) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(frames/intervals mismatch)");
+    }
+    float spriteAnimArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    if (drawSummaryAddButton(ICON_FA_PLUS " Add Frame##sprite_animation_add", spriteAnimArrowWidth, canAddFrame,
+            "Sprite animation has reached the maximum number of frames")) {
         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
         for (const Entity& selectedEntity : entities) {
             if (SpriteAnimationComponent* animComp = sceneProject->scene->findComponent<SpriteAnimationComponent>(selectedEntity)) {
@@ -9648,18 +9669,6 @@ void editor::Properties::drawSpriteAnimationComponent(ComponentType cpType, Scen
         }
         multiCmd->setNoMerge();
         CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
-    }
-    if (ImGui::IsItemHovered() && !canAddFrame) {
-        ImGui::SetTooltip("Sprite animation has reached the maximum number of frames");
-    }
-    ImGui::EndDisabled();
-
-    beginTable(cpType, getLabelSize("Animation Frames"), "sprite_animation_frames_header");
-    propertyHeader("Animation Frames", -1, false, false);
-    ImGui::Text("%u", visibleFrameCount);
-    if (!countsMatch) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("(frames/intervals mismatch)");
     }
     ImGui::SameLine();
     if (ImGui::ArrowButton("##toggle_all_sprite_animation_frames", spriteAnimationFramesExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
@@ -9870,14 +9879,16 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
 
     ImGui::SeparatorText("Actions");
 
-    if (ImGui::Button("Add Action")) {
+    beginTable(cpType, getLabelSize("Actions"), "animation_actions_header");
+    propertyHeader("Actions", -1, false, false);
+    ImGui::Text("%zu", anim.actions.size());
+    if (drawSummaryAddButton("Add Action##animation_actions_add")) {
         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
         for (Entity entity : entities) {
             if (AnimationComponent* animComp = sceneProject->scene->findComponent<AnimationComponent>(entity)) {
                 std::vector<ActionFrame> newActions = animComp->actions;
                 ActionFrame newFrame = {0.0f, 1.0f, NULL_ENTITY, 0};
 
-                // Find non-overlapping track
                 bool overlap;
                 do {
                     overlap = false;
@@ -9903,6 +9914,7 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
         multiCmd->setNoMerge();
         CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
     }
+    endTable();
 
     if (!anim.actions.empty()) {
         beginTable(cpType, getLabelSize("Start Time"), "animation_actions_table");
@@ -9998,8 +10010,9 @@ void editor::Properties::drawTrackValues(ComponentType cpType, SceneProject* sce
     ImGui::TableSetColumnIndex(1);
 
     ImGui::Text("%zu", (comp.*memberPtr).size());
-    ImGui::SameLine();
-    if (ImGui::Button("Add Value")){
+    float trackValuesArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    std::string addValueLabel = std::string("Add Value##add_") + idPrefix + "_values";
+    if (drawSummaryAddButton(addValueLabel, trackValuesArrowWidth)) {
         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
         for (Entity entity : entities){
             if (Component* trackComp = sceneProject->scene->findComponent<Component>(entity)){
@@ -10108,8 +10121,8 @@ void editor::Properties::drawMorphTracksComponent(ComponentType cpType, ScenePro
     ImGui::TableSetColumnIndex(1);
 
     ImGui::Text("%zu", comp.values.size());
-    ImGui::SameLine();
-    if (ImGui::Button("Add Value")){
+    float morphValuesArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    if (drawSummaryAddButton("Add Value##morph_values_add", morphValuesArrowWidth)) {
         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
         for (Entity entity : entities){
             if (MorphTracksComponent* trackComp = sceneProject->scene->findComponent<MorphTracksComponent>(entity)){

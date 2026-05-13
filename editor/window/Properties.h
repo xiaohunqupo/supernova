@@ -216,6 +216,7 @@ namespace doriax::editor{
         bool compareVectorFloat(const float* a, const float* b, size_t elements, const float threshold);
 
         float getLabelSize(std::string label, bool addRotateIconSpace = true);
+        static bool drawSummaryAddButton(const std::string& label, float trailingReservedWidth = 0.0f, bool enabled = true, const char* disabledTooltip = nullptr);
 
         void helpMarker(std::string desc);
 
