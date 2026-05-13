@@ -67,6 +67,19 @@ namespace doriax{
 		void alphaActionUIUpdate(double dt, ActionComponent& action, TimedActionComponent& timedaction, AlphaActionComponent& alphaaction, UIComponent& ui);
 
 		//Particle helpers functions
+		float getParticleInverseScale(float value);
+		Vector3 getParticleDisplayScale(Vector3 scale, Transform* targetTransform);
+		bool isParticleWorldSpace(ParticlesComponent& particles, Transform* targetTransform);
+		void updateParticleTargetTransform(Transform& transform);
+		Vector3 getParticleSimulationPosition(ParticlesComponent& particles, Transform* targetTransform, Vector3 position);
+		Vector3 getParticleSimulationDirection(ParticlesComponent& particles, Transform* targetTransform, Vector3 direction);
+		Quaternion getParticleSimulationRotation(ParticlesComponent& particles, Transform* targetTransform, Quaternion rotation);
+		Vector3 getParticleDisplayPosition(ParticlesComponent& particles, Transform* targetTransform, Vector3 position);
+		Quaternion getParticleDisplayRotation(ParticlesComponent& particles, Transform* targetTransform, Quaternion rotation);
+		Vector3 getParticleDisplayScale(ParticlesComponent& particles, Transform* targetTransform, Vector3 scale);
+		void syncParticleInstance(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, Transform* targetTransform);
+		void syncParticlePoint(size_t idx, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform);
+
 		int findUnusedParticle(ParticlesComponent& particles);
 
 		float getFloatInitializerValue(float& min, float& max);
@@ -74,8 +87,8 @@ namespace doriax{
 		Quaternion getQuaternionInitializerValue(Quaternion& min, Quaternion& max, bool shortestPath);
 		Rect getSpriteInitializerValue(std::vector<int>& frames, SpriteComponent& sprite);
 		Rect getSpriteInitializerValue(std::vector<int>& frames, PointsComponent& points);
-		void applyParticleInitializers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite);
-		void applyParticleInitializers(size_t idx, ParticlesComponent& particles, PointsComponent& points);
+		void applyParticleInitializers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite, Transform* targetTransform);
+		void applyParticleInitializers(size_t idx, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform);
 
 		float getTimeFromParticleTime(float& time, float& fromTime, float& toTime);
 		bool getParticleModifierValue(float& particleTime, float& fromTime, float& toTime, Ease& function, float& value);
@@ -84,10 +97,10 @@ namespace doriax{
 		Quaternion getQuaternionModifierValue(float& value, Quaternion& fromValue, Quaternion& toValue, bool shortestPath);
 		Rect getSpriteModifierValue(float& value, std::vector<int>& frames, SpriteComponent& sprite);
 		Rect getSpriteModifierValue(float& value, std::vector<int>& frames, PointsComponent& points);
-		void applyParticleModifiers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite);
-		void applyParticleModifiers(size_t idx, ParticlesComponent& particles, PointsComponent& points);
-		void advanceParticle(size_t idx, float dt, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite);
-		void advanceParticle(size_t idx, float dt, ParticlesComponent& particles, PointsComponent& points);
+		void applyParticleModifiers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite, Transform* targetTransform);
+		void applyParticleModifiers(size_t idx, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform);
+		void advanceParticle(size_t idx, float dt, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite, Transform* targetTransform);
+		void advanceParticle(size_t idx, float dt, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform);
 
 		void particleActionStart(ParticlesComponent& particles, InstancedMeshComponent& instmesh, MeshComponent& mesh);
 		void particleActionStart(ParticlesComponent& particles, PointsComponent& points);

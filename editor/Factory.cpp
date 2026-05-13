@@ -2210,6 +2210,7 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.maxParticles = " << formatUInt(p.maxParticles) << ";\n";
     code << ind << "particles.emitter = " << formatBool(p.emitter) << ";\n";
     code << ind << "particles.loop = " << formatBool(p.loop) << ";\n";
+    code << ind << "particles.localSpace = " << formatBool(p.localSpace) << ";\n";
     code << ind << "particles.rate = " << formatInt(p.rate) << ";\n";
     code << ind << "particles.maxPerUpdate = " << formatInt(p.maxPerUpdate) << ";\n";
 

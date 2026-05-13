@@ -14,6 +14,108 @@
 
 using namespace doriax;
 
+float ActionSystem::getParticleInverseScale(float value){
+    if (value == 0.0f)
+        return 1.0f;
+
+    return 1.0f / value;
+}
+
+Vector3 ActionSystem::getParticleDisplayScale(Vector3 scale, Transform* targetTransform){
+    if (!targetTransform)
+        return scale;
+
+    return Vector3(
+        scale.x * getParticleInverseScale(targetTransform->worldScale.x),
+        scale.y * getParticleInverseScale(targetTransform->worldScale.y),
+        scale.z * getParticleInverseScale(targetTransform->worldScale.z));
+}
+
+bool ActionSystem::isParticleWorldSpace(ParticlesComponent& particles, Transform* targetTransform){
+    return !particles.localSpace && targetTransform;
+}
+
+void ActionSystem::updateParticleTargetTransform(Transform& transform){
+    Matrix4 translateMatrix = Matrix4::translateMatrix(transform.position);
+    Matrix4 rotationMatrix = transform.rotation.getRotationMatrix();
+    Matrix4 scaleMatrix = Matrix4::scaleMatrix(transform.scale);
+
+    transform.localMatrix = translateMatrix * rotationMatrix * scaleMatrix;
+
+    if (transform.parent != NULL_ENTITY){
+        Transform* transformParent = scene->findComponent<Transform>(transform.parent);
+        if (transformParent){
+            updateParticleTargetTransform(*transformParent);
+
+            transform.modelMatrix = transformParent->modelMatrix * transform.localMatrix;
+            transform.worldPosition = transformParent->modelMatrix * transform.position;
+            transform.worldScale = transformParent->worldScale * transform.scale;
+            transform.worldRotation = transformParent->worldRotation * transform.rotation;
+            return;
+        }
+    }
+
+    transform.modelMatrix = transform.localMatrix;
+    transform.worldPosition = transform.position;
+    transform.worldScale = transform.scale;
+    transform.worldRotation = transform.rotation;
+}
+
+Vector3 ActionSystem::getParticleSimulationPosition(ParticlesComponent& particles, Transform* targetTransform, Vector3 position){
+    if (isParticleWorldSpace(particles, targetTransform))
+        return targetTransform->modelMatrix * position;
+
+    return position;
+}
+
+Vector3 ActionSystem::getParticleSimulationDirection(ParticlesComponent& particles, Transform* targetTransform, Vector3 direction){
+    if (isParticleWorldSpace(particles, targetTransform))
+        return targetTransform->worldRotation * direction;
+
+    return direction;
+}
+
+Quaternion ActionSystem::getParticleSimulationRotation(ParticlesComponent& particles, Transform* targetTransform, Quaternion rotation){
+    if (isParticleWorldSpace(particles, targetTransform))
+        return targetTransform->worldRotation * rotation;
+
+    return rotation;
+}
+
+Vector3 ActionSystem::getParticleDisplayPosition(ParticlesComponent& particles, Transform* targetTransform, Vector3 position){
+    if (isParticleWorldSpace(particles, targetTransform))
+        return targetTransform->modelMatrix.inverse() * position;
+
+    return position;
+}
+
+Quaternion ActionSystem::getParticleDisplayRotation(ParticlesComponent& particles, Transform* targetTransform, Quaternion rotation){
+    if (isParticleWorldSpace(particles, targetTransform))
+        return targetTransform->worldRotation.inverse() * rotation;
+
+    return rotation;
+}
+
+Vector3 ActionSystem::getParticleDisplayScale(ParticlesComponent& particles, Transform* targetTransform, Vector3 scale){
+    if (isParticleWorldSpace(particles, targetTransform))
+        return getParticleDisplayScale(scale, targetTransform);
+
+    return scale;
+}
+
+void ActionSystem::syncParticleInstance(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, Transform* targetTransform){
+    ParticleData& particle = particles.particles[idx];
+    InstanceData& instance = instmesh.instances[idx];
+
+    instance.position = getParticleDisplayPosition(particles, targetTransform, particle.position);
+    instance.rotation = getParticleDisplayRotation(particles, targetTransform, particle.rotation);
+    instance.scale = getParticleDisplayScale(particles, targetTransform, particle.scale);
+}
+
+void ActionSystem::syncParticlePoint(size_t idx, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform){
+    points.points[idx].position = getParticleDisplayPosition(particles, targetTransform, particles.particles[idx].position);
+}
+
 
 ActionSystem::ActionSystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<ActionComponent>());
@@ -407,18 +509,21 @@ Rect ActionSystem::getSpriteInitializerValue(std::vector<int>& frames, PointsCom
     return Rect(0,0,1,1);
 }
 
-void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite){
+void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite, Transform* targetTransform){
     ParticleLifeInitializer& lifeInit = particles.lifeInitializer;
     particles.particles[idx].life = getFloatInitializerValue(lifeInit.minLife, lifeInit.maxLife);
 
     ParticlePositionInitializer& posInit = particles.positionInitializer;
-    instmesh.instances[idx].position = getVector3InitializerValue(posInit.minPosition, posInit.maxPosition, false);
+    Vector3 position = getVector3InitializerValue(posInit.minPosition, posInit.maxPosition, false);
+    particles.particles[idx].position = getParticleSimulationPosition(particles, targetTransform, position);
 
     ParticleVelocityInitializer& velInit = particles.velocityInitializer;
-    particles.particles[idx].velocity = getVector3InitializerValue(velInit.minVelocity, velInit.maxVelocity, false);
+    Vector3 velocity = getVector3InitializerValue(velInit.minVelocity, velInit.maxVelocity, false);
+    particles.particles[idx].velocity = getParticleSimulationDirection(particles, targetTransform, velocity);
 
     ParticleAccelerationInitializer& accInit = particles.accelerationInitializer;
-    particles.particles[idx].acceleration = getVector3InitializerValue(accInit.minAcceleration, accInit.maxAcceleration, false);
+    Vector3 acceleration = getVector3InitializerValue(accInit.minAcceleration, accInit.maxAcceleration, false);
+    particles.particles[idx].acceleration = getParticleSimulationDirection(particles, targetTransform, acceleration);
 
     ParticleColorInitializer& colInit = particles.colorInitializer;
     instmesh.instances[idx].color = getVector3InitializerValue(colInit.minColor, colInit.maxColor, false);
@@ -437,25 +542,31 @@ void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& par
     }
 
     ParticleRotationInitializer& rotInit = particles.rotationInitializer;
-    instmesh.instances[idx].rotation = getQuaternionInitializerValue(rotInit.minRotation, rotInit.maxRotation, rotInit.shortestPath);
+    Quaternion rotation = getQuaternionInitializerValue(rotInit.minRotation, rotInit.maxRotation, rotInit.shortestPath);
+    particles.particles[idx].rotation = getParticleSimulationRotation(particles, targetTransform, rotation);
 
     ParticleScaleInitializer& scaInit = particles.scaleInitializer;
-    instmesh.instances[idx].scale = getVector3InitializerValue(scaInit.minScale, scaInit.maxScale, scaInit.linearSort);
+    particles.particles[idx].scale = getVector3InitializerValue(scaInit.minScale, scaInit.maxScale, scaInit.linearSort);
+
+    syncParticleInstance(idx, particles, instmesh, targetTransform);
 
 }
 
-void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& particles, PointsComponent& points){
+void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform){
     ParticleLifeInitializer& lifeInit = particles.lifeInitializer;
     particles.particles[idx].life = getFloatInitializerValue(lifeInit.minLife, lifeInit.maxLife);
 
     ParticlePositionInitializer& posInit = particles.positionInitializer;
-    points.points[idx].position = getVector3InitializerValue(posInit.minPosition, posInit.maxPosition, false);
+    Vector3 position = getVector3InitializerValue(posInit.minPosition, posInit.maxPosition, false);
+    particles.particles[idx].position = getParticleSimulationPosition(particles, targetTransform, position);
 
     ParticleVelocityInitializer& velInit = particles.velocityInitializer;
-    particles.particles[idx].velocity = getVector3InitializerValue(velInit.minVelocity, velInit.maxVelocity, false);
+    Vector3 velocity = getVector3InitializerValue(velInit.minVelocity, velInit.maxVelocity, false);
+    particles.particles[idx].velocity = getParticleSimulationDirection(particles, targetTransform, velocity);
 
     ParticleAccelerationInitializer& accInit = particles.accelerationInitializer;
-    particles.particles[idx].acceleration = getVector3InitializerValue(accInit.minAcceleration, accInit.maxAcceleration, false);
+    Vector3 acceleration = getVector3InitializerValue(accInit.minAcceleration, accInit.maxAcceleration, false);
+    particles.particles[idx].acceleration = getParticleSimulationDirection(particles, targetTransform, acceleration);
 
     ParticleColorInitializer& colInit = particles.colorInitializer;
     points.points[idx].color = getVector3InitializerValue(colInit.minColor, colInit.maxColor, false);
@@ -474,6 +585,8 @@ void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& par
 
     ParticleRotationInitializer& rotInit = particles.rotationInitializer;
     points.points[idx].rotation = Angle::defaultToRad(getQuaternionInitializerValue(rotInit.minRotation, rotInit.maxRotation, rotInit.shortestPath).getRoll());
+
+    syncParticlePoint(idx, particles, points, targetTransform);
 
     // scale initializer is not applicable to points
 }
@@ -532,23 +645,23 @@ Rect ActionSystem::getSpriteModifierValue(float& value, std::vector<int>& frames
     return Rect(0,0,1,1);
 }
 
-void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite){
+void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite, Transform* targetTransform){
     float particleTime = particles.particles[idx].time;
     float value;
 
     ParticlePositionModifier& posMod = particles.positionModifier;
     if (getParticleModifierValue(particleTime, posMod.fromTime, posMod.toTime, posMod.function, value)){
-        instmesh.instances[idx].position = getVector3ModifierValue(value, posMod.fromPosition, posMod.toPosition);
+        particles.particles[idx].position = getParticleSimulationPosition(particles, targetTransform, getVector3ModifierValue(value, posMod.fromPosition, posMod.toPosition));
     }
 
     ParticleVelocityModifier& velMod = particles.velocityModifier;
     if (getParticleModifierValue(particleTime, velMod.fromTime, velMod.toTime, velMod.function, value)){
-        particles.particles[idx].velocity = getVector3ModifierValue(value, velMod.fromVelocity, velMod.toVelocity);
+        particles.particles[idx].velocity = getParticleSimulationDirection(particles, targetTransform, getVector3ModifierValue(value, velMod.fromVelocity, velMod.toVelocity));
     }
 
     ParticleAccelerationModifier& accMod = particles.accelerationModifier;
     if (getParticleModifierValue(particleTime, accMod.fromTime, accMod.toTime, accMod.function, value)){
-        particles.particles[idx].acceleration = getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration);
+        particles.particles[idx].acceleration = getParticleSimulationDirection(particles, targetTransform, getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration));
     }
 
     ParticleColorModifier& colMod = particles.colorModifier;
@@ -575,33 +688,33 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
 
     ParticleRotationModifier& rotMod = particles.rotationModifier;
     if (getParticleModifierValue(particleTime, rotMod.fromTime, rotMod.toTime, rotMod.function, value)){
-        instmesh.instances[idx].rotation = getQuaternionModifierValue(value, rotMod.fromRotation, rotMod.toRotation, rotMod.shortestPath);
+        particles.particles[idx].rotation = getParticleSimulationRotation(particles, targetTransform, getQuaternionModifierValue(value, rotMod.fromRotation, rotMod.toRotation, rotMod.shortestPath));
     }
 
     ParticleScaleModifier& scaMod = particles.scaleModifier;
     if (getParticleModifierValue(particleTime, scaMod.fromTime, scaMod.toTime, scaMod.function, value)){
-        instmesh.instances[idx].scale = getVector3ModifierValue(value, scaMod.fromScale, scaMod.toScale);
+        particles.particles[idx].scale = getVector3ModifierValue(value, scaMod.fromScale, scaMod.toScale);
     }
 
 }
 
-void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& particles, PointsComponent& points){
+void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform){
     float particleTime = particles.particles[idx].time;
     float value;
 
     ParticlePositionModifier& posMod = particles.positionModifier;
     if (getParticleModifierValue(particleTime, posMod.fromTime, posMod.toTime, posMod.function, value)){
-        points.points[idx].position = getVector3ModifierValue(value, posMod.fromPosition, posMod.toPosition);
+        particles.particles[idx].position = getParticleSimulationPosition(particles, targetTransform, getVector3ModifierValue(value, posMod.fromPosition, posMod.toPosition));
     }
 
     ParticleVelocityModifier& velMod = particles.velocityModifier;
     if (getParticleModifierValue(particleTime, velMod.fromTime, velMod.toTime, velMod.function, value)){
-        particles.particles[idx].velocity = getVector3ModifierValue(value, velMod.fromVelocity, velMod.toVelocity);
+        particles.particles[idx].velocity = getParticleSimulationDirection(particles, targetTransform, getVector3ModifierValue(value, velMod.fromVelocity, velMod.toVelocity));
     }
 
     ParticleAccelerationModifier& accMod = particles.accelerationModifier;
     if (getParticleModifierValue(particleTime, accMod.fromTime, accMod.toTime, accMod.function, value)){
-        particles.particles[idx].acceleration = getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration);
+        particles.particles[idx].acceleration = getParticleSimulationDirection(particles, targetTransform, getVector3ModifierValue(value, accMod.fromAcceleration, accMod.toAcceleration));
     }
 
     ParticleColorModifier& colMod = particles.colorModifier;
@@ -635,7 +748,7 @@ void ActionSystem::applyParticleModifiers(size_t idx, ParticlesComponent& partic
     // scale modifier is not applicable to points
 }
 
-void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite){
+void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& particles, InstancedMeshComponent& instmesh, SpriteComponent* sprite, Transform* targetTransform){
     float life = particles.particles[idx].life;
     float time = particles.particles[idx].time;
 
@@ -644,10 +757,10 @@ void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& par
         return;
     }
 
-    applyParticleModifiers(idx, particles, instmesh, sprite);
+    applyParticleModifiers(idx, particles, instmesh, sprite, targetTransform);
 
     Vector3 velocity = particles.particles[idx].velocity;
-    Vector3 position = instmesh.instances[idx].position;
+    Vector3 position = particles.particles[idx].position;
     Vector3 acceleration = particles.particles[idx].acceleration;
 
     velocity += acceleration * dt * 0.5f;
@@ -657,13 +770,15 @@ void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& par
 
     particles.particles[idx].time = time;
     particles.particles[idx].velocity = velocity;
-    instmesh.instances[idx].position = position;
+    particles.particles[idx].position = position;
+
+    syncParticleInstance(idx, particles, instmesh, targetTransform);
 
     instmesh.instances[idx].visible = true;
     instmesh.needUpdateInstances = true;
 }
 
-void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& particles, PointsComponent& points){
+void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& particles, PointsComponent& points, Transform* targetTransform){
     float life = particles.particles[idx].life;
     float time = particles.particles[idx].time;
 
@@ -672,10 +787,10 @@ void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& par
         return;
     }
 
-    applyParticleModifiers(idx, particles, points);
+    applyParticleModifiers(idx, particles, points, targetTransform);
 
     Vector3 velocity = particles.particles[idx].velocity;
-    Vector3 position = points.points[idx].position;
+    Vector3 position = particles.particles[idx].position;
     Vector3 acceleration = particles.particles[idx].acceleration;
 
     velocity += acceleration * dt * 0.5f;
@@ -685,7 +800,9 @@ void ActionSystem::advanceParticle(size_t idx, float dt, ParticlesComponent& par
 
     particles.particles[idx].time = time;
     particles.particles[idx].velocity = velocity;
-    points.points[idx].position = position;
+    particles.particles[idx].position = position;
+
+    syncParticlePoint(idx, particles, points, targetTransform);
 
     points.points[idx].visible = true;
     points.needUpdate = true;
@@ -751,11 +868,15 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, PointsComp
 
 void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target, ActionComponent& action, ParticlesComponent& particles, InstancedMeshComponent& instmesh){
     SpriteComponent* sprite = scene->findComponent<SpriteComponent>(target);
+    Transform* targetTransform = scene->findComponent<Transform>(target);
+    if (!particles.localSpace && targetTransform){
+        updateParticleTargetTransform(*targetTransform);
+    }
 
     bool existParticles = false;
     for(int i=0; i<particles.particles.size(); i++){
         if (particles.particles[i].life > particles.particles[i].time){
-            advanceParticle(i, dt, particles, instmesh, sprite);
+            advanceParticle(i, dt, particles, instmesh, sprite, targetTransform);
             existParticles = true;
         }else{
             instmesh.instances[i].visible = false;
@@ -775,11 +896,11 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
 
             if (particleIndex >= 0){
                 particles.particles[particleIndex].time = 0;
-                applyParticleInitializers(particleIndex, particles, instmesh, sprite);
+                applyParticleInitializers(particleIndex, particles, instmesh, sprite, targetTransform);
 
                 float spawnDt = (float)dt * (float)(newparticles - i) / (float)(newparticles + 1);
                 if (spawnDt > 0.0f){
-                    advanceParticle(particleIndex, spawnDt, particles, instmesh, sprite);
+                    advanceParticle(particleIndex, spawnDt, particles, instmesh, sprite, targetTransform);
                 }
 
                 existParticles = true;
@@ -803,10 +924,15 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
 }
 
 void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target, ActionComponent& action, ParticlesComponent& particles, PointsComponent& points){
+    Transform* targetTransform = scene->findComponent<Transform>(target);
+    if (!particles.localSpace && targetTransform){
+        updateParticleTargetTransform(*targetTransform);
+    }
+
     bool existParticles = false;
     for(int i=0; i<particles.particles.size(); i++){
         if (particles.particles[i].life > particles.particles[i].time){
-            advanceParticle(i, dt, particles, points);
+            advanceParticle(i, dt, particles, points, targetTransform);
             existParticles = true;
         }else{
             points.points[i].visible = false;
@@ -826,11 +952,11 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
 
             if (particleIndex >= 0){
                 particles.particles[particleIndex].time = 0;
-                applyParticleInitializers(particleIndex, particles, points);
+                applyParticleInitializers(particleIndex, particles, points, targetTransform);
 
                 float spawnDt = (float)dt * (float)(newparticles - i) / (float)(newparticles + 1);
                 if (spawnDt > 0.0f){
-                    advanceParticle(particleIndex, spawnDt, particles, points);
+                    advanceParticle(particleIndex, spawnDt, particles, points, targetTransform);
                 }
 
                 existParticles = true;

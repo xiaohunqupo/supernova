@@ -142,6 +142,7 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addProperty("maxPerUpdate", &Particles::getMaxPerUpdate, &Particles::setMaxPerUpdate)
         .addProperty("emitter", &Particles::isEmitter, &Particles::setEmitter)
         .addProperty("loop", &Particles::isLoop, &Particles::setLoop)
+        .addProperty("localSpace", &Particles::isLocalSpace, &Particles::setLocalSpace)
         .addFunction("setLifeInitializer", 
             luabridge::overload<float>(&Particles::setLifeInitializer),
             luabridge::overload<float, float>(&Particles::setLifeInitializer))

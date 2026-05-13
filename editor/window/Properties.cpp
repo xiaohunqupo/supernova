@@ -6941,6 +6941,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     propertyRow(RowPropertyType::UInt, cpType, "maxParticles", "Max Particles", sceneProject, entities, settingsInt);
     propertyRow(RowPropertyType::Bool, cpType, "emitter", "Emitter", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "localSpace", "Local Space", sceneProject, entities);
     propertyRow(RowPropertyType::Int, cpType, "rate", "Rate", sceneProject, entities, settingsInt);
     propertyRow(RowPropertyType::Int, cpType, "maxPerUpdate", "Max Per Update", sceneProject, entities, settingsInt);
     endTable();

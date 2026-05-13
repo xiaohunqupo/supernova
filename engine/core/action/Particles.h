@@ -26,6 +26,9 @@ namespace doriax{
         void setLoop(bool loop);
         bool isLoop() const;
 
+        void setLocalSpace(bool localSpace);
+        bool isLocalSpace() const;
+
         void setMaxPerUpdate(int maxPerUpdate);
         int getMaxPerUpdate() const;
 

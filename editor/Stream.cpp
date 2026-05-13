@@ -5077,6 +5077,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     node["maxParticles"] = particles.maxParticles;
     node["emitter"] = particles.emitter;
     node["loop"] = particles.loop;
+    node["localSpace"] = particles.localSpace;
     node["rate"] = particles.rate;
     node["maxPerUpdate"] = particles.maxPerUpdate;
 
@@ -5219,6 +5220,7 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
     if (node["maxParticles"]) particles.maxParticles = node["maxParticles"].as<unsigned int>();
     if (node["emitter"]) particles.emitter = node["emitter"].as<bool>();
     if (node["loop"]) particles.loop = node["loop"].as<bool>();
+    if (node["localSpace"]) particles.localSpace = node["localSpace"].as<bool>();
     if (node["rate"]) particles.rate = node["rate"].as<int>();
     if (node["maxPerUpdate"]) particles.maxPerUpdate = node["maxPerUpdate"].as<int>();
 

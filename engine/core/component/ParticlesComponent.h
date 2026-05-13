@@ -163,8 +163,11 @@ namespace doriax{
 
     struct ParticleData{
         float life = 1;
+        Vector3 position = Vector3(0,0,0);
         Vector3 velocity = Vector3(0,0,0);
         Vector3 acceleration = Vector3(0,0,0);
+        Quaternion rotation;
+        Vector3 scale = Vector3(1,1,1);
 
         float time = 0;
     };
@@ -180,6 +183,7 @@ namespace doriax{
         bool emitter = false;
 
         bool loop = true;
+        bool localSpace = false;
 
         int rate = 5; //per second
         int maxPerUpdate = 100;

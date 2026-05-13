@@ -66,6 +66,18 @@ bool Particles::isLoop() const{
     return partAnim.loop;
 }
 
+void Particles::setLocalSpace(bool localSpace){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.localSpace = localSpace;
+}
+
+bool Particles::isLocalSpace() const{
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    return partAnim.localSpace;
+}
+
 void Particles::setMaxPerUpdate(int maxPerUpdate){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
     

@@ -531,6 +531,7 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("lastUsedParticle", &ParticlesComponent::lastUsedParticle)
         .addProperty("emitter", &ParticlesComponent::emitter)
         .addProperty("loop", &ParticlesComponent::loop)
+        .addProperty("localSpace", &ParticlesComponent::localSpace)
         .addProperty("rate", &ParticlesComponent::rate)
         .addProperty("lifeInitializer", &ParticlesComponent::lifeInitializer)
         .addProperty("lifeInitializer", &ParticlesComponent::lifeInitializer)
