@@ -143,12 +143,28 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addProperty("emitter", &Particles::isEmitter, &Particles::setEmitter)
         .addProperty("loop", &Particles::isLoop, &Particles::setLoop)
         .addProperty("localSpace", &Particles::isLocalSpace, &Particles::setLocalSpace)
+        .addProperty("emitterShape", &Particles::getPositionInitializerShape, &Particles::setPositionInitializerShape)
         .addFunction("setLifeInitializer", 
             luabridge::overload<float>(&Particles::setLifeInitializer),
             luabridge::overload<float, float>(&Particles::setLifeInitializer))
         .addFunction("setPositionInitializer", 
             luabridge::overload<Vector3>(&Particles::setPositionInitializer),
             luabridge::overload<Vector3, Vector3>(&Particles::setPositionInitializer))
+        .addFunction("setSpherePositionInitializer",
+            luabridge::overload<float>(&Particles::setSpherePositionInitializer),
+            luabridge::overload<float, float>(&Particles::setSpherePositionInitializer))
+        .addFunction("setHemispherePositionInitializer",
+            luabridge::overload<float>(&Particles::setHemispherePositionInitializer),
+            luabridge::overload<float, float>(&Particles::setHemispherePositionInitializer))
+        .addFunction("setCirclePositionInitializer",
+            luabridge::overload<float>(&Particles::setCirclePositionInitializer),
+            luabridge::overload<float, float>(&Particles::setCirclePositionInitializer))
+        .addFunction("setConePositionInitializer", &Particles::setConePositionInitializer)
+        .addFunction("addBurst",
+            luabridge::overload<float, int>(&Particles::addBurst),
+            luabridge::overload<float, int, int>(&Particles::addBurst))
+        .addFunction("setBursts", &Particles::setBursts)
+        .addFunction("clearBursts", &Particles::clearBursts)
         .addFunction("setPositionModifier", 
             luabridge::overload<float, float, Vector3, Vector3>(&Particles::setPositionModifier),
             luabridge::overload<float, float, Vector3, Vector3, EaseType>(&Particles::setPositionModifier),

@@ -71,6 +71,11 @@ namespace doriax{
 		Vector3 getParticleDisplayScale(Vector3 scale, Transform* targetTransform);
 		bool isParticleWorldSpace(ParticlesComponent& particles, Transform* targetTransform);
 		void updateParticleTargetTransform(Transform& transform);
+		void updateParticleTargetCache(ParticlesComponent& particles, Transform* targetTransform);
+		Vector3 samplePositionInitializer(ParticlePositionInitializer& init);
+		int sampleBurstCount(ParticleBurst& burst);
+		void sortParticleBursts(ParticlesComponent& particles);
+		float getParticleCycleDuration(ParticlesComponent& particles);
 		Vector3 getParticleSimulationPosition(ParticlesComponent& particles, Transform* targetTransform, Vector3 position);
 		Vector3 getParticleSimulationDirection(ParticlesComponent& particles, Transform* targetTransform, Vector3 direction);
 		Quaternion getParticleSimulationRotation(ParticlesComponent& particles, Transform* targetTransform, Quaternion rotation);

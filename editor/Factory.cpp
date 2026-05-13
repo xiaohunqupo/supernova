@@ -2214,11 +2214,23 @@ std::string editor::Factory::createParticlesComponent(int indentSpaces, EntityRe
     code << ind << "particles.rate = " << formatInt(p.rate) << ";\n";
     code << ind << "particles.maxPerUpdate = " << formatInt(p.maxPerUpdate) << ";\n";
 
+    for (size_t i = 0; i < p.bursts.size(); i++) {
+        code << ind << "{ ParticleBurst b; b.time = " << formatFloat(p.bursts[i].time)
+             << "; b.minCount = " << formatInt(p.bursts[i].minCount)
+             << "; b.maxCount = " << formatInt(p.bursts[i].maxCount)
+             << "; particles.bursts.push_back(b); }\n";
+    }
+
     code << ind << "particles.lifeInitializer.minLife = " << formatFloat(p.lifeInitializer.minLife) << ";\n";
     code << ind << "particles.lifeInitializer.maxLife = " << formatFloat(p.lifeInitializer.maxLife) << ";\n";
 
+    code << ind << "particles.positionInitializer.shape = (ParticleEmitterShape)" << formatInt((int)p.positionInitializer.shape) << ";\n";
     code << ind << "particles.positionInitializer.minPosition = " << formatVector3(p.positionInitializer.minPosition) << ";\n";
     code << ind << "particles.positionInitializer.maxPosition = " << formatVector3(p.positionInitializer.maxPosition) << ";\n";
+    code << ind << "particles.positionInitializer.radius = " << formatFloat(p.positionInitializer.radius) << ";\n";
+    code << ind << "particles.positionInitializer.innerRadius = " << formatFloat(p.positionInitializer.innerRadius) << ";\n";
+    code << ind << "particles.positionInitializer.coneAngle = " << formatFloat(p.positionInitializer.coneAngle) << ";\n";
+    code << ind << "particles.positionInitializer.coneHeight = " << formatFloat(p.positionInitializer.coneHeight) << ";\n";
     code << ind << "particles.positionModifier.fromTime = " << formatFloat(p.positionModifier.fromTime) << ";\n";
     code << ind << "particles.positionModifier.toTime = " << formatFloat(p.positionModifier.toTime) << ";\n";
     code << ind << "particles.positionModifier.fromPosition = " << formatVector3(p.positionModifier.fromPosition) << ";\n";

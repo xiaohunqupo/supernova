@@ -110,6 +110,15 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
+        .beginNamespace("ParticleEmitterShape")
+        .addVariable("Box", ParticleEmitterShape::Box)
+        .addVariable("Sphere", ParticleEmitterShape::Sphere)
+        .addVariable("Hemisphere", ParticleEmitterShape::Hemisphere)
+        .addVariable("Circle", ParticleEmitterShape::Circle)
+        .addVariable("Cone", ParticleEmitterShape::Cone)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
         .beginClass<ActionSystem>("ActionSystem")
         .addFunction("actionStart", &ActionSystem::actionStart)
         .addFunction("actionStop", &ActionSystem::actionStop)
@@ -390,8 +399,20 @@ void LuaBinding::registerECSClasses(lua_State *L){
 
     luabridge::getGlobalNamespace(L)
         .beginClass<ParticlePositionInitializer>("ParticlePositionInitializer")
+        .addProperty("shape", &ParticlePositionInitializer::shape)
         .addProperty("minPosition", &ParticlePositionInitializer::minPosition)
         .addProperty("maxPosition", &ParticlePositionInitializer::maxPosition)
+        .addProperty("radius", &ParticlePositionInitializer::radius)
+        .addProperty("innerRadius", &ParticlePositionInitializer::innerRadius)
+        .addProperty("coneAngle", &ParticlePositionInitializer::coneAngle)
+        .addProperty("coneHeight", &ParticlePositionInitializer::coneHeight)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<ParticleBurst>("ParticleBurst")
+        .addProperty("time", &ParticleBurst::time)
+        .addProperty("minCount", &ParticleBurst::minCount)
+        .addProperty("maxCount", &ParticleBurst::maxCount)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
@@ -533,7 +554,9 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("loop", &ParticlesComponent::loop)
         .addProperty("localSpace", &ParticlesComponent::localSpace)
         .addProperty("rate", &ParticlesComponent::rate)
-        .addProperty("lifeInitializer", &ParticlesComponent::lifeInitializer)
+        .addProperty("maxPerUpdate", &ParticlesComponent::maxPerUpdate)
+        .addProperty("bursts", &ParticlesComponent::bursts)
+        .addProperty("currentBurst", &ParticlesComponent::currentBurst)
         .addProperty("lifeInitializer", &ParticlesComponent::lifeInitializer)
         .addProperty("positionInitializer", &ParticlesComponent::positionInitializer)
         .addProperty("positionModifier", &ParticlesComponent::positionModifier)

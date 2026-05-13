@@ -108,8 +108,94 @@ void Particles::setPositionInitializer(Vector3 position){
 void Particles::setPositionInitializer(Vector3 minPosition, Vector3 maxPosition){
     ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
 
+    partAnim.positionInitializer.shape = ParticleEmitterShape::Box;
     partAnim.positionInitializer.minPosition = minPosition;
     partAnim.positionInitializer.maxPosition = maxPosition;
+}
+
+void Particles::setPositionInitializerShape(ParticleEmitterShape shape){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.positionInitializer.shape = shape;
+}
+
+ParticleEmitterShape Particles::getPositionInitializerShape() const{
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    return partAnim.positionInitializer.shape;
+}
+
+void Particles::setSpherePositionInitializer(float radius){
+    setSpherePositionInitializer(radius, 0.0f);
+}
+
+void Particles::setSpherePositionInitializer(float radius, float innerRadius){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.positionInitializer.shape = ParticleEmitterShape::Sphere;
+    partAnim.positionInitializer.radius = radius;
+    partAnim.positionInitializer.innerRadius = innerRadius;
+}
+
+void Particles::setHemispherePositionInitializer(float radius){
+    setHemispherePositionInitializer(radius, 0.0f);
+}
+
+void Particles::setHemispherePositionInitializer(float radius, float innerRadius){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.positionInitializer.shape = ParticleEmitterShape::Hemisphere;
+    partAnim.positionInitializer.radius = radius;
+    partAnim.positionInitializer.innerRadius = innerRadius;
+}
+
+void Particles::setCirclePositionInitializer(float radius){
+    setCirclePositionInitializer(radius, 0.0f);
+}
+
+void Particles::setCirclePositionInitializer(float radius, float innerRadius){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.positionInitializer.shape = ParticleEmitterShape::Circle;
+    partAnim.positionInitializer.radius = radius;
+    partAnim.positionInitializer.innerRadius = innerRadius;
+}
+
+void Particles::setConePositionInitializer(float angle, float height){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.positionInitializer.shape = ParticleEmitterShape::Cone;
+    partAnim.positionInitializer.coneAngle = angle;
+    partAnim.positionInitializer.coneHeight = height;
+}
+
+void Particles::addBurst(float time, int count){
+    addBurst(time, count, count);
+}
+
+void Particles::addBurst(float time, int minCount, int maxCount){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    ParticleBurst burst;
+    burst.time = time;
+    burst.minCount = minCount;
+    burst.maxCount = maxCount;
+    partAnim.bursts.push_back(burst);
+    partAnim.currentBurst = 0;
+}
+
+void Particles::setBursts(std::vector<ParticleBurst> bursts){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.bursts = bursts;
+    partAnim.currentBurst = 0;
+}
+
+void Particles::clearBursts(){
+    ParticlesComponent& partAnim = getComponent<ParticlesComponent>();
+
+    partAnim.bursts.clear();
+    partAnim.currentBurst = 0;
 }
 
 void Particles::setPositionModifier(float fromTime, float toTime, Vector3 fromPosition, Vector3 toPosition){

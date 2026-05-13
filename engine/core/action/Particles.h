@@ -6,6 +6,7 @@
 #define PARTICLES_H
 
 #include "Action.h"
+#include "component/ParticlesComponent.h"
 
 namespace doriax{
 
@@ -37,9 +38,23 @@ namespace doriax{
 
         void setPositionInitializer(Vector3 position);
         void setPositionInitializer(Vector3 minPosition, Vector3 maxPosition);
+        void setPositionInitializerShape(ParticleEmitterShape shape);
+        ParticleEmitterShape getPositionInitializerShape() const;
+        void setSpherePositionInitializer(float radius);
+        void setSpherePositionInitializer(float radius, float innerRadius);
+        void setHemispherePositionInitializer(float radius);
+        void setHemispherePositionInitializer(float radius, float innerRadius);
+        void setCirclePositionInitializer(float radius);
+        void setCirclePositionInitializer(float radius, float innerRadius);
+        void setConePositionInitializer(float angle, float height);
         void setPositionModifier(float fromTime, float toTime, Vector3 fromPosition, Vector3 toPosition);
         void setPositionModifier(float fromTime, float toTime, Vector3 fromPosition, Vector3 toPosition, EaseType functionType);
         void setPositionModifier(float fromTime, float toTime, Vector3 fromPosition, Vector3 toPosition, Ease function);
+
+        void addBurst(float time, int count);
+        void addBurst(float time, int minCount, int maxCount);
+        void setBursts(std::vector<ParticleBurst> bursts);
+        void clearBursts();
 
         void setVelocityInitializer(Vector3 velocity);
         void setVelocityInitializer(Vector3 minVelocity, Vector3 maxVelocity);

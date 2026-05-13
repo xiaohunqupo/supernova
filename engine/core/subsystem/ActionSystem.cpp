@@ -9,6 +9,8 @@
 #include "util/Angle.h"
 #include "subsystem/MeshSystem.h"
 
+#include <algorithm>
+#include <cmath>
 #include <functional>
 #include <unordered_set>
 
@@ -84,23 +86,124 @@ Quaternion ActionSystem::getParticleSimulationRotation(ParticlesComponent& parti
 
 Vector3 ActionSystem::getParticleDisplayPosition(ParticlesComponent& particles, Transform* targetTransform, Vector3 position){
     if (isParticleWorldSpace(particles, targetTransform))
-        return targetTransform->modelMatrix.inverse() * position;
+        return particles.cachedTargetModelInv * position;
 
     return position;
 }
 
 Quaternion ActionSystem::getParticleDisplayRotation(ParticlesComponent& particles, Transform* targetTransform, Quaternion rotation){
     if (isParticleWorldSpace(particles, targetTransform))
-        return targetTransform->worldRotation.inverse() * rotation;
+        return particles.cachedTargetWorldRotInv * rotation;
 
     return rotation;
 }
 
 Vector3 ActionSystem::getParticleDisplayScale(ParticlesComponent& particles, Transform* targetTransform, Vector3 scale){
     if (isParticleWorldSpace(particles, targetTransform))
-        return getParticleDisplayScale(scale, targetTransform);
+        return Vector3(
+            scale.x * particles.cachedTargetInvScale.x,
+            scale.y * particles.cachedTargetInvScale.y,
+            scale.z * particles.cachedTargetInvScale.z);
 
     return scale;
+}
+
+void ActionSystem::updateParticleTargetCache(ParticlesComponent& particles, Transform* targetTransform){
+    if (!isParticleWorldSpace(particles, targetTransform))
+        return;
+
+    updateParticleTargetTransform(*targetTransform);
+
+    particles.cachedTargetModelInv = targetTransform->modelMatrix.inverse();
+    particles.cachedTargetWorldRotInv = targetTransform->worldRotation.inverse();
+    particles.cachedTargetInvScale = Vector3(
+        getParticleInverseScale(targetTransform->worldScale.x),
+        getParticleInverseScale(targetTransform->worldScale.y),
+        getParticleInverseScale(targetTransform->worldScale.z));
+}
+
+Vector3 ActionSystem::samplePositionInitializer(ParticlePositionInitializer& init){
+    auto frand = [](){ return (float)rand() / (float)RAND_MAX; };
+    const float twoPi = 6.28318530717958647692f;
+    const float degToRad = 0.01745329251994329577f;
+    float outerRadius = std::max(0.0f, init.radius);
+    float innerRadius = std::min(std::max(0.0f, init.innerRadius), outerRadius);
+
+    auto sampleVolumeRadius = [&](){
+        float inner3 = innerRadius * innerRadius * innerRadius;
+        float outer3 = outerRadius * outerRadius * outerRadius;
+        return std::pow(inner3 + frand() * (outer3 - inner3), 1.0f / 3.0f);
+    };
+
+    auto sampleDiscRadius = [&](){
+        float inner2 = innerRadius * innerRadius;
+        float outer2 = outerRadius * outerRadius;
+        return std::sqrt(inner2 + frand() * (outer2 - inner2));
+    };
+
+    switch (init.shape){
+        case ParticleEmitterShape::Sphere:{
+            float u = frand() * 2.0f - 1.0f;
+            float theta = frand() * twoPi;
+            float r = sampleVolumeRadius();
+            float s = std::sqrt(std::max(0.0f, 1.0f - u*u));
+            return Vector3(r * s * std::cos(theta), r * u, r * s * std::sin(theta));
+        }
+        case ParticleEmitterShape::Hemisphere:{
+            float u = frand();
+            float theta = frand() * twoPi;
+            float r = sampleVolumeRadius();
+            float s = std::sqrt(std::max(0.0f, 1.0f - u*u));
+            return Vector3(r * s * std::cos(theta), r * u, r * s * std::sin(theta));
+        }
+        case ParticleEmitterShape::Circle:{
+            float theta = frand() * twoPi;
+            float r = sampleDiscRadius();
+            return Vector3(r * std::cos(theta), 0.0f, r * std::sin(theta));
+        }
+        case ParticleEmitterShape::Cone:{
+            float coneHeight = std::max(0.0f, init.coneHeight);
+            float coneAngle = std::min(std::max(0.0f, init.coneAngle), 89.0f);
+            float h = coneHeight * std::pow(frand(), 1.0f / 3.0f);
+            float angleRad = coneAngle * degToRad;
+            float maxR = h * std::tan(angleRad);
+            float theta = frand() * twoPi;
+            float r = maxR * std::sqrt(frand());
+            return Vector3(r * std::cos(theta), h, r * std::sin(theta));
+        }
+        case ParticleEmitterShape::Box:
+        default:
+            return getVector3InitializerValue(init.minPosition, init.maxPosition, false);
+    }
+}
+
+int ActionSystem::sampleBurstCount(ParticleBurst& burst){
+    int minCount = std::max(0, burst.minCount);
+    int maxCount = std::max(minCount, burst.maxCount);
+    if (maxCount <= minCount)
+        return minCount;
+    int span = maxCount - minCount + 1;
+    return minCount + (int)((float)span * (float)rand() / (float)(RAND_MAX + 1.0));
+}
+
+void ActionSystem::sortParticleBursts(ParticlesComponent& particles){
+    std::sort(particles.bursts.begin(), particles.bursts.end(), [](const ParticleBurst& a, const ParticleBurst& b){
+        return a.time < b.time;
+    });
+}
+
+float ActionSystem::getParticleCycleDuration(ParticlesComponent& particles){
+    float cycleDuration = 0.0f;
+    if (particles.rate > 0){
+        cycleDuration = std::max(cycleDuration, (float)particles.maxParticles / (float)particles.rate);
+    }
+    for (ParticleBurst& burst : particles.bursts){
+        cycleDuration = std::max(cycleDuration, burst.time);
+    }
+    if (cycleDuration <= 0.0f && !particles.bursts.empty()){
+        cycleDuration = std::max(0.0001f, particles.lifeInitializer.maxLife);
+    }
+    return cycleDuration;
 }
 
 void ActionSystem::syncParticleInstance(size_t idx, ParticlesComponent& particles, InstancedMeshComponent& instmesh, Transform* targetTransform){
@@ -514,7 +617,7 @@ void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& par
     particles.particles[idx].life = getFloatInitializerValue(lifeInit.minLife, lifeInit.maxLife);
 
     ParticlePositionInitializer& posInit = particles.positionInitializer;
-    Vector3 position = getVector3InitializerValue(posInit.minPosition, posInit.maxPosition, false);
+    Vector3 position = samplePositionInitializer(posInit);
     particles.particles[idx].position = getParticleSimulationPosition(particles, targetTransform, position);
 
     ParticleVelocityInitializer& velInit = particles.velocityInitializer;
@@ -557,7 +660,7 @@ void ActionSystem::applyParticleInitializers(size_t idx, ParticlesComponent& par
     particles.particles[idx].life = getFloatInitializerValue(lifeInit.minLife, lifeInit.maxLife);
 
     ParticlePositionInitializer& posInit = particles.positionInitializer;
-    Vector3 position = getVector3InitializerValue(posInit.minPosition, posInit.maxPosition, false);
+    Vector3 position = samplePositionInitializer(posInit);
     particles.particles[idx].position = getParticleSimulationPosition(particles, targetTransform, position);
 
     ParticleVelocityInitializer& velInit = particles.velocityInitializer;
@@ -832,6 +935,8 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, InstancedM
     particles.emitter = true;
     particles.newParticlesCount = 0;
     particles.lastUsedParticle = 0;
+    sortParticleBursts(particles);
+    particles.currentBurst = 0;
 }
 
 void ActionSystem::particleActionStart(ParticlesComponent& particles, PointsComponent& points){
@@ -864,14 +969,14 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, PointsComp
     particles.emitter = true;
     particles.newParticlesCount = 0;
     particles.lastUsedParticle = 0;
+    sortParticleBursts(particles);
+    particles.currentBurst = 0;
 }
 
 void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target, ActionComponent& action, ParticlesComponent& particles, InstancedMeshComponent& instmesh){
     SpriteComponent* sprite = scene->findComponent<SpriteComponent>(target);
     Transform* targetTransform = scene->findComponent<Transform>(target);
-    if (!particles.localSpace && targetTransform){
-        updateParticleTargetTransform(*targetTransform);
-    }
+    updateParticleTargetCache(particles, targetTransform);
 
     bool existParticles = false;
     for(int i=0; i<particles.particles.size(); i++){
@@ -884,6 +989,20 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
     }
 
     if (particles.emitter){
+        // Bursts (process all bursts whose scheduled time has been reached)
+        while (particles.currentBurst < (int)particles.bursts.size() &&
+               particles.bursts[particles.currentBurst].time <= action.timecount){
+            int count = sampleBurstCount(particles.bursts[particles.currentBurst]);
+            for (int b = 0; b < count; b++){
+                int particleIndex = findUnusedParticle(particles);
+                if (particleIndex < 0) break;
+                particles.particles[particleIndex].time = 0;
+                applyParticleInitializers(particleIndex, particles, instmesh, sprite, targetTransform);
+                existParticles = true;
+            }
+            particles.currentBurst++;
+        }
+
         particles.newParticlesCount += dt * particles.rate;
 
         int newparticles = (int)particles.newParticlesCount;
@@ -915,19 +1034,20 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
     if (!existParticles && !particles.emitter){
         actionStop(entity);
         //onFinish.call(object);
-    } else if (particles.loop && particles.rate > 0) {
-        float cycleDuration = (float)particles.maxParticles / (float)particles.rate;
-        while (action.timecount >= cycleDuration) {
-            action.timecount -= cycleDuration;
+    } else if (particles.loop) {
+        float cycleDuration = getParticleCycleDuration(particles);
+        if (cycleDuration > 0.0f){
+            while (action.timecount >= cycleDuration) {
+                action.timecount -= cycleDuration;
+                particles.currentBurst = 0;
+            }
         }
     }
 }
 
 void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target, ActionComponent& action, ParticlesComponent& particles, PointsComponent& points){
     Transform* targetTransform = scene->findComponent<Transform>(target);
-    if (!particles.localSpace && targetTransform){
-        updateParticleTargetTransform(*targetTransform);
-    }
+    updateParticleTargetCache(particles, targetTransform);
 
     bool existParticles = false;
     for(int i=0; i<particles.particles.size(); i++){
@@ -940,6 +1060,20 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
     }
 
     if (particles.emitter){
+        // Bursts (process all bursts whose scheduled time has been reached)
+        while (particles.currentBurst < (int)particles.bursts.size() &&
+               particles.bursts[particles.currentBurst].time <= action.timecount){
+            int count = sampleBurstCount(particles.bursts[particles.currentBurst]);
+            for (int b = 0; b < count; b++){
+                int particleIndex = findUnusedParticle(particles);
+                if (particleIndex < 0) break;
+                particles.particles[particleIndex].time = 0;
+                applyParticleInitializers(particleIndex, particles, points, targetTransform);
+                existParticles = true;
+            }
+            particles.currentBurst++;
+        }
+
         particles.newParticlesCount += dt * particles.rate;
 
         int newparticles = (int)particles.newParticlesCount;
@@ -971,10 +1105,13 @@ void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target
     if (!existParticles && !particles.emitter){
         actionStop(entity);
         //onFinish.call(object);
-    } else if (particles.loop && particles.rate > 0) {
-        float cycleDuration = (float)particles.maxParticles / (float)particles.rate;
-        while (action.timecount >= cycleDuration) {
-            action.timecount -= cycleDuration;
+    } else if (particles.loop) {
+        float cycleDuration = getParticleCycleDuration(particles);
+        if (cycleDuration > 0.0f){
+            while (action.timecount >= cycleDuration) {
+                action.timecount -= cycleDuration;
+                particles.currentBurst = 0;
+            }
         }
     }
 }
@@ -1076,8 +1213,8 @@ float ActionSystem::getDuration(Entity entity) {
         }
         duration = totalMs / 1000.0f;
     } else if (ParticlesComponent* parts = scene->findComponent<ParticlesComponent>(entity)) {
-        if (parts->rate > 0) {
-            float emitDuration = (float)parts->maxParticles / (float)parts->rate;
+        float emitDuration = getParticleCycleDuration(*parts);
+        if (emitDuration > 0.0f) {
             if (parts->loop) {
                 // One emission cycle: used for timeline wrapping
                 duration = emitDuration;

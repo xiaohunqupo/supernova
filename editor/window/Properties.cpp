@@ -120,6 +120,14 @@ static std::vector<editor::EnumEntry> entriesCameraType = {
     { (int)CameraType::CAMERA_PERSPECTIVE, "Perspective" }
 };
 
+static std::vector<editor::EnumEntry> entriesEmitterShape = {
+    { (int)ParticleEmitterShape::Box, "Box" },
+    { (int)ParticleEmitterShape::Sphere, "Sphere" },
+    { (int)ParticleEmitterShape::Hemisphere, "Hemisphere" },
+    { (int)ParticleEmitterShape::Circle, "Circle" },
+    { (int)ParticleEmitterShape::Cone, "Cone" }
+};
+
 static std::vector<editor::EnumEntry> entriesAudioAttenuation = {
     { (int)SoundAttenuation::NO_ATTENUATION, "No Attenuation" },
     { (int)SoundAttenuation::INVERSE_DISTANCE, "Inverse Distance" },
@@ -4198,6 +4206,12 @@ void editor::Properties::setParticleFrames(ComponentType cpType, const std::stri
     CommandHandle::get(project->getSelectedSceneId())->addCommand(frameCmd);
 }
 
+void editor::Properties::setParticleBursts(ComponentType cpType, SceneProject* sceneProject, Entity entity, const std::vector<ParticleBurst>& bursts) {
+    editor::PropertyCmd<std::vector<ParticleBurst>>* burstCmd = new editor::PropertyCmd<std::vector<ParticleBurst>>(project, sceneProject->id, entity, cpType, "bursts", bursts);
+    burstCmd->setNoMerge();
+    CommandHandle::get(project->getSelectedSceneId())->addCommand(burstCmd);
+}
+
 void editor::Properties::drawParticleFrameList(ComponentType cpType, const std::string& propertyId, const std::string& tableId, SceneProject* sceneProject, const std::vector<Entity>& entities) {
     if (entities.size() != 1) {
         ImGui::TextDisabled("Select a single entity to edit sprite frames");
@@ -6946,6 +6960,71 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
     propertyRow(RowPropertyType::Int, cpType, "maxPerUpdate", "Max Per Update", sceneProject, entities, settingsInt);
     endTable();
 
+    // Bursts (single-entity editor; vector edits are not multi-entity safe)
+    if (entities.size() == 1) {
+        Scene* burstScene = sceneProject->scene;
+        ParticlesComponent* bp = burstScene ? burstScene->findComponent<ParticlesComponent>(entities[0]) : nullptr;
+        if (bp) {
+            Entity entity = entities[0];
+            ImGui::SeparatorText("Bursts");
+            if (ImGui::Button((ICON_FA_PLUS " Add Burst##particle_burst_add"), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+                std::vector<ParticleBurst> newBursts = bp->bursts;
+                newBursts.push_back(ParticleBurst());
+                setParticleBursts(cpType, sceneProject, entity, newBursts);
+            }
+            if (!bp->bursts.empty()) {
+                beginTable(cpType, getLabelSize("Max Count"), "particle_burst_table");
+                for (size_t i = 0; i < bp->bursts.size(); i++) {
+                    ImGui::PushID((int)(1000 + i));
+                    ParticleBurst burst = bp->bursts[i];
+
+                    propertyHeader("Time " + std::to_string(i), -1, false, false);
+                    float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                    ImGui::SetNextItemWidth(-deleteButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+                    if (ImGui::InputFloat("##particle_burst_time", &burst.time)) {
+                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                        newBursts[i] = burst;
+                        setParticleBursts(cpType, sceneProject, entity, newBursts);
+                    }
+                    ImGui::SameLine();
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+                    bool removed = ImGui::Button(ICON_FA_TRASH_CAN "##particle_burst_delete");
+                    ImGui::PopStyleColor(2);
+
+                    propertyHeader("Min Count", -1, false, false);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::InputInt("##particle_burst_min", &burst.minCount)) {
+                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                        newBursts[i] = burst;
+                        setParticleBursts(cpType, sceneProject, entity, newBursts);
+                    }
+
+                    propertyHeader("Max Count", -1, false, false);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::InputInt("##particle_burst_max", &burst.maxCount)) {
+                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                        newBursts[i] = burst;
+                        setParticleBursts(cpType, sceneProject, entity, newBursts);
+                    }
+
+                    ImGui::PopID();
+
+                    if (removed) {
+                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                        newBursts.erase(newBursts.begin() + (std::ptrdiff_t)i);
+                        setParticleBursts(cpType, sceneProject, entity, newBursts);
+                        break;
+                    }
+                }
+                endTable();
+            }
+        }
+    } else {
+        ImGui::SeparatorText("Bursts");
+        ImGui::TextDisabled("Select a single entity to edit bursts");
+    }
+
     const float subsectionIndent = 10.0f;
 
     ImGui::Indent(subsectionIndent);
@@ -6964,9 +7043,29 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         endTable();
 
         ImGui::SeparatorText("Position");
-        beginTable(cpType, getLabelSize("Max Position"), "position_initializer_table");
-        propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.minPosition", "Min Position", sceneProject, entities);
-        propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.maxPosition", "Max Position", sceneProject, entities);
+        RowSettings settingsShape;
+        settingsShape.enumEntries = &entriesEmitterShape;
+        beginTable(cpType, getLabelSize("Cone Height"), "position_initializer_table");
+        propertyRow(RowPropertyType::Enum, cpType, "positionInitializer.shape", "Shape", sceneProject, entities, settingsShape);
+
+        ParticleEmitterShape shownShape = ParticleEmitterShape::Box;
+        if (!entities.empty()) {
+            ParticlesComponent* sp = sceneProject->scene->findComponent<ParticlesComponent>(entities[0]);
+            if (sp) shownShape = sp->positionInitializer.shape;
+        }
+
+        if (shownShape == ParticleEmitterShape::Box) {
+            propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.minPosition", "Min Position", sceneProject, entities);
+            propertyRow(RowPropertyType::Vector3, cpType, "positionInitializer.maxPosition", "Max Position", sceneProject, entities);
+        } else if (shownShape == ParticleEmitterShape::Sphere ||
+                   shownShape == ParticleEmitterShape::Hemisphere ||
+                   shownShape == ParticleEmitterShape::Circle) {
+            propertyRow(RowPropertyType::Float, cpType, "positionInitializer.radius", "Radius", sceneProject, entities, settingsFloat);
+            propertyRow(RowPropertyType::Float, cpType, "positionInitializer.innerRadius", "Inner Radius", sceneProject, entities, settingsFloat);
+        } else if (shownShape == ParticleEmitterShape::Cone) {
+            propertyRow(RowPropertyType::Float, cpType, "positionInitializer.coneAngle", "Cone Angle", sceneProject, entities, settingsFloat);
+            propertyRow(RowPropertyType::Float, cpType, "positionInitializer.coneHeight", "Cone Height", sceneProject, entities, settingsFloat);
+        }
         endTable();
 
         ImGui::SeparatorText("Velocity");

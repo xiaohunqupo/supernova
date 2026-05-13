@@ -10,8 +10,17 @@
 #include "util/SpriteFrameData.h"
 #include "Engine.h"
 #include "buffer/ExternalBuffer.h"
+#include "math/Matrix4.h"
 
 namespace doriax{
+
+    enum class ParticleEmitterShape{
+        Box = 0,
+        Sphere = 1,
+        Hemisphere = 2,
+        Circle = 3,
+        Cone = 4
+    };
 
     struct ParticleLifeInitializer{
         float minLife = 10;
@@ -19,8 +28,29 @@ namespace doriax{
     };
 
     struct ParticlePositionInitializer{
+        ParticleEmitterShape shape = ParticleEmitterShape::Box;
+
+        // Box shape (and historical default)
         Vector3 minPosition = Vector3(0,0,0);
         Vector3 maxPosition = Vector3(0,0,0);
+
+        // Sphere / Hemisphere / Circle
+        float radius = 1.0f;
+        float innerRadius = 0.0f;
+
+        // Cone (apex at origin, axis +Y; half-angle in degrees)
+        float coneAngle = 30.0f;
+        float coneHeight = 1.0f;
+    };
+
+    struct ParticleBurst{
+        float time = 0.0f;
+        int minCount = 10;
+        int maxCount = 10;
+
+        bool operator==(const ParticleBurst& other) const{
+            return time == other.time && minCount == other.minCount && maxCount == other.maxCount;
+        }
     };
 
     struct ParticlePositionModifier{
@@ -187,6 +217,14 @@ namespace doriax{
 
         int rate = 5; //per second
         int maxPerUpdate = 100;
+
+        std::vector<ParticleBurst> bursts;
+        int currentBurst = 0; // runtime, not serialized as data
+
+        // Cached target transform context (runtime only, world-space mode)
+        Matrix4 cachedTargetModelInv;
+        Quaternion cachedTargetWorldRotInv;
+        Vector3 cachedTargetInvScale = Vector3(1,1,1);
 
         ParticleLifeInitializer lifeInitializer;
 

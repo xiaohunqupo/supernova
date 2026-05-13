@@ -1183,14 +1183,20 @@ namespace {
         if (propertyName == "localSpace") return {PropertyType::Bool, UpdateFlags_None, &def.localSpace, &comp->localSpace};
         if (propertyName == "rate") return {PropertyType::Int, UpdateFlags_None, &def.rate, &comp->rate};
         if (propertyName == "maxPerUpdate") return {PropertyType::Int, UpdateFlags_None, &def.maxPerUpdate, &comp->maxPerUpdate};
+        if (propertyName == "bursts") return {PropertyType::Custom, UpdateFlags_None, &def.bursts, &comp->bursts};
 
         // Life Initializer
         if (propertyName == "lifeInitializer.minLife") return {PropertyType::Float, UpdateFlags_None, &def.lifeInitializer.minLife, &comp->lifeInitializer.minLife};
         if (propertyName == "lifeInitializer.maxLife") return {PropertyType::Float, UpdateFlags_None, &def.lifeInitializer.maxLife, &comp->lifeInitializer.maxLife};
 
         // Position Initializer
+        if (propertyName == "positionInitializer.shape") return {PropertyType::Enum, UpdateFlags_None, &def.positionInitializer.shape, &comp->positionInitializer.shape};
         if (propertyName == "positionInitializer.minPosition") return {PropertyType::Vector3, UpdateFlags_None, &def.positionInitializer.minPosition, &comp->positionInitializer.minPosition};
         if (propertyName == "positionInitializer.maxPosition") return {PropertyType::Vector3, UpdateFlags_None, &def.positionInitializer.maxPosition, &comp->positionInitializer.maxPosition};
+        if (propertyName == "positionInitializer.radius") return {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.radius, &comp->positionInitializer.radius};
+        if (propertyName == "positionInitializer.innerRadius") return {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.innerRadius, &comp->positionInitializer.innerRadius};
+        if (propertyName == "positionInitializer.coneAngle") return {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.coneAngle, &comp->positionInitializer.coneAngle};
+        if (propertyName == "positionInitializer.coneHeight") return {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.coneHeight, &comp->positionInitializer.coneHeight};
 
         // Position Modifier
         if (propertyName == "positionModifier.fromTime") return {PropertyType::Float, UpdateFlags_None, &def.positionModifier.fromTime, &comp->positionModifier.fromTime};
@@ -2147,12 +2153,18 @@ namespace {
         ps["localSpace"] = {PropertyType::Bool, UpdateFlags_None, &def.localSpace, comp ? &comp->localSpace : nullptr};
         ps["rate"] = {PropertyType::Int, UpdateFlags_None, &def.rate, comp ? &comp->rate : nullptr};
         ps["maxPerUpdate"] = {PropertyType::Int, UpdateFlags_None, &def.maxPerUpdate, comp ? &comp->maxPerUpdate : nullptr};
+        ps["bursts"] = {PropertyType::Custom, UpdateFlags_None, &def.bursts, comp ? &comp->bursts : nullptr};
 
         ps["lifeInitializer.minLife"] = {PropertyType::Float, UpdateFlags_None, &def.lifeInitializer.minLife, comp ? &comp->lifeInitializer.minLife : nullptr};
         ps["lifeInitializer.maxLife"] = {PropertyType::Float, UpdateFlags_None, &def.lifeInitializer.maxLife, comp ? &comp->lifeInitializer.maxLife : nullptr};
 
+        ps["positionInitializer.shape"] = {PropertyType::Enum, UpdateFlags_None, &def.positionInitializer.shape, comp ? &comp->positionInitializer.shape : nullptr};
         ps["positionInitializer.minPosition"] = {PropertyType::Vector3, UpdateFlags_None, &def.positionInitializer.minPosition, comp ? &comp->positionInitializer.minPosition : nullptr};
         ps["positionInitializer.maxPosition"] = {PropertyType::Vector3, UpdateFlags_None, &def.positionInitializer.maxPosition, comp ? &comp->positionInitializer.maxPosition : nullptr};
+        ps["positionInitializer.radius"] = {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.radius, comp ? &comp->positionInitializer.radius : nullptr};
+        ps["positionInitializer.innerRadius"] = {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.innerRadius, comp ? &comp->positionInitializer.innerRadius : nullptr};
+        ps["positionInitializer.coneAngle"] = {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.coneAngle, comp ? &comp->positionInitializer.coneAngle : nullptr};
+        ps["positionInitializer.coneHeight"] = {PropertyType::Float, UpdateFlags_None, &def.positionInitializer.coneHeight, comp ? &comp->positionInitializer.coneHeight : nullptr};
         ps["positionModifier.fromTime"] = {PropertyType::Float, UpdateFlags_None, &def.positionModifier.fromTime, comp ? &comp->positionModifier.fromTime : nullptr};
         ps["positionModifier.toTime"] = {PropertyType::Float, UpdateFlags_None, &def.positionModifier.toTime, comp ? &comp->positionModifier.toTime : nullptr};
         ps["positionModifier.function"] = {PropertyType::Ease, UpdateFlags_None, &def.positionModifier.function, comp ? &comp->positionModifier.function : nullptr};

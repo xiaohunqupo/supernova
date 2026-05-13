@@ -5081,14 +5081,29 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     node["rate"] = particles.rate;
     node["maxPerUpdate"] = particles.maxPerUpdate;
 
+    YAML::Node bursts;
+    for (const auto& b : particles.bursts) {
+        YAML::Node bn;
+        bn["time"] = b.time;
+        bn["minCount"] = b.minCount;
+        bn["maxCount"] = b.maxCount;
+        bursts.push_back(bn);
+    }
+    node["bursts"] = bursts;
+
     YAML::Node lifeInit;
     lifeInit["minLife"] = particles.lifeInitializer.minLife;
     lifeInit["maxLife"] = particles.lifeInitializer.maxLife;
     node["lifeInitializer"] = lifeInit;
 
     YAML::Node posInit;
+    posInit["shape"] = (int)particles.positionInitializer.shape;
     posInit["minPosition"] = encodeVector3(particles.positionInitializer.minPosition);
     posInit["maxPosition"] = encodeVector3(particles.positionInitializer.maxPosition);
+    posInit["radius"] = particles.positionInitializer.radius;
+    posInit["innerRadius"] = particles.positionInitializer.innerRadius;
+    posInit["coneAngle"] = particles.positionInitializer.coneAngle;
+    posInit["coneHeight"] = particles.positionInitializer.coneHeight;
     node["positionInitializer"] = posInit;
 
     YAML::Node posMod;
@@ -5224,6 +5239,17 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
     if (node["rate"]) particles.rate = node["rate"].as<int>();
     if (node["maxPerUpdate"]) particles.maxPerUpdate = node["maxPerUpdate"].as<int>();
 
+    if (node["bursts"] && node["bursts"].IsSequence()) {
+        particles.bursts.clear();
+        for (const auto& bn : node["bursts"]) {
+            ParticleBurst b;
+            if (bn["time"]) b.time = bn["time"].as<float>();
+            if (bn["minCount"]) b.minCount = bn["minCount"].as<int>();
+            if (bn["maxCount"]) b.maxCount = bn["maxCount"].as<int>();
+            particles.bursts.push_back(b);
+        }
+    }
+
     if (node["lifeInitializer"]) {
         const YAML::Node& n = node["lifeInitializer"];
         if (n["minLife"]) particles.lifeInitializer.minLife = n["minLife"].as<float>();
@@ -5231,8 +5257,13 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
     }
     if (node["positionInitializer"]) {
         const YAML::Node& n = node["positionInitializer"];
+        if (n["shape"]) particles.positionInitializer.shape = (ParticleEmitterShape)n["shape"].as<int>();
         if (n["minPosition"]) particles.positionInitializer.minPosition = decodeVector3(n["minPosition"]);
         if (n["maxPosition"]) particles.positionInitializer.maxPosition = decodeVector3(n["maxPosition"]);
+        if (n["radius"]) particles.positionInitializer.radius = n["radius"].as<float>();
+        if (n["innerRadius"]) particles.positionInitializer.innerRadius = n["innerRadius"].as<float>();
+        if (n["coneAngle"]) particles.positionInitializer.coneAngle = n["coneAngle"].as<float>();
+        if (n["coneHeight"]) particles.positionInitializer.coneHeight = n["coneHeight"].as<float>();
     }
     if (node["positionModifier"]) {
         const YAML::Node& n = node["positionModifier"];
