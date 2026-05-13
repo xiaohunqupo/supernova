@@ -4241,17 +4241,21 @@ void editor::Properties::drawParticleFrameList(ComponentType cpType, const std::
         finishProperty = true;
     }
     ImGui::Text("%zu", frames->size());
-    endTable();
-
-    if (ImGui::Button((ICON_FA_PLUS " Add Frame##" + tableId).c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+    std::string addFrameLabel = ICON_FA_PLUS " Add Frame##" + tableId;
+    ImGui::SameLine();
+    float addFrameButtonWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x);
+    if (ImGui::Button(addFrameLabel.c_str(), ImVec2(addFrameButtonWidth, 0))) {
         std::vector<int> newFrames = *frames;
         newFrames.push_back(newFrames.empty() ? 0 : newFrames.back() + 1);
         setParticleFrames(cpType, propertyId, sceneProject, entity, newFrames);
     }
+    endTable();
 
     if (frames->empty()) {
         return;
     }
+
+    const float frameInputWidth = 6.0f * ImGui::GetFontSize();
 
     beginTable(cpType, getLabelSize("Frame 000"), tableId + "_values");
     for (size_t i = 0; i < frames->size(); i++) {
@@ -4259,7 +4263,7 @@ void editor::Properties::drawParticleFrameList(ComponentType cpType, const std::
         propertyHeader("Frame " + std::to_string(i), -1, false, false);
 
         float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        ImGui::SetNextItemWidth(-deleteButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+        ImGui::SetNextItemWidth(frameInputWidth);
         int newValue = (*frames)[i];
         if (ImGui::InputInt(("##particle_frame_value_" + tableId).c_str(), &newValue)) {
             std::vector<int> newFrames = *frames;
@@ -4268,6 +4272,8 @@ void editor::Properties::drawParticleFrameList(ComponentType cpType, const std::
         }
 
         ImGui::SameLine();
+        float targetX = ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - deleteButtonWidth);
+        ImGui::SetCursorPosX(targetX);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
         if (ImGui::Button((ICON_FA_TRASH_CAN "##particle_frame_delete_" + tableId).c_str())) {
@@ -6974,27 +6980,46 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
         ParticlesComponent* bp = burstScene ? burstScene->findComponent<ParticlesComponent>(entities[0]) : nullptr;
         if (bp) {
             Entity entity = entities[0];
+            PropertyData burstProp = Catalog::getProperty(sceneProject->scene, entity, cpType, "bursts");
+            std::vector<ParticleBurst>* bursts = static_cast<std::vector<ParticleBurst>*>(burstProp.ref);
+            std::vector<ParticleBurst>* defBursts = static_cast<std::vector<ParticleBurst>*>(burstProp.def);
+
             ImGui::SeparatorText("Bursts");
-            if (ImGui::Button((ICON_FA_PLUS " Add Burst##particle_burst_add"), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
-                std::vector<ParticleBurst> newBursts = bp->bursts;
-                newBursts.push_back(ParticleBurst());
-                setParticleBursts(cpType, sceneProject, entity, newBursts);
+            if (bursts) {
+                bool defChanged = defBursts && *bursts != *defBursts;
+                beginTable(cpType, getLabelSize("Bursts"), "particle_burst_header");
+                if (propertyHeader("Bursts", -1, defChanged, false) && defBursts) {
+                    setParticleBursts(cpType, sceneProject, entity, *defBursts);
+                    finishProperty = true;
+                }
+                ImGui::Text("%zu", bursts->size());
+                std::string addBurstLabel = ICON_FA_PLUS " Add Burst##particle_burst_add";
+                ImGui::SameLine();
+                float addBurstButtonWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x);
+                if (ImGui::Button(addBurstLabel.c_str(), ImVec2(addBurstButtonWidth, 0))) {
+                    std::vector<ParticleBurst> newBursts = *bursts;
+                    newBursts.push_back(ParticleBurst());
+                    setParticleBursts(cpType, sceneProject, entity, newBursts);
+                }
+                endTable();
             }
-            if (!bp->bursts.empty()) {
+            if (bursts && !bursts->empty()) {
                 beginTable(cpType, getLabelSize("Max Count"), "particle_burst_table");
-                for (size_t i = 0; i < bp->bursts.size(); i++) {
+                for (size_t i = 0; i < bursts->size(); i++) {
                     ImGui::PushID((int)(1000 + i));
-                    ParticleBurst burst = bp->bursts[i];
+                    ParticleBurst burst = (*bursts)[i];
 
                     propertyHeader("Time " + std::to_string(i), -1, false, false);
-                    float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-                    ImGui::SetNextItemWidth(-deleteButtonWidth - ImGui::GetStyle().ItemSpacing.x);
-                    if (ImGui::InputFloat("##particle_burst_time", &burst.time)) {
-                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                    ImGui::SetNextItemWidth(settingsFloat.secondColSize);
+                    if (ImGui::DragFloat("##particle_burst_time", &burst.time, settingsFloat.stepSize, 0.0f, 0.0f, settingsFloat.format)) {
+                        std::vector<ParticleBurst> newBursts = *bursts;
                         newBursts[i] = burst;
                         setParticleBursts(cpType, sceneProject, entity, newBursts);
                     }
+                    float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
                     ImGui::SameLine();
+                    float targetX = ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - deleteButtonWidth);
+                    ImGui::SetCursorPosX(targetX);
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
                     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
                     bool removed = ImGui::Button(ICON_FA_TRASH_CAN "##particle_burst_delete");
@@ -7003,7 +7028,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
                     propertyHeader("Min Count", -1, false, false);
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     if (ImGui::InputInt("##particle_burst_min", &burst.minCount)) {
-                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                        std::vector<ParticleBurst> newBursts = *bursts;
                         newBursts[i] = burst;
                         setParticleBursts(cpType, sceneProject, entity, newBursts);
                     }
@@ -7011,7 +7036,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
                     propertyHeader("Max Count", -1, false, false);
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     if (ImGui::InputInt("##particle_burst_max", &burst.maxCount)) {
-                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                        std::vector<ParticleBurst> newBursts = *bursts;
                         newBursts[i] = burst;
                         setParticleBursts(cpType, sceneProject, entity, newBursts);
                     }
@@ -7019,7 +7044,7 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
                     ImGui::PopID();
 
                     if (removed) {
-                        std::vector<ParticleBurst> newBursts = bp->bursts;
+                        std::vector<ParticleBurst> newBursts = *bursts;
                         newBursts.erase(newBursts.begin() + (std::ptrdiff_t)i);
                         setParticleBursts(cpType, sceneProject, entity, newBursts);
                         break;
@@ -7179,29 +7204,46 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
             ParticlesComponent* gp = gradScene ? gradScene->findComponent<ParticlesComponent>(entities[0]) : nullptr;
             if (gp) {
                 Entity entity = entities[0];
+                PropertyData gradProp = Catalog::getProperty(sceneProject->scene, entity, cpType, "colorGradient");
+                ParticleColorGradient* gradient = static_cast<ParticleColorGradient*>(gradProp.ref);
+                ParticleColorGradient* defGradient = static_cast<ParticleColorGradient*>(gradProp.def);
+
                 ImGui::SeparatorText("Color Gradient");
-                if (ImGui::Button((ICON_FA_PLUS " Add Stop##particle_grad_add"), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
-                    ParticleColorGradient newGrad = gp->colorGradient;
-                    ParticleColorGradientStop stop;
-                    if (!newGrad.stops.empty()) {
-                        float last = newGrad.stops.back().time;
-                        stop.time = std::min(1.0f, last + 0.25f);
-                        stop.color = newGrad.stops.back().color;
+                if (gradient) {
+                    bool defChanged = defGradient && !(*gradient == *defGradient);
+                    beginTable(cpType, getLabelSize("Stops"), "particle_gradient_header");
+                    if (propertyHeader("Stops", -1, defChanged, false) && defGradient) {
+                        setParticleColorGradient(cpType, sceneProject, entity, *defGradient);
+                        finishProperty = true;
                     }
-                    newGrad.stops.push_back(stop);
-                    setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                    ImGui::Text("%zu", gradient->stops.size());
+                    std::string addStopLabel = ICON_FA_PLUS " Add Stop##particle_grad_add";
+                    ImGui::SameLine();
+                    float addStopButtonWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x);
+                    if (ImGui::Button(addStopLabel.c_str(), ImVec2(addStopButtonWidth, 0))) {
+                        ParticleColorGradient newGrad = *gradient;
+                        ParticleColorGradientStop stop;
+                        if (!newGrad.stops.empty()) {
+                            float last = newGrad.stops.back().time;
+                            stop.time = std::min(1.0f, last + 0.25f);
+                            stop.color = newGrad.stops.back().color;
+                        }
+                        newGrad.stops.push_back(stop);
+                        setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                    }
+                    endTable();
                 }
-                if (!gp->colorGradient.stops.empty()) {
+                if (gradient && !gradient->stops.empty()) {
                     beginTable(cpType, getLabelSize("Color N"), "particle_gradient_table");
-                    for (size_t i = 0; i < gp->colorGradient.stops.size(); i++) {
+                    for (size_t i = 0; i < gradient->stops.size(); i++) {
                         ImGui::PushID((int)(2000 + i));
-                        ParticleColorGradientStop stop = gp->colorGradient.stops[i];
+                        ParticleColorGradientStop stop = gradient->stops[i];
 
                         propertyHeader("Time " + std::to_string(i), -1, false, false);
                         float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
                         ImGui::SetNextItemWidth(-deleteButtonWidth - ImGui::GetStyle().ItemSpacing.x);
                         if (ImGui::SliderFloat("##particle_grad_time", &stop.time, 0.0f, 1.0f)) {
-                            ParticleColorGradient newGrad = gp->colorGradient;
+                            ParticleColorGradient newGrad = *gradient;
                             newGrad.stops[i] = stop;
                             setParticleColorGradient(cpType, sceneProject, entity, newGrad);
                         }
@@ -7214,9 +7256,9 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
                         propertyHeader("Color " + std::to_string(i), -1, false, false);
                         ImGui::SetNextItemWidth(-FLT_MIN);
                         float col[3] = { stop.color.x, stop.color.y, stop.color.z };
-                        if (ImGui::ColorEdit3("##particle_grad_color", col)) {
+                        if (ImGui::ColorEdit3("##particle_grad_color", col, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf)) {
                             stop.color = Vector3(col[0], col[1], col[2]);
-                            ParticleColorGradient newGrad = gp->colorGradient;
+                            ParticleColorGradient newGrad = *gradient;
                             newGrad.stops[i] = stop;
                             setParticleColorGradient(cpType, sceneProject, entity, newGrad);
                         }
@@ -7224,25 +7266,25 @@ void editor::Properties::drawParticlesComponent(ComponentType cpType, SceneProje
                         ImGui::PopID();
 
                         if (removed) {
-                            ParticleColorGradient newGrad = gp->colorGradient;
+                            ParticleColorGradient newGrad = *gradient;
                             newGrad.stops.erase(newGrad.stops.begin() + (std::ptrdiff_t)i);
                             setParticleColorGradient(cpType, sceneProject, entity, newGrad);
                             break;
                         }
                     }
                     endTable();
-
-                    beginTable(cpType, getLabelSize("Grad sRGB"), "particle_gradient_options_table");
-                    propertyHeader("Grad sRGB", -1, false, false);
-                    bool useSRGB = gp->colorGradient.useSRGB;
-                    ImGui::SetNextItemWidth(-FLT_MIN);
-                    if (ImGui::Checkbox("##particle_grad_srgb", &useSRGB)) {
-                        ParticleColorGradient newGrad = gp->colorGradient;
-                        newGrad.useSRGB = useSRGB;
-                        setParticleColorGradient(cpType, sceneProject, entity, newGrad);
-                    }
-                    endTable();
                 }
+
+                beginTable(cpType, getLabelSize("Grad sRGB"), "particle_gradient_options_table");
+                propertyHeader("Grad sRGB", -1, false, false);
+                bool useSRGB = gradient ? gradient->useSRGB : gp->colorGradient.useSRGB;
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::Checkbox("##particle_grad_srgb", &useSRGB)) {
+                    ParticleColorGradient newGrad = gradient ? *gradient : gp->colorGradient;
+                    newGrad.useSRGB = useSRGB;
+                    setParticleColorGradient(cpType, sceneProject, entity, newGrad);
+                }
+                endTable();
             }
         } else {
             ImGui::SeparatorText("Color Gradient");
