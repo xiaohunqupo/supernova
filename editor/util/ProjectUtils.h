@@ -65,6 +65,10 @@ public:
     // Returns the command (caller must add it to CommandHandle) or nullptr if invalid.
     static Command* buildDeleteInstanceCmd(Project* project, uint32_t sceneId, Entity entity, unsigned int instanceIndex);
 
+    // Builds a PropertyCmd that duplicates the instance at instanceIndex in an InstancedMeshComponent.
+    // Returns the command (caller must add it to CommandHandle) or nullptr if invalid.
+    static Command* buildDuplicateInstanceCmd(Project* project, uint32_t sceneId, Entity entity, unsigned int instanceIndex);
+
     // Builds a MultiPropertyCmd that duplicates tile at tileIndex in a TilemapComponent.
     // The new tile is placed with a small offset. Returns nullptr if invalid or array is full.
     static Command* buildDuplicateTileCmd(Project* project, uint32_t sceneId, Entity entity, unsigned int tileIndex);

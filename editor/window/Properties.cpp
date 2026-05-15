@@ -264,6 +264,14 @@ static std::vector<editor::EnumEntry> entriesEaseType = {
 
 std::vector<editor::Properties::DirtyMaterialEntry> editor::Properties::dirtyMaterials;
 
+static bool isLastHeaderRowClicked() {
+    ImVec2 min = ImGui::GetItemRectMin();
+    ImVec2 max = ImGui::GetItemRectMax();
+    max.x = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+
+    return ImGui::IsMouseHoveringRect(min, max) && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+}
+
 void editor::Properties::markMaterialDirty(unsigned int sceneId, Entity entity, int submeshIndex, const std::string& relativePath) {
     for (auto& entry : dirtyMaterials) {
         if (entry.sceneId == sceneId && entry.entity == entity && entry.submeshIndex == submeshIndex) {
@@ -1418,6 +1426,32 @@ void editor::Properties::drawNinePatchesPreview(const ImageComponent& img, Textu
         ImVec2(cursor.x + displayWidth, bottomY),
         line_color, 1.0f
     );
+}
+
+void editor::Properties::syncSubSelection(SceneProject* sceneProject, Entity entity, int tileIndex, int instanceIndex) {
+    if (!sceneProject) {
+        return;
+    }
+
+    project->setSelectedSceneForProperties(sceneProject->id);
+    project->setSelectedEntity(sceneProject->id, entity);
+
+    if (!sceneProject->sceneRender) {
+        return;
+    }
+
+    sceneProject->sceneRender->clearTileSelection();
+    sceneProject->sceneRender->clearInstanceSelection();
+
+    if (tileIndex >= 0) {
+        sceneProject->sceneRender->selectTile(entity, tileIndex);
+    }
+    if (instanceIndex >= 0) {
+        sceneProject->sceneRender->selectInstance(entity, instanceIndex);
+    }
+
+    sceneProject->sceneRender->update(project->getSelectedEntities(sceneProject->id),
+        project->getEntities(sceneProject->id), sceneProject->mainCamera, sceneProject->displaySettings);
 }
 
 
@@ -6118,6 +6152,9 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
                     drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + width, cursorPos.y + height), ImGui::GetColorU32(highlightColor), 3.0f);
                 }
                 ImGui::SeparatorText(label.c_str());
+                if (isLastHeaderRowClicked()) {
+                    syncSubSelection(sceneProject, entities[0], (int)i, -1);
+                }
 
                 beginTable(cpType, getLabelSize("Position"), groupStr);
 
@@ -6909,6 +6946,9 @@ void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneP
             drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + width, cursorPos.y + height), ImGui::GetColorU32(highlightColor), 3.0f);
         }
         ImGui::SeparatorText(instanceLabel.c_str());
+        if (isLastHeaderRowClicked()) {
+            syncSubSelection(sceneProject, entities[0], -1, (int)i);
+        }
 
         beginTable(cpType, getLabelSize("Position"), instanceGroupStr);
         propertyHeader("Instance", -1, false, false);

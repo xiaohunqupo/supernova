@@ -1320,6 +1320,25 @@ editor::Command* editor::ProjectUtils::buildDeleteInstanceCmd(Project* project, 
     return cmd;
 }
 
+editor::Command* editor::ProjectUtils::buildDuplicateInstanceCmd(Project* project, uint32_t sceneId, Entity entity, unsigned int instanceIndex) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) {
+        return nullptr;
+    }
+
+    InstancedMeshComponent* instmesh = sceneProject->scene->findComponent<InstancedMeshComponent>(entity);
+    if (!instmesh || instanceIndex >= instmesh->instances.size()) {
+        return nullptr;
+    }
+
+    std::vector<InstanceData> newInstances = instmesh->instances;
+    newInstances.push_back(instmesh->instances[instanceIndex]);
+
+    auto* cmd = new PropertyCmd<std::vector<InstanceData>>(project, sceneId, entity, ComponentType::InstancedMeshComponent, "instances", newInstances);
+    cmd->setNoMerge();
+    return cmd;
+}
+
 void editor::ProjectUtils::removeDynamicInstmesh(Entity entity, const YAML::Node& savedComponents, EntityRegistry* registry) {
     if (!savedComponents || savedComponents.IsNull()) return;
     if (savedComponents[Catalog::getComponentName(ComponentType::InstancedMeshComponent, true)]) return;

@@ -693,6 +693,20 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         sceneProject->sceneRender->update(project->getSelectedEntities(sceneId), project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                         sceneProject->sceneRender->mouseHoverEvent(x, y);
                     }
+                } else if (sceneProject->sceneRender->getSelectedInstanceIndex() >= 0) {
+                    int instIdx = sceneProject->sceneRender->getSelectedInstanceIndex();
+                    Entity instEntity = sceneProject->sceneRender->getSelectedInstanceEntity();
+                    Command* dupCmd = ProjectUtils::buildDuplicateInstanceCmd(project, sceneId, instEntity, (unsigned int)instIdx);
+                    if (dupCmd) {
+                        CommandHandle::get(sceneId)->addCommand(dupCmd);
+                        InstancedMeshComponent* instmesh = sceneProject->scene->findComponent<InstancedMeshComponent>(instEntity);
+                        if (instmesh) {
+                            sceneProject->sceneRender->clearTileSelection();
+                            sceneProject->sceneRender->selectInstance(instEntity, (int)instmesh->instances.size() - 1);
+                        }
+                        sceneProject->sceneRender->update(project->getSelectedEntities(sceneId), project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                        sceneProject->sceneRender->mouseHoverEvent(x, y);
+                    }
                 } else {
                     // Duplicate entities
                     std::vector<Entity> selectedEntities = project->getSelectedEntities(sceneId);
