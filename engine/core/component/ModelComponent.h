@@ -8,6 +8,7 @@
 #include "buffer/ExternalBuffer.h"
 #include <vector>
 #include <map>
+#include <memory>
 #include <string>
 
 namespace tinygltf {class Model;}
@@ -15,7 +16,7 @@ namespace tinygltf {class Model;}
 namespace doriax{
 
     struct DORIAX_API ModelComponent{
-        tinygltf::Model* gltfModel = NULL;
+        std::shared_ptr<tinygltf::Model> gltfModel;
 
         Matrix4 inverseDerivedTransform;
         

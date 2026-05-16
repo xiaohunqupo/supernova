@@ -148,6 +148,7 @@
 #include "pool/SoundPool.h"
 #include "pool/TextureDataPool.h"
 #include "pool/TexturePool.h"
+#include "pool/ModelPool.h"
 
 #include "registry/EntityRegistry.h"
 

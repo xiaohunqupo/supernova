@@ -16,6 +16,7 @@
 #include "pool/TextureDataPool.h"
 #include "pool/ShaderPool.h"
 #include "pool/FontPool.h"
+#include "pool/ModelPool.h"
 #ifndef NO_THREAD_SUPPORT
     #include "thread/ThreadPoolManager.h"
 #endif
@@ -853,6 +854,7 @@ void Engine::systemViewDestroyed(){
     TextureDataPool::clear();
     ShaderPool::clear();
     FontPool::clear();
+    ModelPool::clear();
 
     drawSemaphore.release();
 

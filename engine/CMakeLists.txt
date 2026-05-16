@@ -603,6 +603,7 @@ set(DORIAX_SRCS
     core/pool/SoundPool.cpp
     core/pool/TextureDataPool.cpp
     core/pool/TexturePool.cpp
+    core/pool/ModelPool.cpp
     core/registry/EntityRegistry.cpp
     core/render/BufferRender.cpp
     core/render/CameraRender.cpp

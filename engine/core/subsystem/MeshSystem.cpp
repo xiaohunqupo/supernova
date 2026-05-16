@@ -9,6 +9,7 @@
 #include "buffer/InterleavedBuffer.h"
 #include "io/FileData.h"
 #include "io/Data.h"
+#include "pool/ModelPool.h"
 #include "thread/ResourceProgress.h"
 #include "thread/ThreadPoolManager.h"
 
@@ -600,14 +601,14 @@ std::string MeshSystem::getAsyncModelLoadScenePrefix(const Scene* scene){
     return key.str();
 }
 
-std::string MeshSystem::getAsyncModelLoadKey(const Scene* scene, Entity entity, const std::string& filename){
+std::string MeshSystem::getAsyncModelLoadKey(const Scene* scene, const std::string& filename){
     std::ostringstream key;
-    key << getAsyncModelLoadScenePrefix(scene) << entity << '|' << filename;
+    key << getAsyncModelLoadScenePrefix(scene) << getModelFilenameKey(filename);
     return key.str();
 }
 
-std::string MeshSystem::getAsyncModelLoadKey(Entity entity, const std::string& filename) const{
-    return getAsyncModelLoadKey(scene, entity, filename);
+std::string MeshSystem::getAsyncModelLoadKey(const std::string& filename) const{
+    return getAsyncModelLoadKey(scene, filename);
 }
 
 bool MeshSystem::hasPendingAsyncModelLoads() const{
@@ -656,13 +657,15 @@ void MeshSystem::cancelAllAsyncModelLoads(){
 }
 
 bool MeshSystem::isAsyncModelLoadPending(Entity entity, const std::string& filename) const{
-    const std::string key = getAsyncModelLoadKey(entity, filename);
+    (void)entity;
+    const std::string key = getAsyncModelLoadKey(filename);
     std::lock_guard<std::mutex> lock(asyncModelMutex);
     return pendingModelLoads.find(key) != pendingModelLoads.end();
 }
 
 void MeshSystem::cancelAsyncModelLoad(Entity entity, const std::string& filename){
-    const std::string key = getAsyncModelLoadKey(entity, filename);
+    (void)entity;
+    const std::string key = getAsyncModelLoadKey(filename);
     const uint64_t buildId = std::hash<std::string>{}(key);
     bool erased = false;
     {
@@ -715,8 +718,8 @@ std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::loadModelFileOnWor
     return result;
 }
 
-std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::pollOrStartAsyncModelLoad(Entity entity, const std::string& filename, bool obj){
-    const std::string key = getAsyncModelLoadKey(entity, filename);
+std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::pollOrStartAsyncModelLoad(const std::string& filename, bool obj){
+    const std::string key = getAsyncModelLoadKey(filename);
     const uint64_t buildId = std::hash<std::string>{}(key);
 
     std::shared_future<std::shared_ptr<AsyncModelLoadResult>> future;
@@ -2200,9 +2203,16 @@ void MeshSystem::createTorus(MeshComponent& mesh, float radius, float ringRadius
 }
 
 bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncLoad, bool skipEntities, bool changeRootTransform){
+    const std::string poolKey = getModelFilenameKey(filename);
+
+    // If parsed data is already cached, skip the async background-thread entirely.
+    if (asyncLoad && ModelPool::get(poolKey)){
+        asyncLoad = false;
+    }
+
     std::shared_ptr<AsyncModelLoadResult> asyncResult;
     if (asyncLoad){
-        asyncResult = pollOrStartAsyncModelLoad(entity, filename, false);
+        asyncResult = pollOrStartAsyncModelLoad(filename, false);
         if (!asyncResult || !asyncResult->success || !asyncResult->gltfModel){
             return false;
         }
@@ -2216,13 +2226,10 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
     model.filename = filename;
 
-    uint64_t buildId = asyncLoad ? std::hash<std::string>{}(getAsyncModelLoadKey(entity, filename)) : 0;
+    uint64_t buildId = asyncLoad ? std::hash<std::string>{}(getAsyncModelLoadKey(filename)) : 0;
 
     mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
     mesh.numSubmeshes = 1;
-
-    if (!model.gltfModel)
-        model.gltfModel = new tinygltf::Model();
 
     std::string err;
     std::string warn;
@@ -2235,32 +2242,50 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     bool res = false;
 
     if (asyncLoad){
-        *model.gltfModel = std::move(*asyncResult->gltfModel);
+        // Async loader already produced a parsed model; reuse it (and cache it).
+        auto cached = ModelPool::get(poolKey);
+        if (cached){
+            model.gltfModel = cached;
+        }else{
+            model.gltfModel = asyncResult->gltfModel;
+            ModelPool::add(poolKey, model.gltfModel);
+        }
         res = true;
     }else{
-        tinygltf::TinyGLTF loader;
-        loader.SetFsCallbacks({&fileExists, &tinygltf::ExpandFilePath, &readWholeFile, &tinygltf::WriteWholeFile, &getFileSizeInBytes});
-
-        std::string ext = FileData::getFilePathExtension(filename);
-
-        if (ext.compare("glb") == 0) {
-            res = loader.LoadBinaryFromFile(model.gltfModel, &err, &warn, filename); // for binary glTF(.glb)
+        // Try cache before hitting disk.
+        auto cached = ModelPool::get(poolKey);
+        if (cached){
+            model.gltfModel = cached;
+            res = true;
         }else{
-            res = loader.LoadASCIIFromFile(model.gltfModel, &err, &warn, filename);
-        }
+            model.gltfModel = std::make_shared<tinygltf::Model>();
 
-        if (!warn.empty()) {
-            Log::warn("Loading GLTF model (%s): %s", filename.c_str(), warn.c_str());
-        }
+            tinygltf::TinyGLTF loader;
+            loader.SetFsCallbacks({&fileExists, &tinygltf::ExpandFilePath, &readWholeFile, &tinygltf::WriteWholeFile, &getFileSizeInBytes});
 
-        if (!err.empty()) {
-            Log::error("Can't load GLTF model (%s): %s", filename.c_str(), err.c_str());
-            return false;
-        }
+            std::string ext = FileData::getFilePathExtension(filename);
 
-        if (!res) {
-            Log::verbose("Failed to load glTF: %s", filename.c_str());
-            return false;
+            if (ext.compare("glb") == 0) {
+                res = loader.LoadBinaryFromFile(model.gltfModel.get(), &err, &warn, filename); // for binary glTF(.glb)
+            }else{
+                res = loader.LoadASCIIFromFile(model.gltfModel.get(), &err, &warn, filename);
+            }
+
+            if (!warn.empty()) {
+                Log::warn("Loading GLTF model (%s): %s", filename.c_str(), warn.c_str());
+            }
+
+            if (!err.empty()) {
+                Log::error("Can't load GLTF model (%s): %s", filename.c_str(), err.c_str());
+                return false;
+            }
+
+            if (!res) {
+                Log::verbose("Failed to load glTF: %s", filename.c_str());
+                return false;
+            }
+
+            ModelPool::add(poolKey, model.gltfModel);
         }
     }
 
@@ -3016,7 +3041,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLoad){
     std::shared_ptr<AsyncModelLoadResult> asyncResult;
     if (asyncLoad){
-        asyncResult = pollOrStartAsyncModelLoad(entity, filename, true);
+        asyncResult = pollOrStartAsyncModelLoad(filename, true);
         if (!asyncResult || !asyncResult->success){
             return false;
         }
@@ -3030,7 +3055,7 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
     model.filename = filename;
 
-    uint64_t buildId = asyncLoad ? std::hash<std::string>{}(getAsyncModelLoadKey(entity, filename)) : 0;
+    uint64_t buildId = asyncLoad ? std::hash<std::string>{}(getAsyncModelLoadKey(filename)) : 0;
 
     mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
     mesh.numSubmeshes = 1;
@@ -3299,8 +3324,11 @@ void MeshSystem::clearAnimationMapping(ModelComponent& model){
 
 void MeshSystem::destroyModel(ModelComponent& model){
     if (model.gltfModel){
-        delete model.gltfModel;
-        model.gltfModel = NULL;
+        model.gltfModel.reset();
+    }
+
+    if (!model.loadedFilename.empty()){
+        ModelPool::remove(model.loadedFilename);
     }
 
     model.morphNameMapping.clear();
