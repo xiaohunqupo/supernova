@@ -2251,7 +2251,7 @@ namespace {
         if (propertyName == "maxPoints") return {PropertyType::UInt, UpdateFlags_None, &def.maxPoints, &comp->maxPoints};
         if (propertyName == "transparent") return {PropertyType::Bool, UpdateFlags_None, &def.transparent, &comp->transparent};
         if (propertyName == "autoTransparency") return {PropertyType::Bool, UpdateFlags_None, &def.autoTransparency, &comp->autoTransparency};
-        if (propertyName == "texture") return {PropertyType::Texture, UpdateFlags_None, &def.texture, &comp->texture};
+        if (propertyName == "texture") return {PropertyType::Texture, UpdateFlags_Points_Texture, &def.texture, &comp->texture};
 
         if (propertyName == "numFramesRect") {
             return {PropertyType::UInt, UpdateFlags_None, (void*)&def.numFramesRect, (void*)&comp->numFramesRect};
@@ -2332,7 +2332,7 @@ namespace {
         ps["maxPoints"] = {PropertyType::UInt, UpdateFlags_None, &def.maxPoints, comp ? &comp->maxPoints : nullptr};
         ps["transparent"] = {PropertyType::Bool, UpdateFlags_None, &def.transparent, comp ? &comp->transparent : nullptr};
         ps["autoTransparency"] = {PropertyType::Bool, UpdateFlags_None, &def.autoTransparency, comp ? &comp->autoTransparency : nullptr};
-        ps["texture"] = {PropertyType::Texture, UpdateFlags_None, &def.texture, comp ? &comp->texture : nullptr};
+        ps["texture"] = {PropertyType::Texture, UpdateFlags_Points_Texture, &def.texture, comp ? &comp->texture : nullptr};
 
         static std::vector<PointData> defPoints;
         ps["points"] = {PropertyType::Custom, UpdateFlags_Points, (void*)&defPoints, comp ? (void*)&comp->points : nullptr};
@@ -3265,9 +3265,12 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int 
             instmesh->needUpdateInstances = true;
         }
     }
-    if (updateFlags & UpdateFlags_Points){
+    if (updateFlags & (UpdateFlags_Points | UpdateFlags_Points_Texture)){
         if (PointsComponent* pts = registry->findComponent<PointsComponent>(entity)){
-            pts->needUpdate = true;
+            if (updateFlags & UpdateFlags_Points)
+                pts->needUpdate = true;
+            if (updateFlags & UpdateFlags_Points_Texture)
+                pts->needUpdateTexture = true;
         }
     }
     if (updateFlags & (UpdateFlags_Lines | UpdateFlags_Lines_Reload)){

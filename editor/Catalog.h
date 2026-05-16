@@ -37,7 +37,8 @@ namespace doriax::editor{
         UpdateFlags_Terrain_Texture     = 1 << 26,
         UpdateFlags_Sound               = 1 << 27,
         UpdateFlags_Lines               = 1 << 28,
-        UpdateFlags_Lines_Reload        = 1 << 29
+        UpdateFlags_Lines_Reload        = 1 << 29,
+        UpdateFlags_Points_Texture      = 1 << 30
     };
 
     // the order of components here affects properties window
