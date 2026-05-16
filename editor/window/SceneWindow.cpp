@@ -1415,9 +1415,9 @@ void editor::SceneWindow::show() {
                             } else if (side == Gizmo2DSideSelected::NY || side == Gizmo2DSideSelected::PY) {
                                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
                             } else if (side == Gizmo2DSideSelected::NX_NY || side == Gizmo2DSideSelected::PX_PY) {
-                                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
-                            } else if (side == Gizmo2DSideSelected::NX_PY || side == Gizmo2DSideSelected::PX_NY) {
                                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
+                            } else if (side == Gizmo2DSideSelected::NX_PY || side == Gizmo2DSideSelected::PX_NY) {
+                                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
                             }
                         }
                     }
