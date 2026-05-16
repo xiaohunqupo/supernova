@@ -1415,14 +1415,15 @@ void editor::SceneWindow::show() {
                             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
                         } else {
                             Gizmo2DSideSelected side = sceneProject.sceneRender->getToolsLayer()->getGizmo2DSideSelected();
+                            bool uiScene = sceneProject.sceneType == SceneType::SCENE_UI;
                             if (side == Gizmo2DSideSelected::NX || side == Gizmo2DSideSelected::PX) {
                                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
                             } else if (side == Gizmo2DSideSelected::NY || side == Gizmo2DSideSelected::PY) {
                                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
                             } else if (side == Gizmo2DSideSelected::NX_NY || side == Gizmo2DSideSelected::PX_PY) {
-                                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
+                                ImGui::SetMouseCursor(uiScene ? ImGuiMouseCursor_ResizeNWSE : ImGuiMouseCursor_ResizeNESW);
                             } else if (side == Gizmo2DSideSelected::NX_PY || side == Gizmo2DSideSelected::PX_NY) {
-                                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
+                                ImGui::SetMouseCursor(uiScene ? ImGuiMouseCursor_ResizeNESW : ImGuiMouseCursor_ResizeNWSE);
                             }
                         }
                     }
