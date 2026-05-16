@@ -1972,7 +1972,11 @@ void editor::Project::deleteSceneProject(SceneProject* sceneProject){
     if (sceneProject->sceneRender) {
         Camera* editorCam = sceneProject->sceneRender->getCamera();
         if (editorCam) {
-            sceneProject->editorCameraState = Stream::encodeEditorCamera(editorCam);
+            float zoom = 0.0f;
+            if (sceneProject->sceneType == SceneType::SCENE_2D || sceneProject->sceneType == SceneType::SCENE_UI) {
+                zoom = static_cast<SceneRender2D*>(sceneProject->sceneRender)->getZoom();
+            }
+            sceneProject->editorCameraState = Stream::encodeEditorCamera(editorCam, zoom);
         }
     }
 
