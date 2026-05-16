@@ -40,9 +40,11 @@ namespace doriax {
 
     class DORIAX_API ResourceProgress {
     private:
-        static std::mutex progressMutex;
-        static std::unordered_map<uint64_t, ResourceBuildInfo> activeBuilds;
-        static uint64_t mostRecentBuildId;
+        typedef std::unordered_map<uint64_t, ResourceBuildInfo> resource_builds_t;
+
+        static std::mutex& getProgressMutex();
+        static resource_builds_t& getActiveBuilds();
+        static uint64_t& getMostRecentBuildId();
 
     public:
         static void startBuild(uint64_t id, ResourceType type, const std::string& name);

@@ -40,8 +40,15 @@ struct MeshSystem::AsyncModelLoadResult {
     std::vector<tinyobj::material_t> objMaterials;
 };
 
-std::mutex MeshSystem::asyncModelMutex;
-std::unordered_map<std::string, std::shared_future<std::shared_ptr<MeshSystem::AsyncModelLoadResult>>> MeshSystem::pendingModelLoads;
+std::mutex& MeshSystem::getAsyncModelMutex(){
+    static std::mutex* mutex = new std::mutex();
+    return *mutex;
+}
+
+MeshSystem::async_model_loads_t& MeshSystem::getPendingModelLoads(){
+    static async_model_loads_t* loads = new async_model_loads_t();
+    return *loads;
+}
 
 std::string MeshSystem::getModelFilenameKey(const std::string& filename){
     return std::filesystem::path(filename).lexically_normal().generic_string();
@@ -613,7 +620,8 @@ std::string MeshSystem::getAsyncModelLoadKey(const std::string& filename) const{
 
 bool MeshSystem::hasPendingAsyncModelLoads() const{
     const std::string scenePrefix = getAsyncModelLoadScenePrefix(scene);
-    std::lock_guard<std::mutex> lock(asyncModelMutex);
+    std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+    auto& pendingModelLoads = getPendingModelLoads();
     for (const auto& [key, future] : pendingModelLoads) {
         if (key.rfind(scenePrefix, 0) == 0) {
             return true;
@@ -626,7 +634,8 @@ void MeshSystem::cancelAsyncModelLoads(){
     const std::string scenePrefix = getAsyncModelLoadScenePrefix(scene);
     std::vector<uint64_t> buildIds;
     {
-        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+        auto& pendingModelLoads = getPendingModelLoads();
         for (auto it = pendingModelLoads.begin(); it != pendingModelLoads.end();) {
             if (it->first.rfind(scenePrefix, 0) == 0) {
                 buildIds.push_back(std::hash<std::string>{}(it->first));
@@ -644,7 +653,8 @@ void MeshSystem::cancelAsyncModelLoads(){
 void MeshSystem::cancelAllAsyncModelLoads(){
     std::vector<uint64_t> buildIds;
     {
-        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+        auto& pendingModelLoads = getPendingModelLoads();
         buildIds.reserve(pendingModelLoads.size());
         for (const auto& [key, future] : pendingModelLoads) {
             buildIds.push_back(std::hash<std::string>{}(key));
@@ -659,7 +669,8 @@ void MeshSystem::cancelAllAsyncModelLoads(){
 bool MeshSystem::isAsyncModelLoadPending(Entity entity, const std::string& filename) const{
     (void)entity;
     const std::string key = getAsyncModelLoadKey(filename);
-    std::lock_guard<std::mutex> lock(asyncModelMutex);
+    std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+    auto& pendingModelLoads = getPendingModelLoads();
     return pendingModelLoads.find(key) != pendingModelLoads.end();
 }
 
@@ -669,7 +680,8 @@ void MeshSystem::cancelAsyncModelLoad(Entity entity, const std::string& filename
     const uint64_t buildId = std::hash<std::string>{}(key);
     bool erased = false;
     {
-        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+        auto& pendingModelLoads = getPendingModelLoads();
         erased = pendingModelLoads.erase(key) > 0;
     }
     if (erased){
@@ -724,7 +736,8 @@ std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::pollOrStartAsyncMo
 
     std::shared_future<std::shared_ptr<AsyncModelLoadResult>> future;
     {
-        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+        auto& pendingModelLoads = getPendingModelLoads();
         auto it = pendingModelLoads.find(key);
         if (it == pendingModelLoads.end()){
             std::filesystem::path filePath(filename);
@@ -743,7 +756,8 @@ std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::pollOrStartAsyncMo
     }
 
     if (!future.valid()){
-        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+        auto& pendingModelLoads = getPendingModelLoads();
         pendingModelLoads.erase(key);
         ResourceProgress::failBuild(buildId);
         return nullptr;
@@ -755,7 +769,8 @@ std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::pollOrStartAsyncMo
 
     std::shared_ptr<AsyncModelLoadResult> result = future.get();
     {
-        std::lock_guard<std::mutex> lock(asyncModelMutex);
+        std::lock_guard<std::mutex> lock(getAsyncModelMutex());
+        auto& pendingModelLoads = getPendingModelLoads();
         pendingModelLoads.erase(key);
     }
 

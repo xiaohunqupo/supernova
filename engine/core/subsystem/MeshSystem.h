@@ -29,9 +29,10 @@ namespace doriax{
 
     private:
         struct AsyncModelLoadResult;
+        typedef std::unordered_map<std::string, std::shared_future<std::shared_ptr<AsyncModelLoadResult>>> async_model_loads_t;
 
-        static std::mutex asyncModelMutex;
-        static std::unordered_map<std::string, std::shared_future<std::shared_ptr<AsyncModelLoadResult>>> pendingModelLoads;
+        static std::mutex& getAsyncModelMutex();
+        static async_model_loads_t& getPendingModelLoads();
 
         bool createSprite(SpriteComponent& sprite, MeshComponent& mesh, CameraComponent& camera);
         bool createMeshPolygon(MeshPolygonComponent& polygon, MeshComponent& mesh);

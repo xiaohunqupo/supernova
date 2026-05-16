@@ -9,13 +9,26 @@
 
 using namespace doriax;
 
-std::mutex ResourceProgress::progressMutex;
-std::unordered_map<uint64_t, ResourceBuildInfo> ResourceProgress::activeBuilds;
-uint64_t ResourceProgress::mostRecentBuildId = 0;
+std::mutex& ResourceProgress::getProgressMutex(){
+    static std::mutex* mutex = new std::mutex();
+    return *mutex;
+}
+
+ResourceProgress::resource_builds_t& ResourceProgress::getActiveBuilds(){
+    static resource_builds_t* builds = new resource_builds_t();
+    return *builds;
+}
+
+uint64_t& ResourceProgress::getMostRecentBuildId(){
+    static uint64_t* buildId = new uint64_t(0);
+    return *buildId;
+}
 
 void ResourceProgress::startBuild(uint64_t id, ResourceType type, const std::string& name) {
     Log::debug("Loading started [%s]: %s", getResourceTypeName(type).c_str(), name.c_str());
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
+    auto& mostRecentBuildId = getMostRecentBuildId();
 
     ResourceBuildInfo info;
     info.type = type;
@@ -29,7 +42,8 @@ void ResourceProgress::startBuild(uint64_t id, ResourceType type, const std::str
 }
 
 void ResourceProgress::updateProgress(uint64_t id, float progress) {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
 
     auto it = activeBuilds.find(id);
     if (it != activeBuilds.end()) {
@@ -38,7 +52,8 @@ void ResourceProgress::updateProgress(uint64_t id, float progress) {
 }
 
 void ResourceProgress::completeBuild(uint64_t id) {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
     auto it = activeBuilds.find(id);
     if (it != activeBuilds.end()) {
         Log::debug("Loading completed [%s]: %s", getResourceTypeName(it->second.type).c_str(), it->second.name.c_str());
@@ -49,7 +64,8 @@ void ResourceProgress::completeBuild(uint64_t id) {
 }
 
 void ResourceProgress::failBuild(uint64_t id) {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
     auto it = activeBuilds.find(id);
     if (it != activeBuilds.end()) {
         Log::debug("Loading failed [%s]: %s", getResourceTypeName(it->second.type).c_str(), it->second.name.c_str());
@@ -60,12 +76,15 @@ void ResourceProgress::failBuild(uint64_t id) {
 }
 
 bool ResourceProgress::hasActiveBuilds() {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
     return !activeBuilds.empty();
 }
 
 OverallBuildProgress ResourceProgress::getOverallProgress() {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
+    auto& mostRecentBuildId = getMostRecentBuildId();
 
     OverallBuildProgress overall;
 
@@ -98,7 +117,9 @@ OverallBuildProgress ResourceProgress::getOverallProgress() {
 }
 
 ResourceBuildInfo ResourceProgress::getCurrentBuild() {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
+    auto& mostRecentBuildId = getMostRecentBuildId();
 
     if (activeBuilds.empty()) {
         return {};
@@ -113,12 +134,14 @@ ResourceBuildInfo ResourceProgress::getCurrentBuild() {
 }
 
 int ResourceProgress::getActiveBuildCount() {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
     return static_cast<int>(activeBuilds.size());
 }
 
 std::vector<ResourceBuildInfo> ResourceProgress::getAllActiveBuilds() {
-    std::lock_guard<std::mutex> lock(progressMutex);
+    std::lock_guard<std::mutex> lock(getProgressMutex());
+    auto& activeBuilds = getActiveBuilds();
 
     std::vector<ResourceBuildInfo> builds;
     builds.reserve(activeBuilds.size());
