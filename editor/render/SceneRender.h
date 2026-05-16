@@ -93,6 +93,11 @@ namespace doriax::editor{
         OBB getFamilyOBB(Entity entity, float offset);
         void updateTerrainBrushCursor();
         float snapRotationAngle(float angle, bool invertRotationSnap) const;
+        static Vector3 getMatrixScale(const Matrix4& matrix);
+        static bool isCorner2DGizmoSide(Gizmo2DSideSelected side);
+        static bool gizmo2DSideUsesNegativeX(Gizmo2DSideSelected side);
+        static bool gizmo2DSideUsesNegativeY(Gizmo2DSideSelected side);
+        static Vector2 lockObject2DAspectRatio(const Vector2& startSize, const Vector2& candidateSize);
 
     protected:
         void updateCameraFrustum(CameraObjects& co, const CameraComponent& cameraComponent, bool isMainCamera, bool fixedSizeFrustum = true);
@@ -138,7 +143,7 @@ namespace doriax::editor{
         virtual void mouseHoverEvent(float x, float y);
         virtual void mouseClickEvent(float x, float y, std::vector<Entity> selEntities);
         virtual void mouseReleaseEvent(float x, float y);
-        virtual void mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap);
+        virtual void mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap, bool preserveAspectRatio);
 
         virtual bool isAnyGizmoSideSelected() const;
         bool isTerrainEditing() const;

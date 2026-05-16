@@ -1795,8 +1795,8 @@ void editor::SceneRender3D::mouseReleaseEvent(float x, float y){
     SceneRender::mouseReleaseEvent(x, y);
 }
 
-void editor::SceneRender3D::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap){
-    SceneRender::mouseDragEvent(x, y, origX, origY, project, sceneId, selEntities, disableSelection, invertRotationSnap);
+void editor::SceneRender3D::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap, bool preserveAspectRatio){
+    SceneRender::mouseDragEvent(x, y, origX, origY, project, sceneId, selEntities, disableSelection, invertRotationSnap, preserveAspectRatio);
 }
 
 editor::ViewportGizmo* editor::SceneRender3D::getViewportGizmo(){

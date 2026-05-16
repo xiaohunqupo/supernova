@@ -578,12 +578,17 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
     bool altHeld = ImGui::IsKeyDown(ImGuiKey_ModAlt);
     bool suppressLeftMouse = suppressLeftMouseUntilRelease[sceneId];
+    bool gizmoSideActive = sceneProject->sceneRender->isAnyGizmoSideSelected();
+    // Alt + click on a gizmo handle duplicates the target and drags the copy.
+    // Alt + click on empty space keeps its camera-orbit behavior, so the guard
+    // is gated on a hovered/active gizmo side.
+    bool altGizmoDrag = altHeld && gizmoSideActive;
 
     bool disableSelection = 
         altHeld ||
         sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND || 
         sceneProject->sceneRender->isTerrainEditing() ||
-        sceneProject->sceneRender->isAnyGizmoSideSelected() ||
+        gizmoSideActive ||
         sceneProject->sceneType != SceneType::SCENE_3D && ImGui::IsKeyDown(ImGuiKey_Space);
 
     if (isMouseInWindow){
@@ -591,10 +596,9 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         float x = mousePos.x - windowPos.x;
         float y = mousePos.y - windowPos.y;
 
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !altHeld && !suppressLeftMouse){
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && (!altHeld || altGizmoDrag) && !suppressLeftMouse){
             // Selecting and dragging an unselected object at same time (just for 2D object mode)
             GizmoSelected gizmoSelected = sceneProject->sceneRender->getToolsLayer()->getGizmoSelected();
-            bool gizmoSideActive = sceneProject->sceneRender->isAnyGizmoSideSelected();
             if (!disableSelection && gizmoSelected == GizmoSelected::OBJECT2D) {
                 Entity hitEntity = project->findObjectByRay(sceneId, x, y);
                 if (hitEntity != NULL_ENTITY) {
@@ -677,8 +681,9 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                     }
                 }
             }
-            // Shift+click on gizmo: duplicate before starting drag
-            if (io.KeyShift && sceneProject->sceneRender->isAnyGizmoSideSelected()){
+            // Alt+click on gizmo: duplicate before starting drag (Shift is reserved
+            // for aspect-ratio lock on 2D corner handles, see mouseDragEvent).
+            if (altGizmoDrag){
                 int tileIdx = sceneProject->sceneRender->getSelectedTileIndex();
                 Entity tileEntity = sceneProject->sceneRender->getSelectedTileEntity();
                 if (tileIdx >= 0) {
@@ -725,7 +730,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
             sceneProject->sceneRender->mouseHoverEvent(x, y);
         }
 
-        if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && !altHeld && !suppressLeftMouse){
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && (!altHeld || altGizmoDrag) && !suppressLeftMouse){
             if (!mouseLeftDown){
                 mouseLeftStartPos = Vector2(x, y);
                 mouseLeftDown = true;
@@ -735,11 +740,11 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 mouseLeftDraggedInside = true;
             }
             if (mouseLeftDraggedInside){
-                sceneProject->sceneRender->mouseDragEvent(x, y, mouseLeftStartPos.x, mouseLeftStartPos.y, project, sceneId, project->getSelectedEntities(sceneId), disableSelection, io.KeyCtrl);
+                sceneProject->sceneRender->mouseDragEvent(x, y, mouseLeftStartPos.x, mouseLeftStartPos.y, project, sceneId, project->getSelectedEntities(sceneId), disableSelection, io.KeyCtrl, io.KeyShift);
             }
         }
 
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !altHeld && !suppressLeftMouse){
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && (!altHeld || altGizmoDrag) && !suppressLeftMouse){
             if (!mouseLeftDraggedInside && mouseLeftDown && !disableSelection){
                 // Remember sub-selection anchors BEFORE re-selecting, so we can tell
                 // whether the release click actually changed the host entity.
@@ -791,7 +796,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
     }
 
     if (isMouseInWindow && (ImGui::IsMouseClicked(ImGuiMouseButton_Middle) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
-            (altHeld && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !suppressLeftMouse))) {
+            (altHeld && !gizmoSideActive && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !suppressLeftMouse))) {
         draggingMouse[sceneId] = true;
 
         ImGui::SetWindowFocus();

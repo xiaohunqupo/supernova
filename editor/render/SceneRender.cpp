@@ -695,7 +695,47 @@ void editor::SceneRender::mouseReleaseEvent(float x, float y){
     }
 }
 
-void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap){
+Vector3 editor::SceneRender::getMatrixScale(const Matrix4& matrix){
+    return Vector3(
+        Vector3(matrix[0][0], matrix[0][1], matrix[0][2]).length(),
+        Vector3(matrix[1][0], matrix[1][1], matrix[1][2]).length(),
+        Vector3(matrix[2][0], matrix[2][1], matrix[2][2]).length());
+}
+
+bool editor::SceneRender::isCorner2DGizmoSide(Gizmo2DSideSelected side){
+    return side == Gizmo2DSideSelected::NX_NY || side == Gizmo2DSideSelected::NX_PY ||
+           side == Gizmo2DSideSelected::PX_NY || side == Gizmo2DSideSelected::PX_PY;
+}
+
+bool editor::SceneRender::gizmo2DSideUsesNegativeX(Gizmo2DSideSelected side){
+    return side == Gizmo2DSideSelected::NX_NY || side == Gizmo2DSideSelected::NX_PY;
+}
+
+bool editor::SceneRender::gizmo2DSideUsesNegativeY(Gizmo2DSideSelected side){
+    return side == Gizmo2DSideSelected::NX_NY || side == Gizmo2DSideSelected::PX_NY;
+}
+
+Vector2 editor::SceneRender::lockObject2DAspectRatio(const Vector2& startSize, const Vector2& candidateSize){
+    if (startSize.x <= 0.0f || startSize.y <= 0.0f){
+        return candidateSize;
+    }
+
+    float scaleX = candidateSize.x / startSize.x;
+    float scaleY = candidateSize.y / startSize.y;
+    float chosenScale = (std::fabs(scaleX - 1.0f) >= std::fabs(scaleY - 1.0f)) ? scaleX : scaleY;
+
+    if (!std::isfinite(chosenScale)){
+        return candidateSize;
+    }
+
+    if (chosenScale < 0.0f){
+        chosenScale = 0.0f;
+    }
+
+    return Vector2(startSize.x * chosenScale, startSize.y * chosenScale);
+}
+
+void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float origY, Project* project, size_t sceneId, std::vector<Entity> selEntities, bool disableSelection, bool invertRotationSnap, bool preserveAspectRatio){
     mouseRay = camera->screenToRay(x, y);
 
     if (TerrainEditWindow* terrainEditWindow = Backend::getApp().getTerrainEditWindow()){
@@ -912,6 +952,14 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                                 newTileH = tileStartHeight + localSizeDelta.y;
                             }
 
+                            if (preserveAspectRatio && isCorner2DGizmoSide(side)) {
+                                Vector2 lockedSize = lockObject2DAspectRatio(Vector2(tileStartWidth, tileStartHeight), Vector2(newTileW, newTileH));
+                                newTileW = lockedSize.x;
+                                newTileH = lockedSize.y;
+                                newTilePos.x = gizmo2DSideUsesNegativeX(side) ? (tileMaxX - newTileW) : tileStartPosition.x;
+                                newTilePos.y = gizmo2DSideUsesNegativeY(side) ? (tileMaxY - newTileH) : tileStartPosition.y;
+                            }
+
                             if (displaySettings.snapToGrid) {
                                 float spacing = displaySettings.gridSpacing2D;
                                 if (spacing > 0.0f) {
@@ -1005,12 +1053,61 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                     bool isLayout = scene->getComponentArray<UILayoutComponent>()->hasEntity(entity);
                     bool isText = scene->getComponentArray<TextComponent>()->hasEntity(entity);
 
-                    Vector3 newPos = gizmoRMatrix.inverse() * ((rretrun.point + cursorStartOffset) - gizmoStartPosition);
+                    Gizmo2DSideSelected side = toolslayer.getGizmo2DSideSelected();
+                    Vector3 deltaPos = gizmoRMatrix.inverse() * ((rretrun.point + cursorStartOffset) - gizmoStartPosition);
+                    Vector3 deltaSize = gizmoRMatrix.inverse() * -(gizmoStartPosition - rretrun.point - cursorStartOffset);
 
-                    Vector3 newSize = gizmoRMatrix.inverse() * -(gizmoStartPosition - rretrun.point - cursorStartOffset);
+                    Vector3 oScale = getMatrixScale(transform->modelMatrix);
+                    if (oScale.x == 0.0f) oScale.x = 1.0f;
+                    if (oScale.y == 0.0f) oScale.y = 1.0f;
+                    Vector3 posOffset = Vector3::ZERO;
+                    Vector2 sizeDeltaLocal = Vector2::ZERO;
 
-                    if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::CENTER){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * newPos);
+                    if (side == Gizmo2DSideSelected::CENTER){
+                        posOffset = deltaPos;
+                    }else if (side == Gizmo2DSideSelected::NX){
+                        posOffset.x = deltaPos.x;
+                        sizeDeltaLocal.x = -deltaSize.x / oScale.x;
+                    }else if (side == Gizmo2DSideSelected::NY){
+                        posOffset.y = deltaPos.y;
+                        sizeDeltaLocal.y = -deltaSize.y / oScale.y;
+                    }else if (side == Gizmo2DSideSelected::PX){
+                        sizeDeltaLocal.x = deltaSize.x / oScale.x;
+                    }else if (side == Gizmo2DSideSelected::PY){
+                        sizeDeltaLocal.y = deltaSize.y / oScale.y;
+                    }else if (side == Gizmo2DSideSelected::NX_NY){
+                        posOffset.x = deltaPos.x;
+                        posOffset.y = deltaPos.y;
+                        sizeDeltaLocal.x = -deltaSize.x / oScale.x;
+                        sizeDeltaLocal.y = -deltaSize.y / oScale.y;
+                    }else if (side == Gizmo2DSideSelected::NX_PY){
+                        posOffset.x = deltaPos.x;
+                        sizeDeltaLocal.x = -deltaSize.x / oScale.x;
+                        sizeDeltaLocal.y = deltaSize.y / oScale.y;
+                    }else if (side == Gizmo2DSideSelected::PX_NY){
+                        posOffset.y = deltaPos.y;
+                        sizeDeltaLocal.x = deltaSize.x / oScale.x;
+                        sizeDeltaLocal.y = -deltaSize.y / oScale.y;
+                    }else if (side == Gizmo2DSideSelected::PX_PY){
+                        sizeDeltaLocal.x = deltaSize.x / oScale.x;
+                        sizeDeltaLocal.y = deltaSize.y / oScale.y;
+                    }
+
+                    if (preserveAspectRatio && isCorner2DGizmoSide(side)){
+                        Vector2 freeformSizeDeltaLocal = sizeDeltaLocal;
+                        Vector2 lockedSize = lockObject2DAspectRatio(objectSizeOffset[entity], objectSizeOffset[entity] + sizeDeltaLocal);
+                        sizeDeltaLocal = lockedSize - objectSizeOffset[entity];
+                        if (gizmo2DSideUsesNegativeX(side)){
+                            posOffset.x = (freeformSizeDeltaLocal.x != 0.0f) ? (posOffset.x * (sizeDeltaLocal.x / freeformSizeDeltaLocal.x)) : 0.0f;
+                        }
+                        if (gizmo2DSideUsesNegativeY(side)){
+                            posOffset.y = (freeformSizeDeltaLocal.y != 0.0f) ? (posOffset.y * (sizeDeltaLocal.y / freeformSizeDeltaLocal.y)) : 0.0f;
+                        }
+                    }
+
+                    Vector3 newPos = gizmoStartPosition + (gizmoRMatrix * posOffset);
+
+                    if (side == Gizmo2DSideSelected::CENTER){
                         // Snap absolute world position to grid (must be done after newPos becomes world-space)
                         if (displaySettings.snapToGrid) {
                             float spacing = displaySettings.gridSpacing2D;
@@ -1019,31 +1116,6 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                                 newPos.y = std::round(newPos.y / spacing) * spacing;
                             }
                         }
-                        newSize = Vector3(0, 0, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::NX){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(newPos.x, 0, 0));
-                        newSize = Vector3(-newSize.x, 0, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::NY){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, newPos.y, 0));
-                        newSize = Vector3(0, -newSize.y, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::PX){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, 0, 0));
-                        newSize = Vector3(newSize.x, 0, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::PY){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, 0, 0));
-                        newSize = Vector3(0, newSize.y, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::NX_NY){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(newPos.x, newPos.y, 0));
-                        newSize = Vector3(-newSize.x, -newSize.y, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::NX_PY){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(newPos.x, 0, 0));
-                        newSize = Vector3(-newSize.x, newSize.y, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::PX_NY){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, newPos.y, 0));
-                        newSize = Vector3(newSize.x, -newSize.y, 0);
-                    }else if (toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::PX_PY){
-                        newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, 0, 0));
-                        newSize = Vector3(newSize.x, newSize.y, 0);
                     }
 
                     Matrix4 gizmoMatrix = Matrix4::translateMatrix(newPos) * gizmoRMatrix * Matrix4::scaleMatrix(Vector3(1,1,1));
@@ -1053,12 +1125,7 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                         objMatrix = transformParent->modelMatrix.inverse() * objMatrix;
                     }
 
-                    Vector3 oScale = Vector3(1.0f, 1.0f, 1.0f);
-                    oScale.x = Vector3(objMatrix[0][0], objMatrix[0][1], objMatrix[0][2]).length();
-                    oScale.y = Vector3(objMatrix[1][0], objMatrix[1][1], objMatrix[1][2]).length();
-                    oScale.z = Vector3(objMatrix[2][0], objMatrix[2][1], objMatrix[2][2]).length();
-
-                    Vector2 size = objectSizeOffset[entity] + Vector2(newSize.x / oScale.x, newSize.y / oScale.y);
+                    Vector2 size = objectSizeOffset[entity] + sizeDeltaLocal;
                     Vector3 pos = Vector3(objMatrix[3][0], objMatrix[3][1], objMatrix[3][2]);
 
                     if (size.x < 0) size.x = 0;
@@ -1077,13 +1144,12 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                         }
                     }
 
-                    if (toolslayer.getGizmo2DSideSelected() != Gizmo2DSideSelected::NONE){
+                    if (side != Gizmo2DSideSelected::NONE){
                         MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
                         if (isLayout){
                             multiCmd->addPropertyCmd<unsigned int>(project, sceneProject->id, entity, ComponentType::UILayoutComponent, "width", static_cast<unsigned int>(size.x));
                             multiCmd->addPropertyCmd<unsigned int>(project, sceneProject->id, entity, ComponentType::UILayoutComponent, "height", static_cast<unsigned int>(size.y));
                             if (isText){
-                                Gizmo2DSideSelected side = toolslayer.getGizmo2DSideSelected();
                                 if (side == Gizmo2DSideSelected::NX || side == Gizmo2DSideSelected::PX || 
                                     side == Gizmo2DSideSelected::NX_NY || side == Gizmo2DSideSelected::NX_PY || 
                                     side == Gizmo2DSideSelected::PX_NY || side == Gizmo2DSideSelected::PX_PY) {
