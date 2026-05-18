@@ -24,24 +24,54 @@ texturesdata_t& TextureDataPool::getMap(){
     return *map;
 };
 
+bool TextureDataPool::hasTexturePixels(const std::shared_ptr<std::array<TextureData,6>>& data, size_t numFaces) {
+    if (!data) {
+        return false;
+    }
+
+    for (size_t f = 0; f < numFaces; f++) {
+        TextureData& face = data->at(f);
+        if (!face.getData() || face.getSize() == 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+size_t TextureDataPool::getTextureFaces(std::array<TextureData,6>& data) {
+    for (size_t f = 1; f < 6; f++) {
+        if (data.at(f).getData() && data.at(f).getSize() > 0) {
+            return 6;
+        }
+    }
+
+    return 1;
+}
+
 std::shared_ptr<std::array<TextureData,6>> TextureDataPool::get(const std::string& id){
-	auto& shared = getMap()[id];
+    auto& map = getMap();
+    auto it = map.find(id);
 
-	if (shared.use_count() > 0){
-		return shared;
-	}
+    if (it != map.end() && it->second){
+        return it->second;
+    }
 
-	return nullptr;
+    return nullptr;
 }
 
 std::shared_ptr<std::array<TextureData,6>> TextureDataPool::get(const std::string& id, std::array<TextureData,6> data){
-	auto& shared = getMap()[id];
+    auto& map = getMap();
+    auto it = map.find(id);
+    std::shared_ptr<std::array<TextureData,6>> shared = (it != map.end()) ? it->second : nullptr;
+    size_t numFaces = getTextureFaces(data);
 
-	if (shared.use_count() > 0){
+    if (shared && hasTexturePixels(shared, numFaces)){
 		return shared;
 	}
 
 	shared = std::make_shared<std::array<TextureData,6>>(data);
+    map[id] = shared;
 
 	return shared;
 }
@@ -52,11 +82,16 @@ TextureLoadResult TextureDataPool::loadFromFile(const std::string& id, const std
     TextureLoadResult result;
     result.id = id;
 
-    if (shared && shared.use_count() > 0) {
+    if (shared && shared.use_count() > 0 && hasTexturePixels(shared, numFaces)) {
         result.state = ResourceLoadState::Finished;
         result.data = shared;
         return result;
     }
+
+    // The pool entry may still exist while other Texture instances hold the old
+    // shared_ptr, even after releaseDataAfterLoad freed the pixel buffer. In
+    // that case, keep the stale object alive for existing holders but replace
+    // the cached map entry with a freshly loaded copy.
 
     if (Engine::isAsyncLoading()) {
         std::lock_guard<std::mutex> lock(cacheMutex);
@@ -331,11 +366,12 @@ void TextureDataPool::requestShutdown() {
 }
 
 void TextureDataPool::remove(const std::string& id){
-	if (getMap().count(id)){
-		auto& shared = getMap()[id];
-		if (shared.use_count() <= 1){
-			getMap().erase(id);
-		}
+    auto& map = getMap();
+    auto it = map.find(id);
+    if (it != map.end()){
+        if (!it->second || it->second.use_count() <= 1){
+            map.erase(it);
+        }
 	}else{
 		if (Engine::isViewLoaded()){
 			Log::debug("Trying to destroy a non existent texture data: %s", id.c_str());

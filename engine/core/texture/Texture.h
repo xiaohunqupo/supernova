@@ -17,6 +17,9 @@ namespace doriax{
 
     class DORIAX_API Texture{
         private:
+            static bool hasTexturePixels(const std::shared_ptr<std::array<TextureData,6>>& data, size_t numFaces);
+            static std::string buildCubeTextureId(const std::string paths[6]);
+
             std::shared_ptr<TextureRender> render = NULL;
             Framebuffer* framebuffer;
             unsigned long lastFramebufferVersion = 0;

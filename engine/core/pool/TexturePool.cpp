@@ -17,54 +17,74 @@ textures_t& TexturePool::getMap(){
 };
 
 std::shared_ptr<TextureRender> TexturePool::get(const std::string& id){
-	auto& shared = getMap()[id];
+	auto& map = getMap();
+	auto it = map.find(id);
 
-    if (shared && shared->isCreated()){
-        return shared;
+    if (it != map.end() && it->second && it->second->isCreated()){
+        return it->second;
     }
 
 	return NULL;
 }
 
 std::shared_ptr<TextureRender> TexturePool::get(const std::string& id, TextureType type, const std::shared_ptr<std::array<TextureData,6>> &data, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV){
-	auto& shared = getMap()[id];
+	auto& map = getMap();
+	auto it = map.find(id);
+	std::shared_ptr<TextureRender> shared = (it != map.end()) ? it->second : nullptr;
 
-    if (shared && shared->isCreated()){
-        return shared;
-    }
-
-    if (!shared) {
-        shared = std::make_shared<TextureRender>();
-    }
-
-	int numFaces = 1;
-	if (type == TextureType::TEXTURE_CUBE){
-		numFaces = 6;
+	if (shared && shared->isCreated()){
+		return shared;
 	}
 
-	if (data){
-		void* data_array[6];
-		size_t size_array[6];
+	if (!data){
+		return NULL;
+	}
 
-		for (int f = 0; f < numFaces; f++){
-			data_array[f] = data->at(f).getData();
-			size_array[f] = (size_t)data->at(f).getSize();
+	int numFaces = (type == TextureType::TEXTURE_CUBE) ? 6 : 1;
+
+	void* data_array[6];
+	size_t size_array[6];
+
+	for (int f = 0; f < numFaces; f++){
+		data_array[f] = data->at(f).getData();
+		size_array[f] = (size_t)data->at(f).getSize();
+		if (!data_array[f] || size_array[f] == 0){
+			// Pixel data was released or never populated. Skip the upload so we
+			// don't trigger Sokol's VALIDATE_IMAGEDATA_NODATA. The caller will
+			// fall back and Texture::load() will refresh the data on a later try.
+			Log::error("Texture data is empty: %s", id.c_str());
+			return NULL;
 		}
-
-		shared->createTexture(id, data->at(0).getWidth(), data->at(0).getHeight(), data->at(0).getColorFormat(), type, numFaces, data_array, size_array, minFilter, magFilter, wrapU, wrapV);
-		//Log::debug("Create texture %s", id.c_str());
 	}
+
+	if (!shared){
+		shared = std::make_shared<TextureRender>();
+	}
+
+	if (!shared->createTexture(id, data->at(0).getWidth(), data->at(0).getHeight(), data->at(0).getColorFormat(), type, numFaces, data_array, size_array, minFilter, magFilter, wrapU, wrapV)){
+		shared->destroyTexture();
+		if (it != map.end()){
+			map.erase(it);
+		}
+		return NULL;
+	}
+	//Log::debug("Create texture %s", id.c_str());
+
+	map[id] = shared;
 
 	return shared;
 }
 
 void TexturePool::remove(const std::string& id){
-	if (getMap().count(id)){
-		auto& shared = getMap()[id];
-		if (shared.use_count() <= 1){
-			shared->destroyTexture();
+	auto& map = getMap();
+	auto it = map.find(id);
+	if (it != map.end()){
+		if (!it->second || it->second.use_count() <= 1){
+			if (it->second){
+				it->second->destroyTexture();
+			}
 			//Log::debug("Remove texture %s", id.c_str());
-			getMap().erase(id);
+			map.erase(it);
 		}
 	}else{
 		if (Engine::isViewLoaded()){

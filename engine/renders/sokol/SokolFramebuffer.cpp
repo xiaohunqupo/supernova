@@ -38,8 +38,16 @@ bool SokolFramebuffer::createFramebuffer(TextureType textureType, int width, int
         Log::error("Framebuffer texture type must be 2D or CUBE");
         return false;
     }
-    colorTexture.createFramebufferTexture(textureType, false, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
-    depthTexture.createFramebufferTexture(TextureType::TEXTURE_2D, true, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
+
+    destroyFramebuffer();
+
+    bool colorCreated = colorTexture.createFramebufferTexture(textureType, false, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
+    bool depthCreated = depthTexture.createFramebufferTexture(TextureType::TEXTURE_2D, true, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
+
+    if (!colorCreated || !depthCreated) {
+        destroyFramebuffer();
+        return false;
+    }
 
     size_t faces = (textureType == TextureType::TEXTURE_CUBE)? 6 : 1;
 
@@ -57,21 +65,31 @@ bool SokolFramebuffer::createFramebuffer(TextureType textureType, int width, int
         }
     }
 
-    return isCreated();
+    bool created = isCreated();
+    if (!created) {
+        destroyFramebuffer();
+    }
+
+    return created;
 }
 
 void SokolFramebuffer::destroyFramebuffer(){
-    if (attachments[0].id != SG_INVALID_ID && sg_isvalid()){
+    if (sg_isvalid()){
         for (int i = 0; i < 6; i++){
+            if (attachments[i].id == SG_INVALID_ID) {
+                continue;
+            }
+
             if (Engine::isAsyncThread()){
                 SokolCmdQueue::add_command_destroy_attachments(attachments[i]);
             }else{
                 sg_destroy_attachments(attachments[i]);
             }
         }
-        colorTexture.destroyTexture();
-        depthTexture.destroyTexture();
     }
+
+    colorTexture.destroyTexture();
+    depthTexture.destroyTexture();
 
     for (int i = 0; i < 6; i++){
         attachments[i].id = SG_INVALID_ID;
@@ -79,11 +97,23 @@ void SokolFramebuffer::destroyFramebuffer(){
 }
 
 bool SokolFramebuffer::isCreated(){
-    if (attachments[0].id != SG_INVALID_ID && sg_isvalid()) {
-        return sg_query_attachments_state(attachments[0]) == SG_RESOURCESTATE_VALID;
+    if (!sg_isvalid()) {
+        return false;
     }
 
-    return false;
+    bool hasAttachment = false;
+    for (int i = 0; i < 6; i++) {
+        if (attachments[i].id == SG_INVALID_ID) {
+            continue;
+        }
+
+        hasAttachment = true;
+        if (sg_query_attachments_state(attachments[i]) != SG_RESOURCESTATE_VALID) {
+            return false;
+        }
+    }
+
+    return hasAttachment;
 }
 
 TextureRender& SokolFramebuffer::getColorTexture(){

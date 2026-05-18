@@ -4,8 +4,6 @@
 
 #include "Texture.h"
 
-#include "Engine.h"
-#include "Log.h"
 #include "render/SystemRender.h"
 
 using namespace doriax;
@@ -68,9 +66,6 @@ Texture::Texture(const std::string& id, TextureData data){
 }
 
 Texture::Texture(Framebuffer* framebuffer){
-    this->render = NULL;
-    this->framebuffer = framebuffer;
-
     this->render = NULL;
     this->framebuffer = framebuffer;
 
@@ -258,11 +253,7 @@ void Texture::setCubePath(size_t index, const std::string& path){
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
 
-    std::string id = "cube";
-    for (int f = 0; f < 6; f++){
-        id = id + "|" + paths[f];
-    }
-    this->id = id;
+    this->id = buildCubeTextureId(paths);
     this->render = TexturePool::get(id);
 }
 
@@ -289,11 +280,7 @@ void Texture::setCubePaths(const std::string& front, const std::string& back,
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
 
-    std::string id = "cube";
-    for (int f = 0; f < 6; f++){
-        id = id + "|" + paths[f];
-    }
-    this->id = id;
+    this->id = buildCubeTextureId(paths);
     this->render = TexturePool::get(id);
 }
 
@@ -334,6 +321,30 @@ void Texture::setFramebuffer(Framebuffer* framebuffer){
     this->needLoad = false;
 }
 
+// Returns true if every required face of the texture data still owns its
+// CPU pixel buffer. After `releaseDataAfterLoad` the pixels are freed but
+// the TextureData object (with its width/height/size) survives, so the
+// shared_ptr alone is not enough to know whether the data is usable for a
+// GPU upload.
+bool Texture::hasTexturePixels(const std::shared_ptr<std::array<TextureData,6>>& data, size_t numFaces) {
+    if (!data) return false;
+    for (size_t f = 0; f < numFaces; f++) {
+        TextureData& face = data->at(f);
+        if (!face.getData() || face.getSize() == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string Texture::buildCubeTextureId(const std::string paths[6]) {
+    std::string id = "cube";
+    for (int f = 0; f < 6; f++) {
+        id += "|" + paths[f];
+    }
+    return id;
+}
+
 TextureLoadResult Texture::load() {
     TextureLoadResult result;
     result.id = id;
@@ -344,16 +355,25 @@ TextureLoadResult Texture::load() {
         return result;
     }
 
-    if (data) {
+    // Refresh from the data pool if we don't have a local reference yet.
+    if (!data) {
+        data = TextureDataPool::get(id);
+    }
+
+    if (data && hasTexturePixels(data, numFaces)) {
         result.state = ResourceLoadState::Finished;
         result.data = data;
         return result;
-    } else {
-        data = TextureDataPool::get(id);
-        if (data) {
-            result.state = ResourceLoadState::Finished;
-            result.data = data;
-            return result;
+    }
+
+    // Cached data exists but its pixels were already released (after a previous
+    // GPU upload with releaseDataAfterLoad). Drop the stale entry so the next
+    // load path can either reload from disk or fail cleanly.
+    if (data) {
+        data.reset();
+        TextureDataPool::remove(id);
+        if (loadFromPath) {
+            needLoad = true;
         }
     }
 
@@ -410,15 +430,19 @@ TextureRender* Texture::getRender(TextureRender* fallBackTexture){
         return &framebuffer->getRender().getColorTexture();
     }
 
+    // Fast path: GPU texture already created and cached.
     render = TexturePool::get(id);
-
     if (render){
-        data = TextureDataPool::get(id);
         return render.get();
     }
 
     TextureLoadResult texResult = load();
-    if (texResult.state == ResourceLoadState::Failed){
+    if (texResult.state == ResourceLoadState::Loading){
+        render = std::make_shared<TextureRender>();
+        return render.get();
+    }
+
+    if (texResult.state != ResourceLoadState::Finished || !hasTexturePixels(data, numFaces)){
         return fallBackTexture;
     }
 
@@ -426,7 +450,7 @@ TextureRender* Texture::getRender(TextureRender* fallBackTexture){
         render = TexturePool::get(id, type, data, minFilter, magFilter, wrapU, wrapV);
     }
 
-    if (data && releaseDataAfterLoad){
+    if (render && releaseDataAfterLoad && data){
         for (int f = 0; f < numFaces; f++){
             SystemRender::scheduleCleanup(TextureData::cleanupTexture, &data->at(f));
         }
@@ -436,7 +460,7 @@ TextureRender* Texture::getRender(TextureRender* fallBackTexture){
         return render.get();
     }
 
-    return NULL;
+    return fallBackTexture;
 }
 
 std::string Texture::getPath(size_t index) const{

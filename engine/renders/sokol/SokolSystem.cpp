@@ -47,6 +47,9 @@ void SokolSystem::setup(){
     /* setup sokol_gfx */
     sg_desc desc = {0};
     desc.buffer_pool_size = 1024; //default: 128
+    desc.image_pool_size = 2048; //default: 128
+    desc.sampler_pool_size = 2048; //default: 64
+    desc.attachments_pool_size = 512; //default: 16
     desc.pipeline_pool_size = 2048; //default: 64
     desc.environment = System::instance().getSokolEnvironment();
     desc.logger.func = sokol_log;
