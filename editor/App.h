@@ -86,6 +86,8 @@ namespace doriax::editor{
         ProjectSettingsWindow projectSettingsWindow;
 
         std::queue<SaveDialogQueueItem> saveDialogQueue;
+        bool saveDialogInProgress = false;
+        std::filesystem::path lastResourcesProjectPath;
 
         std::vector<std::string> droppedExternalPaths;
         bool isDroppedExternalPaths;
@@ -111,6 +113,7 @@ namespace doriax::editor{
         void buildDockspace();
         void kewtStyleTheme();
         void processNextSaveDialog();
+        bool popSaveDialogQueueItem();
 
         void closeWindow();
 

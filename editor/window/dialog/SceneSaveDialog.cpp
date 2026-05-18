@@ -8,12 +8,29 @@
 namespace doriax {
 namespace editor {
 
-void SceneSaveDialog::open(const fs::path& projectPath, const std::string& defaultName,
+void SceneSaveDialog::open(const fs::path& projectPath, const fs::path& initialDirectory, const std::string& defaultName,
         std::function<void(const fs::path&)> onSave,
         std::function<void()> onCancel) {
     m_isOpen = true;
     m_projectPath = projectPath;
-    m_selectedPath = projectPath.string();
+
+    fs::path selectedPath = initialDirectory.empty() ? projectPath : initialDirectory;
+    std::error_code ec;
+    if (selectedPath.is_relative()) {
+        selectedPath = projectPath / selectedPath;
+    }
+
+    if (!fs::is_directory(selectedPath, ec) || ec) {
+        selectedPath = projectPath;
+    } else {
+        fs::path relativeToProject = selectedPath.lexically_relative(projectPath);
+        if ((selectedPath != projectPath && relativeToProject.empty()) ||
+                (!relativeToProject.empty() && *relativeToProject.begin() == "..")) {
+            selectedPath = projectPath;
+        }
+    }
+
+    m_selectedPath = selectedPath.lexically_normal().string();
     m_onSave = onSave;
     m_onCancel = onCancel;
 

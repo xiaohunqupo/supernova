@@ -189,6 +189,7 @@ namespace doriax::editor {
         void cleanupThumbnails();
 
         void refreshCurrentDirectory();
+        fs::path getCurrentPath() const { return currentPath; }
 
         void show();
         void setOpen(bool open);

@@ -974,7 +974,7 @@ void editor::App::show(){
     exportWindow.show();
     projectSettingsWindow.show();
 
-    if (!sceneSaveDialog.isOpen() && !projectSaveDialog.isOpen() && !saveDialogQueue.empty()) {
+    if (!saveDialogInProgress && !sceneSaveDialog.isOpen() && !projectSaveDialog.isOpen() && !saveDialogQueue.empty()) {
         processNextSaveDialog();
     }
 
@@ -1295,9 +1295,18 @@ void editor::App::resetLastActivatedScene(){
 }
 
 void editor::App::updateResourcesPath(){
+    std::filesystem::path currentProjectPath = project.getProjectPath().lexically_normal();
+    bool projectPathChanged = lastResourcesProjectPath != currentProjectPath;
+
     if (isInitialized){
-        resourcesWindow->notifyProjectPathChange();
+        if (projectPathChanged) {
+            resourcesWindow->notifyProjectPathChange();
+        } else {
+            resourcesWindow->refreshCurrentDirectory();
+        }
     }
+
+    lastResourcesProjectPath = currentProjectPath;
     resourcesWindow->cleanupThumbnails();
 }
 
@@ -1339,7 +1348,7 @@ void editor::App::registerSaveSceneDialog(uint32_t sceneId, std::function<void()
     saveDialogQueue.push(item);
 
     // If this is the only item in the queue, process it immediately
-    if (saveDialogQueue.size() == 1 && !sceneSaveDialog.isOpen() && !projectSaveDialog.isOpen()) {
+    if (saveDialogQueue.size() == 1 && !saveDialogInProgress && !sceneSaveDialog.isOpen() && !projectSaveDialog.isOpen()) {
         processNextSaveDialog();
     }
     // If queue has more items or another dialog is open, they'll be processed later
@@ -1351,7 +1360,7 @@ void editor::App::registerProjectSaveDialog(std::function<void()> callback) {
     saveDialogQueue.push(item);
 
     // If this is the only item in the queue, process it immediately
-    if (saveDialogQueue.size() == 1 && !sceneSaveDialog.isOpen() && !projectSaveDialog.isOpen()) {
+    if (saveDialogQueue.size() == 1 && !saveDialogInProgress && !sceneSaveDialog.isOpen() && !projectSaveDialog.isOpen()) {
         processNextSaveDialog();
     }
     // If queue has more items or another dialog is open, they'll be processed later
@@ -1439,6 +1448,16 @@ editor::ResourcesWindow* editor::App::getResourcesWindow() const{
     return resourcesWindow;
 }
 
+bool editor::App::popSaveDialogQueueItem() {
+    if (saveDialogQueue.empty()) {
+        Out::warning("Attempted to pop an empty save dialog queue.");
+        return false;
+    }
+
+    saveDialogQueue.pop();
+    return true;
+}
+
 editor::AnimationWindow* editor::App::getAnimationWindow() const{
     return animationWindow;
 }
@@ -1449,7 +1468,7 @@ editor::TerrainEditWindow* editor::App::getTerrainEditWindow() const{
 
 void editor::App::processNextSaveDialog() {
     // Check if there's anything to process and no dialogs are currently open
-    if (saveDialogQueue.empty() || sceneSaveDialog.isOpen() || projectSaveDialog.isOpen()) {
+    if (saveDialogInProgress || saveDialogQueue.empty() || sceneSaveDialog.isOpen() || projectSaveDialog.isOpen()) {
         return;
     }
 
@@ -1464,17 +1483,27 @@ void editor::App::processNextSaveDialog() {
         SceneProject* sceneProject = project.getScene(sceneId);
         if (!sceneProject) {
             // Invalid scene, remove from queue and try next item
-            saveDialogQueue.pop();
+            popSaveDialogQueueItem();
             processNextSaveDialog();
             return;
         }
 
         // Set default filename
         std::string defaultName = sceneProject->name + ".scene";
+        fs::path initialDirectory = project.getProjectPath();
+        if (resourcesWindow) {
+            fs::path resourcesPath = resourcesWindow->getCurrentPath();
+            if (!resourcesPath.empty()) {
+                initialDirectory = resourcesPath;
+            }
+        }
+
+        saveDialogInProgress = true;
 
         // Open dialog for the current scene
         sceneSaveDialog.open(
-            project.getProjectPath(), 
+            project.getProjectPath(),
+            initialDirectory,
             defaultName,
             // Save callback
             [this, sceneId, completionCallback](const fs::path& fullPath) {
@@ -1494,7 +1523,8 @@ void editor::App::processNextSaveDialog() {
                         sceneProject->filepath = relPath;
                         saveStarted = true;
                         project.saveSceneToPathAsync(sceneId, fullPath, [this, completionCallback](bool success) {
-                            saveDialogQueue.pop();
+                            saveDialogInProgress = false;
+                            popSaveDialogQueueItem();
 
                             if (success && completionCallback) {
                                 completionCallback();
@@ -1506,14 +1536,16 @@ void editor::App::processNextSaveDialog() {
                 }
 
                 if (!saveStarted) {
-                    saveDialogQueue.pop();
+                    saveDialogInProgress = false;
+                    popSaveDialogQueueItem();
                     processNextSaveDialog();
                 }
             },
             // Cancel callback
             [this, completionCallback]() {
                 // Remove the current item from the queue without saving
-                saveDialogQueue.pop();
+                saveDialogInProgress = false;
+                popSaveDialogQueueItem();
 
                 // Process the next item if available
                 processNextSaveDialog();
@@ -1526,6 +1558,8 @@ void editor::App::processNextSaveDialog() {
         if (defaultName.empty()) {
             defaultName = "MyProject";
         }
+
+        saveDialogInProgress = true;
 
         projectSaveDialog.open(
             defaultName,
@@ -1540,7 +1574,8 @@ void editor::App::processNextSaveDialog() {
                 project.saveProjectToPath(projectPath);
 
                 // Remove this item from the queue
-                saveDialogQueue.pop();
+                saveDialogInProgress = false;
+                popSaveDialogQueueItem();
 
                 // Execute the completion callback if provided
                 if (completionCallback) {
@@ -1553,7 +1588,8 @@ void editor::App::processNextSaveDialog() {
             // Cancel callback
             [this, completionCallback]() {
                 // Remove the current item from the queue without saving
-                saveDialogQueue.pop();
+                saveDialogInProgress = false;
+                popSaveDialogQueueItem();
 
                 // Process the next item if available
                 processNextSaveDialog();

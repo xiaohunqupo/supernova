@@ -27,7 +27,7 @@ public:
     SceneSaveDialog() = default;
     ~SceneSaveDialog() = default;
 
-    void open(const fs::path& projectPath, const std::string& defaultName, 
+    void open(const fs::path& projectPath, const fs::path& initialDirectory, const std::string& defaultName,
         std::function<void(const fs::path&)> onSave,
         std::function<void()> onCancel = nullptr);
     void show();
