@@ -66,16 +66,23 @@ namespace doriax{
 
 	class DORIAX_API RenderSystem : public SubSystem {
 	private:
-		struct TransparentMeshesData{
+		enum class TransparentRenderType{
+			MESH,
+			POINTS
+		};
+
+		struct TransparentRenderData{
+			TransparentRenderType type;
 			MeshComponent* mesh;
+			PointsComponent* points;
 			InstancedMeshComponent* instmesh;
 			TerrainComponent* terrain;
 			Transform* transform;
 			float distanceToCamera;
 		};
 
-		struct MeshComparison{
-			bool operator()(const TransparentMeshesData& lhs, const TransparentMeshesData& rhs) const{
+		struct TransparentRenderComparison{
+			bool operator()(const TransparentRenderData& lhs, const TransparentRenderData& rhs) const{
 				return lhs.distanceToCamera < rhs.distanceToCamera;
 			}
 		};

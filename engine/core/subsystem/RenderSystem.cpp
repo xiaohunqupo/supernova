@@ -3123,7 +3123,7 @@ void RenderSystem::update(double dt){
 }
 
 void RenderSystem::draw(){
-    std::priority_queue<TransparentMeshesData, std::vector<TransparentMeshesData>, MeshComparison> transparentMeshes;
+    std::priority_queue<TransparentRenderData, std::vector<TransparentRenderData>, TransparentRenderComparison> transparentRenders;
 
     auto transforms = scene->getComponentArray<Transform>();
     auto cameras = scene->getComponentArray<CameraComponent>();
@@ -3324,7 +3324,7 @@ void RenderSystem::draw(){
                         //Draw opaque meshes if transparency is not necessary
                         drawMesh(mesh, transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), instmesh, terrain);
                     }else{
-                        transparentMeshes.push({&mesh, instmesh, terrain, &transform, transform.distanceToCamera});
+                        transparentRenders.push({TransparentRenderType::MESH, &mesh, nullptr, instmesh, terrain, &transform, transform.distanceToCamera});
                     }
                 }
 
@@ -3347,8 +3347,13 @@ void RenderSystem::draw(){
                     sortPoints(points, transform, camera, cameraTransform);
                 }
 
-                if (transform.visible)
-                    drawPoints(points, transform, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+                if (transform.visible){
+                    if (!points.transparent || !camera.transparentSort){
+                        drawPoints(points, transform, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+                    }else{
+                        transparentRenders.push({TransparentRenderType::POINTS, nullptr, &points, nullptr, nullptr, &transform, transform.distanceToCamera});
+                    }
+                }
 
             }else if (signature.test(scene->getComponentId<LinesComponent>())){
                 LinesComponent& lines = scene->getComponent<LinesComponent>(entity);
@@ -3368,14 +3373,17 @@ void RenderSystem::draw(){
             }
         }
 
-        //---------Draw transparent meshes----------
-        while (!transparentMeshes.empty()){
-            TransparentMeshesData meshData = transparentMeshes.top();
+        //---------Draw transparent renderers----------
+        while (!transparentRenders.empty()){
+            TransparentRenderData renderData = transparentRenders.top();
 
-            //Draw transparent meshes
-            drawMesh(*meshData.mesh, *meshData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), meshData.instmesh, meshData.terrain);
+            if (renderData.type == TransparentRenderType::MESH){
+                drawMesh(*renderData.mesh, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), renderData.instmesh, renderData.terrain);
+            }else if (renderData.type == TransparentRenderType::POINTS){
+                drawPoints(*renderData.points, *renderData.transform, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+            }
 
-            transparentMeshes.pop();
+            transparentRenders.pop();
         }
 
         camera.render.endRenderPass();
