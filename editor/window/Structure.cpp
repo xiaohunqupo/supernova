@@ -426,7 +426,7 @@ void editor::Structure::handleSceneFilesDropAsChildScenes(const std::vector<std:
         return;
     }
 
-    auto normalizeDroppedPath = [this](const std::filesystem::path& p) -> std::filesystem::path {
+    auto normalizeProjectScenePath = [this](const std::filesystem::path& p) -> std::filesystem::path {
         if (p.empty()) {
             return p;
         }
@@ -436,18 +436,24 @@ void editor::Structure::handleSceneFilesDropAsChildScenes(const std::vector<std:
         return p.lexically_normal();
     };
 
-    auto pathsReferToSameFile = [](const std::filesystem::path& a, const std::filesystem::path& b) -> bool {
-        std::error_code ec;
-        if (std::filesystem::exists(a, ec) && std::filesystem::exists(b, ec)) {
-            if (std::filesystem::equivalent(a, b, ec) && !ec) {
+    auto pathsReferToSameFile = [&](const std::filesystem::path& a, const std::filesystem::path& b) -> bool {
+        std::filesystem::path normalizedA = normalizeProjectScenePath(a);
+        std::filesystem::path normalizedB = normalizeProjectScenePath(b);
+
+        std::error_code ecA;
+        std::error_code ecB;
+        if (std::filesystem::exists(normalizedA, ecA) && !ecA &&
+            std::filesystem::exists(normalizedB, ecB) && !ecB) {
+            std::error_code equivalentEc;
+            if (std::filesystem::equivalent(normalizedA, normalizedB, equivalentEc) && !equivalentEc) {
                 return true;
             }
         }
-        return a.lexically_normal() == b.lexically_normal();
+        return normalizedA == normalizedB;
     };
 
     for (const std::string& filePath : filePaths) {
-        std::filesystem::path droppedPath = normalizeDroppedPath(std::filesystem::path(filePath));
+        std::filesystem::path droppedPath = normalizeProjectScenePath(std::filesystem::path(filePath));
         if (droppedPath.extension() != ".scene") {
             continue;
         }
