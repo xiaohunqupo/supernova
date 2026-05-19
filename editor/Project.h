@@ -199,7 +199,7 @@ namespace doriax::editor{
 
         std::map<std::filesystem::path, EntityBundle> entityBundles;
 
-        const std::string libName = "projectlib";
+        std::string libName;
 
         template<typename T>
         T* findScene(uint32_t sceneId) const;

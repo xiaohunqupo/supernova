@@ -1061,6 +1061,7 @@ std::string editor::Project::getName() const {
 
 void editor::Project::setName(std::string name){
     this->name = name;
+    this->libName = Factory::toIdentifier(name);
     Backend::updateWindowTitle(name);
 }
 
