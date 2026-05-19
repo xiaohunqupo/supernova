@@ -95,10 +95,12 @@ int UISystem::getAnchorReferenceHeight() const{
 }
 
 bool UISystem::createImagePatches(ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
-    unsigned int texWidth = 0;
-    unsigned int texHeight = 0;
+    unsigned int texWidth = ui.texture.getWidth();
+    unsigned int texHeight = ui.texture.getHeight();
 
-    if (!ui.texture.empty()){
+    if ((texWidth == 0 || texHeight == 0) && !ui.texture.empty()){
+        // Reuse cached texture metadata when available. Reloading here is only
+        // needed for first-time loads, not when resize just rebuilds patches.
         TextureLoadResult texResult = ui.texture.load();
         if (texResult.state == ResourceLoadState::Finished){
             texWidth = ui.texture.getWidth();
