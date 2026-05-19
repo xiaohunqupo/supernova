@@ -763,11 +763,10 @@ Texture* editor::Properties::findThumbnail(const std::string& path) {
     std::error_code thumbEc;
     const bool thumbnailExists = std::filesystem::exists(thumbnailPath, thumbEc) && !thumbEc;
 
-    // Try to load from disk
     if (thumbnailExists) {
-        Texture thumbTexture;
-        thumbTexture.setPath(thumbPathStr);
-        if (thumbTexture.load()) {
+        TextureData thumbData(thumbnailPath.string().c_str());
+        if (thumbData.getData() && thumbData.getSize() > 0) {
+            Texture thumbTexture(thumbPathStr, thumbData);
             thumbnailTextures[thumbPathStr] = thumbTexture;
             return &thumbnailTextures[thumbPathStr];
         }
