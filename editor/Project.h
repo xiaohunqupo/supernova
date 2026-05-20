@@ -229,6 +229,7 @@ namespace doriax::editor{
         fs::path normalizeToProjectRelative(const fs::path& path) const;
         static bool matchesRelativePath(const fs::path& relativeBase, const fs::path& currentPath);
         static bool matchesRelativeString(const fs::path& relativeBase, const std::string& currentPath);
+        static bool eraseChildSceneReference(std::vector<uint32_t>& childScenes, uint32_t childSceneId);
         static bool remapRelativePath(const fs::path& oldRelative, const fs::path& newRelative,
                           const fs::path& currentPath, fs::path& updatedPath);
         static bool remapRelativeString(const fs::path& oldRelative, const fs::path& newRelative,
@@ -238,6 +239,8 @@ namespace doriax::editor{
         bool remapScriptPathsInRegistry(EntityRegistry* registry, const fs::path& oldRelative,
                         const fs::path& newRelative);
         bool cleanupScriptPathsInRegistry(EntityRegistry* registry, const fs::path& deletedRelative);
+        bool removeMissingChildSceneReferences(SceneProject& sceneProject);
+        bool detachChildSceneFromParents(uint32_t childSceneId, const std::set<uint32_t>& skippedSceneIds);
 
         void finalizeStart(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene>& runtimeScenes);
         void finalizeStop(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene> runtimeScenes);

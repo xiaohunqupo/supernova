@@ -213,6 +213,16 @@ bool editor::Project::matchesRelativeString(const fs::path& relativeBase, const 
     return matchesRelativePath(relativeBase, fs::path(currentPath));
 }
 
+bool editor::Project::eraseChildSceneReference(std::vector<uint32_t>& childScenes, uint32_t childSceneId) {
+    auto it = std::remove(childScenes.begin(), childScenes.end(), childSceneId);
+    if (it == childScenes.end()) {
+        return false;
+    }
+
+    childScenes.erase(it, childScenes.end());
+    return true;
+}
+
 bool editor::Project::remapRelativePath(const fs::path& oldRelative, const fs::path& newRelative,
                                         const fs::path& currentPath, fs::path& updatedPath) {
     if (oldRelative.empty() || newRelative.empty() || currentPath.empty()) {
@@ -311,6 +321,53 @@ bool editor::Project::cleanupScriptPathsInRegistry(EntityRegistry* registry, con
             scriptComponent.scripts.end());
 
         changed |= (scriptComponent.scripts.size() != originalSize);
+    }
+
+    return changed;
+}
+
+bool editor::Project::detachChildSceneFromParents(uint32_t childSceneId, const std::set<uint32_t>& skippedSceneIds) {
+    bool changed = false;
+
+    for (auto& sceneProject : scenes) {
+        if (sceneProject.id == childSceneId || skippedSceneIds.find(sceneProject.id) != skippedSceneIds.end()) {
+            continue;
+        }
+
+        if (!eraseChildSceneReference(sceneProject.childScenes, childSceneId)) {
+            continue;
+        }
+
+        if (sceneProject.scene) {
+            sceneProject.needUpdateRender = true;
+            sceneProject.isModified = true;
+        }
+
+        changed = true;
+    }
+
+    return changed;
+}
+
+bool editor::Project::removeMissingChildSceneReferences(SceneProject& sceneProject) {
+    bool changed = false;
+
+    for (auto it = sceneProject.childScenes.begin(); it != sceneProject.childScenes.end();) {
+        uint32_t childSceneId = *it;
+        if (getScene(childSceneId)) {
+            ++it;
+            continue;
+        }
+
+        Out::warning("Scene '%s' references missing child scene ID %u. Removing child scene reference.",
+            sceneProject.name.c_str(), childSceneId);
+        it = sceneProject.childScenes.erase(it);
+        changed = true;
+    }
+
+    if (changed && sceneProject.scene) {
+        sceneProject.needUpdateRender = true;
+        sceneProject.isModified = true;
     }
 
     return changed;
@@ -674,6 +731,7 @@ void editor::Project::cleanupSceneFilePath(const std::filesystem::path& deletedP
 
     bool changed = false;
     std::vector<uint32_t> scenesToRemove;
+    std::set<uint32_t> removedChildSceneIds;
 
     for (auto& sceneProject : scenes) {
         if (sceneProject.filepath.empty()) {
@@ -681,12 +739,20 @@ void editor::Project::cleanupSceneFilePath(const std::filesystem::path& deletedP
         }
 
         if (matchesRelativePath(deletedRelative, sceneProject.filepath)) {
+            removedChildSceneIds.insert(sceneProject.id);
             if (sceneProject.opened) {
                 sceneProject.filepath.clear();
                 sceneProject.isModified = true;
+                sceneProject.needUpdateRender = true;
             } else {
                 scenesToRemove.push_back(sceneProject.id);
             }
+            changed = true;
+        }
+    }
+
+    for (uint32_t childSceneId : removedChildSceneIds) {
+        if (detachChildSceneFromParents(childSceneId, removedChildSceneIds)) {
             changed = true;
         }
     }
@@ -1597,6 +1663,10 @@ void editor::Project::loadScene(fs::path filepath, bool opened, bool isNewScene,
             }
         }
 
+        if (opened && !isNewScene) {
+            removeMissingChildSceneReferences(*targetScene);
+        }
+
     } catch (const YAML::Exception& e) {
         if (isNewScene && !scenes.empty()) scenes.pop_back();
         Out::error("Failed to open scene: %s", e.what());
@@ -1830,6 +1900,8 @@ bool editor::Project::loadChildSceneInline(uint32_t childSceneId) {
         childScene->expandedInline = true;
         childScene->needUpdateRender = true;
         childScene->isModified = false;
+
+        removeMissingChildSceneReferences(*childScene);
 
         markParentScenesNeedUpdate(childSceneId);
 
@@ -2430,6 +2502,12 @@ bool editor::Project::loadProject(const std::filesystem::path path) {
         // Create a default scene if no scenes were loaded
         if (scenes.empty()) {
             createNewScene("New Scene", SceneType::SCENE_3D);
+        }
+
+        for (auto& sceneProject : scenes) {
+            if (sceneProject.opened) {
+                removeMissingChildSceneReferences(sceneProject);
+            }
         }
 
         // Copy engine-api to project

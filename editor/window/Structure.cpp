@@ -627,7 +627,17 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
     if (node.isScene){
         ImGui::SetItemTooltip("Id: %u", node.id);
     }else if (node.isChildScene){
-        ImGui::SetItemTooltip("Child Scene\nId: %u", node.childSceneId);
+        const SceneProject* childScene = project->getScene(node.childSceneId);
+        std::filesystem::path childScenePath = childScene ? childScene->filepath : std::filesystem::path();
+        if (!childScenePath.empty() && childScenePath.is_absolute()) {
+            std::error_code ec;
+            std::filesystem::path relativePath = std::filesystem::relative(childScenePath, project->getProjectPath(), ec);
+            if (!ec && !relativePath.empty()) {
+                childScenePath = relativePath;
+            }
+        }
+        const std::string pathText = childScenePath.empty() ? "Unsaved scene" : childScenePath.generic_string();
+        ImGui::SetItemTooltip("Child Scene\nPath: %s", pathText.c_str());
     }else{
         if (node.isBundle) {
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
