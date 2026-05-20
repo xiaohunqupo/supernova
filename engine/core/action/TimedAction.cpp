@@ -10,6 +10,10 @@ TimedAction::TimedAction(Scene* scene): Action(scene){
     addComponent<TimedActionComponent>();
 }
 
+TimedAction::TimedAction(Scene* scene, Entity entity): Action(scene, entity){
+
+}
+
 void TimedAction::setAction(float duration, bool loop){
     ActionComponent& action = getComponent<ActionComponent>();
     TimedActionComponent& timedAction = getComponent<TimedActionComponent>();

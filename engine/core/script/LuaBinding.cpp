@@ -40,7 +40,19 @@
 #include "object/physics/Body2D.h"
 #include "object/physics/Body3D.h"
 #include "action/Action.h"
+#include "action/TimedAction.h"
+#include "action/AlphaAction.h"
+#include "action/ColorAction.h"
+#include "action/PositionAction.h"
+#include "action/RotationAction.h"
+#include "action/ScaleAction.h"
 #include "action/Animation.h"
+#include "action/Particles.h"
+#include "action/SpriteAnimation.h"
+#include "action/keyframe/MorphTracks.h"
+#include "action/keyframe/RotateTracks.h"
+#include "action/keyframe/ScaleTracks.h"
+#include "action/keyframe/TranslateTracks.h"
 
 #include "lua.hpp"
 
@@ -492,7 +504,19 @@ bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, dori
     DISPATCH_TYPE(Body2D, "body2d");
     DISPATCH_TYPE(Body3D, "body3d");
     DISPATCH_TYPE(Action, "action");
+    DISPATCH_TYPE(TimedAction, "timedaction");
+    DISPATCH_TYPE(AlphaAction, "alphaaction");
+    DISPATCH_TYPE(ColorAction, "coloraction");
+    DISPATCH_TYPE(PositionAction, "positionaction");
+    DISPATCH_TYPE(RotationAction, "rotationaction");
+    DISPATCH_TYPE(ScaleAction, "scaleaction");
     DISPATCH_TYPE(Animation, "animation");
+    DISPATCH_TYPE(Particles, "particles");
+    DISPATCH_TYPE(SpriteAnimation, "spriteanimation");
+    DISPATCH_TYPE(MorphTracks, "morphtracks");
+    DISPATCH_TYPE(RotateTracks, "rotatetracks");
+    DISPATCH_TYPE(ScaleTracks, "scaletracks");
+    DISPATCH_TYPE(TranslateTracks, "translatetracks");
 
     #undef DISPATCH_TYPE
 

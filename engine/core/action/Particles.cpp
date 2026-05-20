@@ -10,6 +10,10 @@ Particles::Particles(Scene* scene): Action(scene){
     addComponent<ParticlesComponent>();
 }
 
+Particles::Particles(Scene* scene, Entity entity): Action(scene, entity){
+
+}
+
 Particles::~Particles(){
 
 }

@@ -11,6 +11,10 @@ ColorAction::ColorAction(Scene* scene): TimedAction(scene){
     addComponent<ColorActionComponent>();
 }
 
+ColorAction::ColorAction(Scene* scene, Entity entity): TimedAction(scene, entity){
+
+}
+
 void ColorAction::setAction(Vector3 startColor, Vector3 endColor, float duration, bool loop){
     TimedAction::setAction(duration, loop);
 

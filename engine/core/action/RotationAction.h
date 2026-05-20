@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         RotationAction(Scene* scene);
+        RotationAction(Scene* scene, Entity entity);
 
         void setAction(Quaternion startRotation, Quaternion endRotation, float duration, bool loop=false);
     };

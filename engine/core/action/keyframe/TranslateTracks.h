@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         TranslateTracks(Scene* scene);
+        TranslateTracks(Scene* scene, Entity entity);
         TranslateTracks(Scene* scene, std::vector<float> times, std::vector<Vector3> values);
 
         void setTimes(std::vector<float> times);

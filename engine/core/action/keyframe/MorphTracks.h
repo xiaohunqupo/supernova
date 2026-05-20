@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         MorphTracks(Scene* scene);
+        MorphTracks(Scene* scene, Entity entity);
         MorphTracks(Scene* scene, std::vector<float> times, std::vector<std::vector<float>> values);
 
         void setTimes(std::vector<float> times);

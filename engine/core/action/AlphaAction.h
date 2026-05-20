@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         AlphaAction(Scene* scene);
+        AlphaAction(Scene* scene, Entity entity);
 
         void setAction(float startAlpha, float endAlpha, float duration, bool loop=false);
     };

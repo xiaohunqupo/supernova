@@ -14,6 +14,10 @@ MorphTracks::MorphTracks(Scene* scene): Action(scene){
     addComponent<MorphTracksComponent>();
 }
 
+MorphTracks::MorphTracks(Scene* scene, Entity entity): Action(scene, entity){
+
+}
+
 MorphTracks::MorphTracks(Scene* scene, std::vector<float> times, std::vector<std::vector<float>> values): Action(scene){
     addComponent<KeyframeTracksComponent>();
     addComponent<MorphTracksComponent>();

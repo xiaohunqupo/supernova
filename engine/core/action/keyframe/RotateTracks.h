@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         RotateTracks(Scene* scene);
+        RotateTracks(Scene* scene, Entity entity);
         RotateTracks(Scene* scene, std::vector<float> times, std::vector<Quaternion> values);
 
         void setTimes(std::vector<float> times);

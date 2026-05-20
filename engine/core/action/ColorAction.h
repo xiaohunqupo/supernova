@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         ColorAction(Scene* scene);
+        ColorAction(Scene* scene, Entity entity);
 
         void setAction(Vector3 startColor, Vector3 endColor, float duration, bool loop=false);
         void setAction(Vector4 startColor, Vector4 endColor, float duration, bool loop=false);

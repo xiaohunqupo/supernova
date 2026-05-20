@@ -1375,7 +1375,19 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<CameraComponent>()))      return "Camera";
     if (signature.test(scene->getComponentId<Body2DComponent>()))      return "Body2D";
     if (signature.test(scene->getComponentId<Body3DComponent>()))      return "Body3D";
+    if (signature.test(scene->getComponentId<AlphaActionComponent>())) return "AlphaAction";
+    if (signature.test(scene->getComponentId<ColorActionComponent>())) return "ColorAction";
+    if (signature.test(scene->getComponentId<PositionActionComponent>())) return "PositionAction";
+    if (signature.test(scene->getComponentId<RotationActionComponent>())) return "RotationAction";
+    if (signature.test(scene->getComponentId<ScaleActionComponent>())) return "ScaleAction";
+    if (signature.test(scene->getComponentId<TimedActionComponent>())) return "TimedAction";
     if (signature.test(scene->getComponentId<AnimationComponent>()))   return "Animation";
+    if (signature.test(scene->getComponentId<SpriteAnimationComponent>())) return "SpriteAnimation";
+    if (signature.test(scene->getComponentId<MorphTracksComponent>())) return "MorphTracks";
+    if (signature.test(scene->getComponentId<RotateTracksComponent>())) return "RotateTracks";
+    if (signature.test(scene->getComponentId<ScaleTracksComponent>())) return "ScaleTracks";
+    if (signature.test(scene->getComponentId<TranslateTracksComponent>())) return "TranslateTracks";
+    if (signature.test(scene->getComponentId<ParticlesComponent>()))   return "Particles";
     if (signature.test(scene->getComponentId<ActionComponent>()))      return "Action";
     if (signature.test(scene->getComponentId<Transform>()))            return "Object";
 

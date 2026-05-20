@@ -14,6 +14,10 @@ TranslateTracks::TranslateTracks(Scene* scene): Action(scene){
     addComponent<TranslateTracksComponent>();
 }
 
+TranslateTracks::TranslateTracks(Scene* scene, Entity entity): Action(scene, entity){
+
+}
+
 TranslateTracks::TranslateTracks(Scene* scene, std::vector<float> times, std::vector<Vector3> values): Action(scene){
     addComponent<KeyframeTracksComponent>();
     addComponent<TranslateTracksComponent>();

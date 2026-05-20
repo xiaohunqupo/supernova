@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         ScaleAction(Scene* scene);
+        ScaleAction(Scene* scene, Entity entity);
 
         void setAction(Vector3 startScale, Vector3 endScale, float duration, bool loop=false);
     };

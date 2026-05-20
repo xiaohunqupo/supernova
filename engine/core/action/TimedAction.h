@@ -16,6 +16,7 @@ namespace doriax{
 
     public:
         TimedAction(Scene* scene);
+        TimedAction(Scene* scene, Entity entity);
 
         void setFunctionType(EaseType functionType);
 

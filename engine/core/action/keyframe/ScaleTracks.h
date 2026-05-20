@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         ScaleTracks(Scene* scene);
+        ScaleTracks(Scene* scene, Entity entity);
         ScaleTracks(Scene* scene, std::vector<float> times, std::vector<Vector3> values);
 
         void setTimes(std::vector<float> times);

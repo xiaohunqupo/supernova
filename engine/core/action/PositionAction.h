@@ -12,6 +12,7 @@ namespace doriax{
 
     public:
         PositionAction(Scene* scene);
+        PositionAction(Scene* scene, Entity entity);
 
         void setAction(Vector3 startPosition, Vector3 endPosition, float duration, bool loop=false);
     };

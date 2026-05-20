@@ -10,6 +10,10 @@ SpriteAnimation::SpriteAnimation(Scene* scene): Action(scene){
     addComponent<SpriteAnimationComponent>();
 }
 
+SpriteAnimation::SpriteAnimation(Scene* scene, Entity entity): Action(scene, entity){
+
+}
+
 void SpriteAnimation::setAnimation(std::vector<int> frames, std::vector<int> framesTime, bool loop){
     if (frames.size() <= 0 || framesTime.size() <= 0) {
         Log::error("Cannot set animation without frames or intervals");

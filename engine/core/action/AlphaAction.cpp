@@ -10,6 +10,10 @@ AlphaAction::AlphaAction(Scene* scene): TimedAction(scene){
     addComponent<AlphaActionComponent>();
 }
 
+AlphaAction::AlphaAction(Scene* scene, Entity entity): TimedAction(scene, entity){
+
+}
+
 void AlphaAction::setAction(float startAlpha, float endAlpha, float duration, bool loop){
     TimedAction::setAction(duration, loop);
 

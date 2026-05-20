@@ -10,9 +10,10 @@
 
 namespace doriax{
 
-    class Particles: public Action{
+    class DORIAX_API Particles: public Action{
     public:
         Particles(Scene* scene);
+        Particles(Scene* scene, Entity entity);
         virtual ~Particles();
 
         void setMaxParticles(unsigned int maxParticles);
