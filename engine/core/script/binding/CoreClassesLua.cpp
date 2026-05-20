@@ -252,10 +252,16 @@ void LuaBinding::registerCoreClasses(lua_State *L){
 
     luabridge::getGlobalNamespace(L)
         .beginClass<SceneManager>("SceneManager")
-        .addStaticFunction("registerScene", &SceneManager::registerScene)
+        .addStaticFunction("registerScene", luabridge::overload<uint32_t, const std::string&, std::function<void()>>(&SceneManager::registerScene))
         .addStaticFunction("loadScene", 
             luabridge::overload<uint32_t>(&SceneManager::loadScene),
             luabridge::overload<const std::string&>(&SceneManager::loadScene))
+        .addStaticFunction("addSceneLayer",
+            luabridge::overload<uint32_t>(&SceneManager::addSceneLayer),
+            luabridge::overload<const std::string&>(&SceneManager::addSceneLayer))
+        .addStaticFunction("removeSceneLayer",
+            luabridge::overload<uint32_t>(&SceneManager::removeSceneLayer),
+            luabridge::overload<const std::string&>(&SceneManager::removeSceneLayer))
         .addStaticFunction("getSceneId", &SceneManager::getSceneId)
         .addStaticFunction("getSceneName", &SceneManager::getSceneName)
         .addStaticFunction("getSceneNames", &SceneManager::getSceneNames)

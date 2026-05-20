@@ -14,16 +14,41 @@ std::vector<SceneManager::SceneEntry> SceneManager::entries;
 uint32_t SceneManager::currentId = 0;
 std::map<uint32_t, Scene*> SceneManager::scenePtrs;
 
+std::vector<uint32_t> SceneManager::buildSceneStackIds(uint32_t id, const std::vector<uint32_t>& sceneIds) {
+    std::vector<uint32_t> result;
+    result.reserve(sceneIds.size() + 1);
+
+    auto addId = [&result](uint32_t sceneId) {
+        if (std::find(result.begin(), result.end(), sceneId) == result.end()) {
+            result.push_back(sceneId);
+        }
+    };
+
+    addId(id);
+    for (uint32_t sceneId : sceneIds) {
+        addId(sceneId);
+    }
+
+    return result;
+}
+
 void SceneManager::registerScene(uint32_t id, const std::string& name, std::function<void()> factory) {
+    registerScene(id, name, std::move(factory), std::vector<uint32_t>{id});
+}
+
+void SceneManager::registerScene(uint32_t id, const std::string& name, std::function<void()> factory, const std::vector<uint32_t>& sceneIds) {
+    std::vector<uint32_t> stackSceneIds = buildSceneStackIds(id, sceneIds);
+
     // Overwrite if the id already exists
     for (auto& entry : entries) {
         if (entry.id == id) {
             entry.name = name;
             entry.factory = std::move(factory);
+            entry.sceneIds = std::move(stackSceneIds);
             return;
         }
     }
-    entries.push_back({id, name, std::move(factory)});
+    entries.push_back({id, name, std::move(factory), std::move(stackSceneIds)});
 }
 
 bool SceneManager::loadScene(const std::string& name) {
@@ -49,6 +74,75 @@ bool SceneManager::loadScene(uint32_t id) {
 
     Log::error("SceneManager: scene id %u not found", id);
     return false;
+}
+
+bool SceneManager::addSceneLayer(uint32_t id) {
+    for (const auto& entry : entries) {
+        if (entry.id != id) {
+            continue;
+        }
+
+        for (uint32_t sceneId : entry.sceneIds) {
+            Scene* scene = getScenePtr(sceneId);
+            if (!scene) {
+                Log::error("SceneManager: scene id %u is not loaded", sceneId);
+                return false;
+            }
+        }
+
+        for (uint32_t sceneId : entry.sceneIds) {
+            Engine::addSceneLayer(getScenePtr(sceneId));
+        }
+
+        return true;
+    }
+
+    Log::error("SceneManager: scene id %u not found", id);
+    return false;
+}
+
+bool SceneManager::addSceneLayer(const std::string& name) {
+    uint32_t id = getSceneId(name);
+    if (id == 0) {
+        Log::error("SceneManager: scene '%s' not found", name.c_str());
+        return false;
+    }
+
+    return addSceneLayer(id);
+}
+
+bool SceneManager::removeSceneLayer(uint32_t id) {
+    for (const auto& entry : entries) {
+        if (entry.id != id) {
+            continue;
+        }
+
+        bool removedScene = false;
+        for (auto it = entry.sceneIds.rbegin(); it != entry.sceneIds.rend(); ++it) {
+            Scene* scene = getScenePtr(*it);
+            if (!scene || scene == Engine::getMainScene() || !Engine::isSceneRunning(scene)) {
+                continue;
+            }
+
+            Engine::removeScene(scene);
+            removedScene = true;
+        }
+
+        return removedScene;
+    }
+
+    Log::error("SceneManager: scene id %u not found", id);
+    return false;
+}
+
+bool SceneManager::removeSceneLayer(const std::string& name) {
+    uint32_t id = getSceneId(name);
+    if (id == 0) {
+        Log::error("SceneManager: scene '%s' not found", name.c_str());
+        return false;
+    }
+
+    return removeSceneLayer(id);
 }
 
 uint32_t SceneManager::getSceneId(const std::string& name) {

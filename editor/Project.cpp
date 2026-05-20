@@ -5425,6 +5425,9 @@ void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session
 void editor::Project::registerSceneManager() {
     SceneManager::clearAll();
     for (SceneProject& sceneProject : scenes) {
+        std::vector<uint32_t> stackSceneIds;
+        collectInvolvedScenes(sceneProject.id, stackSceneIds);
+
         SceneManager::registerScene(sceneProject.id, sceneProject.name, [this, sceneId = sceneProject.id]() {
             std::shared_ptr<PlaySession> session;
             {
@@ -5521,7 +5524,7 @@ void editor::Project::registerSceneManager() {
                     }
                 }
             }
-        });
+        }, stackSceneIds);
     }
 }
 
