@@ -52,6 +52,52 @@ Scene::~Scene(){
     destroy();
 }
 
+template<typename Component, typename Callback>
+static void removeComponentSubscriptionsByTag(Scene* scene, const std::string& substring, Callback callback) {
+    auto components = scene->getComponentArray<Component>();
+
+    for (size_t i = 0; i < components->size(); i++) {
+        callback(components->getComponentFromIndex(i), substring);
+    }
+}
+
+void Scene::removeSubscriptionsByTag(const std::string& substring) {
+    removeComponentSubscriptionsByTag<ActionComponent>(this, substring, [](ActionComponent& action, const std::string& tag) {
+        action.onStart.removeByTagSubstring(tag);
+        action.onPause.removeByTagSubstring(tag);
+        action.onStop.removeByTagSubstring(tag);
+        action.onStep.removeByTagSubstring(tag);
+    });
+
+    removeComponentSubscriptionsByTag<SoundComponent>(this, substring, [](SoundComponent& sound, const std::string& tag) {
+        sound.onStart.removeByTagSubstring(tag);
+        sound.onPause.removeByTagSubstring(tag);
+        sound.onStop.removeByTagSubstring(tag);
+    });
+
+    removeComponentSubscriptionsByTag<UIComponent>(this, substring, [](UIComponent& ui, const std::string& tag) {
+        ui.onGetFocus.removeByTagSubstring(tag);
+        ui.onLostFocus.removeByTagSubstring(tag);
+        ui.onPointerMove.removeByTagSubstring(tag);
+        ui.onPointerDown.removeByTagSubstring(tag);
+        ui.onPointerUp.removeByTagSubstring(tag);
+    });
+
+    removeComponentSubscriptionsByTag<ButtonComponent>(this, substring, [](ButtonComponent& button, const std::string& tag) {
+        button.onPress.removeByTagSubstring(tag);
+        button.onRelease.removeByTagSubstring(tag);
+    });
+
+    removeComponentSubscriptionsByTag<PanelComponent>(this, substring, [](PanelComponent& panel, const std::string& tag) {
+        panel.onMove.removeByTagSubstring(tag);
+        panel.onResize.removeByTagSubstring(tag);
+    });
+
+    removeComponentSubscriptionsByTag<ScrollbarComponent>(this, substring, [](ScrollbarComponent& scrollbar, const std::string& tag) {
+        scrollbar.onChange.removeByTagSubstring(tag);
+    });
+}
+
 void Scene::setCamera(Camera* camera){
     setCamera(camera->getEntity());
 }

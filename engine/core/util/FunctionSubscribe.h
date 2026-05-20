@@ -9,39 +9,92 @@
 #ifndef FUNCTIONSUBSCRIBE_H
 #define FUNCTIONSUBSCRIBE_H
 
+#include <cstdint>
 #include <functional>
 #include <type_traits>
 #include <memory>
 #include <string>
+#include <typeinfo>
 #include <vector>
 #include <algorithm>
 
+#include "Log.h"
 #include "LuaFunction.h"
 #ifdef DORIAX_CRASH_GUARD
 #include "util/CrashGuard.h"
 #endif
 
+#define DORIAX_EVENT_SUBSCRIPTION_TAG(METHOD) \
+    (std::string(typeid(std::remove_pointer_t<decltype(this)>).name()) + \
+     "_" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + \
+     "_" #METHOD)
+
 #define REGISTER_EVENT(EVENT_OBJ, METHOD) \
     do { \
-        std::string __tag = std::string(typeid(std::remove_pointer_t<decltype(this)>).name()) + \
-                            "_" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + \
-                            "_" #METHOD; \
+        std::string __tag = DORIAX_EVENT_SUBSCRIPTION_TAG(METHOD); \
         (EVENT_OBJ).add< \
             std::remove_pointer_t<decltype(this)>, \
             &std::remove_pointer_t<decltype(this)>::METHOD \
         >(__tag, this); \
     } while (0)
 
+#define UNREGISTER_EVENT(EVENT_OBJ, METHOD) \
+    do { \
+        std::string __tag = DORIAX_EVENT_SUBSCRIPTION_TAG(METHOD); \
+        (EVENT_OBJ).remove(__tag); \
+    } while (0)
+
 #define REGISTER_ENGINE_EVENT(EVENT) \
     do { \
-        std::string __tag = std::string(typeid(std::remove_pointer_t<decltype(this)>).name()) + \
-                            "_" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + \
-                            "_" #EVENT; \
+        std::string __tag = DORIAX_EVENT_SUBSCRIPTION_TAG(EVENT); \
         ::doriax::Engine::EVENT.add< \
             std::remove_pointer_t<decltype(this)>, \
             &std::remove_pointer_t<decltype(this)>::EVENT \
         >(__tag, this); \
     } while (0)
+
+#define UNREGISTER_ENGINE_EVENT(EVENT) \
+    UNREGISTER_EVENT(::doriax::Engine::EVENT, EVENT)
+
+#define REGISTER_COMPONENT_EVENT(COMPONENT, EVENT, METHOD) \
+    do { \
+        auto* __scene = this->getScene(); \
+        if (__scene) { \
+            auto* __component = __scene->findComponent<COMPONENT>(this->getEntity()); \
+            if (__component) { \
+                std::string __tag = DORIAX_EVENT_SUBSCRIPTION_TAG(METHOD); \
+                __component->EVENT.add< \
+                    std::remove_pointer_t<decltype(this)>, \
+                    &std::remove_pointer_t<decltype(this)>::METHOD \
+                >(__tag, this); \
+            } else { \
+                ::doriax::Log::warn("Cannot register " #COMPONENT "::" #EVENT ": component not found"); \
+            } \
+        } \
+    } while (0)
+
+#define UNREGISTER_COMPONENT_EVENT(COMPONENT, EVENT, METHOD) \
+    do { \
+        auto* __scene = this->getScene(); \
+        if (__scene) { \
+            auto* __component = __scene->findComponent<COMPONENT>(this->getEntity()); \
+            if (__component) { \
+                UNREGISTER_EVENT(__component->EVENT, METHOD); \
+            } \
+        } \
+    } while (0)
+
+#define REGISTER_UI_EVENT(EVENT, METHOD) REGISTER_COMPONENT_EVENT(::doriax::UIComponent, EVENT, METHOD)
+#define UNREGISTER_UI_EVENT(EVENT, METHOD) UNREGISTER_COMPONENT_EVENT(::doriax::UIComponent, EVENT, METHOD)
+
+#define REGISTER_BUTTON_EVENT(EVENT, METHOD) REGISTER_COMPONENT_EVENT(::doriax::ButtonComponent, EVENT, METHOD)
+#define UNREGISTER_BUTTON_EVENT(EVENT, METHOD) UNREGISTER_COMPONENT_EVENT(::doriax::ButtonComponent, EVENT, METHOD)
+
+#define REGISTER_SCROLLBAR_EVENT(EVENT, METHOD) REGISTER_COMPONENT_EVENT(::doriax::ScrollbarComponent, EVENT, METHOD)
+#define UNREGISTER_SCROLLBAR_EVENT(EVENT, METHOD) UNREGISTER_COMPONENT_EVENT(::doriax::ScrollbarComponent, EVENT, METHOD)
+
+#define REGISTER_PANEL_EVENT(EVENT, METHOD) REGISTER_COMPONENT_EVENT(::doriax::PanelComponent, EVENT, METHOD)
+#define UNREGISTER_PANEL_EVENT(EVENT, METHOD) UNREGISTER_COMPONENT_EVENT(::doriax::PanelComponent, EVENT, METHOD)
 
 
 template<size_t>

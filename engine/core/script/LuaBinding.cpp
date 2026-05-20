@@ -408,16 +408,28 @@ void LuaBinding::cleanup(){
     }
 }
 
-void LuaBinding::removeScriptSubscriptions(int luaRef){
-    if (!luastate) return;
+std::string LuaBinding::getScriptSubscriptionTag(int luaRef){
+    if (!luastate) return "";
 
     lua_rawgeti(luastate, LUA_REGISTRYINDEX, luaRef);
     const void* ptr = lua_topointer(luastate, -1);
+    std::string addr;
     if (ptr) {
-        std::string addr = "_" + std::to_string(reinterpret_cast<std::uintptr_t>(ptr)) + "_";
-        Engine::removeSubscriptionsByTag(addr);
+        addr = "_" + std::to_string(reinterpret_cast<std::uintptr_t>(ptr)) + "_";
     }
     lua_pop(luastate, 1);
+
+    return addr;
+}
+
+void LuaBinding::removeScriptSubscriptions(Scene* scene, int luaRef){
+    std::string addr = getScriptSubscriptionTag(luaRef);
+    if (addr.empty()) return;
+
+    Engine::removeSubscriptionsByTag(addr);
+    if (scene) {
+        scene->removeSubscriptionsByTag(addr);
+    }
 }
 
 void LuaBinding::releaseLuaRef(int luaRef){
@@ -699,7 +711,7 @@ void LuaBinding::cleanupLuaScripts(Scene* scene) {
             if (scriptEntry.type != ScriptType::SCRIPT_LUA) continue;
             if (scriptEntry.instance) {
                 int ref = static_cast<int>(reinterpret_cast<intptr_t>(scriptEntry.instance));
-                removeScriptSubscriptions(ref);
+                removeScriptSubscriptions(scene, ref);
                 releaseLuaRef(ref);
                 scriptEntry.instance = nullptr;
                 for (auto& prop : scriptEntry.properties) {

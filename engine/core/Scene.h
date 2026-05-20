@@ -9,6 +9,7 @@
 #include "SubSystem.h"
 #include "EntityRegistry.h"
 #include "Export.h"
+#include <string>
 #include <vector>
 #include <unordered_map>
 
@@ -84,6 +85,8 @@ namespace doriax{
         void draw();
         void update(double dt);
         void fixedUpdate(double dt);
+
+        void removeSubscriptionsByTag(const std::string& substring);
 
         void updateCameraSize();
 
