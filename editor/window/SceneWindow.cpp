@@ -932,8 +932,9 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
     }else{
 
         if (ImGui::IsMouseDown(ImGuiMouseButton_Middle) || 
-                (ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::IsKeyDown(ImGuiKey_Space)) ||
-                (ImGui::IsMouseDown(ImGuiMouseButton_Left) && sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND)){
+            (draggingMouse[sceneId] && altHeld && ImGui::IsMouseDown(ImGuiMouseButton_Left)) ||
+            (ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::IsKeyDown(ImGuiKey_Space)) ||
+            (ImGui::IsMouseDown(ImGuiMouseButton_Left) && sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND)){
 
             SceneRender2D* sceneRender2D = static_cast<SceneRender2D*>(sceneProject->sceneRender);
             float currentZoom = sceneRender2D->getZoom();
