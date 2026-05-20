@@ -491,20 +491,28 @@ unsigned int Texture::getWidth() const{
     if (this->framebuffer){
         return framebuffer->getWidth();
     }
-    if (!data){
+    if (data){
+        return static_cast<unsigned int>(data->at(0).getOriginalWidth());
+    }
+    std::shared_ptr<std::array<TextureData,6>> sharedData = id.empty() ? nullptr : TextureDataPool::get(id);
+    if (!sharedData){
         return 0;
     }
-    return static_cast<unsigned int>(getData().getOriginalWidth());
+    return static_cast<unsigned int>(sharedData->at(0).getOriginalWidth());
 }
 
 unsigned int Texture::getHeight() const{
     if (this->framebuffer){
         return framebuffer->getHeight();
     }
-    if (!data){
+    if (data){
+        return static_cast<unsigned int>(data->at(0).getOriginalHeight());
+    }
+    std::shared_ptr<std::array<TextureData,6>> sharedData = id.empty() ? nullptr : TextureDataPool::get(id);
+    if (!sharedData){
         return 0;
     }
-    return static_cast<unsigned int>(getData().getOriginalHeight());
+    return static_cast<unsigned int>(sharedData->at(0).getOriginalHeight());
 }
 
 bool Texture::isTransparent() const{
