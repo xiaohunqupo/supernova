@@ -578,11 +578,16 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
     bool altHeld = ImGui::IsKeyDown(ImGuiKey_ModAlt);
     bool suppressLeftMouse = suppressLeftMouseUntilRelease[sceneId];
+    GizmoSelected gizmoSelected = sceneProject->sceneRender->getToolsLayer()->getGizmoSelected();
+    Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
     bool gizmoSideActive = sceneProject->sceneRender->isAnyGizmoSideSelected();
     // Alt + click on a gizmo handle duplicates the target and drags the copy.
-    // Alt + click on empty space keeps its camera-orbit behavior, so the guard
-    // is gated on a hovered/active gizmo side.
+    // For the 2D gizmo, only the center move area duplicates; resize handles
+    // keep editing the current selection. Alt + click on empty space keeps its
+    // camera-orbit behavior, so the guard is gated on a hovered/active gizmo side.
     bool altGizmoDrag = altHeld && gizmoSideActive;
+    bool altGizmoDuplicate = altGizmoDrag &&
+        (gizmoSelected != GizmoSelected::OBJECT2D || gizmo2DSide == Gizmo2DSideSelected::CENTER);
 
     bool disableSelection = 
         altHeld ||
@@ -598,7 +603,6 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && (!altHeld || altGizmoDrag) && !suppressLeftMouse){
             // Selecting and dragging an unselected object at same time (just for 2D object mode)
-            GizmoSelected gizmoSelected = sceneProject->sceneRender->getToolsLayer()->getGizmoSelected();
             if (!disableSelection && gizmoSelected == GizmoSelected::OBJECT2D) {
                 Entity hitEntity = project->findObjectByRay(sceneId, x, y);
                 if (hitEntity != NULL_ENTITY) {
@@ -683,7 +687,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
             }
             // Alt+click on gizmo: duplicate before starting drag (Shift is reserved
             // for aspect-ratio lock on 2D corner handles, see mouseDragEvent).
-            if (altGizmoDrag){
+            if (altGizmoDuplicate){
                 int tileIdx = sceneProject->sceneRender->getSelectedTileIndex();
                 Entity tileEntity = sceneProject->sceneRender->getSelectedTileEntity();
                 if (tileIdx >= 0) {
