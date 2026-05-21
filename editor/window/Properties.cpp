@@ -2818,6 +2818,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
                 cmd = new PropertyCmd<int>(project, sceneProject->id, entity, cpType, id, newValue, settings.onValueChanged);
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
             }
+            finishProperty = true;
         }
         if (dif)
             ImGui::PopStyleColor();
@@ -2885,6 +2886,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
                 cmd = new PropertyCmd<Ease>(project, sceneProject->id, entity, cpType, id, newValue, settings.onValueChanged);
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
             }
+            finishProperty = true;
         }
         if (dif)
             ImGui::PopStyleColor();
