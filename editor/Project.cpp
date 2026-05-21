@@ -2230,6 +2230,8 @@ void editor::Project::finalizeStart(SceneProject* mainSceneProject, std::vector<
 
     if (mainSceneProject) {
         mainSceneProject->playState = ScenePlayState::PLAYING;
+        mainSceneProject->needUpdateRender = true;
+        Backend::getApp().resetLastActivatedScene();
         Out::success("Scene '%s' started", mainSceneProject->name.c_str());
     }
 }
