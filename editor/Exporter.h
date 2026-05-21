@@ -54,6 +54,7 @@ namespace doriax::editor {
         bool isCancelled() const;
 
         fs::path getExportProjectRoot() const;
+        static bool shouldSkipExportSupportFile(const fs::path& relativePath);
 
         bool checkTargetDir();
         bool clearGenerated();

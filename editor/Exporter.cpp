@@ -104,6 +104,10 @@ fs::path editor::Exporter::getExportProjectRoot() const {
     return config.targetDir / "project";
 }
 
+bool editor::Exporter::shouldSkipExportSupportFile(const fs::path& relativePath) {
+    return relativePath == "CMakeLists.txt" || relativePath.filename() == "AGENTS.md";
+}
+
 bool editor::Exporter::checkTargetDir() {
     setProgress("Checking target directory...", 0.0f);
 
@@ -295,12 +299,21 @@ bool editor::Exporter::copyGenerated() {
     // Also copy scene_scripts.cpp
     fs::path sceneScriptsSrc = project->getProjectInternalPath() / "scene_scripts.cpp";
     if (fs::exists(sceneScriptsSrc, ec)) {
-        fs::copy_file(sceneScriptsSrc, generatedDst / "scene_scripts.cpp",
-                      fs::copy_options::overwrite_existing, ec);
-        if (ec) {
-            setError("Failed to copy scene_scripts.cpp: " + ec.message());
+        std::ifstream ifs(sceneScriptsSrc, std::ios::in | std::ios::binary);
+        if (!ifs) {
+            setError("Failed to read generated scene_scripts.cpp");
             return false;
         }
+
+        std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        const std::string editorOnlyComment = "// Doriax API headers for this project are provided by .doriax/engine-api; see generated CMakeLists.txt for local and upstream source references.\n";
+        const std::string exportComment = "// This file binds scene script metadata to compiled C++ and Lua scripts for the current build configuration.\n";
+        size_t commentPos = content.find(editorOnlyComment);
+        if (commentPos != std::string::npos) {
+            content.replace(commentPos, editorOnlyComment.size(), exportComment);
+        }
+
+        FileUtils::writeIfChanged(generatedDst / "scene_scripts.cpp", content);
     }
 
     return true;
@@ -355,8 +368,8 @@ bool editor::Exporter::copyAssets() {
             std::string firstComponent = relPath.begin()->string();
             if (!firstComponent.empty() && firstComponent[0] == '.') continue;
 
-            // Skip CMakeLists.txt at root level
-            if (relPath == "CMakeLists.txt") continue;
+            // Skip project support files that should not ship as assets
+            if (shouldSkipExportSupportFile(relPath)) continue;
 
             // Skip C++ script files (handled by copyCppScripts)
             if (entry.is_regular_file() && scriptPaths.count(fs::weakly_canonical(entry.path(), ec))) continue;
@@ -450,8 +463,8 @@ bool editor::Exporter::copyLua() {
         std::string firstComponent = relPath.begin()->string();
         if (!firstComponent.empty() && firstComponent[0] == '.') { it.disable_recursion_pending(); continue; }
 
-        // Skip CMakeLists.txt at root level
-        if (relPath == "CMakeLists.txt") continue;
+        // Skip project support files that should not ship in the Lua directory
+        if (shouldSkipExportSupportFile(relPath)) continue;
 
         // Skip terrain_maps directory (handled by copyAssets)
         if (entry.is_directory()) {
