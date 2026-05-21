@@ -179,7 +179,7 @@ namespace doriax::editor {
         static YAML::Node encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers = true, bool embedTextureData = true);
         static MeshComponent decodeMeshComponent(const YAML::Node& node, const MeshComponent* oldMesh = nullptr);
 
-        static YAML::Node encodeUIComponent(const UIComponent& ui);
+        static YAML::Node encodeUIComponent(const UIComponent& ui, bool embedTextureData = true);
         static UIComponent decodeUIComponent(const YAML::Node& node, const UIComponent* oldUI = nullptr);
 
         static YAML::Node encodeButtonComponent(const ButtonComponent& button);

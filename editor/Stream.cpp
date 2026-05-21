@@ -2222,14 +2222,15 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
     }
 
     if (signature.test(registry->getComponentId<MeshComponent>())) {
-        bool isModel = signature.test(registry->getComponentId<ModelComponent>());
+        const bool isModel = signature.test(registry->getComponentId<ModelComponent>());
         MeshComponent mesh = registry->getComponent<MeshComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::MeshComponent, true)] = encodeMeshComponent(mesh, !isModel, !isModel);
     }
 
     if (signature.test(registry->getComponentId<UIComponent>())) {
+        const bool isText = signature.test(registry->getComponentId<TextComponent>());
         UIComponent ui = registry->getComponent<UIComponent>(entity);
-        compNode[Catalog::getComponentName(ComponentType::UIComponent, true)] = encodeUIComponent(ui);
+        compNode[Catalog::getComponentName(ComponentType::UIComponent, true)] = encodeUIComponent(ui, !isText);
     }
 
     if (signature.test(registry->getComponentId<ButtonComponent>())) {
@@ -3167,7 +3168,7 @@ MeshComponent editor::Stream::decodeMeshComponent(const YAML::Node& node, const 
     return mesh;
 }
 
-YAML::Node editor::Stream::encodeUIComponent(const UIComponent& ui) {
+YAML::Node editor::Stream::encodeUIComponent(const UIComponent& ui, bool embedTextureData) {
     YAML::Node node;
     //node["loaded"] = ui.loaded;
     //node["loadCalled"] = ui.loadCalled;
@@ -3188,7 +3189,7 @@ YAML::Node editor::Stream::encodeUIComponent(const UIComponent& ui) {
     node["aabb"] = encodeAABB(ui.aabb);
     node["worldAABB"] = encodeAABB(ui.worldAABB);
 
-    node["texture"] = encodeTexture(ui.texture);
+    node["texture"] = encodeTexture(ui.texture, embedTextureData);
     node["color"] = encodeVector4(ui.color);
     // FunctionSubscribe fields are not serializable
 
