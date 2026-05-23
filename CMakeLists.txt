@@ -258,6 +258,7 @@ add_executable(
     ${EDITOR_DIR}/command/type/MoveEntityOrderCmd.cpp
     ${EDITOR_DIR}/command/type/ObjectTransformCmd.cpp
     ${EDITOR_DIR}/command/type/RemoveChildSceneCmd.cpp
+    ${EDITOR_DIR}/command/type/SetChildSceneStartActiveCmd.cpp
     ${EDITOR_DIR}/command/type/EntityNameCmd.cpp
     ${EDITOR_DIR}/command/type/ImportEntityBundleCmd.cpp
     ${EDITOR_DIR}/command/type/RemoveEntityFromBundleCmd.cpp

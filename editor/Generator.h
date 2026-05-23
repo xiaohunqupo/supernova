@@ -42,6 +42,7 @@ namespace doriax::editor {
         uint32_t id;
         std::string name;
         std::vector<uint32_t> involvedScenes; // IDs of all scenes involved in this stack (main + layers)
+        std::vector<uint32_t> activeScenes;   // IDs that should be added to Engine when the stack is loaded
         bool isMain;
     };
 

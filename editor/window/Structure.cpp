@@ -5,6 +5,7 @@
 #include "command/type/MoveEntityOrderCmd.h"
 #include "command/type/AddChildSceneCmd.h"
 #include "command/type/RemoveChildSceneCmd.h"
+#include "command/type/SetChildSceneStartActiveCmd.h"
 #include "command/type/CreateEntityCmd.h"
 #include "command/type/EntityNameCmd.h"
 #include "command/type/SceneNameCmd.h"
@@ -1042,6 +1043,10 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
             ImGui::PopItemWidth();
 
             ImGui::Separator();
+            bool startActive = project->isChildSceneStartActive(node.ownerSceneId, node.childSceneId);
+            if (ImGui::MenuItem(ICON_FA_PLAY "  Start active", nullptr, startActive)) {
+                CommandHandle::get(node.ownerSceneId)->addCommand(new SetChildSceneStartActiveCmd(project, node.ownerSceneId, node.childSceneId, !startActive));
+            }
             if (ImGui::MenuItem(ICON_FA_TRASH "  Remove child scene")) {
                 CommandHandle::get(node.ownerSceneId)->addCommand(new RemoveChildSceneCmd(project, node.ownerSceneId, node.childSceneId));
             }
@@ -1359,7 +1364,8 @@ void editor::Structure::show(){
 
     // child scenes (shown before entities)
     bool hasChildScenes = !sceneProject->childScenes.empty();
-    for (const auto& childSceneId : sceneProject->childScenes) {
+    for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
+        uint32_t childSceneId = childSceneRef.id;
         const SceneProject* childScene = project->getScene(childSceneId);
         if (!childScene) {
             continue; // Skip invalid child scene references

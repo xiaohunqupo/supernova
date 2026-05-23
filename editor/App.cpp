@@ -1051,7 +1051,8 @@ void editor::App::engineRender(){
             // Collect loaded child scene layers (skip if playing — runtime manages its own layers)
             std::vector<Scene*> childLayers;
             if (sceneProject.playState == ScenePlayState::STOPPED) {
-                for (uint32_t childId : sceneProject.childScenes) {
+                for (const ChildSceneRef& childSceneRef : sceneProject.childScenes) {
+                    uint32_t childId = childSceneRef.id;
                     const SceneProject* childScene = project.getScene(childId);
                     if (childScene && childScene->expandedInline && childScene->scene) {
                         childLayers.push_back(childScene->scene);
@@ -1061,9 +1062,12 @@ void editor::App::engineRender(){
             sceneProject.sceneRender->setChildSceneLayers(childLayers);
 
             if (lastActivatedScene != sceneProject.id || sceneProject.needUpdateRender){
+                std::vector<Scene*> runtimeLayers = project.getRunningRuntimeLayers(sceneProject.id);
                 sceneProject.sceneRender->activate();
 
-                project.restoreRuntimeLayers(sceneProject.id);
+                for (Scene* runtimeLayer : runtimeLayers) {
+                    Engine::addSceneLayer(runtimeLayer);
+                }
                 if (lastActivatedScene != sceneProject.id) {
                     lastActivatedScene = sceneProject.id;
                     sceneChanged = true;
@@ -1081,7 +1085,8 @@ void editor::App::engineRender(){
                 }
 
                 // Update child scene render systems so their entities display correctly
-                for (uint32_t childId : sceneProject.childScenes) {
+                for (const ChildSceneRef& childSceneRef : sceneProject.childScenes) {
+                    uint32_t childId = childSceneRef.id;
                     SceneProject* childScene = project.getScene(childId);
                     if (childScene && childScene->expandedInline && childScene->scene) {
                         if (childScene->sceneRender) {

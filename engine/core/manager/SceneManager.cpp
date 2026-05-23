@@ -76,7 +76,7 @@ bool SceneManager::loadScene(uint32_t id) {
     return false;
 }
 
-bool SceneManager::addSceneLayer(uint32_t id) {
+bool SceneManager::addChildScene(uint32_t id) {
     for (const auto& entry : entries) {
         if (entry.id != id) {
             continue;
@@ -101,17 +101,17 @@ bool SceneManager::addSceneLayer(uint32_t id) {
     return false;
 }
 
-bool SceneManager::addSceneLayer(const std::string& name) {
+bool SceneManager::addChildScene(const std::string& name) {
     uint32_t id = getSceneId(name);
     if (id == 0) {
         Log::error("SceneManager: scene '%s' not found", name.c_str());
         return false;
     }
 
-    return addSceneLayer(id);
+    return addChildScene(id);
 }
 
-bool SceneManager::removeSceneLayer(uint32_t id) {
+bool SceneManager::removeChildScene(uint32_t id) {
     for (const auto& entry : entries) {
         if (entry.id != id) {
             continue;
@@ -135,14 +135,14 @@ bool SceneManager::removeSceneLayer(uint32_t id) {
     return false;
 }
 
-bool SceneManager::removeSceneLayer(const std::string& name) {
+bool SceneManager::removeChildScene(const std::string& name) {
     uint32_t id = getSceneId(name);
     if (id == 0) {
         Log::error("SceneManager: scene '%s' not found", name.c_str());
         return false;
     }
 
-    return removeSceneLayer(id);
+    return removeChildScene(id);
 }
 
 uint32_t SceneManager::getSceneId(const std::string& name) {

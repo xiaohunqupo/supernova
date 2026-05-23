@@ -1079,7 +1079,7 @@ void editor::Generator::configure(const std::vector<editor::SceneBuildInfo>& sce
             mainContent += "    }\n";
         }
         mainContent += "\n";
-        for (const auto sceneId : sceneData.involvedScenes) {
+        for (const auto sceneId : sceneData.activeScenes) {
             std::string sceneName = "_" + Factory::toIdentifier(sceneIdToName[sceneId]);
             if (sceneData.id == sceneId) {
                 mainContent += "    Engine::setScene(" + sceneName + ");\n";
@@ -1132,9 +1132,9 @@ void editor::Generator::configure(const std::vector<editor::SceneBuildInfo>& sce
     for (const auto& sceneData : scenes) {
         std::string stackId = Factory::toIdentifier(sceneData.name);
         std::string sceneIds;
-        for (size_t i = 0; i < sceneData.involvedScenes.size(); i++) {
+        for (size_t i = 0; i < sceneData.activeScenes.size(); i++) {
             if (i > 0) sceneIds += ", ";
-            sceneIds += std::to_string(sceneData.involvedScenes[i]);
+            sceneIds += std::to_string(sceneData.activeScenes[i]);
         }
         mainContent += "    SceneManager::registerScene(" + std::to_string(sceneData.id) + ", \"" + sceneData.name + "\", load_" + stackId + ", {" + sceneIds + "});\n";
     }

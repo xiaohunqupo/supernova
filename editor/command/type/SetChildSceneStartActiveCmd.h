@@ -4,18 +4,17 @@
 #include "Project.h"
 
 namespace doriax::editor {
-    class RemoveChildSceneCmd : public Command {
+    class SetChildSceneStartActiveCmd : public Command {
     private:
         Project* project;
         uint32_t sceneId;
         uint32_t childSceneId;
-        ChildSceneRef childSceneRef;
-        int index;
-
+        bool newStartActive;
+        bool oldStartActive;
         bool wasModified;
 
     public:
-        RemoveChildSceneCmd(Project* project, uint32_t sceneId, uint32_t childSceneId);
+        SetChildSceneStartActiveCmd(Project* project, uint32_t sceneId, uint32_t childSceneId, bool startActive);
 
         bool execute() override;
         void undo() override;

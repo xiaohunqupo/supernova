@@ -1,5 +1,7 @@
 #include "RemoveChildSceneCmd.h"
 
+#include <algorithm>
+
 using namespace doriax;
 
 editor::RemoveChildSceneCmd::RemoveChildSceneCmd(Project* project, uint32_t sceneId, uint32_t childSceneId){
@@ -12,9 +14,13 @@ editor::RemoveChildSceneCmd::RemoveChildSceneCmd(Project* project, uint32_t scen
     if (sceneProject){
         this->wasModified = sceneProject->isModified;
         auto& childScenes = sceneProject->childScenes;
-        auto it = std::find(childScenes.begin(), childScenes.end(), childSceneId);
+        auto it = std::find_if(childScenes.begin(), childScenes.end(),
+            [childSceneId](const ChildSceneRef& childScene) {
+                return childScene.id == childSceneId;
+            });
         if (it != childScenes.end()){
             this->index = std::distance(childScenes.begin(), it);
+            this->childSceneRef = *it;
         }
     }
 }
@@ -30,7 +36,7 @@ void editor::RemoveChildSceneCmd::undo() {
     if (sceneProject && index != -1){
         auto& childScenes = sceneProject->childScenes;
         if (index <= childScenes.size()){
-            childScenes.insert(childScenes.begin() + index, childSceneId);
+            childScenes.insert(childScenes.begin() + index, childSceneRef);
             sceneProject->isModified = wasModified;
         }
     }

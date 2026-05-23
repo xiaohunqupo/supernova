@@ -256,12 +256,12 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticFunction("loadScene", 
             luabridge::overload<uint32_t>(&SceneManager::loadScene),
             luabridge::overload<const std::string&>(&SceneManager::loadScene))
-        .addStaticFunction("addSceneLayer",
-            luabridge::overload<uint32_t>(&SceneManager::addSceneLayer),
-            luabridge::overload<const std::string&>(&SceneManager::addSceneLayer))
-        .addStaticFunction("removeSceneLayer",
-            luabridge::overload<uint32_t>(&SceneManager::removeSceneLayer),
-            luabridge::overload<const std::string&>(&SceneManager::removeSceneLayer))
+        .addStaticFunction("addChildScene",
+            luabridge::overload<uint32_t>(&SceneManager::addChildScene),
+            luabridge::overload<const std::string&>(&SceneManager::addChildScene))
+        .addStaticFunction("removeChildScene",
+            luabridge::overload<uint32_t>(&SceneManager::removeChildScene),
+            luabridge::overload<const std::string&>(&SceneManager::removeChildScene))
         .addStaticFunction("getSceneId", &SceneManager::getSceneId)
         .addStaticFunction("getSceneName", &SceneManager::getSceneName)
         .addStaticFunction("getSceneNames", &SceneManager::getSceneNames)

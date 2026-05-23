@@ -1389,8 +1389,11 @@ YAML::Node editor::Stream::encodeSceneProject(const Project* project, const Scen
 
     if (!sceneProject->childScenes.empty()) {
         YAML::Node childScenesNode;
-        for (const auto& childSceneId : sceneProject->childScenes) {
-            childScenesNode.push_back(childSceneId);
+        for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
+            YAML::Node childSceneNode;
+            childSceneNode["id"] = childSceneRef.id;
+            childSceneNode["startActive"] = childSceneRef.startActive;
+            childScenesNode.push_back(childSceneNode);
         }
         root["childScenes"] = childScenesNode;
     }
@@ -1490,7 +1493,16 @@ void editor::Stream::decodeSceneProject(SceneProject* sceneProject, const YAML::
     sceneProject->childScenes.clear();
     if (node["childScenes"]) {
         for (const auto& childSceneNode : node["childScenes"]) {
-            sceneProject->childScenes.push_back(childSceneNode.as<uint32_t>());
+            ChildSceneRef childSceneRef;
+            if (!childSceneNode.IsMap() || !childSceneNode["id"]) {
+                continue;
+            }
+
+            childSceneRef.id = childSceneNode["id"].as<uint32_t>();
+            if (childSceneNode["startActive"]) {
+                childSceneRef.startActive = childSceneNode["startActive"].as<bool>();
+            }
+            sceneProject->childScenes.push_back(childSceneRef);
         }
     }
 

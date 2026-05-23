@@ -60,14 +60,14 @@ namespace doriax {
         // Returns false if the id is not found.
         static bool loadScene(uint32_t id);
 
-        // Add an already-created scene stack as layers. Scene id/name overloads use the
+        // Add an already-created child scene stack. Scene id/name overloads use the
         // pointers registered with setScenePtr(), so all scenes in the stack must already be loaded.
-        static bool addSceneLayer(uint32_t id);
-        static bool addSceneLayer(const std::string& name);
+        static bool addChildScene(uint32_t id);
+        static bool addChildScene(const std::string& name);
 
-        // Remove a scene stack from the layer list without deleting Scene objects. The main scene is kept.
-        static bool removeSceneLayer(uint32_t id);
-        static bool removeSceneLayer(const std::string& name);
+        // Remove a child scene stack from the active scene list without deleting Scene objects. The main scene is kept.
+        static bool removeChildScene(uint32_t id);
+        static bool removeChildScene(const std::string& name);
 
         // Return the id of a scene by name, or 0 if not found.
         static uint32_t getSceneId(const std::string& name);

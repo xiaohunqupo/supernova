@@ -213,8 +213,25 @@ bool editor::Project::matchesRelativeString(const fs::path& relativeBase, const 
     return matchesRelativePath(relativeBase, fs::path(currentPath));
 }
 
-bool editor::Project::eraseChildSceneReference(std::vector<uint32_t>& childScenes, uint32_t childSceneId) {
-    auto it = std::remove(childScenes.begin(), childScenes.end(), childSceneId);
+std::vector<editor::ChildSceneRef>::iterator editor::Project::findChildScene(std::vector<ChildSceneRef>& childScenes, uint32_t childSceneId) {
+    return std::find_if(childScenes.begin(), childScenes.end(),
+        [childSceneId](const ChildSceneRef& childScene) {
+            return childScene.id == childSceneId;
+        });
+}
+
+std::vector<editor::ChildSceneRef>::const_iterator editor::Project::findChildScene(const std::vector<ChildSceneRef>& childScenes, uint32_t childSceneId) {
+    return std::find_if(childScenes.begin(), childScenes.end(),
+        [childSceneId](const ChildSceneRef& childScene) {
+            return childScene.id == childSceneId;
+        });
+}
+
+bool editor::Project::eraseChildSceneReference(std::vector<ChildSceneRef>& childScenes, uint32_t childSceneId) {
+    auto it = std::remove_if(childScenes.begin(), childScenes.end(),
+        [childSceneId](const ChildSceneRef& childScene) {
+            return childScene.id == childSceneId;
+        });
     if (it == childScenes.end()) {
         return false;
     }
@@ -353,7 +370,7 @@ bool editor::Project::removeMissingChildSceneReferences(SceneProject& sceneProje
     bool changed = false;
 
     for (auto it = sceneProject.childScenes.begin(); it != sceneProject.childScenes.end();) {
-        uint32_t childSceneId = *it;
+        uint32_t childSceneId = it->id;
         if (getScene(childSceneId)) {
             ++it;
             continue;
@@ -1841,7 +1858,7 @@ void editor::Project::removeScene(uint32_t sceneId) {
 void editor::Project::markParentScenesNeedUpdate(uint32_t childSceneId) {
     for (auto& s : scenes) {
         auto& cs = s.childScenes;
-        if (std::find(cs.begin(), cs.end(), childSceneId) != cs.end()) {
+        if (findChildScene(cs, childSceneId) != cs.end()) {
             s.needUpdateRender = true;
         }
     }
@@ -1938,7 +1955,7 @@ void editor::Project::unloadChildSceneInline(uint32_t childSceneId) {
     Out::info("Unloaded child scene '%s' from inline", childScene->name.c_str());
 }
 
-void editor::Project::addChildScene(uint32_t sceneId, uint32_t childSceneId) {
+void editor::Project::addChildScene(uint32_t sceneId, uint32_t childSceneId, bool startActive) {
     SceneProject* sceneProject = getScene(sceneId);
     if (!sceneProject) {
         Out::error("Scene with ID %u not found", sceneId);
@@ -1960,12 +1977,12 @@ void editor::Project::addChildScene(uint32_t sceneId, uint32_t childSceneId) {
 
     // Check if already added
     auto& childScenes = sceneProject->childScenes;
-    if (std::find(childScenes.begin(), childScenes.end(), childSceneId) != childScenes.end()) {
+    if (findChildScene(childScenes, childSceneId) != childScenes.end()) {
         Out::warning("Child scene '%s' already exists in scene '%s'", childScene->name.c_str(), sceneProject->name.c_str());
         return;
     }
 
-    childScenes.push_back(childSceneId);
+    childScenes.push_back({childSceneId, startActive});
     sceneProject->isModified = true;
     Out::info("Added child scene '%s' to scene '%s'", childScene->name.c_str(), sceneProject->name.c_str());
 }
@@ -1978,7 +1995,7 @@ void editor::Project::removeChildScene(uint32_t sceneId, uint32_t childSceneId) 
     }
 
     auto& childScenes = sceneProject->childScenes;
-    auto it = std::find(childScenes.begin(), childScenes.end(), childSceneId);
+    auto it = findChildScene(childScenes, childSceneId);
     if (it != childScenes.end()) {
         childScenes.erase(it);
         sceneProject->isModified = true;
@@ -1997,7 +2014,38 @@ bool editor::Project::hasChildScene(uint32_t sceneId, uint32_t childSceneId) con
     }
 
     const auto& childScenes = sceneProject->childScenes;
-    return std::find(childScenes.begin(), childScenes.end(), childSceneId) != childScenes.end();
+    return findChildScene(childScenes, childSceneId) != childScenes.end();
+}
+
+bool editor::Project::isChildSceneStartActive(uint32_t sceneId, uint32_t childSceneId) const {
+    const SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject) {
+        return true;
+    }
+
+    auto it = findChildScene(sceneProject->childScenes, childSceneId);
+    return it == sceneProject->childScenes.end() ? true : it->startActive;
+}
+
+void editor::Project::setChildSceneStartActive(uint32_t sceneId, uint32_t childSceneId, bool startActive) {
+    SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject) {
+        Out::error("Scene with ID %u not found", sceneId);
+        return;
+    }
+
+    auto it = findChildScene(sceneProject->childScenes, childSceneId);
+    if (it == sceneProject->childScenes.end()) {
+        Out::error("Child scene with ID %u not found in scene '%s'", childSceneId, sceneProject->name.c_str());
+        return;
+    }
+
+    if (it->startActive == startActive) {
+        return;
+    }
+
+    it->startActive = startActive;
+    sceneProject->isModified = true;
 }
 
 std::vector<uint32_t> editor::Project::getChildScenes(uint32_t sceneId) const {
@@ -2005,7 +2053,12 @@ std::vector<uint32_t> editor::Project::getChildScenes(uint32_t sceneId) const {
     if (!sceneProject) {
         return {};
     }
-    return sceneProject->childScenes;
+    std::vector<uint32_t> childSceneIds;
+    childSceneIds.reserve(sceneProject->childScenes.size());
+    for (const ChildSceneRef& childScene : sceneProject->childScenes) {
+        childSceneIds.push_back(childScene.id);
+    }
+    return childSceneIds;
 }
 
 Entity editor::Project::createNewEntity(uint32_t sceneId, std::string entityName){
@@ -2206,6 +2259,11 @@ void editor::Project::copyEngineApiToProject() {
 }
 
 void editor::Project::finalizeStart(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene>& runtimeScenes) {
+    std::vector<uint32_t> activeSceneIds;
+    if (mainSceneProject) {
+        collectStartActiveScenes(mainSceneProject->id, activeSceneIds);
+    }
+
     for (auto& entry : runtimeScenes) {
         SceneProject* sceneProject = entry.runtime;
         if (!sceneProject || !sceneProject->scene) {
@@ -2214,10 +2272,9 @@ void editor::Project::finalizeStart(SceneProject* mainSceneProject, std::vector<
 
         prepareRuntimeScene(entry);
 
-        if (sceneProject != mainSceneProject) {
-            Backend::getApp().enqueueMainThreadTask([sceneProject]() {
-                Engine::addSceneLayer(sceneProject->scene);
-            });
+        bool isActiveScene = std::find(activeSceneIds.begin(), activeSceneIds.end(), entry.sourceSceneId) != activeSceneIds.end();
+        if (sceneProject != mainSceneProject && isActiveScene) {
+            Engine::addSceneLayer(sceneProject->scene);
         }
     }
 
@@ -2641,7 +2698,8 @@ void editor::Project::saveModifiedChildScenes(uint32_t sceneId, std::function<vo
     }
 
     std::vector<uint32_t> childIds;
-    for (uint32_t childId : sceneProject->childScenes) {
+    for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
+        uint32_t childId = childSceneRef.id;
         const SceneProject* childScene = getScene(childId);
         if (childScene && childScene->expandedInline && childScene->scene && hasSceneUnsavedChanges(childId)) {
             childIds.push_back(childId);
@@ -2752,9 +2810,11 @@ bool editor::Project::writeSceneToPath(uint32_t sceneId, const std::filesystem::
     for (SceneProject& sceneConf : scenes) {
         bool isMain = (sceneId == sceneConf.id);
         std::vector<uint32_t> involvedSceneIds;
+        std::vector<uint32_t> activeSceneIds;
         collectInvolvedScenes(sceneConf.id, involvedSceneIds);
+        collectStartActiveScenes(sceneConf.id, activeSceneIds);
 
-        scenesToConfig.push_back({sceneConf.id, sceneConf.name, involvedSceneIds, isMain});
+        scenesToConfig.push_back({sceneConf.id, sceneConf.name, involvedSceneIds, activeSceneIds, isMain});
     }
 
     std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
@@ -3053,7 +3113,8 @@ Entity editor::Project::findObjectByRay(uint32_t sceneId, float x, float y, uint
         return selEntity;
     }
 
-    for (uint32_t childId : scenedata->childScenes) {
+    for (const ChildSceneRef& childSceneRef : scenedata->childScenes) {
+        uint32_t childId = childSceneRef.id;
         SceneProject* childScene = getScene(childId);
         if (!childScene || !childScene->expandedInline || !childScene->scene) continue;
 
@@ -3115,7 +3176,8 @@ bool editor::Project::selectObjectsByRect(uint32_t sceneId, Vector2 start, Vecto
     }
 
     // Try children if no main scene selections
-    for (uint32_t childId : scenedata->childScenes) {
+    for (const ChildSceneRef& childSceneRef : scenedata->childScenes) {
+        uint32_t childId = childSceneRef.id;
         SceneProject* childScene = getScene(childId);
         if (!childScene || !childScene->expandedInline || !childScene->scene) continue;
 
@@ -3407,7 +3469,8 @@ bool editor::Project::hasSceneUnsavedChanges(uint32_t sceneId) const{
         return true;
     }
 
-    for (uint32_t childId : sceneProject->childScenes) {
+    for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
+        uint32_t childId = childSceneRef.id;
         const SceneProject* childScene = getScene(childId);
         if (childScene && childScene->expandedInline && childScene->scene && hasSceneUnsavedChanges(childId)) {
             return true;
@@ -5166,8 +5229,23 @@ void editor::Project::collectInvolvedScenes(uint32_t sceneId, std::vector<uint32
         involvedSceneIds.push_back(sceneId);
     }
 
-    for (uint32_t childId : sceneProject->childScenes) {
-        collectInvolvedScenes(childId, involvedSceneIds);
+    for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
+        collectInvolvedScenes(childSceneRef.id, involvedSceneIds);
+    }
+}
+
+void editor::Project::collectStartActiveScenes(uint32_t sceneId, std::vector<uint32_t>& activeSceneIds) {
+    SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject) return;
+
+    if (std::find(activeSceneIds.begin(), activeSceneIds.end(), sceneId) == activeSceneIds.end()) {
+        activeSceneIds.push_back(sceneId);
+    }
+
+    for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
+        if (childSceneRef.startActive) {
+            collectStartActiveScenes(childSceneRef.id, activeSceneIds);
+        }
     }
 }
 
@@ -5319,8 +5397,10 @@ void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session
 
             bool isMain = (sceneId == currentSceneProject.id);
             std::vector<uint32_t> involvedSceneIds;
+            std::vector<uint32_t> activeSceneIds;
             collectInvolvedScenes(currentSceneProject.id, involvedSceneIds);
-            scenesToGenerate.push_back({currentSceneProject.id, currentSceneProject.name, involvedSceneIds, isMain});
+            collectStartActiveScenes(currentSceneProject.id, activeSceneIds);
+            scenesToGenerate.push_back({currentSceneProject.id, currentSceneProject.name, involvedSceneIds, activeSceneIds, isMain});
         }
 
         if (isCancelled()) {
@@ -5428,7 +5508,7 @@ void editor::Project::registerSceneManager() {
     SceneManager::clearAll();
     for (SceneProject& sceneProject : scenes) {
         std::vector<uint32_t> stackSceneIds;
-        collectInvolvedScenes(sceneProject.id, stackSceneIds);
+        collectStartActiveScenes(sceneProject.id, stackSceneIds);
 
         SceneManager::registerScene(sceneProject.id, sceneProject.name, [this, sceneId = sceneProject.id]() {
             std::shared_ptr<PlaySession> session;
@@ -5439,7 +5519,9 @@ void editor::Project::registerSceneManager() {
             if (!session || session->cancelled.load(std::memory_order_acquire)) return;
 
             std::vector<uint32_t> involvedSceneIds;
+            std::vector<uint32_t> activeSceneIds;
             collectInvolvedScenes(sceneId, involvedSceneIds);
+            collectStartActiveScenes(sceneId, activeSceneIds);
 
             std::vector<size_t> currentStackIndices;
 
@@ -5485,7 +5567,9 @@ void editor::Project::registerSceneManager() {
 
             for (size_t entryIndex : currentStackIndices) {
                 PlayRuntimeScene& entry = session->runtimeScenes[entryIndex];
-                if (entry.initialized) return;
+                if (entry.initialized) {
+                    continue;
+                }
 
                 if (conector.isLibraryConnected()) {
                     conector.init(entry.runtime->scene);
@@ -5494,6 +5578,29 @@ void editor::Project::registerSceneManager() {
                 }
 
                 prepareRuntimeScene(entry);
+
+                if (entry.runtime && entry.runtime->scene) {
+                    SceneManager::setScenePtr(entry.sourceSceneId, entry.runtime->scene);
+                }
+            }
+
+            std::vector<size_t> activeStackIndices;
+            for (uint32_t activeSceneId : activeSceneIds) {
+                auto it = std::find_if(session->runtimeScenes.begin(), session->runtimeScenes.end(),
+                    [activeSceneId](const PlayRuntimeScene& entry) {
+                        return entry.sourceSceneId == activeSceneId;
+                    });
+
+                if (it != session->runtimeScenes.end()) {
+                    activeStackIndices.push_back(std::distance(session->runtimeScenes.begin(), it));
+                }
+            }
+
+            for (size_t entryIndex : activeStackIndices) {
+                PlayRuntimeScene& entry = session->runtimeScenes[entryIndex];
+                if (!entry.runtime || !entry.runtime->scene) {
+                    continue;
+                }
 
                 if (entry.sourceSceneId == sceneId) {
                     Engine::setScene(entry.runtime->scene);
@@ -5881,24 +5988,28 @@ void editor::Project::waitForPlaySessionToFinish() {
     }
 }
 
-void editor::Project::restoreRuntimeLayers(uint32_t sceneId) {
+std::vector<Scene*> editor::Project::getRunningRuntimeLayers(uint32_t sceneId) {
+    std::vector<Scene*> runningLayers;
+
     std::scoped_lock lock(playSessionMutex);
     if (!activePlaySession || activePlaySession->mainSceneId != sceneId) {
-        return;
+        return runningLayers;
     }
-
     if (!activePlaySession->startupSucceeded.load(std::memory_order_acquire)) {
-        return;
+        return runningLayers;
     }
 
     for (const auto& entry : activePlaySession->runtimeScenes) {
         SceneProject* runtimeProject = entry.runtime;
-        if (runtimeProject && runtimeProject->scene) {
-             if (entry.sourceSceneId != sceneId) {
-                 Engine::addSceneLayer(runtimeProject->scene);
-             }
+        if (!runtimeProject || !runtimeProject->scene || entry.sourceSceneId == sceneId) {
+            continue;
+        }
+        if (Engine::isSceneRunning(runtimeProject->scene)) {
+            runningLayers.push_back(runtimeProject->scene);
         }
     }
+
+    return runningLayers;
 }
 
 void editor::Project::debugSceneHierarchy(){

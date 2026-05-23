@@ -63,6 +63,11 @@ namespace doriax::editor{
         unsigned int maxSpriteFrames = 0;
     };
 
+    struct ChildSceneRef {
+        uint32_t id = NULL_PROJECT_SCENE;
+        bool startActive = true;
+    };
+
     struct SceneProject{
         uint32_t id = NULL_PROJECT_SCENE;
         std::string name = "Unknown";
@@ -84,7 +89,7 @@ namespace doriax::editor{
         YAML::Node playStateSnapshot;
         SceneMaxValues maxValues;
         std::set<ShaderKey> shaderKeys;
-        std::vector<uint32_t> childScenes;
+        std::vector<ChildSceneRef> childScenes;
         std::vector<SceneScriptSource> cppScripts;
         std::vector<BundleSceneInfo> bundles;
         YAML::Node editorCameraState;
@@ -229,7 +234,9 @@ namespace doriax::editor{
         fs::path normalizeToProjectRelative(const fs::path& path) const;
         static bool matchesRelativePath(const fs::path& relativeBase, const fs::path& currentPath);
         static bool matchesRelativeString(const fs::path& relativeBase, const std::string& currentPath);
-        static bool eraseChildSceneReference(std::vector<uint32_t>& childScenes, uint32_t childSceneId);
+        static std::vector<ChildSceneRef>::iterator findChildScene(std::vector<ChildSceneRef>& childScenes, uint32_t childSceneId);
+        static std::vector<ChildSceneRef>::const_iterator findChildScene(const std::vector<ChildSceneRef>& childScenes, uint32_t childSceneId);
+        static bool eraseChildSceneReference(std::vector<ChildSceneRef>& childScenes, uint32_t childSceneId);
         static bool remapRelativePath(const fs::path& oldRelative, const fs::path& newRelative,
                           const fs::path& currentPath, fs::path& updatedPath);
         static bool remapRelativeString(const fs::path& oldRelative, const fs::path& newRelative,
@@ -254,6 +261,7 @@ namespace doriax::editor{
         void saveSceneListSequentially(std::vector<uint32_t> sceneIds, std::function<void(bool)> callback);
 
         void collectInvolvedScenes(uint32_t sceneId, std::vector<uint32_t>& involvedSceneIds);
+        void collectStartActiveScenes(uint32_t sceneId, std::vector<uint32_t>& activeSceneIds);
 
         uint32_t createNewSceneInternal(std::string sceneName, SceneType type, uint32_t previousSceneId);
         void openSceneInternal(fs::path filepath, uint32_t sceneToClose);
@@ -349,9 +357,11 @@ namespace doriax::editor{
         bool loadChildSceneInline(uint32_t childSceneId);
         void unloadChildSceneInline(uint32_t childSceneId);
 
-        void addChildScene(uint32_t sceneId, uint32_t childSceneId);
+        void addChildScene(uint32_t sceneId, uint32_t childSceneId, bool startActive = true);
         void removeChildScene(uint32_t sceneId, uint32_t childSceneId);
         bool hasChildScene(uint32_t sceneId, uint32_t childSceneId) const;
+        bool isChildSceneStartActive(uint32_t sceneId, uint32_t childSceneId) const;
+        void setChildSceneStartActive(uint32_t sceneId, uint32_t childSceneId, bool startActive);
         std::vector<uint32_t> getChildScenes(uint32_t sceneId) const;
 
         Entity findObjectByRay(uint32_t sceneId, float x, float y, uint32_t* outSceneId = nullptr);
@@ -463,7 +473,7 @@ namespace doriax::editor{
         void stop(uint32_t sceneId);
         void waitForPlaySessionToFinish();
 
-        void restoreRuntimeLayers(uint32_t sceneId);
+        std::vector<Scene*> getRunningRuntimeLayers(uint32_t sceneId);
 
         void debugSceneHierarchy();
     };

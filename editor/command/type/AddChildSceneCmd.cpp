@@ -11,12 +11,8 @@ editor::AddChildSceneCmd::AddChildSceneCmd(Project* project, uint32_t sceneId, u
 }
 
 bool editor::AddChildSceneCmd::execute() {
-    SceneProject* sceneProject = project->getScene(sceneId);
-    if (sceneProject) {
-        auto& childScenes = sceneProject->childScenes;
-        if (std::find(childScenes.begin(), childScenes.end(), childSceneId) != childScenes.end()) {
-            return false;
-        }
+    if (project->hasChildScene(sceneId, childSceneId)) {
+        return false;
     }
 
     project->addChildScene(sceneId, childSceneId);
