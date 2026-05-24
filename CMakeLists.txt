@@ -186,12 +186,9 @@ endif()
 add_custom_target(generate_shaders DEPENDS ${SHADERS_HEADER})
 add_custom_target(generate_api_suggestions DEPENDS ${API_SUGGESTIONS_HEADER})
 
-add_executable(
-    doriax-editor
-
-    ${PLATFORM_EXEC_FLAGS}
-
+set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/main.cpp
+    ${EDITOR_DIR}/cli/ExportCommand.cpp
     ${EDITOR_DIR}/App.cpp
     ${EDITOR_DIR}/AppSettings.cpp
     ${EDITOR_DIR}/Factory.cpp
@@ -200,6 +197,7 @@ add_executable(
     ${EDITOR_DIR}/Project.cpp
     ${EDITOR_DIR}/Catalog.cpp
     ${EDITOR_DIR}/Conector.cpp
+    ${EDITOR_DIR}/EditorHost.cpp
     ${EDITOR_DIR}/Generator.cpp
     ${EDITOR_DIR}/Stream.cpp
     ${EDITOR_DIR}/Exporter.cpp
@@ -282,51 +280,82 @@ add_executable(
     ${BACKEND_SOURCES}
 )
 
-add_dependencies(doriax-editor generate_shaders generate_api_suggestions)
+function(configure_doriax_editor_target target_name)
+    add_dependencies(${target_name} generate_shaders generate_api_suggestions)
 
-# Include directories
-target_include_directories(doriax-editor PRIVATE
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
-    ${OPENGL_INCLUDE_DIR}
-    ${GENERATED_DIR}
-)
+    target_include_directories(${target_name} PRIVATE
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+        ${OPENGL_INCLUDE_DIR}
+        ${GENERATED_DIR}
+    )
 
-# Link libraries
-target_link_libraries(
+    target_link_libraries(
+        ${target_name}
+
+        PRIVATE
+
+        ${BACKEND_LIBS}
+        ${OPENGL_LIBRARIES}
+        ${MINGW_STATIC_FLAGS}
+        Threads::Threads
+        doriax
+        shadercompiler
+        nfd
+        yaml-cpp
+    )
+
+    set_target_properties(
+        ${target_name}
+
+        PROPERTIES
+
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+    )
+endfunction()
+
+add_executable(
     doriax-editor
-    
-    PRIVATE
-    
-    ${BACKEND_LIBS}
-    ${OPENGL_LIBRARIES}
-    ${MINGW_STATIC_FLAGS}
-    Threads::Threads
-    doriax
-    shadercompiler
-    nfd
-    yaml-cpp
+
+    ${PLATFORM_EXEC_FLAGS}
+
+    ${DORIAX_EDITOR_SOURCES}
 )
 
-set_target_properties(
-    doriax-editor
+configure_doriax_editor_target(doriax-editor)
 
-    PROPERTIES
+if(PLATFORM_PROPERTIES_FLAGS)
+    set_target_properties(doriax-editor PROPERTIES ${PLATFORM_PROPERTIES_FLAGS})
+endif()
 
-    ${PLATFORM_PROPERTIES_FLAGS}
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-)
-
-# Copy doriax engine directory to executable output directory for doriax-editor
-add_custom_command(TARGET doriax-editor POST_BUILD
+add_custom_target(copy_doriax_editor_engine
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/engine
         $<TARGET_FILE_DIR:doriax-editor>/engine
     COMMENT "Copying engine to executable directory"
 )
 
-install(TARGETS doriax-editor doriax
+add_dependencies(doriax-editor copy_doriax_editor_engine)
+
+set(DORIAX_EDITOR_INSTALL_TARGETS doriax-editor)
+
+# Windows GUI-subsystem executables do not behave like normal CLI programs
+# when launched from cmd.exe/PowerShell. Provide a console-subsystem twin for
+# automation while keeping Unix-like platforms on a single editor binary.
+if(WIN32)
+    add_executable(
+        doriax-editor-cmd
+
+        ${DORIAX_EDITOR_SOURCES}
+    )
+
+    configure_doriax_editor_target(doriax-editor-cmd)
+    add_dependencies(doriax-editor-cmd copy_doriax_editor_engine)
+    list(APPEND DORIAX_EDITOR_INSTALL_TARGETS doriax-editor-cmd)
+endif()
+
+install(TARGETS ${DORIAX_EDITOR_INSTALL_TARGETS} doriax
         CONFIGURATIONS Release MinSizeRel 
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION bin

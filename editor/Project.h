@@ -311,7 +311,7 @@ namespace doriax::editor{
         bool saveProjectFile();
         bool openProject();
 
-        bool loadProject(const std::filesystem::path path);
+        bool loadProject(const std::filesystem::path path, bool updateLastOpened = true);
 
         void refreshLinkedMaterials(bool force = false);
 

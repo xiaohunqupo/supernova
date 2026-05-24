@@ -23,7 +23,7 @@ namespace doriax::editor {
         fs::path luaDir;
         uint32_t startSceneId = 0;
         std::set<ShaderKey> selectedShaderKeys;
-        std::set<Platform> selectedPlatforms;
+        std::set<::doriax::Platform> selectedPlatforms;
     };
 
     struct ExportProgress {
@@ -71,12 +71,13 @@ namespace doriax::editor {
         ~Exporter();
 
         void startExport(Project* project, const ExportConfig& config);
+        bool exportProject(Project* project, const ExportConfig& config);
         void cancelExport();
         ExportProgress getProgress() const;
         bool isRunning() const;
 
         static std::string getShaderDisplayName(ShaderType type, uint32_t properties);
-        static std::string getPlatformName(Platform platform);
+        static std::string getPlatformName(::doriax::Platform platform);
     };
 
 }

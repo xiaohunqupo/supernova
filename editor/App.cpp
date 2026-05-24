@@ -1299,6 +1299,10 @@ void editor::App::resetLastActivatedScene(){
     lastActivatedScene = NULL_PROJECT_SCENE;
 }
 
+bool editor::App::shouldSyncEngineApi() const {
+    return true;
+}
+
 void editor::App::updateResourcesPath(){
     std::filesystem::path currentProjectPath = project.getProjectPath().lexically_normal();
     bool projectPathChanged = lastResourcesProjectPath != currentProjectPath;
@@ -1317,6 +1321,22 @@ void editor::App::updateResourcesPath(){
 
 void editor::App::requestDockspaceRebuild() {
     dockspaceNeedsRebuild = true;
+}
+
+void editor::App::updateWindowTitle(const std::string& projectName) {
+    Backend::updateWindowTitle(projectName);
+}
+
+void editor::App::stopTransientPreviews() {
+    if (propertiesWindow) {
+        propertiesWindow->stopTransientPreviews();
+    }
+}
+
+void editor::App::saveAllCodeEditors() {
+    if (codeEditor) {
+        codeEditor->saveAll();
+    }
 }
 
 void editor::App::registerAlert(std::string title, std::string message) {

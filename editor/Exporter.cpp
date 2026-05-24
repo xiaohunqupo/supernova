@@ -1,15 +1,24 @@
 #include "Exporter.h"
-#include "App.h"
-#include "Backend.h"
+#include "EditorHost.h"
 #include "Out.h"
 #include "Stream.h"
 #include "util/FileUtils.h"
 #include "pool/ShaderPool.h"
 
+#include <algorithm>
 #include <fstream>
+#include <future>
+
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <windows.h>
+#endif
 
 #ifdef __APPLE__
-#include <mach-o/dyld.h>
+    #include <limits.h>
+    #include <mach-o/dyld.h>
 #endif
 
 using namespace doriax;
@@ -73,12 +82,37 @@ void editor::Exporter::startExport(Project* proj, const ExportConfig& cfg) {
     exportThread = std::thread(&Exporter::runExport, this);
 }
 
+bool editor::Exporter::exportProject(Project* proj, const ExportConfig& cfg) {
+    if (exportThread.joinable()) {
+        exportThread.join();
+    }
+
+    this->project = proj;
+    this->config = cfg;
+    cancelRequested.store(false);
+    {
+        std::lock_guard<std::mutex> lock(progressMutex);
+        this->progress = ExportProgress();
+        this->progress.started = true;
+    }
+
+    runExport();
+
+    std::lock_guard<std::mutex> lock(progressMutex);
+    return progress.finished && !progress.failed;
+}
+
 void editor::Exporter::runExport() {
     if (!checkTargetDir()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!clearGenerated()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!loadAndSaveAllScenes()) return;
+    if (config.selectedShaderKeys.empty()) {
+        for (const auto& sceneProject : project->getScenes()) {
+            config.selectedShaderKeys.insert(sceneProject.shaderKeys.begin(), sceneProject.shaderKeys.end());
+        }
+    }
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!copyGenerated()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
@@ -161,7 +195,7 @@ bool editor::Exporter::loadAndSaveAllScenes() {
     std::promise<bool> savePromise;
     auto saveFuture = savePromise.get_future();
 
-    Backend::getApp().enqueueMainThreadTask([this, &savePromise]() {
+    editor::getEditorHost().enqueueMainThreadTask([this, &savePromise]() {
         try {
             std::vector<uint32_t> temporarilyLoaded;
             auto& scenes = project->getScenes();
@@ -709,7 +743,7 @@ std::string editor::Exporter::getShaderDisplayName(ShaderType type, uint32_t pro
     return name;
 }
 
-std::string editor::Exporter::getPlatformName(Platform platform) {
+std::string editor::Exporter::getPlatformName(::doriax::Platform platform) {
     switch (platform) {
         case Platform::MacOS:   return "macOS";
         case Platform::iOS:     return "iOS";

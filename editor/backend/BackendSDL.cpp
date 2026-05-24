@@ -1,4 +1,5 @@
 #include "Backend.h"
+#include "EditorHost.h"
 
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -26,6 +27,8 @@ editor::App editor::Backend::app;
 std::string editor::Backend::title;
 
 int editor::Backend::init(int argc, char* argv[]) {
+    setEditorHost(&app);
+
     // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         return -1;

@@ -1,7 +1,7 @@
 #include "Project.h"
 #include "Factory.h"
 
-#include "Backend.h"
+#include "EditorHost.h"
 #include "window/TerrainEditWindow.h"
 
 #include <fstream>
@@ -782,7 +782,7 @@ void editor::Project::cleanupSceneFilePath(const std::filesystem::path& deletedP
             cleanupEntityBundlesForScene(sceneId);
             removeTab(TabType::SCENE, it->filepath.string());
             markParentScenesNeedUpdate(sceneId);
-            Backend::getApp().clearSceneWindowState(sceneId);
+            editor::getEditorHost().clearSceneWindowState(sceneId);
             scenes.erase(it);
         }
     }
@@ -1118,7 +1118,7 @@ void editor::Project::checkUnsavedAndExecute(uint32_t sceneId, std::function<voi
     SceneProject* sceneProject = getScene(sceneId);
 
     if (sceneProject && hasSceneUnsavedChanges(sceneId)) {
-        Backend::getApp().registerThreeButtonAlert(
+        editor::getEditorHost().registerThreeButtonAlert(
             "Unsaved Changes",
             "There are unsaved changes. Do you want to save first?",
             [this, sceneId, action]() {
@@ -1145,7 +1145,7 @@ std::string editor::Project::getName() const {
 void editor::Project::setName(std::string name){
     this->name = name;
     this->libName = Factory::toIdentifier(name);
-    Backend::updateWindowTitle(name);
+    editor::getEditorHost().updateWindowTitle(name);
 }
 
 void editor::Project::setCanvasSize(unsigned int width, unsigned int height){
@@ -1317,7 +1317,7 @@ uint32_t editor::Project::createNewSceneInternal(std::string sceneName, SceneTyp
         getScene(data.id)->isModified = false; // New scene starts as unmodified
     }
 
-    Backend::getApp().addNewSceneToDock(data.id);
+    editor::getEditorHost().addNewSceneToDock(data.id);
 
     // Close the previous scene after the new one is created
     if (previousSceneId != NULL_PROJECT_SCENE && previousSceneId != reusedSceneId) {
@@ -1657,7 +1657,7 @@ void editor::Project::loadScene(fs::path filepath, bool opened, bool isNewScene,
 
             setSelectedSceneId(targetScene->id);
 
-            Backend::getApp().addNewSceneToDock(targetScene->id);
+            editor::getEditorHost().addNewSceneToDock(targetScene->id);
         }
 
         targetScene->needUpdateRender = opened;
@@ -1687,11 +1687,11 @@ void editor::Project::loadScene(fs::path filepath, bool opened, bool isNewScene,
     } catch (const YAML::Exception& e) {
         if (isNewScene && !scenes.empty()) scenes.pop_back();
         Out::error("Failed to open scene: %s", e.what());
-        Backend::getApp().registerAlert("Error", "Failed to open scene file!");
+        editor::getEditorHost().registerAlert("Error", "Failed to open scene file!");
     } catch (const std::exception& e) {
         if (isNewScene && !scenes.empty()) scenes.pop_back();
         Out::error("Failed to open scene: %s", e.what());
-        Backend::getApp().registerAlert("Error", "Failed to open scene file!");
+        editor::getEditorHost().registerAlert("Error", "Failed to open scene file!");
     }
 }
 
@@ -1750,7 +1750,7 @@ void editor::Project::openSceneInternal(fs::path filepath, uint32_t sceneToClose
     }
 
     // Scene is not in project
-    Backend::getApp().registerConfirmAlert(
+    editor::getEditorHost().registerConfirmAlert(
         "Add Scene",
         "This scene is not part of the current project. Do you want to add it?",
         [this, filepath, sceneToClose]() {
@@ -1805,7 +1805,7 @@ void editor::Project::closeScene(uint32_t sceneId, bool systemClose) {
 
     // If the scene was never saved, remove it entirely
     if (it->filepath.empty()) {
-        Backend::getApp().clearSceneWindowState(sceneId);
+        editor::getEditorHost().clearSceneWindowState(sceneId);
         scenes.erase(it);
     } else {
         it->opened = false;
@@ -1851,7 +1851,7 @@ void editor::Project::removeScene(uint32_t sceneId) {
     cleanupEntityBundlesForScene(sceneId);
 
     removeTab(TabType::SCENE, it->filepath.string());
-    Backend::getApp().clearSceneWindowState(sceneId);
+    editor::getEditorHost().clearSceneWindowState(sceneId);
     scenes.erase(it);
 }
 
@@ -2142,7 +2142,7 @@ void editor::Project::resetConfigs() {
     }
     scenes.clear();
     entityBundles.clear();
-    Backend::getApp().resetLastActivatedScene();
+    editor::getEditorHost().resetLastActivatedScene();
 
     // Reset state
     name = "";
@@ -2166,7 +2166,7 @@ void editor::Project::resetConfigs() {
     lastMaterialRefreshTime = std::chrono::steady_clock::time_point{};
     projectHistory.clear();
 
-    Backend::updateWindowTitle(name);
+    editor::getEditorHost().updateWindowTitle(name);
 
     resetEngineConfigs(false);
 
@@ -2288,7 +2288,7 @@ void editor::Project::finalizeStart(SceneProject* mainSceneProject, std::vector<
     if (mainSceneProject) {
         mainSceneProject->playState = ScenePlayState::PLAYING;
         mainSceneProject->needUpdateRender = true;
-        Backend::getApp().resetLastActivatedScene();
+        editor::getEditorHost().resetLastActivatedScene();
         Out::success("Scene '%s' started", mainSceneProject->name.c_str());
     }
 }
@@ -2342,7 +2342,7 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         }
 
         if (sceneProject != mainSceneProject) {
-            Backend::getApp().enqueueMainThreadTask([this, sceneProject, entry]() {
+            editor::getEditorHost().enqueueMainThreadTask([this, sceneProject, entry]() {
                 Engine::removeScene(sceneProject->scene);
 
                 // Delete scene because its not opened in editor
@@ -2354,10 +2354,10 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         }
     }
 
-    Backend::getApp().enqueueMainThreadTask([]() {
+    editor::getEditorHost().enqueueMainThreadTask([]() {
         SceneManager::clearAll();
         BundleManager::clearAll();
-        Backend::getApp().resetLastActivatedScene();
+        editor::getEditorHost().resetLastActivatedScene();
     });
 
     resetEngineConfigs(true);
@@ -2374,7 +2374,7 @@ bool editor::Project::createTempProject(std::string projectName, bool deleteIfEx
     }
 
     try {
-        Backend::getApp().prepareForProjectSwitch();
+        editor::getEditorHost().prepareForProjectSwitch();
 
         resetConfigs();
 
@@ -2401,7 +2401,7 @@ bool editor::Project::createTempProject(std::string projectName, bool deleteIfEx
             loadProject(projectPath);
         }
 
-        Backend::getApp().updateResourcesPath();
+        editor::getEditorHost().updateResourcesPath();
 
     } catch (const std::exception& e) {
         printf("Error: %s\n", e.what());
@@ -2413,7 +2413,7 @@ bool editor::Project::createTempProject(std::string projectName, bool deleteIfEx
 
 bool editor::Project::saveProject(bool userCalled, std::function<void()> callback) {
     if (isTempProject() && userCalled) {
-        Backend::getApp().registerProjectSaveDialog(callback);
+        editor::getEditorHost().registerProjectSaveDialog(callback);
         return true;
     }
 
@@ -2473,7 +2473,7 @@ bool editor::Project::saveProjectToPath(const std::filesystem::path& path) {
             std::filesystem::create_directory(path);
         } catch (const std::exception& e) {
             Out::error("Failed to create project directory: %s", e.what());
-            Backend::getApp().registerAlert("Error", "Failed to create project directory!");
+            editor::getEditorHost().registerAlert("Error", "Failed to create project directory!");
             return false;
         }
     }
@@ -2513,7 +2513,7 @@ bool editor::Project::saveProjectToPath(const std::filesystem::path& path) {
 
         } catch (const std::exception& e) {
             Out::error("Failed to move project files: %s", e.what());
-            Backend::getApp().registerAlert("Error", "Failed to move project files to the new location!");
+            editor::getEditorHost().registerAlert("Error", "Failed to move project files to the new location!");
             return false;
         }
     }
@@ -2525,12 +2525,12 @@ bool editor::Project::saveProjectToPath(const std::filesystem::path& path) {
     if (!isTempProject()){
         AppSettings::setLastProjectPath(path);
     }
-    Backend::getApp().updateResourcesPath();
+    editor::getEditorHost().updateResourcesPath();
 
     return true;
 }
 
-bool editor::Project::loadProject(const std::filesystem::path path) {
+bool editor::Project::loadProject(const std::filesystem::path path, bool updateLastOpened) {
     if (isAnyScenePlaying()) {
         Out::warning("Cannot load a project while a scene is running or stopping.");
         return false;
@@ -2551,7 +2551,7 @@ bool editor::Project::loadProject(const std::filesystem::path path) {
         // Load and parse project file
         YAML::Node projectNode = YAML::LoadFile(projectFile.string());
 
-        Backend::getApp().prepareForProjectSwitch();
+        editor::getEditorHost().prepareForProjectSwitch();
 
         resetConfigs();
         projectPath = path;
@@ -2569,13 +2569,14 @@ bool editor::Project::loadProject(const std::filesystem::path path) {
             }
         }
 
-        // Copy engine-api to project
-        copyEngineApiToProject();
+        if (editor::getEditorHost().shouldSyncEngineApi()) {
+            copyEngineApiToProject();
+        }
 
-        Backend::getApp().updateResourcesPath();
+        editor::getEditorHost().updateResourcesPath();
 
         // Save this as the last opened project
-        if (!isTempProject()) {
+        if (updateLastOpened && !isTempProject()) {
             AppSettings::setLastProjectPath(projectPath);
         }
 
@@ -2586,11 +2587,11 @@ bool editor::Project::loadProject(const std::filesystem::path path) {
 
     } catch (const YAML::Exception& e) {
         Out::error("Failed to load project YAML: \"%s\"", e.what());
-        Backend::getApp().registerAlert("Error", "Failed to load project file!");
+        editor::getEditorHost().registerAlert("Error", "Failed to load project file!");
         return false;
     } catch (const std::exception& e) {
         Out::error("Failed to load project: \"%s\"", e.what());
-        Backend::getApp().registerAlert("Error", "Failed to load project!");
+        editor::getEditorHost().registerAlert("Error", "Failed to load project!");
         return false;
     }
 }
@@ -2621,7 +2622,7 @@ bool editor::Project::openProject() {
 
     // Check if the selected directory contains a project.yaml file
     if (!std::filesystem::exists(projectFile)) {
-        Backend::getApp().registerAlert("Error", "The selected directory is not a valid project. No project.yaml file found!");
+        editor::getEditorHost().registerAlert("Error", "The selected directory is not a valid project. No project.yaml file found!");
         return false;
     }
 
@@ -2629,7 +2630,7 @@ bool editor::Project::openProject() {
         return true;
     } else {
         Out::error("Failed to open project: \"%s\"", projectDir.string().c_str());
-        Backend::getApp().registerAlert("Error", "Failed to open project!");
+        editor::getEditorHost().registerAlert("Error", "Failed to open project!");
         return false;
     }
 }
@@ -2660,7 +2661,7 @@ void editor::Project::saveScene(uint32_t sceneId, std::function<void(bool)> call
     if (!sceneProject->filepath.empty()) {
         saveSceneToPathAsync(sceneId, sceneProject->filepath, finishWithChildren);
     } else {
-        Backend::getApp().registerSaveSceneDialog(sceneId, [finishWithChildren]() {
+        editor::getEditorHost().registerSaveSceneDialog(sceneId, [finishWithChildren]() {
             finishWithChildren(true);
         });
     }
@@ -2715,9 +2716,7 @@ bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::files
     }
 
     if (stopTransientPreviews) {
-        if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
-            propertiesWindow->stopTransientPreviews();
-        }
+        editor::getEditorHost().stopTransientPreviews();
     }
 
     fs::path fullPath = path;
@@ -2839,9 +2838,7 @@ void editor::Project::saveSceneToPathAsync(uint32_t sceneId, const std::filesyst
         return;
     }
 
-    if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
-        propertiesWindow->stopTransientPreviews();
-    }
+    editor::getEditorHost().stopTransientPreviews();
 
     sceneProject->playState = ScenePlayState::SAVING;
     fs::path savePath = path;
@@ -2854,7 +2851,7 @@ void editor::Project::saveSceneToPathAsync(uint32_t sceneId, const std::filesyst
             Out::error("Failed to save scene in background: %s", e.what());
         }
 
-        Backend::getApp().enqueueMainThreadTask([this, sceneId, success, callback = std::move(callback)]() mutable {
+        editor::getEditorHost().enqueueMainThreadTask([this, sceneId, success, callback = std::move(callback)]() mutable {
             if (success) {
                 success = saveProject();
             }
@@ -5276,7 +5273,7 @@ bool editor::Project::isAnySceneSaving() const{
 
 void editor::Project::failPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const std::string& message,
                                       const std::string& alertTitle, const std::string& alertMessage) {
-    Backend::getApp().enqueueMainThreadTask([this, session, sceneId, message, alertTitle, alertMessage]() {
+    editor::getEditorHost().enqueueMainThreadTask([this, session, sceneId, message, alertTitle, alertMessage]() {
         if (session->cancelled.load(std::memory_order_acquire)) {
             session->startupThreadDone.store(true, std::memory_order_release);
             return;
@@ -5305,7 +5302,7 @@ void editor::Project::failPlayStartup(const std::shared_ptr<PlaySession>& sessio
         session->startupThreadDone.store(true, std::memory_order_release);
 
         if (!alertTitle.empty()) {
-            Backend::getApp().registerAlert(alertTitle, alertMessage);
+            editor::getEditorHost().registerAlert(alertTitle, alertMessage);
         }
     });
 }
@@ -5455,7 +5452,7 @@ void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session
         // Final initialization runs on the main/GL thread so that script
         // constructors observing a current GL context behave correctly,
         // and so that finalizeStart is invoked from the UI thread.
-        Backend::getApp().enqueueMainThreadTask(
+        editor::getEditorHost().enqueueMainThreadTask(
             [this, session, sceneId, hasCppScripts, playSnapshot = std::move(playSnapshot)]() mutable {
                 if (session->cancelled.load(std::memory_order_acquire)) {
                     session->startupThreadDone.store(true, std::memory_order_release);
@@ -5772,12 +5769,10 @@ void editor::Project::start(uint32_t sceneId) {
         activePlaySession = session;
     }
 
-    if (Properties* propertiesWindow = Backend::getApp().getPropertiesWindow()) {
-        propertiesWindow->stopTransientPreviews();
-    }
+    editor::getEditorHost().stopTransientPreviews();
 
     sceneProject->playState = ScenePlayState::LOADING;
-    Backend::getApp().getCodeEditor()->saveAll();
+    editor::getEditorHost().saveAllCodeEditors();
 
     std::thread startupThread([this, session, sceneId]() {
         runPlayStartup(session, sceneId);
@@ -5921,7 +5916,7 @@ void editor::Project::stop(uint32_t sceneId) {
 
         // All teardown happens on the main/GL thread so that script
         // destructors and engine resource cleanup run with a valid GL context.
-        Backend::getApp().enqueueMainThreadTask([this, session, sceneId, startupSucceededAtStop]() {
+        editor::getEditorHost().enqueueMainThreadTask([this, session, sceneId, startupSucceededAtStop]() {
             SceneProject* mainSceneProject = getScene(sceneId);
             const bool startupSucceeded = session->startupSucceeded.load(std::memory_order_acquire);
 
@@ -5955,7 +5950,7 @@ void editor::Project::stop(uint32_t sceneId) {
                 cleanupPlaySession(session);
                 SceneManager::clearAll();
                 BundleManager::clearAll();
-                Backend::getApp().resetLastActivatedScene();
+                editor::getEditorHost().resetLastActivatedScene();
                 if (mainSceneProject) {
                     mainSceneProject->playState = ScenePlayState::STOPPED;
                 }
@@ -5983,7 +5978,7 @@ void editor::Project::waitForPlaySessionToFinish() {
                 return;
             }
         }
-        Backend::getApp().processMainThreadTasks();
+        editor::getEditorHost().processMainThreadTasks();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }

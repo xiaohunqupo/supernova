@@ -57,42 +57,27 @@ namespace doriax::editor {
         // Formatted logging methods with variable arguments
         template<typename... Args>
         static void info(const char* fmt, Args... args) {
-            if (outputWindow) {
-                std::string message = formatMessage(fmt, args...);
-                outputWindow->addLog(LogType::Info, message);
-            }
+            info(formatMessage(fmt, args...));
         }
 
         template<typename... Args>
         static void success(const char* fmt, Args... args) {
-            if (outputWindow) {
-                std::string message = formatMessage(fmt, args...);
-                outputWindow->addLog(LogType::Success, message);
-            }
+            success(formatMessage(fmt, args...));
         }
 
         template<typename... Args>
         static void warning(const char* fmt, Args... args) {
-            if (outputWindow) {
-                std::string message = formatMessage(fmt, args...);
-                outputWindow->addLog(LogType::Warning, message);
-            }
+            warning(formatMessage(fmt, args...));
         }
 
         template<typename... Args>
         static void error(const char* fmt, Args... args) {
-            if (outputWindow) {
-                std::string message = formatMessage(fmt, args...);
-                outputWindow->addLog(LogType::Error, message);
-            }
+            error(formatMessage(fmt, args...));
         }
 
         template<typename... Args>
         static void build(const char* fmt, Args... args) {
-            if (outputWindow) {
-                std::string message = formatMessage(fmt, args...);
-                outputWindow->addLog(LogType::Build, message);
-            }
+            build(formatMessage(fmt, args...));
         }
 
         // Debug assertion

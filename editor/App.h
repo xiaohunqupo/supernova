@@ -3,6 +3,7 @@
 
 #include "imgui.h"
 
+#include "EditorHost.h"
 #include "Project.h"
 
 #include "window/Properties.h"
@@ -55,7 +56,7 @@ namespace doriax::editor{
         std::function<void()> callback = nullptr;
     };
 
-    class App{
+    class App : public EditorHost{
     private:
         Project project;
 
@@ -158,8 +159,12 @@ namespace doriax::editor{
         void handleExternalDragLeave();
 
         void resetLastActivatedScene();
+        bool shouldSyncEngineApi() const override;
         void updateResourcesPath();
         void requestDockspaceRebuild();
+        void updateWindowTitle(const std::string& projectName) override;
+        void stopTransientPreviews() override;
+        void saveAllCodeEditors() override;
 
         void registerAlert(std::string title, std::string message);
         void registerConfirmAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr);

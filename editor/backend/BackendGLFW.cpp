@@ -1,4 +1,5 @@
 #include "Backend.h"
+#include "EditorHost.h"
 
 #include <GLFW/glfw3.h>
 
@@ -20,6 +21,8 @@ editor::App editor::Backend::app;
 std::string editor::Backend::title;
 
 int editor::Backend::init(int argc, char* argv[]) {
+    setEditorHost(&app);
+
     // Initialize GLFW
     if (!glfwInit())
         return -1;
