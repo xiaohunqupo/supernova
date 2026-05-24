@@ -398,9 +398,9 @@ bool editor::Exporter::copyAssets() {
             fs::path relPath = fs::relative(entry.path(), srcDir, ec);
             if (ec || relPath.empty()) continue;
 
-            // Skip hidden directories (starting with '.')
+            // Skip hidden directories (starting with '.') and build directories
             std::string firstComponent = relPath.begin()->string();
-            if (!firstComponent.empty() && firstComponent[0] == '.') continue;
+            if (!firstComponent.empty() && (firstComponent[0] == '.' || firstComponent == "build")) continue;
 
             // Skip project support files that should not ship as assets
             if (shouldSkipExportSupportFile(relPath)) continue;
@@ -493,9 +493,9 @@ bool editor::Exporter::copyLua() {
         fs::path relPath = fs::relative(entry.path(), luaSrc, ec);
         if (ec || relPath.empty()) continue;
 
-        // Skip hidden directories (starting with '.')
+        // Skip hidden directories (starting with '.') and build directories
         std::string firstComponent = relPath.begin()->string();
-        if (!firstComponent.empty() && firstComponent[0] == '.') { it.disable_recursion_pending(); continue; }
+        if (!firstComponent.empty() && (firstComponent[0] == '.' || firstComponent == "build")) { it.disable_recursion_pending(); continue; }
 
         // Skip project support files that should not ship in the Lua directory
         if (shouldSkipExportSupportFile(relPath)) continue;
