@@ -188,7 +188,7 @@ add_custom_target(generate_api_suggestions DEPENDS ${API_SUGGESTIONS_HEADER})
 
 set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/main.cpp
-    ${EDITOR_DIR}/cli/ExportCommand.cpp
+    ${EDITOR_DIR}/cli/CommandLine.cpp
     ${EDITOR_DIR}/App.cpp
     ${EDITOR_DIR}/AppSettings.cpp
     ${EDITOR_DIR}/Factory.cpp
