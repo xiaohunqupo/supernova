@@ -170,7 +170,12 @@ jobs:
         env:
           CC: ${{ matrix.config.cc }}
           CXX: ${{ matrix.config.cxx }}
-        run: cmake --build build --config ${{env.BUILD_TYPE}} --target ${{env.TARGET}}
+        run: |
+          targets=("${{ env.TARGET }}")
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            targets+=("${{ env.TARGET }}-cmd")
+          fi
+          cmake --build build --config ${{env.BUILD_TYPE}} --target "${targets[@]}"
 
       - name: Install Strip
         shell: bash
