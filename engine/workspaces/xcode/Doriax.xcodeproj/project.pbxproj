@@ -10,6 +10,7 @@
 		1721303B2FB012BD00390DC2 /* SoundPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1721303A2FB012BD00390DC2 /* SoundPool.cpp */; };
 		1721303C2FB012BD00390DC2 /* SoundPool.h in Headers */ = {isa = PBXBuildFile; fileRef = 172130392FB012BD00390DC2 /* SoundPool.h */; };
 		1721303D2FB012BD00390DC2 /* SoundPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1721303A2FB012BD00390DC2 /* SoundPool.cpp */; };
+		172A59A52FC4CF36002FDFCA /* ShaderBuildTypes.h in Headers */ = {isa = PBXBuildFile; fileRef = 172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */; };
 		1787AD8E2F673CE000DB1D75 /* BundleComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 1787AD8D2F673CE000DB1D75 /* BundleComponent.h */; };
 		1787AD942F6C333300DB1D75 /* SceneManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD922F6C333300DB1D75 /* SceneManager.cpp */; };
 		1787AD952F6C333300DB1D75 /* BundleManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD902F6C333300DB1D75 /* BundleManager.cpp */; };
@@ -886,10 +887,7 @@
 		71CC839A26B8C4FD00EEBB93 /* FramebufferRender.h in Headers */ = {isa = PBXBuildFile; fileRef = 71CC839826B8C4FC00EEBB93 /* FramebufferRender.h */; };
 		71CC839B26B8C4FD00EEBB93 /* FramebufferRender.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71CC839926B8C4FD00EEBB93 /* FramebufferRender.cpp */; };
 		71CC839C26B8C4FD00EEBB93 /* FramebufferRender.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71CC839926B8C4FD00EEBB93 /* FramebufferRender.cpp */; };
-		71CC83A226B8C54A00EEBB93 /* SBSReader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71CC839E26B8C54A00EEBB93 /* SBSReader.cpp */; };
-		71CC83A326B8C54A00EEBB93 /* SBSReader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71CC839E26B8C54A00EEBB93 /* SBSReader.cpp */; };
 		71CC83A426B8C54A00EEBB93 /* ShaderData.h in Headers */ = {isa = PBXBuildFile; fileRef = 71CC839F26B8C54A00EEBB93 /* ShaderData.h */; };
-		71CC83A526B8C54A00EEBB93 /* SBSReader.h in Headers */ = {isa = PBXBuildFile; fileRef = 71CC83A026B8C54A00EEBB93 /* SBSReader.h */; };
 		71CC83A626B8C54A00EEBB93 /* ShaderData.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71CC83A126B8C54A00EEBB93 /* ShaderData.cpp */; };
 		71CC83A726B8C54A00EEBB93 /* ShaderData.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71CC83A126B8C54A00EEBB93 /* ShaderData.cpp */; };
 		71CC83AA26B8D54800EEBB93 /* SokolFramebuffer.h in Headers */ = {isa = PBXBuildFile; fileRef = 71CC83A826B8D54800EEBB93 /* SokolFramebuffer.h */; };
@@ -1288,6 +1286,7 @@
 /* Begin PBXFileReference section */
 		172130392FB012BD00390DC2 /* SoundPool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SoundPool.h; sourceTree = "<group>"; };
 		1721303A2FB012BD00390DC2 /* SoundPool.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SoundPool.cpp; sourceTree = "<group>"; };
+		172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderBuildTypes.h; sourceTree = "<group>"; };
 		1787AD8D2F673CE000DB1D75 /* BundleComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleComponent.h; sourceTree = "<group>"; };
 		1787AD8F2F6C333300DB1D75 /* BundleManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleManager.h; sourceTree = "<group>"; };
 		1787AD902F6C333300DB1D75 /* BundleManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = BundleManager.cpp; sourceTree = "<group>"; };
@@ -2192,9 +2191,7 @@
 		71CC839426B8C4D800EEBB93 /* Light.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Light.h; sourceTree = "<group>"; };
 		71CC839826B8C4FC00EEBB93 /* FramebufferRender.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = FramebufferRender.h; sourceTree = "<group>"; };
 		71CC839926B8C4FD00EEBB93 /* FramebufferRender.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = FramebufferRender.cpp; sourceTree = "<group>"; };
-		71CC839E26B8C54A00EEBB93 /* SBSReader.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = SBSReader.cpp; sourceTree = "<group>"; };
 		71CC839F26B8C54A00EEBB93 /* ShaderData.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ShaderData.h; sourceTree = "<group>"; };
-		71CC83A026B8C54A00EEBB93 /* SBSReader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SBSReader.h; sourceTree = "<group>"; };
 		71CC83A126B8C54A00EEBB93 /* ShaderData.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ShaderData.cpp; sourceTree = "<group>"; };
 		71CC83A826B8D54800EEBB93 /* SokolFramebuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SokolFramebuffer.h; sourceTree = "<group>"; };
 		71CC83A926B8D54800EEBB93 /* SokolFramebuffer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = SokolFramebuffer.cpp; sourceTree = "<group>"; };
@@ -4045,8 +4042,7 @@
 		71CC839D26B8C54A00EEBB93 /* shader */ = {
 			isa = PBXGroup;
 			children = (
-				71CC83A026B8C54A00EEBB93 /* SBSReader.h */,
-				71CC839E26B8C54A00EEBB93 /* SBSReader.cpp */,
+				172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */,
 				71CC839F26B8C54A00EEBB93 /* ShaderData.h */,
 				71CC83A126B8C54A00EEBB93 /* ShaderData.cpp */,
 				1789660A2F1D764600E89E52 /* ShaderDataSerializer.h */,
@@ -4314,6 +4310,7 @@
 				71D74957296731F200348AB8 /* EntityHandle.h in Headers */,
 				718FDDF72837CA9A00AF314C /* glsl100.h in Headers */,
 				71E54516284D5BE000C68FAB /* RotateTracksComponent.h in Headers */,
+				172A59A52FC4CF36002FDFCA /* ShaderBuildTypes.h in Headers */,
 				717AD96F290B661A007D7DB5 /* AudioSystem.h in Headers */,
 				7128D10225C2354A00965B51 /* SystemRender.h in Headers */,
 				715253542CD057C400D294D8 /* Sphere.h in Headers */,
@@ -4383,7 +4380,6 @@
 				717AD98D29211976007D7DB5 /* Container.h in Headers */,
 				71ABBD3D279116E1001CE3AF /* UniqueToken.h in Headers */,
 				71E54513284D5BE000C68FAB /* MorphTracksComponent.h in Headers */,
-				71CC83A526B8C54A00EEBB93 /* SBSReader.h in Headers */,
 				711BFE3A2E6E5AE500677D11 /* ScriptComponent.h in Headers */,
 				71FCE4BE28E0FA01003C5217 /* LuaFunction.h in Headers */,
 				71AD5E712E9F2B86004951AB /* ScriptProperty.h in Headers */,
@@ -5570,7 +5566,6 @@
 				7105A56728B305B20092EA05 /* MathClassesLua.cpp in Sources */,
 				715776502B050C230049C970 /* FontPool.cpp in Sources */,
 				713D82A5259D307F00567F9F /* Plane.cpp in Sources */,
-				71CC83A326B8C54A00EEBB93 /* SBSReader.cpp in Sources */,
 				713E580727BA9CB700376680 /* MeshPolygon.cpp in Sources */,
 				71BE624425B1DB9E006D6E02 /* ShaderPool.cpp in Sources */,
 				717AD96E290B661A007D7DB5 /* AudioSystem.cpp in Sources */,
@@ -5746,7 +5741,6 @@
 				7105A56628B305B20092EA05 /* MathClassesLua.cpp in Sources */,
 				7157764F2B050C230049C970 /* FontPool.cpp in Sources */,
 				7162FD3225963AE00075B97D /* Matrix3.cpp in Sources */,
-				71CC83A226B8C54A00EEBB93 /* SBSReader.cpp in Sources */,
 				7162FD3725963AE00075B97D /* Rect.cpp in Sources */,
 				713E580627BA9CB700376680 /* MeshPolygon.cpp in Sources */,
 				717AD96D290B661A007D7DB5 /* AudioSystem.cpp in Sources */,
