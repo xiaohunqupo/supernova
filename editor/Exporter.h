@@ -24,6 +24,8 @@ namespace doriax::editor {
         uint32_t startSceneId = 0;
         std::set<ShaderKey> selectedShaderKeys;
         std::set<::doriax::Platform> selectedPlatforms;
+        fs::path shaderOutputDir;
+        bool shadersOnly = false;
     };
 
     struct ExportProgress {
@@ -53,7 +55,10 @@ namespace doriax::editor {
 
         bool isCancelled() const;
 
+        void collectSelectedShaderKeys();
+
         fs::path getExportProjectRoot() const;
+        fs::path getShaderOutputDir() const;
         static bool shouldSkipExportSupportFile(const fs::path& relativePath);
 
         bool checkTargetDir();
@@ -72,6 +77,7 @@ namespace doriax::editor {
 
         void startExport(Project* project, const ExportConfig& config);
         bool exportProject(Project* project, const ExportConfig& config);
+        bool generateShaders(const ExportConfig& config);
         void cancelExport();
         ExportProgress getProgress() const;
         bool isRunning() const;

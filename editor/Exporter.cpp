@@ -102,17 +102,49 @@ bool editor::Exporter::exportProject(Project* proj, const ExportConfig& cfg) {
     return progress.finished && !progress.failed;
 }
 
+bool editor::Exporter::generateShaders(const ExportConfig& cfg) {
+    if (exportThread.joinable()) {
+        exportThread.join();
+    }
+
+    this->project = nullptr;
+    this->config = cfg;
+    this->config.shadersOnly = true;
+    cancelRequested.store(false);
+    {
+        std::lock_guard<std::mutex> lock(progressMutex);
+        this->progress = ExportProgress();
+        this->progress.started = true;
+    }
+
+    runExport();
+
+    std::lock_guard<std::mutex> lock(progressMutex);
+    return progress.finished && !progress.failed;
+}
+
 void editor::Exporter::runExport() {
     if (!checkTargetDir()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
+
+    if (config.shadersOnly) {
+        collectSelectedShaderKeys();
+        if (isCancelled()) { setError("Export cancelled"); return; }
+        if (!buildAndSaveShaders()) return;
+
+        setProgress("Shader generation complete", 1.0f);
+        {
+            std::lock_guard<std::mutex> lock(progressMutex);
+            progress.finished = true;
+        }
+        Out::info("Shaders generated successfully at: %s", getShaderOutputDir().string().c_str());
+        return;
+    }
+
     if (!clearGenerated()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!loadAndSaveAllScenes()) return;
-    if (config.selectedShaderKeys.empty()) {
-        for (const auto& sceneProject : project->getScenes()) {
-            config.selectedShaderKeys.insert(sceneProject.shaderKeys.begin(), sceneProject.shaderKeys.end());
-        }
-    }
+    collectSelectedShaderKeys();
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!copyGenerated()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
@@ -134,8 +166,30 @@ void editor::Exporter::runExport() {
     Out::info("Project exported successfully to: %s", config.targetDir.string().c_str());
 }
 
+void editor::Exporter::collectSelectedShaderKeys() {
+    if (!config.selectedShaderKeys.empty()) {
+        return;
+    }
+
+    if (!project) {
+        return;
+    }
+
+    for (const auto& sceneProject : project->getScenes()) {
+        config.selectedShaderKeys.insert(sceneProject.shaderKeys.begin(), sceneProject.shaderKeys.end());
+    }
+}
+
 fs::path editor::Exporter::getExportProjectRoot() const {
     return config.targetDir / "project";
+}
+
+fs::path editor::Exporter::getShaderOutputDir() const {
+    if (!config.shaderOutputDir.empty()) {
+        return config.shaderOutputDir;
+    }
+
+    return getExportProjectRoot() / "assets" / "shaders";
 }
 
 bool editor::Exporter::shouldSkipExportSupportFile(const fs::path& relativePath) {
@@ -159,7 +213,7 @@ bool editor::Exporter::checkTargetDir() {
         }
     }
 
-    if (!fs::is_empty(config.targetDir, ec)) {
+    if (!config.shadersOnly && !fs::is_empty(config.targetDir, ec)) {
         setError("Target directory is not empty");
         return false;
     }
@@ -650,7 +704,12 @@ bool editor::Exporter::copyEngine() {
 bool editor::Exporter::buildAndSaveShaders() {
     setProgress("Building shaders...", 0.6f);
 
-    fs::path shadersDst = getExportProjectRoot() / "assets" / "shaders";
+    if (config.selectedShaderKeys.empty()) {
+        setError("No shaders selected");
+        return false;
+    }
+
+    fs::path shadersDst = getShaderOutputDir();
 
     std::error_code ec;
     fs::create_directories(shadersDst, ec);

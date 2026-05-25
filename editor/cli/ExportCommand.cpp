@@ -52,6 +52,14 @@ struct ExportCliOptions {
     std::set<ShaderKey> shaderKeys;
     bool help = false;
     bool listScenes = false;
+    bool shadersOnly = false;
+};
+
+struct ShaderCliOptions {
+    fs::path targetDir;
+    std::set<EnginePlatform> platforms;
+    std::set<ShaderKey> shaderKeys;
+    bool help = false;
 };
 
 struct EngineRuntimeGuard {
@@ -237,21 +245,37 @@ static std::string getCommandName(const char* executableName) {
 static void printUsage(const std::string& commandName) {
     std::cout
         << "Usage:\n"
-        << "  " << commandName << " export --project <project-dir|project.yaml> --out <empty-dir> [options]\n\n"
+        << "  " << commandName << " export --project <project-dir|project.yaml> --out <dir> [options]\n\n"
         << "Options:\n"
         << "  -p, --project <path>        Project directory or project.yaml file.\n"
-        << "  -o, --out <path>            Empty destination directory for the exported project.\n"
+        << "  -o, --out <path>            Destination directory. Must be empty unless --shaders-only is used.\n"
         << "      --assets <path>         Asset directory, relative to the project or absolute.\n"
         << "      --lua <path>            Lua directory, relative to the project or absolute.\n"
         << "      --start-scene <id|name> Start scene override.\n"
         << "      --platform <list>       linux, windows, macos, ios, web, android. Can repeat.\n"
         << "      --all-platforms         Export shader formats for every supported platform.\n"
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
+        << "      --shaders-only          Only generate project shader files under <out>/project/assets/shaders.\n"
         << "      --list-scenes           Print project scenes and exit.\n"
         << "  -h, --help                  Show this help.\n\n"
         << "If no --platform is provided, the current host platform is used.\n"
-        << "If no --shader is provided, shaders discovered while regenerating scenes are exported.\n";
+        << "If no --shader is provided, shaders discovered while regenerating scenes are exported.\n"
+        << "For standalone shader generation, use `" << commandName << " shaders`.\n";
 }
+
+    static void printShadersUsage(const std::string& commandName) {
+        std::cout
+        << "Usage:\n"
+        << "  " << commandName << " shaders --out <dir> --shader <spec> [options]\n\n"
+        << "Options:\n"
+        << "  -o, --out <path>            Destination directory for generated shader files.\n"
+        << "      --platform <list>       linux, windows, macos, ios, web, android. Can repeat.\n"
+        << "      --all-platforms         Generate shader formats for every supported platform.\n"
+        << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
+        << "  -h, --help                  Show this help.\n\n"
+        << "If no --platform is provided, the current host platform is used.\n"
+        << "Shader files are written directly to <out>.\n";
+    }
 
 static bool requireValue(int argc, char** argv, int& index, std::string& value, std::string& error) {
     if (index + 1 >= argc) {
@@ -303,6 +327,8 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
                 return false;
             }
             options.shaderKeys.insert(key);
+        } else if (arg == "--shaders-only" || arg == "--only-shaders") {
+            options.shadersOnly = true;
         } else if (arg == "--list-scenes") {
             options.listScenes = true;
         } else {
@@ -320,6 +346,63 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
     }
     if (options.targetDir.empty() && !options.listScenes) {
         error = "Missing required --out path.";
+        return false;
+    }
+    if (options.shadersOnly && options.shaderKeys.empty()) {
+        error = "--shaders-only requires at least one --shader spec.";
+        return false;
+    }
+    if (options.platforms.empty()) {
+        addHostDefaultPlatform(options.platforms);
+    }
+
+    return true;
+}
+
+static bool parseShadersArgs(int argc, char** argv, ShaderCliOptions& options, std::string& error) {
+    for (int i = 1; i < argc; i++) {
+        const std::string arg = argv[i];
+        std::string value;
+
+        if (arg == "-h" || arg == "--help") {
+            options.help = true;
+        } else if (arg == "-o" || arg == "--out" || arg == "--target") {
+            if (!requireValue(argc, argv, i, value, error)) return false;
+            options.targetDir = value;
+        } else if (arg == "--platform") {
+            if (!requireValue(argc, argv, i, value, error)) return false;
+            for (const std::string& name : splitList(value)) {
+                EnginePlatform platform;
+                if (!parsePlatformName(name, platform)) {
+                    error = "Unknown platform: " + name;
+                    return false;
+                }
+                options.platforms.insert(platform);
+            }
+        } else if (arg == "--all-platforms") {
+            addAllSupportedPlatforms(options.platforms);
+        } else if (arg == "--shader") {
+            if (!requireValue(argc, argv, i, value, error)) return false;
+            ShaderKey key;
+            if (!parseShaderSpec(value, key, error)) {
+                return false;
+            }
+            options.shaderKeys.insert(key);
+        } else {
+            error = "Unknown argument: " + arg;
+            return false;
+        }
+    }
+
+    if (options.help) {
+        return true;
+    }
+    if (options.targetDir.empty()) {
+        error = "Missing required --out path.";
+        return false;
+    }
+    if (options.shaderKeys.empty()) {
+        error = "Missing required --shader spec.";
         return false;
     }
     if (options.platforms.empty()) {
@@ -438,6 +521,7 @@ int runExportCommand(int argc, char** argv, const char* executableName) {
     config.startSceneId = resolveStartSceneId(project, options.startScene);
     config.selectedPlatforms  = options.platforms;
     config.selectedShaderKeys = options.shaderKeys;
+    config.shadersOnly = options.shadersOnly;
 
     if (!options.startScene.empty() && config.startSceneId == 0) {
         Out::warning("Start scene not found: %s", options.startScene.c_str());
@@ -450,6 +534,57 @@ int runExportCommand(int argc, char** argv, const char* executableName) {
     if (!success) {
         if (!progress.errorMessage.empty()) {
             std::cerr << commandName << " export: " << progress.errorMessage << "\n";
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+int runShadersCommand(int argc, char** argv, const char* executableName) {
+    attachHostConsoleIfNeeded();
+
+    EditorHostOverrideGuard hostOverride(nullptr);
+
+    const std::string commandName = getCommandName(executableName);
+
+    ShaderCliOptions options;
+    std::string error;
+    if (!parseShadersArgs(argc, argv, options, error)) {
+        std::cerr << commandName << " shaders: " << error << "\n\n";
+        printShadersUsage(commandName);
+        return 2;
+    }
+
+    if (options.help) {
+        printShadersUsage(commandName);
+        return 0;
+    }
+
+    Out::setOutputWindow(nullptr);
+
+    Project project;
+    auto platform = std::make_unique<Platform>(&project);
+    EngineRuntimeGuard engineRuntime;
+    Engine::systemInit(argc, argv, platform.get());
+    engineRuntime.initialized = true;
+    Engine::pauseGameEvents(true);
+    Engine::setAsyncLoading(true);
+
+    ExportConfig config;
+    config.targetDir = options.targetDir;
+    config.shaderOutputDir = options.targetDir;
+    config.selectedPlatforms = options.platforms;
+    config.selectedShaderKeys = options.shaderKeys;
+    config.shadersOnly = true;
+
+    Exporter exporter;
+    const bool success = exporter.generateShaders(config);
+    const ExportProgress progress = exporter.getProgress();
+
+    if (!success) {
+        if (!progress.errorMessage.empty()) {
+            std::cerr << commandName << " shaders: " << progress.errorMessage << "\n";
         }
         return 1;
     }
