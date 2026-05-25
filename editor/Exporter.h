@@ -17,6 +17,12 @@ namespace doriax::editor {
 
     namespace fs = std::filesystem;
 
+    enum class ShaderOutputFormat {
+        Header,
+        Binary,
+        Json
+    };
+
     struct ExportConfig {
         fs::path targetDir;
         fs::path assetsDir;
@@ -25,6 +31,7 @@ namespace doriax::editor {
         std::set<ShaderKey> selectedShaderKeys;
         std::set<::doriax::Platform> selectedPlatforms;
         fs::path shaderOutputDir;
+        ShaderOutputFormat shaderOutputFormat = ShaderOutputFormat::Header;
     };
 
     struct ExportProgress {

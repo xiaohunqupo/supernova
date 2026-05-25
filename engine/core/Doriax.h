@@ -169,8 +169,8 @@
 #include "script/ScriptBase.h"
 #include "script/ScriptProperty.h"
 
-#include "shader/SBSReader.h"
 #include "shader/ShaderData.h"
+#include "shader/ShaderDataSerializer.h"
 
 #include "subsystem/ActionSystem.h"
 #include "subsystem/AudioSystem.h"

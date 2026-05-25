@@ -4,12 +4,15 @@
 
 #include "ShaderDataSerializer.h"
 
+#include "io/Data.h"
 #include "io/File.h"
+#include "json.hpp"
 
+#include <fstream>
 #include <limits>
 #include <vector>
 
-namespace {
+namespace doriax {
 
 constexpr uint32_t SDAT_MAGIC = 0x54414453; // 'S''D''A''T' little-endian
 constexpr uint32_t SDAT_VERSION = 1;
@@ -25,15 +28,65 @@ constexpr uint32_t kMaxTextures = 64;
 constexpr uint32_t kMaxSamplers = 64;
 constexpr uint32_t kMaxTextureSamplerPairs = 64;
 
-static bool setErr(std::string* err, const std::string& msg) {
+class ShaderDataSerializerHelper {
+public:
+    struct ByteWriter;
+
+    static bool setErr(std::string* err, const std::string& msg);
+
+    template <typename Writer>
+    static void writeU32(Writer& out, uint32_t v);
+
+    template <typename Writer>
+    static void writeU64(Writer& out, uint64_t v);
+
+    template <typename Writer>
+    static void writeI32(Writer& out, int32_t v);
+
+    template <typename Writer>
+    static void writeU8(Writer& out, uint8_t v);
+
+    template <typename Writer>
+    static void writeBool(Writer& out, bool v);
+
+    template <typename Writer>
+    static void writeString(Writer& out, const std::string& s);
+
+    template <typename Writer>
+    static void writeShaderData(Writer& out, uint64_t shaderKey, const ShaderData& shaderData);
+
+    static const char* shaderLangName(ShaderLang lang);
+    static const char* shaderStageName(ShaderStageType type);
+    static nlohmann::json shaderDataToJson(uint64_t shaderKey, const ShaderData& shaderData);
+
+    static bool readU32(FileData& in, uint32_t& v);
+    static bool readU64(FileData& in, uint64_t& v);
+    static bool readI32(FileData& in, int32_t& v);
+    static bool readU8(FileData& in, uint8_t& v);
+    static bool readBool(FileData& in, bool& v);
+    static bool readString(FileData& in, std::string& s);
+    static bool readShaderData(FileData& in, const std::string& filepath, uint64_t expectedShaderKey, ShaderData& outShaderData, std::string* err);
+};
+
+bool ShaderDataSerializerHelper::setErr(std::string* err, const std::string& msg) {
     if (err) {
         *err = msg;
     }
     return false;
 }
 
+struct ShaderDataSerializerHelper::ByteWriter {
+    std::vector<unsigned char>& bytes;
+
+    unsigned int write(unsigned char* src, unsigned int count) {
+        bytes.insert(bytes.end(), src, src + count);
+        return count;
+    }
+};
+
 // Little-endian write helpers (portable across architectures)
-static void writeU32(doriax::File& out, uint32_t v) {
+template <typename Writer>
+void ShaderDataSerializerHelper::writeU32(Writer& out, uint32_t v) {
     uint8_t buf[4] = {
         static_cast<uint8_t>(v),
         static_cast<uint8_t>(v >> 8),
@@ -43,7 +96,8 @@ static void writeU32(doriax::File& out, uint32_t v) {
     out.write(buf, 4);
 }
 
-static void writeU64(doriax::File& out, uint64_t v) {
+template <typename Writer>
+void ShaderDataSerializerHelper::writeU64(Writer& out, uint64_t v) {
     uint8_t buf[8] = {
         static_cast<uint8_t>(v),
         static_cast<uint8_t>(v >> 8),
@@ -57,20 +111,24 @@ static void writeU64(doriax::File& out, uint64_t v) {
     out.write(buf, 8);
 }
 
-static void writeI32(doriax::File& out, int32_t v) {
+template <typename Writer>
+void ShaderDataSerializerHelper::writeI32(Writer& out, int32_t v) {
     writeU32(out, static_cast<uint32_t>(v));
 }
 
-static void writeU8(doriax::File& out, uint8_t v) {
+template <typename Writer>
+void ShaderDataSerializerHelper::writeU8(Writer& out, uint8_t v) {
     out.write(&v, sizeof(v));
 }
 
-static void writeBool(doriax::File& out, bool v) {
+template <typename Writer>
+void ShaderDataSerializerHelper::writeBool(Writer& out, bool v) {
     uint8_t b = v ? 1 : 0;
     writeU8(out, b);
 }
 
-static void writeString(doriax::File& out, const std::string& s) {
+template <typename Writer>
+void ShaderDataSerializerHelper::writeString(Writer& out, const std::string& s) {
     uint32_t len = static_cast<uint32_t>(s.size());
     writeU32(out, len);
     if (len > 0) {
@@ -78,80 +136,8 @@ static void writeString(doriax::File& out, const std::string& s) {
     }
 }
 
-// Little-endian read helpers (portable across architectures)
-static bool readU32(doriax::File& in, uint32_t& v) {
-    uint8_t buf[4];
-    if (in.read(buf, 4) != 4) return false;
-    v = static_cast<uint32_t>(buf[0])
-      | (static_cast<uint32_t>(buf[1]) << 8)
-      | (static_cast<uint32_t>(buf[2]) << 16)
-      | (static_cast<uint32_t>(buf[3]) << 24);
-    return true;
-}
-
-static bool readU64(doriax::File& in, uint64_t& v) {
-    uint8_t buf[8];
-    if (in.read(buf, 8) != 8) return false;
-    v = static_cast<uint64_t>(buf[0])
-      | (static_cast<uint64_t>(buf[1]) << 8)
-      | (static_cast<uint64_t>(buf[2]) << 16)
-      | (static_cast<uint64_t>(buf[3]) << 24)
-      | (static_cast<uint64_t>(buf[4]) << 32)
-      | (static_cast<uint64_t>(buf[5]) << 40)
-      | (static_cast<uint64_t>(buf[6]) << 48)
-      | (static_cast<uint64_t>(buf[7]) << 56);
-    return true;
-}
-
-static bool readI32(doriax::File& in, int32_t& v) {
-    uint32_t u = 0;
-    if (!readU32(in, u)) return false;
-    v = static_cast<int32_t>(u);
-    return true;
-}
-
-static bool readU8(doriax::File& in, uint8_t& v) {
-    return in.read(&v, sizeof(v)) == sizeof(v);
-}
-
-static bool readBool(doriax::File& in, bool& v) {
-    uint8_t b = 0;
-    if (!readU8(in, b)) {
-        return false;
-    }
-    v = (b != 0);
-    return true;
-}
-
-static bool readString(doriax::File& in, std::string& s) {
-    uint32_t len = 0;
-    if (!readU32(in, len)) {
-        return false;
-    }
-
-    if (len > kMaxString) {
-        return false;
-    }
-
-    s.clear();
-    if (len == 0) {
-        return true;
-    }
-
-    s.resize(len);
-    return in.read((unsigned char*)&s[0], len) == len;
-}
-
-} // namespace
-
-namespace doriax {
-
-bool ShaderDataSerializer::writeToFile(const std::string& filepath, uint64_t shaderKey, const ShaderData& shaderData, std::string* err) {
-    File out;
-    if (out.open(filepath.c_str(), true) != FileErrors::FILEDATA_OK) {
-        return setErr(err, "Cannot open file for writing: " + filepath);
-    }
-
+template <typename Writer>
+void ShaderDataSerializerHelper::writeShaderData(Writer& out, uint64_t shaderKey, const ShaderData& shaderData) {
     writeU32(out, SDAT_MAGIC);
     writeU32(out, SDAT_VERSION);
     writeU64(out, shaderKey);
@@ -237,18 +223,231 @@ bool ShaderDataSerializer::writeToFile(const std::string& filepath, uint64_t sha
             writeU32(out, static_cast<uint32_t>(p.slot));
         }
     }
+}
+
+const char* ShaderDataSerializerHelper::shaderLangName(ShaderLang lang) {
+    switch (lang) {
+        case ShaderLang::GLSL: return "GLSL";
+        case ShaderLang::MSL:  return "MSL";
+        case ShaderLang::HLSL: return "HLSL";
+        default:                       return "Unknown";
+    }
+}
+
+const char* ShaderDataSerializerHelper::shaderStageName(ShaderStageType type) {
+    switch (type) {
+        case ShaderStageType::VERTEX:   return "vertex";
+        case ShaderStageType::FRAGMENT: return "fragment";
+        default:                                return "unknown";
+    }
+}
+
+nlohmann::json ShaderDataSerializerHelper::shaderDataToJson(uint64_t shaderKey, const ShaderData& shaderData) {
+    nlohmann::json root;
+    root["magic"] = "SDAT";
+    root["version"] = SDAT_VERSION;
+    root["shaderKey"] = shaderKey;
+    root["lang"] = shaderLangName(shaderData.lang);
+    root["langValue"] = static_cast<uint32_t>(shaderData.lang);
+    root["shaderVersion"] = shaderData.version;
+    root["es"] = shaderData.es;
+    root["stages"] = nlohmann::json::array();
+
+    for (const auto& stage : shaderData.stages) {
+        nlohmann::json stageJson;
+        stageJson["type"] = shaderStageName(stage.type);
+        stageJson["typeValue"] = static_cast<uint32_t>(stage.type);
+        stageJson["name"] = stage.name;
+        stageJson["source"] = stage.source;
+        stageJson["bytecodeSize"] = stage.bytecode.data ? stage.bytecode.size : 0;
+
+        stageJson["attributes"] = nlohmann::json::array();
+        for (const auto& attr : stage.attributes) {
+            stageJson["attributes"].push_back({
+                {"name", attr.name},
+                {"semanticName", attr.semanticName},
+                {"semanticIndex", attr.semanticIndex},
+                {"location", attr.location},
+                {"type", static_cast<uint32_t>(attr.type)}
+            });
+        }
+
+        stageJson["uniformBlocks"] = nlohmann::json::array();
+        for (const auto& block : stage.uniformblocks) {
+            nlohmann::json blockJson = {
+                {"name", block.name},
+                {"instanceName", block.instName},
+                {"set", block.set},
+                {"binding", block.binding},
+                {"slot", block.slot},
+                {"sizeBytes", block.sizeBytes},
+                {"flattened", block.flattened},
+                {"uniforms", nlohmann::json::array()}
+            };
+            for (const auto& uniform : block.uniforms) {
+                blockJson["uniforms"].push_back({
+                    {"name", uniform.name},
+                    {"type", static_cast<uint32_t>(uniform.type)},
+                    {"arrayCount", uniform.arrayCount},
+                    {"offset", uniform.offset}
+                });
+            }
+            stageJson["uniformBlocks"].push_back(blockJson);
+        }
+
+        stageJson["storageBuffers"] = nlohmann::json::array();
+        for (const auto& buffer : stage.storagebuffers) {
+            stageJson["storageBuffers"].push_back({
+                {"name", buffer.name},
+                {"instanceName", buffer.instName},
+                {"set", buffer.set},
+                {"binding", buffer.binding},
+                {"slot", buffer.slot},
+                {"sizeBytes", buffer.sizeBytes},
+                {"readonly", buffer.readonly},
+                {"type", static_cast<uint32_t>(buffer.type)}
+            });
+        }
+
+        stageJson["textures"] = nlohmann::json::array();
+        for (const auto& texture : stage.textures) {
+            stageJson["textures"].push_back({
+                {"name", texture.name},
+                {"set", texture.set},
+                {"binding", texture.binding},
+                {"slot", texture.slot},
+                {"type", static_cast<uint32_t>(texture.type)},
+                {"samplerType", static_cast<uint32_t>(texture.samplerType)}
+            });
+        }
+
+        stageJson["samplers"] = nlohmann::json::array();
+        for (const auto& sampler : stage.samplers) {
+            stageJson["samplers"].push_back({
+                {"name", sampler.name},
+                {"set", sampler.set},
+                {"binding", sampler.binding},
+                {"slot", sampler.slot},
+                {"type", static_cast<uint32_t>(sampler.type)}
+            });
+        }
+
+        stageJson["textureSamplerPairs"] = nlohmann::json::array();
+        for (const auto& pair : stage.textureSamplerPairs) {
+            stageJson["textureSamplerPairs"].push_back({
+                {"name", pair.name},
+                {"textureName", pair.textureName},
+                {"samplerName", pair.samplerName},
+                {"slot", pair.slot}
+            });
+        }
+
+        root["stages"].push_back(stageJson);
+    }
+
+    return root;
+}
+
+// Little-endian read helpers (portable across architectures)
+bool ShaderDataSerializerHelper::readU32(FileData& in, uint32_t& v) {
+    uint8_t buf[4];
+    if (in.read(buf, 4) != 4) return false;
+    v = static_cast<uint32_t>(buf[0])
+      | (static_cast<uint32_t>(buf[1]) << 8)
+      | (static_cast<uint32_t>(buf[2]) << 16)
+      | (static_cast<uint32_t>(buf[3]) << 24);
+    return true;
+}
+
+bool ShaderDataSerializerHelper::readU64(FileData& in, uint64_t& v) {
+    uint8_t buf[8];
+    if (in.read(buf, 8) != 8) return false;
+    v = static_cast<uint64_t>(buf[0])
+      | (static_cast<uint64_t>(buf[1]) << 8)
+      | (static_cast<uint64_t>(buf[2]) << 16)
+      | (static_cast<uint64_t>(buf[3]) << 24)
+      | (static_cast<uint64_t>(buf[4]) << 32)
+      | (static_cast<uint64_t>(buf[5]) << 40)
+      | (static_cast<uint64_t>(buf[6]) << 48)
+      | (static_cast<uint64_t>(buf[7]) << 56);
+    return true;
+}
+
+bool ShaderDataSerializerHelper::readI32(FileData& in, int32_t& v) {
+    uint32_t u = 0;
+    if (!readU32(in, u)) return false;
+    v = static_cast<int32_t>(u);
+    return true;
+}
+
+bool ShaderDataSerializerHelper::readU8(FileData& in, uint8_t& v) {
+    return in.read(&v, sizeof(v)) == sizeof(v);
+}
+
+bool ShaderDataSerializerHelper::readBool(FileData& in, bool& v) {
+    uint8_t b = 0;
+    if (!readU8(in, b)) {
+        return false;
+    }
+    v = (b != 0);
+    return true;
+}
+
+bool ShaderDataSerializerHelper::readString(FileData& in, std::string& s) {
+    uint32_t len = 0;
+    if (!readU32(in, len)) {
+        return false;
+    }
+
+    if (len > kMaxString) {
+        return false;
+    }
+
+    s.clear();
+    if (len == 0) {
+        return true;
+    }
+
+    s.resize(len);
+    return in.read((unsigned char*)&s[0], len) == len;
+}
+
+bool ShaderDataSerializer::writeToFile(const std::string& filepath, uint64_t shaderKey, const ShaderData& shaderData, std::string* err) {
+    File out;
+    if (out.open(filepath.c_str(), true) != FileErrors::FILEDATA_OK) {
+        return ShaderDataSerializerHelper::setErr(err, "Cannot open file for writing: " + filepath);
+    }
+
+    ShaderDataSerializerHelper::writeShaderData(out, shaderKey, shaderData);
 
     out.flush();
 
     return true;
 }
 
-bool ShaderDataSerializer::readFromFile(const std::string& filepath, uint64_t expectedShaderKey, ShaderData& outShaderData, std::string* err) {
-    File in;
-    if (in.open(filepath.c_str()) != FileErrors::FILEDATA_OK) {
-        return setErr(err, "Cannot open file for reading: " + filepath);
+bool ShaderDataSerializer::writeToBytes(std::vector<unsigned char>& outBytes, uint64_t shaderKey, const ShaderData& shaderData, std::string* err) {
+    (void)err;
+    outBytes.clear();
+    ShaderDataSerializerHelper::ByteWriter writer{outBytes};
+    ShaderDataSerializerHelper::writeShaderData(writer, shaderKey, shaderData);
+    return true;
+}
+
+bool ShaderDataSerializer::writeJsonToFile(const std::string& filepath, uint64_t shaderKey, const ShaderData& shaderData, std::string* err) {
+    std::ofstream out(filepath, std::ios::out | std::ios::binary);
+    if (!out) {
+        return ShaderDataSerializerHelper::setErr(err, "Cannot open file for writing: " + filepath);
     }
 
+    out << ShaderDataSerializerHelper::shaderDataToJson(shaderKey, shaderData).dump(4) << "\n";
+    if (!out) {
+        return ShaderDataSerializerHelper::setErr(err, "Failed to write JSON file: " + filepath);
+    }
+
+    return true;
+}
+
+bool ShaderDataSerializerHelper::readShaderData(FileData& in, const std::string& filepath, uint64_t expectedShaderKey, ShaderData& outShaderData, std::string* err) {
     uint32_t magic = 0;
     uint32_t version = 0;
     if (!readU32(in, magic) || !readU32(in, version)) {
@@ -512,6 +711,28 @@ bool ShaderDataSerializer::readFromFile(const std::string& filepath, uint64_t ex
 
     outShaderData = tmp;
     return true;
+}
+
+bool ShaderDataSerializer::readFromFile(const std::string& filepath, uint64_t expectedShaderKey, ShaderData& outShaderData, std::string* err) {
+    File in;
+    if (in.open(filepath.c_str()) != FileErrors::FILEDATA_OK) {
+        return ShaderDataSerializerHelper::setErr(err, "Cannot open file for reading: " + filepath);
+    }
+
+    return ShaderDataSerializerHelper::readShaderData(in, filepath, expectedShaderKey, outShaderData, err);
+}
+
+bool ShaderDataSerializer::readFromBytes(const std::vector<unsigned char>& bytes, uint64_t expectedShaderKey, ShaderData& outShaderData, std::string* err) {
+    if (bytes.empty()) {
+        return ShaderDataSerializerHelper::setErr(err, "Cannot read empty SDAT data");
+    }
+
+    Data in;
+    if (in.open(const_cast<unsigned char*>(bytes.data()), static_cast<unsigned int>(bytes.size()), false, false) != FileErrors::FILEDATA_OK) {
+        return ShaderDataSerializerHelper::setErr(err, "Cannot open SDAT memory buffer");
+    }
+
+    return ShaderDataSerializerHelper::readShaderData(in, "<memory>", expectedShaderKey, outShaderData, err);
 }
 
 } // namespace doriax

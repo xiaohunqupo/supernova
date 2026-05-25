@@ -7,6 +7,7 @@
 
 #include "Engine.h"
 #include "render/ShaderRender.h"
+#include "shader/ShaderBuildTypes.h"
 #include <map>
 #include <memory>
 #include <functional>
@@ -14,29 +15,7 @@
 
 namespace doriax{
 
-    typedef uint64_t ShaderKey;
-
     typedef std::map<ShaderKey, std::shared_ptr<ShaderRender>> shaders_t;
-
-    enum class ShaderBuildState {
-        Finished,
-        Running,
-        Failed,
-        NotStarted
-    };
-
-    struct ShaderBuildResult {
-        ShaderData data;
-        ResourceLoadState state;
-
-        ShaderBuildResult() : state(ResourceLoadState::NotStarted) {}
-        ShaderBuildResult(const ShaderData& shaderData, ResourceLoadState buildState) 
-            : data(shaderData), state(buildState) {}
-
-        explicit operator bool() const {
-            return state == ResourceLoadState::Finished;
-        }
-    };
 
     using ShaderBuilderFn = std::function<ShaderBuildResult(ShaderKey)>;
 

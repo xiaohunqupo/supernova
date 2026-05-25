@@ -58,6 +58,7 @@ struct ShaderCliOptions {
     fs::path targetDir;
     std::set<EnginePlatform> platforms;
     std::set<ShaderKey> shaderKeys;
+    ShaderOutputFormat outputFormat = ShaderOutputFormat::Binary;
     bool help = false;
 };
 
@@ -142,6 +143,23 @@ static bool parsePlatformName(const std::string& value, EnginePlatform& out) {
     if (token == "android")                          { out = EnginePlatform::Android; return true; }
     if (token == "web" || token == "wasm" || token == "emscripten") {
         out = EnginePlatform::Web;
+        return true;
+    }
+    return false;
+}
+
+static bool parseShaderOutputFormat(const std::string& value, ShaderOutputFormat& out) {
+    const std::string token = normalizeToken(value);
+    if (token == "binary" || token == "sdat") {
+        out = ShaderOutputFormat::Binary;
+        return true;
+    }
+    if (token == "header") {
+        out = ShaderOutputFormat::Header;
+        return true;
+    }
+    if (token == "json") {
+        out = ShaderOutputFormat::Json;
         return true;
     }
     return false;
@@ -264,12 +282,13 @@ static void printShadersUsage(const std::string& commandName) {
         << "  " << commandName << " shaders --out <dir> --shader <spec> [options]\n\n"
         << "Options:\n"
         << "  -o, --out <path>            Destination directory for generated shader files.\n"
+        << "      --format <format>       binary, header, or json. Default: binary.\n"
         << "      --platform <list>       linux, windows, macos, ios, web, android. Can repeat.\n"
         << "      --all-platforms         Generate shader formats for every supported platform.\n"
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
         << "  -h, --help                  Show this help.\n\n"
         << "If no --platform is provided, the current host platform is used.\n"
-        << "Shader files are written directly to <out>.\n";
+        << "Shader output is written directly to <out>.\n";
 }
 
 static bool requireValue(int argc, char** argv, int& index, std::string& value, std::string& error) {
@@ -358,6 +377,12 @@ static bool parseShadersArgs(int argc, char** argv, ShaderCliOptions& options, s
         } else if (arg == "-o" || arg == "--out" || arg == "--target") {
             if (!requireValue(argc, argv, i, value, error)) return false;
             options.targetDir = value;
+        } else if (arg == "--format" || arg == "--output-format") {
+            if (!requireValue(argc, argv, i, value, error)) return false;
+            if (!parseShaderOutputFormat(value, options.outputFormat)) {
+                error = "Unknown shader output format: " + value;
+                return false;
+            }
         } else if (arg == "--platform") {
             if (!requireValue(argc, argv, i, value, error)) return false;
             for (const std::string& name : splitList(value)) {
@@ -562,6 +587,7 @@ int CommandLine::runShadersCommand(int argc, char** argv, const char* executable
     ExportConfig config;
     config.targetDir = options.targetDir;
     config.shaderOutputDir = options.targetDir;
+    config.shaderOutputFormat = options.outputFormat;
     config.selectedPlatforms = options.platforms;
     config.selectedShaderKeys = options.shaderKeys;
 

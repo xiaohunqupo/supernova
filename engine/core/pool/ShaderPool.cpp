@@ -6,7 +6,6 @@
 
 #include "Log.h"
 #include "Engine.h"
-#include "shader/SBSReader.h"
 #include "shader/ShaderDataSerializer.h"
 #include "util/Base64.h"
 #include <cstdint>
@@ -349,18 +348,15 @@ std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t pr
                 Log::error("Shader build failed");
             }
         } else {
-            SBSReader sbs;
             ShaderData tempShaderData;
 
             std::string shaderStr = getShaderStr(shaderType, properties);
             std::string base64Shd = getBase64Shader(getShaderName(shaderStr));
 
-            if (!base64Shd.empty() && sbs.read(Base64::decode(base64Shd))){
-                shared->createShader(sbs.getShaderData());
+            if (!base64Shd.empty() && ShaderDataSerializer::readFromBytes(Base64::decode(base64Shd), shaderKey, tempShaderData)){
+                shared->createShader(tempShaderData);
             } else if (ShaderDataSerializer::readFromFile("shader://"+getShaderFile(shaderStr, ".sdat"), shaderKey, tempShaderData)){
                 shared->createShader(tempShaderData);
-            } else if (sbs.read("shader://"+getShaderFile(shaderStr, ".sbs"))){
-                shared->createShader(sbs.getShaderData());
             } else {
                 addMissingShader(shaderStr);
             }

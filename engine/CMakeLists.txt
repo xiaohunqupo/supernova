@@ -625,7 +625,6 @@ set(DORIAX_SRCS
     core/script/binding/ObjectClassesLua.cpp
     core/script/binding/ThreadClassesLua.cpp
     core/script/binding/UtilClassesLua.cpp
-    core/shader/SBSReader.cpp
     core/shader/ShaderData.cpp
     core/shader/ShaderDataSerializer.cpp
     core/subsystem/ActionSystem.cpp

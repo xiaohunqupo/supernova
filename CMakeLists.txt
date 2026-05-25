@@ -93,7 +93,7 @@ set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
 set(SHADERS_HEADER "${GENERATED_DIR}/shaders.h")
 set(GENERATE_SHADERS_SCRIPT "${CMAKE_SOURCE_DIR}/generate_shaders.cmake")
 
-file(GLOB_RECURSE SHADER_FILES "${SHADERS_DIR}/*.glsl" "${SHADERS_DIR}/*.frag" "${SHADERS_DIR}/*.vert")
+file(GLOB_RECURSE SHADER_FILES CONFIGURE_DEPENDS "${SHADERS_DIR}/*.glsl" "${SHADERS_DIR}/*.frag" "${SHADERS_DIR}/*.vert")
 
 add_custom_command(
     OUTPUT ${SHADERS_HEADER}
@@ -113,8 +113,8 @@ set(ENGINE_CORE_DIR "${CMAKE_SOURCE_DIR}/engine/core")
 set(API_SUGGESTIONS_HEADER "${GENERATED_DIR}/engine_api_suggestions.h")
 set(GENERATE_API_SCRIPT "${CMAKE_SOURCE_DIR}/generate_api_suggestions.py")
 
-file(GLOB BINDING_FILES "${BINDING_DIR}/*.cpp")
-file(GLOB_RECURSE ENGINE_HEADERS "${ENGINE_CORE_DIR}/*.h")
+file(GLOB BINDING_FILES CONFIGURE_DEPENDS "${BINDING_DIR}/*.cpp")
+file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_CORE_DIR}/*.h")
 
 add_custom_command(
     OUTPUT ${API_SUGGESTIONS_HEADER}
@@ -202,6 +202,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/Stream.cpp
     ${EDITOR_DIR}/Exporter.cpp
 
+    ${EDITOR_DIR}/util/ShaderHeaderBuilder.cpp
     ${EDITOR_DIR}/util/GraphicUtils.cpp
     ${EDITOR_DIR}/util/EntityBundle.cpp
     ${EDITOR_DIR}/util/ProjectUtils.cpp

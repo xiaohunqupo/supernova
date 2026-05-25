@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "ShaderData.h"
 
@@ -20,7 +21,10 @@ namespace doriax {
         //
         // Returns true on success. On failure, returns false and optionally fills err.
         static bool writeToFile(const std::string& filepath, uint64_t shaderKey, const ShaderData& shaderData, std::string* err = nullptr);
+        static bool writeToBytes(std::vector<unsigned char>& outBytes, uint64_t shaderKey, const ShaderData& shaderData, std::string* err = nullptr);
+        static bool writeJsonToFile(const std::string& filepath, uint64_t shaderKey, const ShaderData& shaderData, std::string* err = nullptr);
         static bool readFromFile(const std::string& filepath, uint64_t expectedShaderKey, ShaderData& outShaderData, std::string* err = nullptr);
+        static bool readFromBytes(const std::vector<unsigned char>& bytes, uint64_t expectedShaderKey, ShaderData& outShaderData, std::string* err = nullptr);
     };
 
 }

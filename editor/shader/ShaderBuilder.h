@@ -2,7 +2,7 @@
 
 #include "Project.h"
 
-#include "pool/ShaderPool.h"
+#include "shader/ShaderBuildTypes.h"
 #include "ShaderData.h"
 #include <vector>
 #include <unordered_map>

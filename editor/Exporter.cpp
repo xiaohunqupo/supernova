@@ -2,12 +2,15 @@
 #include "EditorHost.h"
 #include "Out.h"
 #include "Stream.h"
+#include "util/Base64.h"
 #include "util/FileUtils.h"
+#include "util/ShaderHeaderBuilder.h"
 #include "pool/ShaderPool.h"
 
 #include <algorithm>
 #include <fstream>
 #include <future>
+#include <map>
 
 #ifdef _WIN32
     #ifndef NOMINMAX
@@ -188,6 +191,10 @@ fs::path editor::Exporter::getExportProjectRoot() const {
 fs::path editor::Exporter::getShaderOutputDir() const {
     if (!config.shaderOutputDir.empty()) {
         return config.shaderOutputDir;
+    }
+
+    if (config.shaderOutputFormat == ShaderOutputFormat::Header) {
+        return config.targetDir / "shaders";
     }
 
     return getExportProjectRoot() / "assets" / "shaders";
@@ -752,6 +759,8 @@ bool editor::Exporter::buildAndSaveShaders() {
 
     int total = (int)config.selectedShaderKeys.size() * requiredFormats.size();
     int current = 0;
+    bool hadFailure = false;
+    std::map<std::string, std::vector<ShaderHeaderBuilder::HeaderShader>> headerShaders;
 
     for (const ShaderKey& shaderKey : config.selectedShaderKeys) {
         ShaderType type = ShaderPool::getShaderTypeFromKey(shaderKey);
@@ -767,19 +776,58 @@ bool editor::Exporter::buildAndSaveShaders() {
                 // Synchronous build without cache
                 ShaderData resultData = shaderBuilder.buildShaderForExport(shaderKey, fmt.lang, fmt.version, fmt.es, fmt.platform);
 
-                std::string filename = shaderStr + "_" + fmtStr + ".sdat";
-                fs::path outputPath = shadersDst / filename;
-
+                std::string basename = shaderStr + "_" + fmtStr;
                 std::string err;
-                if (!ShaderDataSerializer::writeToFile(outputPath.string(), shaderKey, resultData, &err)) {
-                    Out::warning("Failed to save shader %s: %s", filename.c_str(), err.c_str());
+
+                if (config.shaderOutputFormat == ShaderOutputFormat::Header) {
+                    std::vector<unsigned char> sdatBytes;
+                    if (!ShaderDataSerializer::writeToBytes(sdatBytes, shaderKey, resultData, &err)) {
+                        Out::warning("Failed to encode shader %s: %s", basename.c_str(), err.c_str());
+                        hadFailure = true;
+                    } else {
+                        headerShaders[fmtStr].push_back({basename, Base64::encode(sdatBytes.data(), sdatBytes.size())});
+                    }
+                } else if (config.shaderOutputFormat == ShaderOutputFormat::Json) {
+                    std::string filename = basename + ".json";
+                    fs::path outputPath = shadersDst / filename;
+                    if (!ShaderDataSerializer::writeJsonToFile(outputPath.string(), shaderKey, resultData, &err)) {
+                        Out::warning("Failed to save shader %s: %s", filename.c_str(), err.c_str());
+                        hadFailure = true;
+                    }
+                } else {
+                    std::string filename = basename + ".sdat";
+                    fs::path outputPath = shadersDst / filename;
+                    if (!ShaderDataSerializer::writeToFile(outputPath.string(), shaderKey, resultData, &err)) {
+                        Out::warning("Failed to save shader %s: %s", filename.c_str(), err.c_str());
+                        hadFailure = true;
+                    }
                 }
             } catch (const std::exception& e) {
                 Out::warning("Failed to build shader %s (%s): %s", shaderStr.c_str(), fmtStr.c_str(), e.what());
+                hadFailure = true;
             }
 
             current++;
         }
+    }
+
+    if (config.shaderOutputFormat == ShaderOutputFormat::Header) {
+        setProgress("Writing shader headers...", 0.95f);
+        for (const auto& fmt : requiredFormats) {
+            std::string err;
+            const auto it = headerShaders.find(fmt.suffix);
+            const std::vector<ShaderHeaderBuilder::HeaderShader> emptyShaders;
+            const std::vector<ShaderHeaderBuilder::HeaderShader>& shaders = it == headerShaders.end() ? emptyShaders : it->second;
+            if (!ShaderHeaderBuilder::writeShaderHeader(shadersDst / (fmt.suffix + ".h"), fmt.suffix, shaders, err)) {
+                Out::warning("Failed to write shader header %s.h: %s", fmt.suffix.c_str(), err.c_str());
+                hadFailure = true;
+            }
+        }
+    }
+
+    if (hadFailure) {
+        setError("One or more shaders failed to build or save");
+        return false;
     }
 
     return true;
