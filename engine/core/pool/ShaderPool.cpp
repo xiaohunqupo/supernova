@@ -34,6 +34,35 @@ using namespace doriax;
 
 ShaderBuilderFn ShaderPool::shaderBuilderFn = nullptr;
 
+bool ShaderPool::parseShaderTypeToken(const std::string& typeToken, ShaderType& shaderType) {
+	if (typeToken == "mesh") {
+		shaderType = ShaderType::MESH;
+		return true;
+	}
+	if (typeToken == "depth") {
+		shaderType = ShaderType::DEPTH;
+		return true;
+	}
+	if (typeToken == "sky") {
+		shaderType = ShaderType::SKYBOX;
+		return true;
+	}
+	if (typeToken == "ui") {
+		shaderType = ShaderType::UI;
+		return true;
+	}
+	if (typeToken == "points") {
+		shaderType = ShaderType::POINTS;
+		return true;
+	}
+	if (typeToken == "lines") {
+		shaderType = ShaderType::LINES;
+		return true;
+	}
+
+	return false;
+}
+
 shaders_t& ShaderPool::getMap(){
     //To prevent similar problem of static init fiasco but on deinitialization
     //https://isocpp.org/wiki/faq/ctors#static-init-order-on-first-use
@@ -66,6 +95,107 @@ std::string ShaderPool::getShaderLangStr(){
 	}
 
 	return "<unknown>";
+}
+
+bool ShaderPool::getShaderCliSpec(const std::string& shaderStr, std::string& cliSpec) {
+	const size_t underscorePos = shaderStr.find('_');
+	const std::string typeToken = underscorePos == std::string::npos ? shaderStr : shaderStr.substr(0, underscorePos);
+
+	ShaderType shaderType;
+	if (!parseShaderTypeToken(typeToken, shaderType)) {
+		return false;
+	}
+
+	cliSpec = typeToken;
+	if (underscorePos == std::string::npos) {
+		return true;
+	}
+
+	const std::string propsToken = shaderStr.substr(underscorePos + 1);
+	if (propsToken.empty()) {
+		return true;
+	}
+
+	std::string propsList;
+	size_t parsedLength = 0;
+	const int propCount = getShaderPropertyCount(shaderType);
+	for (int bit = 0; bit < propCount; bit++) {
+		const std::string propName = getShaderPropertyName(shaderType, bit, true);
+		if (propName.empty() || propName == "?") {
+			continue;
+		}
+
+		if (propsToken.compare(parsedLength, propName.size(), propName) == 0) {
+			if (!propsList.empty()) {
+				propsList += ",";
+			}
+			propsList += propName;
+			parsedLength += propName.size();
+		}
+	}
+
+	if (parsedLength != propsToken.size()) {
+		return false;
+	}
+
+	if (!propsList.empty()) {
+		cliSpec += ":" + propsList;
+	}
+
+	return true;
+}
+
+std::string ShaderPool::getSuggestedCliPlatform() {
+	switch (Engine::getPlatform()) {
+		case Platform::MacOS:
+			return "macos";
+		case Platform::iOS:
+			return "ios";
+		case Platform::Web:
+			return "web";
+		case Platform::Android:
+			return "android";
+		case Platform::Linux:
+			return "linux";
+		case Platform::Windows:
+			return "windows";
+		default:
+			return "<target-platform>";
+	}
+}
+
+std::string ShaderPool::getMissingShadersCliArgs() {
+	std::string cliArgs;
+
+	for (const std::string& shaderName : getMissingShaders()) {
+		std::string cliSpec;
+		if (!getShaderCliSpec(shaderName, cliSpec)) {
+			continue;
+		}
+
+		cliArgs += " --shader \"" + cliSpec + "\"";
+	}
+
+	return cliArgs;
+}
+
+std::string ShaderPool::getMissingShadersDisplayList() {
+	std::string shaderList;
+
+	for (const std::string& shaderName : getMissingShaders()) {
+		std::string displayName = shaderName;
+		std::string cliSpec;
+		if (getShaderCliSpec(shaderName, cliSpec)) {
+			displayName = cliSpec;
+		}
+
+		if (!shaderList.empty()) {
+			shaderList += "; ";
+		}
+		shaderList += displayName;
+	}
+
+	return shaderList;
 }
 
 

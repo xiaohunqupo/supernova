@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <functional>
+#include <vector>
 
 namespace doriax{
 
@@ -45,6 +46,7 @@ namespace doriax{
 
         static ShaderBuilderFn shaderBuilderFn;
 
+        static bool parseShaderTypeToken(const std::string& typeToken, ShaderType& shaderType);
         static std::string getShaderFile(const std::string& shaderStr, const std::string& extension);
         static std::string getShaderName(const std::string& shaderStr);
 
@@ -64,6 +66,10 @@ namespace doriax{
         static uint32_t getPropertiesFromKey(ShaderKey key);
 
         static std::string getShaderLangStr();
+        static bool getShaderCliSpec(const std::string& shaderStr, std::string& cliSpec);
+        static std::string getSuggestedCliPlatform();
+        static std::string getMissingShadersCliArgs();
+        static std::string getMissingShadersDisplayList();
         static std::vector<std::string>& getMissingShaders();
 
         static void setShaderBuilder(ShaderBuilderFn fn);

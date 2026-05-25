@@ -3392,21 +3392,33 @@ void RenderSystem::draw(){
 
     //---------Missing some shaders----------
     if (ShaderPool::getMissingShaders().size() > 0){
-        std::string misShaders;
-        for (int i = 0; i < ShaderPool::getMissingShaders().size(); i++){
-            if (!misShaders.empty())
-                misShaders += "; ";
-            misShaders += ShaderPool::getMissingShaders()[i];
+        const std::string shaderSpecs = ShaderPool::getMissingShadersDisplayList();
+        std::string shaderCliArgs = ShaderPool::getMissingShadersCliArgs();
+        const std::string shaderOutputDir = System::instance().getShaderPath();
+        const std::string shaderPlatform = ShaderPool::getSuggestedCliPlatform();
+
+        if (shaderCliArgs.empty()) {
+            shaderCliArgs = " --shader \"<shader-spec>\"";
         }
+
+        const std::string shaderCommand = "doriax-editor shaders --out \"" + shaderOutputDir + "\" --platform " + shaderPlatform + shaderCliArgs;
+
         Log::verbose(
             "\n"
             "-------------------\n"
-            "Doriax is missing some shaders, you need to use Supershader tool to create these shaders in project assets directory.\n"
-            "Go to directory \"tools/\" and execute the command:\n"
+            "Doriax is missing precompiled shaders in:\n"
+            "%s\n"
             "\n"
-            "> python3 supershader.py -s \"%s\" -l %s\n"
+            "Missing shaders:\n"
+            "%s\n"
+            "\n"
+            "Generate them with Doriax Editor:\n"
+            "\n"
+            "> %s\n"
+            "\n"
+            "Current runtime shader format: %s\n"
             "-------------------"
-            , misShaders.c_str(), ShaderPool::getShaderLangStr().c_str());
+            , shaderOutputDir.c_str(), shaderSpecs.c_str(), shaderCommand.c_str(), ShaderPool::getShaderLangStr().c_str());
         exit(1);
     }
 }

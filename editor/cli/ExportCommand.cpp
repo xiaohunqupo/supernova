@@ -52,7 +52,6 @@ struct ExportCliOptions {
     std::set<ShaderKey> shaderKeys;
     bool help = false;
     bool listScenes = false;
-    bool shadersOnly = false;
 };
 
 struct ShaderCliOptions {
@@ -248,14 +247,13 @@ static void printUsage(const std::string& commandName) {
         << "  " << commandName << " export --project <project-dir|project.yaml> --out <dir> [options]\n\n"
         << "Options:\n"
         << "  -p, --project <path>        Project directory or project.yaml file.\n"
-        << "  -o, --out <path>            Destination directory. Must be empty unless --shaders-only is used.\n"
+        << "  -o, --out <path>            Destination directory. Must be empty.\n"
         << "      --assets <path>         Asset directory, relative to the project or absolute.\n"
         << "      --lua <path>            Lua directory, relative to the project or absolute.\n"
         << "      --start-scene <id|name> Start scene override.\n"
         << "      --platform <list>       linux, windows, macos, ios, web, android. Can repeat.\n"
         << "      --all-platforms         Export shader formats for every supported platform.\n"
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
-        << "      --shaders-only          Only generate project shader files under <out>/project/assets/shaders.\n"
         << "      --list-scenes           Print project scenes and exit.\n"
         << "  -h, --help                  Show this help.\n\n"
         << "If no --platform is provided, the current host platform is used.\n"
@@ -327,8 +325,6 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
                 return false;
             }
             options.shaderKeys.insert(key);
-        } else if (arg == "--shaders-only" || arg == "--only-shaders") {
-            options.shadersOnly = true;
         } else if (arg == "--list-scenes") {
             options.listScenes = true;
         } else {
@@ -346,10 +342,6 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
     }
     if (options.targetDir.empty() && !options.listScenes) {
         error = "Missing required --out path.";
-        return false;
-    }
-    if (options.shadersOnly && options.shaderKeys.empty()) {
-        error = "--shaders-only requires at least one --shader spec.";
         return false;
     }
     if (options.platforms.empty()) {
@@ -521,7 +513,6 @@ int runExportCommand(int argc, char** argv, const char* executableName) {
     config.startSceneId = resolveStartSceneId(project, options.startScene);
     config.selectedPlatforms  = options.platforms;
     config.selectedShaderKeys = options.shaderKeys;
-    config.shadersOnly = options.shadersOnly;
 
     if (!options.startScene.empty() && config.startSceneId == 0) {
         Out::warning("Start scene not found: %s", options.startScene.c_str());
@@ -576,7 +567,6 @@ int runShadersCommand(int argc, char** argv, const char* executableName) {
     config.shaderOutputDir = options.targetDir;
     config.selectedPlatforms = options.platforms;
     config.selectedShaderKeys = options.shaderKeys;
-    config.shadersOnly = true;
 
     Exporter exporter;
     const bool success = exporter.generateShaders(config);

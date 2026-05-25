@@ -25,7 +25,6 @@ namespace doriax::editor {
         std::set<ShaderKey> selectedShaderKeys;
         std::set<::doriax::Platform> selectedPlatforms;
         fs::path shaderOutputDir;
-        bool shadersOnly = false;
     };
 
     struct ExportProgress {

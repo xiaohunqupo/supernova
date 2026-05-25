@@ -109,7 +109,6 @@ bool editor::Exporter::generateShaders(const ExportConfig& cfg) {
 
     this->project = nullptr;
     this->config = cfg;
-    this->config.shadersOnly = true;
     cancelRequested.store(false);
     {
         std::lock_guard<std::mutex> lock(progressMutex);
@@ -124,10 +123,12 @@ bool editor::Exporter::generateShaders(const ExportConfig& cfg) {
 }
 
 void editor::Exporter::runExport() {
+    const bool shaderGenerationOnly = (project == nullptr);
+
     if (!checkTargetDir()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
 
-    if (config.shadersOnly) {
+    if (shaderGenerationOnly) {
         collectSelectedShaderKeys();
         if (isCancelled()) { setError("Export cancelled"); return; }
         if (!buildAndSaveShaders()) return;
@@ -213,7 +214,7 @@ bool editor::Exporter::checkTargetDir() {
         }
     }
 
-    if (!config.shadersOnly && !fs::is_empty(config.targetDir, ec)) {
+    if (project && !fs::is_empty(config.targetDir, ec)) {
         setError("Target directory is not empty");
         return false;
     }
@@ -728,8 +729,11 @@ bool editor::Exporter::buildAndSaveShaders() {
 
     std::vector<ShaderFormat> requiredFormats;
     // Collect formats based on selected platforms
-    if (config.selectedPlatforms.count(Platform::Linux) || config.selectedPlatforms.count(Platform::Windows)) {
+    if (config.selectedPlatforms.count(Platform::Linux)) {
         requiredFormats.push_back({shadercompiler::LANG_GLSL, 410, false, shadercompiler::SHADER_DEFAULT, "glsl410"});
+    }
+    if (config.selectedPlatforms.count(Platform::Windows)) {
+        requiredFormats.push_back({shadercompiler::LANG_HLSL, 50, false, shadercompiler::SHADER_DEFAULT, "hlsl5"});
     }
     if (config.selectedPlatforms.count(Platform::Android) || config.selectedPlatforms.count(Platform::Web)) {
         requiredFormats.push_back({shadercompiler::LANG_GLSL, 300, true, shadercompiler::SHADER_DEFAULT, "glsl300es"});
