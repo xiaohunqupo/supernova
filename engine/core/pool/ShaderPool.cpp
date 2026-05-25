@@ -34,32 +34,32 @@ using namespace doriax;
 ShaderBuilderFn ShaderPool::shaderBuilderFn = nullptr;
 
 bool ShaderPool::parseShaderTypeToken(const std::string& typeToken, ShaderType& shaderType) {
-	if (typeToken == "mesh") {
-		shaderType = ShaderType::MESH;
-		return true;
-	}
-	if (typeToken == "depth") {
-		shaderType = ShaderType::DEPTH;
-		return true;
-	}
-	if (typeToken == "sky") {
-		shaderType = ShaderType::SKYBOX;
-		return true;
-	}
-	if (typeToken == "ui") {
-		shaderType = ShaderType::UI;
-		return true;
-	}
-	if (typeToken == "points") {
-		shaderType = ShaderType::POINTS;
-		return true;
-	}
-	if (typeToken == "lines") {
-		shaderType = ShaderType::LINES;
-		return true;
-	}
+    if (typeToken == "mesh") {
+        shaderType = ShaderType::MESH;
+        return true;
+    }
+    if (typeToken == "depth") {
+        shaderType = ShaderType::DEPTH;
+        return true;
+    }
+    if (typeToken == "sky") {
+        shaderType = ShaderType::SKYBOX;
+        return true;
+    }
+    if (typeToken == "ui") {
+        shaderType = ShaderType::UI;
+        return true;
+    }
+    if (typeToken == "points") {
+        shaderType = ShaderType::POINTS;
+        return true;
+    }
+    if (typeToken == "lines") {
+        shaderType = ShaderType::LINES;
+        return true;
+    }
 
-	return false;
+    return false;
 }
 
 shaders_t& ShaderPool::getMap(){
@@ -79,239 +79,239 @@ void ShaderPool::setShaderBuilder(ShaderBuilderFn fn) {
 }
 
 std::string ShaderPool::getShaderLangStr(){
-	if (Engine::getGraphicBackend() == GraphicBackend::GLCORE){
-		return "glsl410";
-	}else if (Engine::getGraphicBackend() == GraphicBackend::GLES3){
-		return "glsl300es";
-	}else if (Engine::getGraphicBackend() == GraphicBackend::METAL){
-		if (Engine::getPlatform() == Platform::MacOS){
-			return "msl21macos";
-		}else if (Engine::getPlatform() == Platform::iOS){
-			return "msl21ios";
-		}
-	}else if (Engine::getGraphicBackend() == GraphicBackend::D3D11){
-		return "hlsl5";
-	}
+    if (Engine::getGraphicBackend() == GraphicBackend::GLCORE){
+        return "glsl410";
+    }else if (Engine::getGraphicBackend() == GraphicBackend::GLES3){
+        return "glsl300es";
+    }else if (Engine::getGraphicBackend() == GraphicBackend::METAL){
+        if (Engine::getPlatform() == Platform::MacOS){
+            return "msl21macos";
+        }else if (Engine::getPlatform() == Platform::iOS){
+            return "msl21ios";
+        }
+    }else if (Engine::getGraphicBackend() == GraphicBackend::D3D11){
+        return "hlsl5";
+    }
 
-	return "<unknown>";
+    return "<unknown>";
 }
 
 bool ShaderPool::getShaderCliSpec(const std::string& shaderStr, std::string& cliSpec) {
-	const size_t underscorePos = shaderStr.find('_');
-	const std::string typeToken = underscorePos == std::string::npos ? shaderStr : shaderStr.substr(0, underscorePos);
+    const size_t underscorePos = shaderStr.find('_');
+    const std::string typeToken = underscorePos == std::string::npos ? shaderStr : shaderStr.substr(0, underscorePos);
 
-	ShaderType shaderType;
-	if (!parseShaderTypeToken(typeToken, shaderType)) {
-		return false;
-	}
+    ShaderType shaderType;
+    if (!parseShaderTypeToken(typeToken, shaderType)) {
+        return false;
+    }
 
-	cliSpec = typeToken;
-	if (underscorePos == std::string::npos) {
-		return true;
-	}
+    cliSpec = typeToken;
+    if (underscorePos == std::string::npos) {
+        return true;
+    }
 
-	const std::string propsToken = shaderStr.substr(underscorePos + 1);
-	if (propsToken.empty()) {
-		return true;
-	}
+    const std::string propsToken = shaderStr.substr(underscorePos + 1);
+    if (propsToken.empty()) {
+        return true;
+    }
 
-	std::string propsList;
-	size_t parsedLength = 0;
-	const int propCount = getShaderPropertyCount(shaderType);
-	for (int bit = 0; bit < propCount; bit++) {
-		const std::string propName = getShaderPropertyName(shaderType, bit, true);
-		if (propName.empty() || propName == "?") {
-			continue;
-		}
+    std::string propsList;
+    size_t parsedLength = 0;
+    const int propCount = getShaderPropertyCount(shaderType);
+    for (int bit = 0; bit < propCount; bit++) {
+        const std::string propName = getShaderPropertyName(shaderType, bit, true);
+        if (propName.empty() || propName == "?") {
+            continue;
+        }
 
-		if (propsToken.compare(parsedLength, propName.size(), propName) == 0) {
-			if (!propsList.empty()) {
-				propsList += ",";
-			}
-			propsList += propName;
-			parsedLength += propName.size();
-		}
-	}
+        if (propsToken.compare(parsedLength, propName.size(), propName) == 0) {
+            if (!propsList.empty()) {
+                propsList += ",";
+            }
+            propsList += propName;
+            parsedLength += propName.size();
+        }
+    }
 
-	if (parsedLength != propsToken.size()) {
-		return false;
-	}
+    if (parsedLength != propsToken.size()) {
+        return false;
+    }
 
-	if (!propsList.empty()) {
-		cliSpec += ":" + propsList;
-	}
+    if (!propsList.empty()) {
+        cliSpec += ":" + propsList;
+    }
 
-	return true;
+    return true;
 }
 
 std::string ShaderPool::getSuggestedCliPlatform() {
-	switch (Engine::getPlatform()) {
-		case Platform::MacOS:
-			return "macos";
-		case Platform::iOS:
-			return "ios";
-		case Platform::Web:
-			return "web";
-		case Platform::Android:
-			return "android";
-		case Platform::Linux:
-			return "linux";
-		case Platform::Windows:
-			return "windows";
-		default:
-			return "<target-platform>";
-	}
+    switch (Engine::getPlatform()) {
+        case Platform::MacOS:
+            return "macos";
+        case Platform::iOS:
+            return "ios";
+        case Platform::Web:
+            return "web";
+        case Platform::Android:
+            return "android";
+        case Platform::Linux:
+            return "linux";
+        case Platform::Windows:
+            return "windows";
+        default:
+            return "<target-platform>";
+    }
 }
 
 std::string ShaderPool::getMissingShadersCliArgs() {
-	std::string cliArgs;
+    std::string cliArgs;
 
-	for (const std::string& shaderName : getMissingShaders()) {
-		std::string cliSpec;
-		if (!getShaderCliSpec(shaderName, cliSpec)) {
-			continue;
-		}
+    for (const std::string& shaderName : getMissingShaders()) {
+        std::string cliSpec;
+        if (!getShaderCliSpec(shaderName, cliSpec)) {
+            continue;
+        }
 
-		cliArgs += " --shader \"" + cliSpec + "\"";
-	}
+        cliArgs += " --shader \"" + cliSpec + "\"";
+    }
 
-	return cliArgs;
+    return cliArgs;
 }
 
 std::string ShaderPool::getMissingShadersDisplayList() {
-	std::string shaderList;
+    std::string shaderList;
 
-	for (const std::string& shaderName : getMissingShaders()) {
-		std::string displayName = shaderName;
-		std::string cliSpec;
-		if (getShaderCliSpec(shaderName, cliSpec)) {
-			displayName = cliSpec;
-		}
+    for (const std::string& shaderName : getMissingShaders()) {
+        std::string displayName = shaderName;
+        std::string cliSpec;
+        if (getShaderCliSpec(shaderName, cliSpec)) {
+            displayName = cliSpec;
+        }
 
-		if (!shaderList.empty()) {
-			shaderList += "; ";
-		}
-		shaderList += displayName;
-	}
+        if (!shaderList.empty()) {
+            shaderList += "; ";
+        }
+        shaderList += displayName;
+    }
 
-	return shaderList;
+    return shaderList;
 }
 
 
 std::string ShaderPool::getShaderFile(const std::string& shaderStr, const std::string& extension){
-	std::string filename = getShaderName(shaderStr);
+    std::string filename = getShaderName(shaderStr);
 
-	filename += extension;
+    filename += extension;
 
-	return filename;
+    return filename;
 }
 
 std::string ShaderPool::getShaderName(const std::string& shaderStr){
-	std::string name = shaderStr;
+    std::string name = shaderStr;
 
-	name += "_" + getShaderLangStr();
+    name += "_" + getShaderLangStr();
 
-	return name;
+    return name;
 }
 
 std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase){
-	switch (shaderType) {
-		case ShaderType::MESH:   return lowerCase ? "mesh"   : "Mesh";
-		case ShaderType::DEPTH:  return lowerCase ? "depth"  : "Depth";
-		case ShaderType::SKYBOX: return lowerCase ? "sky"    : "Skybox";
-		case ShaderType::UI:     return lowerCase ? "ui"     : "UI";
-		case ShaderType::POINTS: return lowerCase ? "points" : "Points";
-		case ShaderType::LINES:  return lowerCase ? "lines"  : "Lines";
-		default:                 return lowerCase ? "unknown": "Unknown";
-	}
+    switch (shaderType) {
+        case ShaderType::MESH:   return lowerCase ? "mesh"   : "Mesh";
+        case ShaderType::DEPTH:  return lowerCase ? "depth"  : "Depth";
+        case ShaderType::SKYBOX: return lowerCase ? "sky"    : "Skybox";
+        case ShaderType::UI:     return lowerCase ? "ui"     : "UI";
+        case ShaderType::POINTS: return lowerCase ? "points" : "Points";
+        case ShaderType::LINES:  return lowerCase ? "lines"  : "Lines";
+        default:                 return lowerCase ? "unknown": "Unknown";
+    }
 }
 
 int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
-	switch (shaderType) {
-		case ShaderType::MESH:   return 19;
-		case ShaderType::DEPTH:  return 7;
-		case ShaderType::UI:     return 4;
-		case ShaderType::POINTS: return 4;
-		case ShaderType::LINES:  return 2;
-		case ShaderType::SKYBOX: return 0;
-		default:                 return 0;
-	}
+    switch (shaderType) {
+        case ShaderType::MESH:   return 19;
+        case ShaderType::DEPTH:  return 7;
+        case ShaderType::UI:     return 4;
+        case ShaderType::POINTS: return 4;
+        case ShaderType::LINES:  return 2;
+        case ShaderType::SKYBOX: return 0;
+        default:                 return 0;
+    }
 }
 
 std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bool shortName){
-	if (shaderType == ShaderType::MESH) {
-		switch (bit) {
-			case 0:  return shortName ? "Ult" : "Unlit";
-			case 1:  return shortName ? "Uv1" : "UV1";
-			case 2:  return shortName ? "Uv2" : "UV2";
-			case 3:  return shortName ? "Puc" : "Punctual";
-			case 4:  return shortName ? "Shw" : "Shadow";
-			case 5:  return shortName ? "Pcf" : "PCF";
-			case 6:  return shortName ? "Nor" : "Normals";
-			case 7:  return shortName ? "Nmp" : "Normal Map";
-			case 8:  return shortName ? "Tan" : "Tangents";
-			case 9:  return shortName ? "Vc3" : "Vertex Color 3";
-			case 10: return shortName ? "Vc4" : "Vertex Color 4";
-			case 11: return shortName ? "Txr" : "Texture Rect";
-			case 12: return shortName ? "Fog" : "Fog";
-			case 13: return shortName ? "Ski" : "Skinning";
-			case 14: return shortName ? "Mta" : "Morph Target";
-			case 15: return shortName ? "Mnr" : "Morph Normal";
-			case 16: return shortName ? "Mtg" : "Morph Tangent";
-			case 17: return shortName ? "Ter" : "Terrain";
-			case 18: return shortName ? "Ist" : "Instancing";
-		}
-	} else if (shaderType == ShaderType::DEPTH) {
-		switch (bit) {
-			case 0: return shortName ? "Tex" : "Texture";
-			case 1: return shortName ? "Ski" : "Skinning";
-			case 2: return shortName ? "Mta" : "Morph Target";
-			case 3: return shortName ? "Mnr" : "Morph Normal";
-			case 4: return shortName ? "Mtg" : "Morph Tangent";
-			case 5: return shortName ? "Ter" : "Terrain";
-			case 6: return shortName ? "Ist" : "Instancing";
-		}
-	} else if (shaderType == ShaderType::UI) {
-		switch (bit) {
-			case 0: return shortName ? "Tex" : "Texture";
-			case 1: return shortName ? "Ftx" : "Font Texture";
-			case 2: return shortName ? "Vc3" : "Vertex Color 3";
-			case 3: return shortName ? "Vc4" : "Vertex Color 4";
-		}
-	} else if (shaderType == ShaderType::POINTS) {
-		switch (bit) {
-			case 0: return shortName ? "Tex" : "Texture";
-			case 1: return shortName ? "Vc3" : "Vertex Color 3";
-			case 2: return shortName ? "Vc4" : "Vertex Color 4";
-			case 3: return shortName ? "Txr" : "Texture Rect";
-		}
-	} else if (shaderType == ShaderType::LINES) {
-		switch (bit) {
-			case 0: return shortName ? "Vc3" : "Vertex Color 3";
-			case 1: return shortName ? "Vc4" : "Vertex Color 4";
-		}
-	}
-	return shortName ? "?" : "Unknown";
+    if (shaderType == ShaderType::MESH) {
+        switch (bit) {
+            case 0:  return shortName ? "Ult" : "Unlit";
+            case 1:  return shortName ? "Uv1" : "UV1";
+            case 2:  return shortName ? "Uv2" : "UV2";
+            case 3:  return shortName ? "Puc" : "Punctual";
+            case 4:  return shortName ? "Shw" : "Shadow";
+            case 5:  return shortName ? "Pcf" : "PCF";
+            case 6:  return shortName ? "Nor" : "Normals";
+            case 7:  return shortName ? "Nmp" : "Normal Map";
+            case 8:  return shortName ? "Tan" : "Tangents";
+            case 9:  return shortName ? "Vc3" : "Vertex Color 3";
+            case 10: return shortName ? "Vc4" : "Vertex Color 4";
+            case 11: return shortName ? "Txr" : "Texture Rect";
+            case 12: return shortName ? "Fog" : "Fog";
+            case 13: return shortName ? "Ski" : "Skinning";
+            case 14: return shortName ? "Mta" : "Morph Target";
+            case 15: return shortName ? "Mnr" : "Morph Normal";
+            case 16: return shortName ? "Mtg" : "Morph Tangent";
+            case 17: return shortName ? "Ter" : "Terrain";
+            case 18: return shortName ? "Ist" : "Instancing";
+        }
+    } else if (shaderType == ShaderType::DEPTH) {
+        switch (bit) {
+            case 0: return shortName ? "Tex" : "Texture";
+            case 1: return shortName ? "Ski" : "Skinning";
+            case 2: return shortName ? "Mta" : "Morph Target";
+            case 3: return shortName ? "Mnr" : "Morph Normal";
+            case 4: return shortName ? "Mtg" : "Morph Tangent";
+            case 5: return shortName ? "Ter" : "Terrain";
+            case 6: return shortName ? "Ist" : "Instancing";
+        }
+    } else if (shaderType == ShaderType::UI) {
+        switch (bit) {
+            case 0: return shortName ? "Tex" : "Texture";
+            case 1: return shortName ? "Ftx" : "Font Texture";
+            case 2: return shortName ? "Vc3" : "Vertex Color 3";
+            case 3: return shortName ? "Vc4" : "Vertex Color 4";
+        }
+    } else if (shaderType == ShaderType::POINTS) {
+        switch (bit) {
+            case 0: return shortName ? "Tex" : "Texture";
+            case 1: return shortName ? "Vc3" : "Vertex Color 3";
+            case 2: return shortName ? "Vc4" : "Vertex Color 4";
+            case 3: return shortName ? "Txr" : "Texture Rect";
+        }
+    } else if (shaderType == ShaderType::LINES) {
+        switch (bit) {
+            case 0: return shortName ? "Vc3" : "Vertex Color 3";
+            case 1: return shortName ? "Vc4" : "Vertex Color 4";
+        }
+    }
+    return shortName ? "?" : "Unknown";
 }
 
 std::string ShaderPool::getShaderStr(ShaderType shaderType, uint32_t properties){
 
-	std::string str = getShaderTypeName(shaderType, true);
-	std::string propOut;
+    std::string str = getShaderTypeName(shaderType, true);
+    std::string propOut;
 
-	int propCount = getShaderPropertyCount(shaderType);
-	for (int i = 0; i < propCount; i++) {
-		if (properties & (1 << i))
-			propOut += getShaderPropertyName(shaderType, i, true);
-	}
+    int propCount = getShaderPropertyCount(shaderType);
+    for (int i = 0; i < propCount; i++) {
+        if (properties & (1 << i))
+            propOut += getShaderPropertyName(shaderType, i, true);
+    }
 
-	if (str.empty())
-		Log::error("Erro mapping shader type to string");
+    if (str.empty())
+        Log::error("Erro mapping shader type to string");
 
-	if (!propOut.empty())
-		str += "_" + propOut;
+    if (!propOut.empty())
+        str += "_" + propOut;
 
-	return str;
+    return str;
 }
 
 ShaderKey ShaderPool::getShaderKey(ShaderType shaderType, uint32_t properties) {
@@ -367,19 +367,19 @@ std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t pr
 }
 
 void ShaderPool::remove(ShaderType shaderType, uint32_t properties){
-	ShaderKey shaderKey = getShaderKey(shaderType, properties);
-	if (getMap().count(shaderKey)){
-		auto& shared = getMap()[shaderKey];
-		if (shared.use_count() <= 1){
-			shared->destroyShader();
-			//Log::debug("Remove shader %s", shaderStr.c_str());
-			getMap().erase(shaderKey);
-		}
-	}else{
-		if (Engine::isViewLoaded()){
-			Log::debug("Trying to destroy a non existent shader");
-		}
-	}
+    ShaderKey shaderKey = getShaderKey(shaderType, properties);
+    if (getMap().count(shaderKey)){
+        auto& shared = getMap()[shaderKey];
+        if (shared.use_count() <= 1){
+            shared->destroyShader();
+            //Log::debug("Remove shader %s", shaderStr.c_str());
+            getMap().erase(shaderKey);
+        }
+    }else{
+        if (Engine::isViewLoaded()){
+            Log::debug("Trying to destroy a non existent shader");
+        }
+    }
 }
 
 ShaderType ShaderPool::getShaderTypeFromKey(ShaderKey key) {
@@ -467,10 +467,10 @@ uint32_t ShaderPool::getLinesProperties(bool vertexColorVec3, bool vertexColorVe
 }
 
 void ShaderPool::clear(){
-	for (auto& it: getMap()) {
-		if (it.second)
-			it.second->destroyShader();
-	}
-	//Log::debug("Remove all shaders");
-	getMap().clear();
+    for (auto& it: getMap()) {
+        if (it.second)
+            it.second->destroyShader();
+    }
+    //Log::debug("Remove all shaders");
+    getMap().clear();
 }
