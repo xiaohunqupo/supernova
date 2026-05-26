@@ -5,6 +5,7 @@
 #include "Catalog.h"
 #include "Configs.h"
 #include "Stream.h"
+#include <cmath>
 #include <sstream>
 #include <iomanip>
 #include <cctype>
@@ -25,6 +26,11 @@
 #include "resources/sky/Daylight_Box_Top_png.h"
 
 using namespace doriax;
+
+template <typename T>
+static T sanitizeFiniteNumber(T value) {
+    return std::isfinite(value) ? value : static_cast<T>(0);
+}
 
 bool editor::Factory::writeHeaderIfChanged(const fs::path& path, const std::string& varName, const unsigned char* data, size_t len) {
     std::ostringstream out;
@@ -155,31 +161,19 @@ std::string editor::Factory::toIdentifier(const std::string& name) {
 }
 
 std::string editor::Factory::formatVector2(const Vector2& v) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(6);
-    oss << "Vector2(" << v.x << "f, " << v.y << "f)";
-    return oss.str();
+    return "Vector2(" + formatFloat(v.x) + ", " + formatFloat(v.y) + ")";
 }
 
 std::string editor::Factory::formatVector3(const Vector3& v) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(6);
-    oss << "Vector3(" << v.x << "f, " << v.y << "f, " << v.z << "f)";
-    return oss.str();
+    return "Vector3(" + formatFloat(v.x) + ", " + formatFloat(v.y) + ", " + formatFloat(v.z) + ")";
 }
 
 std::string editor::Factory::formatVector4(const Vector4& v) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(6);
-    oss << "Vector4(" << v.x << "f, " << v.y << "f, " << v.z << "f, " << v.w << "f)";
-    return oss.str();
+    return "Vector4(" + formatFloat(v.x) + ", " + formatFloat(v.y) + ", " + formatFloat(v.z) + ", " + formatFloat(v.w) + ")";
 }
 
 std::string editor::Factory::formatRect(const Rect& r) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(6);
-    oss << "Rect(" << r.getX() << "f, " << r.getY() << "f, " << r.getWidth() << "f, " << r.getHeight() << "f)";
-    return oss.str();
+    return "Rect(" + formatFloat(r.getX()) + ", " + formatFloat(r.getY()) + ", " + formatFloat(r.getWidth()) + ", " + formatFloat(r.getHeight()) + ")";
 }
 
 std::string editor::Factory::formatPrimitiveType(PrimitiveType type) {
@@ -356,10 +350,7 @@ std::string editor::Factory::formatScriptType(ScriptType type) {
 }
 
 std::string editor::Factory::formatQuaternion(const Quaternion& q) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(6);
-    oss << "Quaternion(" << q.w << "f, " << q.x << "f, " << q.y << "f, " << q.z << "f)";
-    return oss.str();
+    return "Quaternion(" + formatFloat(q.w) + ", " + formatFloat(q.x) + ", " + formatFloat(q.y) + ", " + formatFloat(q.z) + ")";
 }
 
 std::string editor::Factory::formatBool(bool value) {
@@ -369,14 +360,14 @@ std::string editor::Factory::formatBool(bool value) {
 std::string editor::Factory::formatFloat(float value) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(6);
-    oss << value << "f";
+    oss << sanitizeFiniteNumber(value) << "f";
     return oss.str();
 }
 
 std::string editor::Factory::formatDouble(double value) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(6);
-    oss << value;
+    oss << sanitizeFiniteNumber(value);
     return oss.str();
 }
 
