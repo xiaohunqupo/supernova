@@ -178,11 +178,6 @@ set(IMGUI_SOURCES
 
 include_directories (${EDITOR_DIR})
 
-if(UNIX AND NOT APPLE)
-    set(CMAKE_INSTALL_RPATH "$ORIGIN")
-    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-endif()
-
 add_custom_target(generate_shaders DEPENDS ${SHADERS_HEADER})
 add_custom_target(generate_api_suggestions DEPENDS ${API_SUGGESTIONS_HEADER})
 
@@ -314,6 +309,18 @@ function(configure_doriax_editor_target target_name)
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
     )
+
+    if(APPLE)
+        set_target_properties(${target_name} PROPERTIES
+            BUILD_WITH_INSTALL_RPATH TRUE
+            INSTALL_RPATH "@loader_path"
+        )
+    elseif(UNIX)
+        set_target_properties(${target_name} PROPERTIES
+            BUILD_WITH_INSTALL_RPATH TRUE
+            INSTALL_RPATH "$ORIGIN"
+        )
+    endif()
 endfunction()
 
 add_executable(
