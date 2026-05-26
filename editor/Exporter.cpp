@@ -634,6 +634,32 @@ bool editor::Exporter::copyCppScripts() {
     return true;
 }
 
+void editor::Exporter::copyTree(const fs::path& src, const fs::path& dst, std::error_code& ec) {
+#ifdef _WIN32
+    auto getWindowsLongPath = [](const fs::path& path) {
+        const fs::path absolutePath = fs::absolute(path);
+        const fs::path::string_type nativePath = absolutePath.native();
+
+        if (nativePath.rfind(L"\\\\?\\", 0) == 0) {
+            return absolutePath;
+        }
+        if (nativePath.rfind(L"\\\\", 0) == 0) {
+            return fs::path(L"\\\\?\\UNC\\" + nativePath.substr(2));
+        }
+        return fs::path(L"\\\\?\\" + nativePath);
+    };
+
+    // Prefix absolute paths so Win32 APIs used by std::filesystem can traverse
+    // directory trees beyond the legacy MAX_PATH limit.
+    fs::copy(getWindowsLongPath(src),
+             getWindowsLongPath(dst),
+             fs::copy_options::recursive | fs::copy_options::overwrite_existing,
+             ec);
+#else
+    fs::copy(src, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+#endif
+}
+
 bool editor::Exporter::copyEngine() {
     setProgress("Copying engine...", 0.5f);
 
@@ -678,7 +704,7 @@ bool editor::Exporter::copyEngine() {
             setError(name + " directory not found at: " + src.string());
             return false;
         }
-        fs::copy(src, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+        copyTree(src, dst, ec);
         if (ec) {
             setError("Failed to copy " + name + " directory: " + ec.message());
             return false;

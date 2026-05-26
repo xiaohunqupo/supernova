@@ -77,6 +77,8 @@ namespace doriax::editor {
         bool copyEngine();
         bool buildAndSaveShaders();
 
+        static void copyTree(const fs::path& src, const fs::path& dst, std::error_code& ec);
+
     public:
         Exporter();
         ~Exporter();
