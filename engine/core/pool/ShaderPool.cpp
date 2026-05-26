@@ -78,19 +78,34 @@ void ShaderPool::setShaderBuilder(ShaderBuilderFn fn) {
     shaderBuilderFn = fn;
 }
 
+std::string ShaderPool::getShaderLangStr(ShaderLang lang, int version, bool es, Platform platform) {
+    if (lang == ShaderLang::GLSL) {
+        return es ? "glsl" + std::to_string(version) + "es" : "glsl" + std::to_string(version);
+    }
+    if (lang == ShaderLang::HLSL) {
+        return "hlsl" + std::to_string(version / 10);
+    }
+    if (lang == ShaderLang::MSL) {
+        if (platform == Platform::iOS) {
+            return "msl" + std::to_string(version) + "ios";
+        }
+        if (platform == Platform::MacOS) {
+            return "msl" + std::to_string(version) + "macos";
+        }
+    }
+
+    return "<unknown>";
+}
+
 std::string ShaderPool::getShaderLangStr(){
     if (Engine::getGraphicBackend() == GraphicBackend::GLCORE){
-        return "glsl410";
+        return getShaderLangStr(ShaderLang::GLSL, 410, false, Engine::getPlatform());
     }else if (Engine::getGraphicBackend() == GraphicBackend::GLES3){
-        return "glsl300es";
+        return getShaderLangStr(ShaderLang::GLSL, 300, true, Engine::getPlatform());
     }else if (Engine::getGraphicBackend() == GraphicBackend::METAL){
-        if (Engine::getPlatform() == Platform::MacOS){
-            return "msl21macos";
-        }else if (Engine::getPlatform() == Platform::iOS){
-            return "msl21ios";
-        }
+        return getShaderLangStr(ShaderLang::MSL, 21, false, Engine::getPlatform());
     }else if (Engine::getGraphicBackend() == GraphicBackend::D3D11){
-        return "hlsl5";
+        return getShaderLangStr(ShaderLang::HLSL, 50, false, Engine::getPlatform());
     }
 
     return "<unknown>";

@@ -45,6 +45,7 @@ namespace doriax{
         static uint32_t getPropertiesFromKey(ShaderKey key);
 
         static std::string getShaderLangStr();
+        static std::string getShaderLangStr(ShaderLang lang, int version, bool es = false, Platform platform = Platform::Linux);
         static bool getShaderCliSpec(const std::string& shaderStr, std::string& cliSpec);
         static std::string getSuggestedCliPlatform();
         static std::string getMissingShadersCliArgs();

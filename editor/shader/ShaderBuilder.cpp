@@ -3,6 +3,7 @@
 #include "ShaderDataSerializer.h"
 #include "App.h"
 #include "Engine.h"
+#include "Out.h"
 
 #include "thread/ResourceProgress.h"
 #include "thread/ThreadPoolManager.h"
@@ -514,7 +515,10 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
         ResourceProgress::completeBuild(shaderKey);
     }
 
-    printf("Shader (%s, %s, %u) generated successfully\n", args.vert_file.c_str(), args.frag_file.c_str(), properties);
+    Out::build(
+        "Shader %s (%s) generated successfully",
+        getShaderDisplayName(shaderKey).c_str(),
+        ShaderPool::getShaderLangStr(shaderData.lang, shaderData.version, shaderData.es, Engine::getPlatform()).c_str());
 
     return shaderData;
 }
@@ -558,29 +562,12 @@ std::string editor::ShaderBuilder::getShaderDisplayName(ShaderKey key) {
     uint32_t properties = ShaderPool::getPropertiesFromKey(key);
     std::string shaderStr = ShaderPool::getShaderStr(type, properties);
 
-    // Find the underscore separating type and properties
-    size_t underscorePos = shaderStr.find('_');
-    std::string props;
-    std::string typeStr = shaderStr; // Use a separate string variable
-
-    if (underscorePos != std::string::npos) {
-        typeStr = shaderStr.substr(0, underscorePos);  // Assign to string, not enum
-        props = shaderStr.substr(underscorePos + 1);
+    std::string cliSpec;
+    if (ShaderPool::getShaderCliSpec(shaderStr, cliSpec)) {
+        return cliSpec;
     }
 
-    // Capitalize the first character of type, lowercase the rest
-    if (!typeStr.empty()) {
-        typeStr[0] = std::toupper(typeStr[0]);
-        for (size_t i = 1; i < typeStr.size(); ++i)
-            typeStr[i] = std::tolower(typeStr[i]);
-    }
-
-    // Format as "Type (Props)"
-    std::string result = typeStr;
-    if (!props.empty()) {
-        result += " (" + props + ")";
-    }
-    return result;
+    return shaderStr;
 }
 
 ShaderData& editor::ShaderBuilder::getShaderData(ShaderKey shaderKey) { 
@@ -624,6 +611,16 @@ ShaderData editor::ShaderBuilder::buildShaderForExport(ShaderKey shaderKey, shad
 
     args.output_basename = ShaderPool::getShaderStr(shaderType, properties) + getLangSuffix(lang, version, es, platform);
     ShaderData shaderData = convertToShaderData(spirvcrossvec, inputs, args);
+
+    Platform shaderPlatform = Platform::Linux;
+    if (shaderData.lang == ShaderLang::MSL) {
+        shaderPlatform = platform == shadercompiler::SHADER_IOS ? Platform::iOS : Platform::MacOS;
+    }
+
+    Out::build(
+        "Shader %s (%s) generated successfully",
+        getShaderDisplayName(shaderKey).c_str(),
+        ShaderPool::getShaderLangStr(shaderData.lang, shaderData.version, shaderData.es, shaderPlatform).c_str());
 
     return shaderData;
 }
