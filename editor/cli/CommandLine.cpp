@@ -148,6 +148,10 @@ static bool parsePlatformName(const std::string& value, EnginePlatform& out) {
     return false;
 }
 
+static bool isAllPlatformsToken(const std::string& value) {
+    return normalizeToken(value) == "all";
+}
+
 static bool parseShaderOutputFormat(const std::string& value, ShaderOutputFormat& out) {
     const std::string token = normalizeToken(value);
     if (token == "binary" || token == "sdat") {
@@ -254,8 +258,7 @@ static void printUsage(const std::string& commandName) {
         << "      --assets <path>         Asset directory, relative to the project or absolute.\n"
         << "      --lua <path>            Lua directory, relative to the project or absolute.\n"
         << "      --start-scene <id|name> Start scene override.\n"
-        << "      --platform <list>       linux, windows, macos, ios, web, android. Can repeat.\n"
-        << "      --all-platforms         Export shader formats for every supported platform.\n"
+        << "      --platform <list>       linux, windows, macos, ios, web, android, all. Can repeat.\n"
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
         << "      --list-scenes           Print project scenes and exit.\n"
         << "  -h, --help                  Show this help.\n\n"
@@ -271,8 +274,7 @@ static void printShadersUsage(const std::string& commandName) {
         << "Options:\n"
         << "  -o, --out <path>            Destination directory for generated shader files.\n"
         << "      --format <format>       binary, header, or json. Default: binary.\n"
-        << "      --platform <list>       linux, windows, macos, ios, web, android. Can repeat.\n"
-        << "      --all-platforms         Generate shader formats for every supported platform.\n"
+        << "      --platform <list>       linux, windows, macos, ios, web, android, all. Can repeat.\n"
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
         << "  -h, --help                  Show this help.\n\n"
         << "If no --platform is provided, all supported platforms are used.\n"
@@ -313,6 +315,11 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
         } else if (arg == "--platform") {
             if (!requireValue(argc, argv, i, value, error)) return false;
             for (const std::string& name : splitList(value)) {
+                if (isAllPlatformsToken(name)) {
+                    addAllSupportedPlatforms(options.platforms);
+                    continue;
+                }
+
                 EnginePlatform platform;
                 if (!parsePlatformName(name, platform)) {
                     error = "Unknown platform: " + name;
@@ -320,8 +327,6 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
                 }
                 options.platforms.insert(platform);
             }
-        } else if (arg == "--all-platforms") {
-            addAllSupportedPlatforms(options.platforms);
         } else if (arg == "--shader") {
             if (!requireValue(argc, argv, i, value, error)) return false;
             ShaderKey key;
@@ -374,6 +379,11 @@ static bool parseShadersArgs(int argc, char** argv, ShaderCliOptions& options, s
         } else if (arg == "--platform") {
             if (!requireValue(argc, argv, i, value, error)) return false;
             for (const std::string& name : splitList(value)) {
+                if (isAllPlatformsToken(name)) {
+                    addAllSupportedPlatforms(options.platforms);
+                    continue;
+                }
+
                 EnginePlatform platform;
                 if (!parsePlatformName(name, platform)) {
                     error = "Unknown platform: " + name;
@@ -381,8 +391,6 @@ static bool parseShadersArgs(int argc, char** argv, ShaderCliOptions& options, s
                 }
                 options.platforms.insert(platform);
             }
-        } else if (arg == "--all-platforms") {
-            addAllSupportedPlatforms(options.platforms);
         } else if (arg == "--shader") {
             if (!requireValue(argc, argv, i, value, error)) return false;
             ShaderKey key;
