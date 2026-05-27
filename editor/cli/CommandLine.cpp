@@ -225,18 +225,6 @@ static bool parseShaderSpec(const std::string& value, ShaderKey& out, std::strin
     return true;
 }
 
-static void addHostDefaultPlatform(std::set<EnginePlatform>& platforms) {
-#if defined(__linux__)
-    platforms.insert(EnginePlatform::Linux);
-#elif defined(_WIN32)
-    platforms.insert(EnginePlatform::Windows);
-#elif defined(__APPLE__)
-    platforms.insert(EnginePlatform::MacOS);
-#else
-    platforms.insert(EnginePlatform::Linux);
-#endif
-}
-
 static void addAllSupportedPlatforms(std::set<EnginePlatform>& platforms) {
     platforms.insert(EnginePlatform::Linux);
     platforms.insert(EnginePlatform::Windows);
@@ -271,7 +259,7 @@ static void printUsage(const std::string& commandName) {
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
         << "      --list-scenes           Print project scenes and exit.\n"
         << "  -h, --help                  Show this help.\n\n"
-        << "If no --platform is provided, the current host platform is used.\n"
+        << "If no --platform is provided, all supported platforms are used.\n"
         << "If no --shader is provided, shaders discovered while regenerating scenes are exported.\n"
         << "For standalone shader generation, use `" << commandName << " shaders`.\n";
 }
@@ -287,7 +275,7 @@ static void printShadersUsage(const std::string& commandName) {
         << "      --all-platforms         Generate shader formats for every supported platform.\n"
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
         << "  -h, --help                  Show this help.\n\n"
-        << "If no --platform is provided, the current host platform is used.\n"
+        << "If no --platform is provided, all supported platforms are used.\n"
         << "Shader output is written directly to <out>.\n";
 }
 
@@ -361,7 +349,7 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
         return false;
     }
     if (options.platforms.empty()) {
-        addHostDefaultPlatform(options.platforms);
+        addAllSupportedPlatforms(options.platforms);
     }
 
     return true;
@@ -420,7 +408,7 @@ static bool parseShadersArgs(int argc, char** argv, ShaderCliOptions& options, s
         return false;
     }
     if (options.platforms.empty()) {
-        addHostDefaultPlatform(options.platforms);
+        addAllSupportedPlatforms(options.platforms);
     }
 
     return true;
