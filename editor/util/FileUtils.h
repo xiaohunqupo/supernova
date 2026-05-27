@@ -2,14 +2,69 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <system_error>
-#include <iterator>
+#include <vector>
+
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <windows.h>
+#elif defined(__APPLE__)
+    #include <mach-o/dyld.h>
+#endif
 
 namespace doriax::editor {
 
 class FileUtils {
 public:
+    static std::filesystem::path getExecutableDir() {
+        namespace fs = std::filesystem;
+
+        fs::path executablePath;
+
+#ifdef _WIN32
+        std::vector<char> buffer(MAX_PATH);
+        while (true) {
+            const DWORD size = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+            if (size == 0) {
+                return {};
+            }
+            if (size < buffer.size()) {
+                executablePath = std::string(buffer.data(), size);
+                break;
+            }
+            buffer.resize(buffer.size() * 2);
+        }
+#elif defined(__APPLE__)
+        std::vector<char> buffer(1024);
+        while (true) {
+            uint32_t size = static_cast<uint32_t>(buffer.size());
+            if (_NSGetExecutablePath(buffer.data(), &size) == 0) {
+                executablePath = std::string(buffer.data());
+                break;
+            }
+            buffer.resize(size);
+        }
+#else
+        std::error_code readLinkError;
+        executablePath = fs::read_symlink("/proc/self/exe", readLinkError);
+        if (readLinkError) {
+            return {};
+        }
+#endif
+
+        std::error_code ec;
+        fs::path normalizedPath = fs::weakly_canonical(executablePath, ec);
+        if (ec) {
+            normalizedPath = executablePath;
+        }
+
+        return normalizedPath.parent_path();
+    }
+
     // Returns true if the file was written/updated.
     // Returns false if the file was unchanged or if an error occurred.
     static bool writeIfChanged(const std::filesystem::path& filePath, const std::string& newContent) {

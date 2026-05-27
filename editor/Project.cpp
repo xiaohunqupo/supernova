@@ -2,17 +2,12 @@
 #include "Factory.h"
 
 #include "EditorHost.h"
+#include "util/FileUtils.h"
 #include "window/TerrainEditWindow.h"
 
 #include <fstream>
 #include <system_error>
 #include <chrono>
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
 #include <unordered_set>
 #include <algorithm>
 #include <unordered_map>
@@ -2216,14 +2211,7 @@ void editor::Project::pauseEngineScene(Scene* scene, bool pause) const{
 
 void editor::Project::copyEngineApiToProject() {
     try {
-        std::filesystem::path exePath;
-        #ifdef _WIN32
-            char path[MAX_PATH];
-            GetModuleFileNameA(NULL, path, MAX_PATH);
-            exePath = std::filesystem::path(path).parent_path();
-        #else
-            exePath = std::filesystem::canonical("/proc/self/exe").parent_path();
-        #endif
+        std::filesystem::path exePath = FileUtils::getExecutableDir();
         std::filesystem::path engineApiSource = exePath / "engine";
 
         if (!std::filesystem::exists(engineApiSource)) {

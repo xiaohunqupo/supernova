@@ -64,7 +64,6 @@ namespace doriax::editor {
         std::atomic<bool> lastBuildSucceeded;
         std::atomic<bool> cancelRequested;
 
-        static fs::path getExecutableDir();
         static fs::path getGeneratedPath(const fs::path& projectInternalPath);
 
     #ifdef _WIN32

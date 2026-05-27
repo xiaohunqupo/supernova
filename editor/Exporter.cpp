@@ -12,18 +12,6 @@
 #include <future>
 #include <map>
 
-#ifdef _WIN32
-    #ifndef NOMINMAX
-        #define NOMINMAX
-    #endif
-    #include <windows.h>
-#endif
-
-#ifdef __APPLE__
-    #include <limits.h>
-    #include <mach-o/dyld.h>
-#endif
-
 using namespace doriax;
 
 editor::Exporter::Exporter() {
@@ -663,18 +651,7 @@ void editor::Exporter::copyTree(const fs::path& src, const fs::path& dst, std::e
 bool editor::Exporter::copyEngine() {
     setProgress("Copying engine...", 0.5f);
 
-#ifdef _WIN32
-    char exePath[MAX_PATH];
-    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
-    fs::path exeDir = fs::path(exePath).parent_path();
-#elif defined(__APPLE__)
-    char exePath[PATH_MAX];
-    uint32_t size = sizeof(exePath);
-    _NSGetExecutablePath(exePath, &size);
-    fs::path exeDir = fs::canonical(exePath).parent_path();
-#else
-    fs::path exeDir = fs::canonical("/proc/self/exe").parent_path();
-#endif
+    fs::path exeDir = FileUtils::getExecutableDir();
 
     fs::path sdkRoot;
     const std::vector<fs::path> sdkCandidates = {

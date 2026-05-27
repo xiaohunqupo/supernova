@@ -66,16 +66,6 @@ namespace {
 #endif
 }
 
-fs::path editor::Generator::getExecutableDir() {
-#ifdef _WIN32
-    char path[MAX_PATH];
-    GetModuleFileNameA(nullptr, path, MAX_PATH);
-    return fs::path(path).parent_path();
-#else
-    return fs::canonical("/proc/self/exe").parent_path();
-#endif
-}
-
 fs::path editor::Generator::getGeneratedPath(const fs::path& projectInternalPath) {
     return projectInternalPath / "generated";
 }
@@ -215,7 +205,7 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
         }
     }
 
-    const fs::path exePath = getExecutableDir();
+    const fs::path exePath = FileUtils::getExecutableDir();
 
     std::string cmakeCommand = "cmake ";
     if (!generator.empty()) {
@@ -682,7 +672,7 @@ std::string editor::Generator::buildCleanupSceneScriptsSource(const std::vector<
 }
 
 void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::path& projectInternalPath, std::string libName, const std::vector<SceneScriptSource>& scriptFiles, const std::vector<editor::SceneBuildInfo>& scenes, const std::vector<editor::BundleSceneInfo>& bundles) {
-    const fs::path exePath = getExecutableDir();
+    const fs::path exePath = FileUtils::getExecutableDir();
 
     fs::path relativeInternalPath = fs::relative(projectInternalPath, projectPath);
     fs::path engineApiRelativePath = relativeInternalPath / "engine-api";
