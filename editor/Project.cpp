@@ -2297,6 +2297,23 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         // Stop scene audio before restoring snapshot to prevent stale SoLoud handles on the next play
         sceneProject->scene->getSystem<AudioSystem>()->stopSceneSounds();
 
+        // Collect shader keys while components are still loaded (before snapshot restore wipes loaded state).
+        // Merge newly discovered keys into the editor-side scene and mark it modified so the file is saved.
+        if (entry.sourceSceneId != NULL_PROJECT_SCENE) {
+            std::set<ShaderKey> playKeys;
+            collectSceneShaderKeys(sceneProject, playKeys);
+            if (!playKeys.empty()) {
+                SceneProject* editorScene = entry.ownedRuntime ? getScene(entry.sourceSceneId) : sceneProject;
+                if (editorScene) {
+                    const size_t prevSize = editorScene->shaderKeys.size();
+                    editorScene->shaderKeys.insert(playKeys.begin(), playKeys.end());
+                    if (editorScene->shaderKeys.size() > prevSize) {
+                        editorScene->isModified = true;
+                    }
+                }
+            }
+        }
+
         // Restore snapshot if present
         if (sceneProject->playStateSnapshot && !sceneProject->playStateSnapshot.IsNull()) {
             Stream::decodeScene(sceneProject->scene, sceneProject->playStateSnapshot["scene"]);

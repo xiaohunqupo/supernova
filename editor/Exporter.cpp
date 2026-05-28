@@ -115,6 +115,7 @@ bool editor::Exporter::generateShaders(const ExportConfig& cfg) {
 
 void editor::Exporter::runExport() {
     const bool shaderGenerationOnly = (project == nullptr);
+    const bool useSceneShaderKeys = !shaderGenerationOnly && config.selectedShaderKeys.empty();
 
     if (!checkTargetDir()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
@@ -133,10 +134,12 @@ void editor::Exporter::runExport() {
         return;
     }
 
+    if (useSceneShaderKeys) collectSelectedShaderKeys();
+    if (isCancelled()) { setError("Export cancelled"); return; }
     if (!clearGenerated()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!loadAndSaveAllScenes()) return;
-    collectSelectedShaderKeys();
+    if (useSceneShaderKeys) collectSelectedShaderKeys(true);
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!copyGenerated()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
@@ -158,8 +161,8 @@ void editor::Exporter::runExport() {
     Out::info("Project exported successfully to: %s", config.targetDir.string().c_str());
 }
 
-void editor::Exporter::collectSelectedShaderKeys() {
-    if (!config.selectedShaderKeys.empty()) {
+void editor::Exporter::collectSelectedShaderKeys(bool mergeWithExisting) {
+    if (!mergeWithExisting && !config.selectedShaderKeys.empty()) {
         return;
     }
 

@@ -61,7 +61,7 @@ namespace doriax::editor {
 
         bool isCancelled() const;
 
-        void collectSelectedShaderKeys();
+        void collectSelectedShaderKeys(bool mergeWithExisting = false);
 
         fs::path getExportProjectRoot() const;
         fs::path getShaderOutputDir() const;
