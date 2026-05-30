@@ -2282,11 +2282,17 @@ void editor::Project::finalizeStart(SceneProject* mainSceneProject, std::vector<
 }
 
 void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene> runtimeScenes) {
+    bool saveMainOnStop = false;
+    bool keepMainModified = false;
+
     for (const auto& entry : runtimeScenes) {
         SceneProject* sceneProject = entry.runtime;
         if (!sceneProject || !sceneProject->scene) {
             continue;
         }
+
+        bool saveOnStop = false;
+        bool keepModified = false;
 
         pauseEngineScene(sceneProject->scene, true);
         sceneProject->scene->getSystem<UISystem>()->setAnchorReferenceSize(canvasWidth, canvasHeight);
@@ -2305,10 +2311,18 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
             if (!playKeys.empty()) {
                 SceneProject* editorScene = entry.ownedRuntime ? getScene(entry.sourceSceneId) : sceneProject;
                 if (editorScene) {
+                    const bool wasModified = editorScene->isModified;
                     const size_t prevSize = editorScene->shaderKeys.size();
                     editorScene->shaderKeys.insert(playKeys.begin(), playKeys.end());
                     if (editorScene->shaderKeys.size() > prevSize) {
                         editorScene->isModified = true;
+                        saveOnStop = true;
+                        keepModified = wasModified;
+
+                        if (mainSceneProject && entry.sourceSceneId == mainSceneProject->id) {
+                            saveMainOnStop = true;
+                            keepMainModified = wasModified;
+                        }
                     }
                 }
             }
@@ -2347,10 +2361,15 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         }
 
         if (sceneProject != mainSceneProject) {
-            editor::getEditorHost().enqueueMainThreadTask([this, sceneProject, entry]() {
+            editor::getEditorHost().enqueueMainThreadTask([this, sceneProject, entry, saveOnStop, keepModified]() {
+                SceneProject* editorScene = entry.ownedRuntime ? getScene(entry.sourceSceneId) : sceneProject;
+                if (saveOnStop && editorScene && !editorScene->filepath.empty()) {
+                    saveLoadedSceneOnStop(sceneProject, editorScene, keepModified);
+                }
+
                 Engine::removeScene(sceneProject->scene);
 
-                // Delete scene because its not opened in editor
+                // Delete runtime clones that aren't opened in the editor.
                 if (entry.ownedRuntime) {
                     deleteSceneProject(sceneProject);
                     delete sceneProject;
@@ -2369,6 +2388,15 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
 
     if (mainSceneProject) {
         Out::success("Scene '%s' stopped", mainSceneProject->name.c_str());
+        if (saveMainOnStop && !mainSceneProject->filepath.empty()) {
+            uint32_t mainSceneId = mainSceneProject->id;
+            editor::getEditorHost().enqueueMainThreadTask([this, mainSceneId, keepMainModified]() {
+                SceneProject* sceneProject = getScene(mainSceneId);
+                if (sceneProject) {
+                    saveLoadedSceneOnStop(sceneProject, sceneProject, keepMainModified);
+                }
+            });
+        }
     }
 }
 
@@ -2640,6 +2668,34 @@ bool editor::Project::openProject() {
     }
 }
 
+bool editor::Project::saveLoadedSceneOnStop(SceneProject* loadedSceneProject, SceneProject* editorScene, bool keepModified) {
+    if (!loadedSceneProject || !editorScene || editorScene->filepath.empty()) {
+        return true;
+    }
+
+    bool success = false;
+    if (loadedSceneProject == editorScene) {
+        success = saveSceneFile(editorScene, editorScene->filepath, false);
+        if (success) {
+            editorScene->isModified = keepModified;
+        }
+    } else {
+        loadedSceneProject->shaderKeys = editorScene->shaderKeys;
+        success = saveSceneFile(loadedSceneProject, editorScene->filepath, false);
+        if (success) {
+            editorScene->filepath = loadedSceneProject->filepath;
+            editorScene->shaderKeys = loadedSceneProject->shaderKeys;
+            editorScene->isModified = keepModified;
+        }
+    }
+
+    if (success) {
+        Out::info("Auto-saved scene '%s' on stop", editorScene->name.c_str());
+    }
+
+    return success;
+}
+
 void editor::Project::saveScene(uint32_t sceneId, std::function<void(bool)> callback) {
     SceneProject* sceneProject = getScene(sceneId);
     if (!sceneProject) {
@@ -2662,6 +2718,11 @@ void editor::Project::saveScene(uint32_t sceneId, std::function<void(bool)> call
 
         saveModifiedChildScenes(sceneId, callback);
     };
+
+    if (!sceneProject->scene) {
+        finishWithChildren(true);
+        return;
+    }
 
     if (!sceneProject->filepath.empty()) {
         saveSceneToPathAsync(sceneId, sceneProject->filepath, finishWithChildren);
@@ -2697,18 +2758,15 @@ void editor::Project::saveSceneListSequentially(std::vector<uint32_t> sceneIds, 
 }
 
 void editor::Project::saveModifiedChildScenes(uint32_t sceneId, std::function<void(bool)> callback) {
-    SceneProject* sceneProject = getScene(sceneId);
-    if (!sceneProject) {
-        if (callback) callback(true);
-        return;
-    }
+    std::vector<uint32_t> involvedIds;
+    collectInvolvedScenes(sceneId, involvedIds);
 
     std::vector<uint32_t> childIds;
-    for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
-        uint32_t childId = childSceneRef.id;
-        const SceneProject* childScene = getScene(childId);
-        if (childScene && childScene->expandedInline && childScene->scene && hasSceneUnsavedChanges(childId)) {
-            childIds.push_back(childId);
+    for (uint32_t id : involvedIds) {
+        if (id == sceneId) continue;
+        const SceneProject* childScene = getScene(id);
+        if (childScene && hasLocalUnsavedChanges(id)) {
+            childIds.push_back(id);
         }
     }
 
@@ -2748,6 +2806,8 @@ bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::files
 
     std::set<ShaderKey> shaderKeys;
     collectSceneShaderKeys(sceneProject, shaderKeys);
+    // Merge with existing keys so those from components not yet rendered by RenderSystem are preserved.
+    shaderKeys.insert(sceneProject->shaderKeys.begin(), sceneProject->shaderKeys.end());
     sceneProject->shaderKeys = std::move(shaderKeys);
 
     updateSceneCppScripts(sceneProject);
@@ -3457,7 +3517,7 @@ bool editor::Project::hasSelectedSceneUnsavedEntityBundles() const{
     return hasUnsavedEntityBundles(selectedScene);
 }
 
-bool editor::Project::hasSceneUnsavedChanges(uint32_t sceneId) const{
+bool editor::Project::hasLocalUnsavedChanges(uint32_t sceneId) const{
     const SceneProject* sceneProject = getScene(sceneId);
     if (!sceneProject){
         return false;
@@ -3471,15 +3531,35 @@ bool editor::Project::hasSceneUnsavedChanges(uint32_t sceneId) const{
         return true;
     }
 
+    return false;
+}
+
+bool editor::Project::hasSceneUnsavedChangesImpl(uint32_t sceneId, std::unordered_set<uint32_t>& visited) const{
+    if (!visited.insert(sceneId).second){
+        return false;
+    }
+
+    const SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject){
+        return false;
+    }
+
+    if (hasLocalUnsavedChanges(sceneId)){
+        return true;
+    }
+
     for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
-        uint32_t childId = childSceneRef.id;
-        const SceneProject* childScene = getScene(childId);
-        if (childScene && childScene->expandedInline && childScene->scene && hasSceneUnsavedChanges(childId)) {
+        if (hasSceneUnsavedChangesImpl(childSceneRef.id, visited)) {
             return true;
         }
     }
 
     return false;
+}
+
+bool editor::Project::hasSceneUnsavedChanges(uint32_t sceneId) const{
+    std::unordered_set<uint32_t> visited;
+    return hasSceneUnsavedChangesImpl(sceneId, visited);
 }
 
 bool editor::Project::hasUnsavedEntityBundles(uint32_t sceneId) const{
@@ -5226,10 +5306,11 @@ void editor::Project::collectInvolvedScenes(uint32_t sceneId, std::vector<uint32
     SceneProject* sceneProject = getScene(sceneId);
     if (!sceneProject) return;
 
-    // Avoid duplicates if the scene is already in the list
-    if (std::find(involvedSceneIds.begin(), involvedSceneIds.end(), sceneId) == involvedSceneIds.end()) {
-        involvedSceneIds.push_back(sceneId);
+    // Skip if already visited - also guards against cycles in the child-scene graph
+    if (std::find(involvedSceneIds.begin(), involvedSceneIds.end(), sceneId) != involvedSceneIds.end()) {
+        return;
     }
+    involvedSceneIds.push_back(sceneId);
 
     for (const ChildSceneRef& childSceneRef : sceneProject->childScenes) {
         collectInvolvedScenes(childSceneRef.id, involvedSceneIds);

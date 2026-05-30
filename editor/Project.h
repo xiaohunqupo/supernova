@@ -18,6 +18,7 @@
 #include <chrono>
 #include <map>
 #include <set>
+#include <unordered_set>
 #include <tuple>
 #include <atomic>
 #include <mutex>
@@ -256,8 +257,10 @@ namespace doriax::editor{
                      const std::string& alertTitle = "", const std::string& alertMessage = "");
         bool saveSceneFile(SceneProject* sceneProject, const std::filesystem::path& path, bool stopTransientPreviews = true);
         bool saveSceneForPlayStartup(SceneProject* sceneProject);
+        bool saveLoadedSceneOnStop(SceneProject* loadedSceneProject, SceneProject* editorScene, bool keepModified);
         bool writeSceneToPath(uint32_t sceneId, const std::filesystem::path& path, bool stopTransientPreviews = true);
         void saveModifiedChildScenes(uint32_t sceneId, std::function<void(bool)> callback = nullptr);
+        bool hasSceneUnsavedChangesImpl(uint32_t sceneId, std::unordered_set<uint32_t>& visited) const;
         void saveSceneListSequentially(std::vector<uint32_t> sceneIds, std::function<void(bool)> callback);
 
         void collectInvolvedScenes(uint32_t sceneId, std::vector<uint32_t>& involvedSceneIds);
@@ -413,6 +416,7 @@ namespace doriax::editor{
 
         bool hasSelectedSceneUnsavedChanges() const;
         bool hasSelectedSceneUnsavedEntityBundles() const;
+        bool hasLocalUnsavedChanges(uint32_t sceneId) const;
         bool hasSceneUnsavedChanges(uint32_t sceneId) const;
         bool hasUnsavedEntityBundles(uint32_t sceneId) const;
         bool hasScenesUnsavedChanges() const;
