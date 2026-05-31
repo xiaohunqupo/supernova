@@ -578,6 +578,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
     bool altHeld = ImGui::IsKeyDown(ImGuiKey_ModAlt);
     bool suppressLeftMouse = suppressLeftMouseUntilRelease[sceneId];
+    bool handPanEnabled = sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND;
     GizmoSelected gizmoSelected = sceneProject->sceneRender->getToolsLayer()->getGizmoSelected();
     Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
     bool gizmoSideActive = sceneProject->sceneRender->isAnyGizmoSideSelected();
@@ -591,7 +592,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
     bool disableSelection = 
         altHeld ||
-        sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND || 
+        handPanEnabled || 
         sceneProject->sceneRender->isTerrainEditing() ||
         gizmoSideActive ||
         sceneProject->sceneType != SceneType::SCENE_3D && ImGui::IsKeyDown(ImGuiKey_Space);
@@ -917,7 +918,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
             }
         }
 
-        if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && !altHeld && sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND) {
+        if (isMouseInWindow && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !altHeld && handPanEnabled) {
             camera->slide(-0.01 * mouseDelta.x * distanceScaleFactor);
             camera->slideUp(0.01 * mouseDelta.y * distanceScaleFactor);
         }
@@ -938,7 +939,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         if (ImGui::IsMouseDown(ImGuiMouseButton_Middle) || 
             (draggingMouse[sceneId] && altHeld && ImGui::IsMouseDown(ImGuiMouseButton_Left)) ||
             (ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::IsKeyDown(ImGuiKey_Space)) ||
-            (ImGui::IsMouseDown(ImGuiMouseButton_Left) && sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND)){
+            (isMouseInWindow && ImGui::IsMouseDown(ImGuiMouseButton_Left) && handPanEnabled)){
 
             SceneRender2D* sceneRender2D = static_cast<SceneRender2D*>(sceneProject->sceneRender);
             float currentZoom = sceneRender2D->getZoom();
