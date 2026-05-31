@@ -9,6 +9,7 @@
 #include "render/SceneRender2D.h"
 
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <set>
@@ -74,6 +75,97 @@ bool editor::Stream::setEmbeddedTextureData(Texture& texture, const std::string&
     texture.setData(textureId, data);
     texture.getData().setDataOwned(true);
     return true;
+}
+
+float editor::Stream::finiteOr(float value, float fallback) {
+    return std::isfinite(value) ? value : (std::isfinite(fallback) ? fallback : 0.0f);
+}
+
+double editor::Stream::finiteOr(double value, double fallback) {
+    return std::isfinite(value) ? value : (std::isfinite(fallback) ? fallback : 0.0);
+}
+
+float editor::Stream::positiveFiniteOr(float value, float fallback) {
+    if (std::isfinite(value) && value > 0.0f) {
+        return value;
+    }
+    return std::isfinite(fallback) && fallback > 0.0f ? fallback : 1.0f;
+}
+
+float editor::Stream::decodeFinite(const YAML::Node& node, float fallback) {
+    if (!node || !node.IsScalar()) {
+        return finiteOr(fallback);
+    }
+
+    try {
+        float value = node.as<float>();
+        return finiteOr(value, fallback);
+    } catch (const YAML::Exception&) {
+        return finiteOr(fallback);
+    }
+}
+
+double editor::Stream::decodeFiniteDouble(const YAML::Node& node, double fallback) {
+    if (!node || !node.IsScalar()) {
+        return finiteOr(fallback);
+    }
+
+    try {
+        double value = node.as<double>();
+        return finiteOr(value, fallback);
+    } catch (const YAML::Exception&) {
+        return finiteOr(fallback);
+    }
+}
+
+float editor::Stream::decodePositiveFinite(const YAML::Node& node, float fallback) {
+    if (!node || !node.IsScalar()) {
+        return positiveFiniteOr(fallback, 1.0f);
+    }
+
+    try {
+        float value = node.as<float>();
+        return positiveFiniteOr(value, fallback);
+    } catch (const YAML::Exception&) {
+        return positiveFiniteOr(fallback, 1.0f);
+    }
+}
+
+void editor::Stream::encodeFinite(YAML::Node& node, const char* key, float value) {
+    if (std::isfinite(value)) {
+        node[key] = value;
+    }
+}
+
+void editor::Stream::encodeFinite(YAML::Node& node, const char* key, double value) {
+    if (std::isfinite(value)) {
+        node[key] = value;
+    }
+}
+
+void editor::Stream::encodePositiveFinite(YAML::Node& node, const char* key, float value) {
+    if (std::isfinite(value) && value > 0.0f) {
+        node[key] = value;
+    }
+}
+
+void editor::Stream::encodeFiniteVector3(YAML::Node& node, const char* key, const Vector3& value) {
+    if (value.isValid()) {
+        node[key] = encodeVector3(value);
+    }
+}
+
+Vector3 editor::Stream::decodeFiniteVector3(const YAML::Node& node, const Vector3& fallback) {
+    Vector3 safeFallback = fallback.isValid() ? fallback : Vector3::ZERO;
+    if (!node || !node.IsSequence() || node.size() < 3) {
+        return safeFallback;
+    }
+
+    return Vector3(
+        decodeFinite(node[0], safeFallback.x),
+        decodeFinite(node[1], safeFallback.y),
+        decodeFinite(node[2], safeFallback.z)
+    );
 }
 
 std::string editor::Stream::sceneTypeToString(editor::SceneType type){
@@ -659,78 +751,99 @@ ScriptType editor::Stream::stringToScriptType(const std::string& str) {
 YAML::Node editor::Stream::encodeVector2(const Vector2& vec){
     YAML::Node node;
     node.SetStyle(YAML::EmitterStyle::Flow);
-    node.push_back(vec.x);
-    node.push_back(vec.y);
+    node.push_back(finiteOr(vec.x));
+    node.push_back(finiteOr(vec.y));
     return node;
 }
 
 Vector2 editor::Stream::decodeVector2(const YAML::Node& node) {
-    return Vector2(node[0].as<float>(), node[1].as<float>());
+    if (!node || !node.IsSequence() || node.size() < 2) {
+        return Vector2();
+    }
+
+    return Vector2(decodeFinite(node[0], 0.0f), decodeFinite(node[1], 0.0f));
 }
 
 YAML::Node editor::Stream::encodeVector3(const Vector3& vec) {
     YAML::Node node;
     node.SetStyle(YAML::EmitterStyle::Flow);
-    node.push_back(vec.x);
-    node.push_back(vec.y);
-    node.push_back(vec.z);
+    node.push_back(finiteOr(vec.x));
+    node.push_back(finiteOr(vec.y));
+    node.push_back(finiteOr(vec.z));
     return node;
 }
 
 Vector3 editor::Stream::decodeVector3(const YAML::Node& node) {
-    return Vector3(node[0].as<float>(), node[1].as<float>(), node[2].as<float>());
+    if (!node || !node.IsSequence() || node.size() < 3) {
+        return Vector3();
+    }
+
+    return Vector3(decodeFinite(node[0], 0.0f), decodeFinite(node[1], 0.0f), decodeFinite(node[2], 0.0f));
 }
 
 YAML::Node editor::Stream::encodeVector4(const Vector4& vec){
     YAML::Node node;
     node.SetStyle(YAML::EmitterStyle::Flow);
-    node.push_back(vec.x);
-    node.push_back(vec.y);
-    node.push_back(vec.z);
-    node.push_back(vec.w);
+    node.push_back(finiteOr(vec.x));
+    node.push_back(finiteOr(vec.y));
+    node.push_back(finiteOr(vec.z));
+    node.push_back(finiteOr(vec.w));
     return node;
 }
 
 Vector4 editor::Stream::decodeVector4(const YAML::Node& node) {
-    return Vector4(node[0].as<float>(), node[1].as<float>(), node[2].as<float>(), node[3].as<float>());
+    if (!node || !node.IsSequence() || node.size() < 4) {
+        return Vector4();
+    }
+
+    return Vector4(decodeFinite(node[0], 0.0f), decodeFinite(node[1], 0.0f), decodeFinite(node[2], 0.0f), decodeFinite(node[3], 0.0f));
 }
 
 YAML::Node editor::Stream::encodeQuaternion(const Quaternion& quat) {
     YAML::Node node;
     node.SetStyle(YAML::EmitterStyle::Flow);
-    node.push_back(quat.w);
-    node.push_back(quat.x);
-    node.push_back(quat.y);
-    node.push_back(quat.z);
+    node.push_back(finiteOr(quat.w, 1.0f));
+    node.push_back(finiteOr(quat.x));
+    node.push_back(finiteOr(quat.y));
+    node.push_back(finiteOr(quat.z));
     return node;
 }
 
 Quaternion editor::Stream::decodeQuaternion(const YAML::Node& node) {
-    return Quaternion(node[0].as<float>(), node[1].as<float>(), node[2].as<float>(), node[3].as<float>());
+    if (!node || !node.IsSequence() || node.size() < 4) {
+        return Quaternion::IDENTITY;
+    }
+
+    return Quaternion(decodeFinite(node[0], 1.0f), decodeFinite(node[1], 0.0f), decodeFinite(node[2], 0.0f), decodeFinite(node[3], 0.0f));
 }
 
 YAML::Node editor::Stream::encodeRect(const Rect& rect) {
     YAML::Node node;
     node.SetStyle(YAML::EmitterStyle::Flow);
-    node.push_back(rect.getX());
-    node.push_back(rect.getY());
-    node.push_back(rect.getWidth());
-    node.push_back(rect.getHeight());
+    node.push_back(finiteOr(rect.getX()));
+    node.push_back(finiteOr(rect.getY()));
+    node.push_back(finiteOr(rect.getWidth()));
+    node.push_back(finiteOr(rect.getHeight()));
     return node;
 }
 
 Rect editor::Stream::decodeRect(const YAML::Node& node) {
-    return Rect(node[0].as<float>(), node[1].as<float>(), node[2].as<float>(), node[3].as<float>());
+    if (!node || !node.IsSequence() || node.size() < 4) {
+        return Rect();
+    }
+
+    return Rect(decodeFinite(node[0], 0.0f), decodeFinite(node[1], 0.0f), decodeFinite(node[2], 0.0f), decodeFinite(node[3], 0.0f));
 }
 
 YAML::Node editor::Stream::encodeMatrix4(const Matrix4& mat) {
     YAML::Node node;
     node.SetStyle(YAML::EmitterStyle::Flow);
+    Matrix4 safeMatrix = mat.isValid() ? mat : Matrix4();
     for (int i = 0; i < 4; i++) {
         YAML::Node row;
         row.SetStyle(YAML::EmitterStyle::Flow);
         for (int j = 0; j < 4; j++) {
-            row.push_back(mat[i][j]);
+            row.push_back(safeMatrix[i][j]);
         }
         node.push_back(row);
     }
@@ -739,9 +852,17 @@ YAML::Node editor::Stream::encodeMatrix4(const Matrix4& mat) {
 
 Matrix4 editor::Stream::decodeMatrix4(const YAML::Node& node) {
     Matrix4 mat;
+    if (!node || !node.IsSequence() || node.size() < 4) {
+        return mat;
+    }
+
     for (int i = 0; i < 4; i++) {
+        if (!node[i] || !node[i].IsSequence() || node[i].size() < 4) {
+            return Matrix4();
+        }
+
         for (int j = 0; j < 4; j++) {
-            mat[i][j] = node[i][j].as<float>();
+            mat[i][j] = decodeFinite(node[i][j], i == j ? 1.0f : 0.0f);
         }
     }
     return mat;
@@ -1145,9 +1266,9 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         terrainNode["brushMode"] = ts.brushMode;
         terrainNode["brushShape"] = ts.brushShape;
         terrainNode["brushFalloff"] = ts.brushFalloff;
-        terrainNode["brushSize"] = ts.brushSize;
-        terrainNode["brushStrength"] = ts.brushStrength;
-        terrainNode["flattenHeight"] = ts.flattenHeight;
+        encodePositiveFinite(terrainNode, "brushSize", ts.brushSize);
+        encodeFinite(terrainNode, "brushStrength", ts.brushStrength);
+        encodeFinite(terrainNode, "flattenHeight", ts.flattenHeight);
         terrainNode["heightMapResolution"] = ts.heightMapResolution;
         terrainNode["blendMapResolution"] = ts.blendMapResolution;
         terrainNode["normalizeBlendPaint"] = ts.normalizeBlendPaint;
@@ -1185,11 +1306,11 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
             sceneNode["showGrid3D"]           = sceneProject.displaySettings.showGrid3D;
             sceneNode["hideSelectionOutline"] = sceneProject.displaySettings.hideSelectionOutline;
             sceneNode["showGrid2D"]           = sceneProject.displaySettings.showGrid2D;
-            sceneNode["gridSpacing2D"]        = sceneProject.displaySettings.gridSpacing2D;
-            sceneNode["gridSpacing3D"]        = sceneProject.displaySettings.gridSpacing3D;
+            encodePositiveFinite(sceneNode, "gridSpacing2D", sceneProject.displaySettings.gridSpacing2D);
+            encodePositiveFinite(sceneNode, "gridSpacing3D", sceneProject.displaySettings.gridSpacing3D);
             sceneNode["snapToGrid"]           = sceneProject.displaySettings.snapToGrid;
             sceneNode["snapRotation"]         = sceneProject.displaySettings.snapRotation;
-            sceneNode["rotationSnapDegrees"]  = sceneProject.displaySettings.rotationSnapDegrees;
+            encodePositiveFinite(sceneNode, "rotationSnapDegrees", sceneProject.displaySettings.rotationSnapDegrees);
 
             if (sceneProject.sceneRender) {
                 Camera* editorCam = sceneProject.sceneRender->getCamera();
@@ -1271,9 +1392,9 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
         if (tn["brushMode"].IsDefined())          ts.brushMode          = tn["brushMode"].as<int>();
         if (tn["brushShape"].IsDefined())         ts.brushShape         = tn["brushShape"].as<int>();
         if (tn["brushFalloff"].IsDefined())       ts.brushFalloff       = tn["brushFalloff"].as<int>();
-        if (tn["brushSize"].IsDefined())          ts.brushSize          = tn["brushSize"].as<float>();
-        if (tn["brushStrength"].IsDefined())      ts.brushStrength      = tn["brushStrength"].as<float>();
-        if (tn["flattenHeight"].IsDefined())      ts.flattenHeight      = tn["flattenHeight"].as<float>();
+        if (tn["brushSize"].IsDefined())          ts.brushSize          = decodePositiveFinite(tn["brushSize"], ts.brushSize);
+        if (tn["brushStrength"].IsDefined())      ts.brushStrength      = decodeFinite(tn["brushStrength"], ts.brushStrength);
+        if (tn["flattenHeight"].IsDefined())      ts.flattenHeight      = decodeFinite(tn["flattenHeight"], ts.flattenHeight);
         if (tn["heightMapResolution"].IsDefined()) ts.heightMapResolution = tn["heightMapResolution"].as<int>();
         if (tn["blendMapResolution"].IsDefined()) ts.blendMapResolution = tn["blendMapResolution"].as<int>();
         if (tn["normalizeBlendPaint"].IsDefined()) ts.normalizeBlendPaint = tn["normalizeBlendPaint"].as<bool>();
@@ -1335,11 +1456,11 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
                         if (sceneNode["hideSelectionOutline"]) ds.hideSelectionOutline = sceneNode["hideSelectionOutline"].as<bool>();
                         if (sceneNode["showGrid2D"])           ds.showGrid2D           = sceneNode["showGrid2D"].as<bool>();
 
-                        if (sceneNode["gridSpacing2D"])        ds.gridSpacing2D        = sceneNode["gridSpacing2D"].as<float>();
-                        if (sceneNode["gridSpacing3D"])        ds.gridSpacing3D        = sceneNode["gridSpacing3D"].as<float>();
+                        if (sceneNode["gridSpacing2D"])        ds.gridSpacing2D        = decodePositiveFinite(sceneNode["gridSpacing2D"], ds.gridSpacing2D);
+                        if (sceneNode["gridSpacing3D"])        ds.gridSpacing3D        = decodePositiveFinite(sceneNode["gridSpacing3D"], ds.gridSpacing3D);
                         if (sceneNode["snapToGrid"])           ds.snapToGrid           = sceneNode["snapToGrid"].as<bool>();
                         if (sceneNode["snapRotation"])         ds.snapRotation         = sceneNode["snapRotation"].as<bool>();
-                        if (sceneNode["rotationSnapDegrees"])  ds.rotationSnapDegrees  = sceneNode["rotationSnapDegrees"].as<float>();
+                        if (sceneNode["rotationSnapDegrees"])  ds.rotationSnapDegrees  = decodePositiveFinite(sceneNode["rotationSnapDegrees"], ds.rotationSnapDegrees);
                     }
 
                     if (sceneNode["editorCamera"]) {
@@ -1575,14 +1696,14 @@ YAML::Node editor::Stream::encodeEditorCamera(Camera* camera, float zoom) {
     Transform& camTransform = scene->getComponent<Transform>(camEntity);
     YAML::Node camNode;
     camNode["type"] = cameraTypeToString(camComp.type);
-    camNode["target"] = encodeVector3(camComp.target);
-    camNode["up"] = encodeVector3(camComp.up);
-    camNode["yfov"] = camComp.yfov;
-    camNode["aspect"] = camComp.aspect;
-    camNode["nearClip"] = camComp.nearClip;
-    camNode["farClip"] = camComp.farClip;
-    camNode["position"] = encodeVector3(camTransform.position);
-    if (zoom > 0.0f) camNode["zoom"] = zoom;
+    encodeFiniteVector3(camNode, "target", camComp.target);
+    encodeFiniteVector3(camNode, "up", camComp.up);
+    encodePositiveFinite(camNode, "yfov", camComp.yfov);
+    encodePositiveFinite(camNode, "aspect", camComp.aspect);
+    encodeFinite(camNode, "nearClip", camComp.nearClip);
+    encodeFinite(camNode, "farClip", camComp.farClip);
+    encodeFiniteVector3(camNode, "position", camTransform.position);
+    encodePositiveFinite(camNode, "zoom", zoom);
     return camNode;
 }
 
@@ -1593,15 +1714,21 @@ void editor::Stream::decodeEditorCamera(Camera* camera, const YAML::Node& node, 
     CameraComponent& camComp = scene->getComponent<CameraComponent>(camEntity);
     Transform& camTransform = scene->getComponent<Transform>(camEntity);
     if (node["type"]) camComp.type = stringToCameraType(node["type"].as<std::string>());
-    if (node["target"]) camComp.target = decodeVector3(node["target"]);
-    if (node["up"]) camComp.up = decodeVector3(node["up"]);
-    if (node["yfov"]) camComp.yfov = node["yfov"].as<float>();
-    if (node["aspect"]) camComp.aspect = node["aspect"].as<float>();
-    if (node["nearClip"]) camComp.nearClip = node["nearClip"].as<float>();
-    if (node["farClip"]) camComp.farClip = node["farClip"].as<float>();
-    if (node["position"]) camTransform.position = decodeVector3(node["position"]);
+    camComp.target = decodeFiniteVector3(node["target"], camComp.target);
+    camComp.up = decodeFiniteVector3(node["up"], camComp.up);
+    camComp.yfov = decodePositiveFinite(node["yfov"], camComp.yfov);
+    camComp.aspect = decodePositiveFinite(node["aspect"], camComp.aspect);
+    camComp.nearClip = decodeFinite(node["nearClip"], camComp.nearClip);
+    camComp.farClip = decodeFinite(node["farClip"], camComp.farClip);
+    camTransform.position = decodeFiniteVector3(node["position"], camTransform.position);
     camComp.needUpdate = true;
-    zoom = node["zoom"] ? node["zoom"].as<float>() : 0.0f;
+    zoom = 0.0f;
+    if (node["zoom"]) {
+        float decodedZoom = decodeFinite(node["zoom"], 0.0f);
+        if (decodedZoom > 0.0f) {
+            zoom = decodedZoom;
+        }
+    }
 }
 
 YAML::Node editor::Stream::encodeScene(Scene* scene) {
@@ -3803,16 +3930,16 @@ YAML::Node editor::Stream::encodeCameraComponent(const CameraComponent& camera) 
     YAML::Node node;
 
     node["type"] = cameraTypeToString(camera.type);
-    node["target"] = encodeVector3(camera.target);
-    node["up"] = encodeVector3(camera.up);
-    node["leftClip"] = camera.leftClip;
-    node["rightClip"] = camera.rightClip;
-    node["bottomClip"] = camera.bottomClip;
-    node["topClip"] = camera.topClip;
-    node["yfov"] = camera.yfov;
-    node["aspect"] = camera.aspect;
-    node["nearClip"] = camera.nearClip;
-    node["farClip"] = camera.farClip;
+    encodeFiniteVector3(node, "target", camera.target);
+    encodeFiniteVector3(node, "up", camera.up);
+    encodeFinite(node, "leftClip", camera.leftClip);
+    encodeFinite(node, "rightClip", camera.rightClip);
+    encodeFinite(node, "bottomClip", camera.bottomClip);
+    encodeFinite(node, "topClip", camera.topClip);
+    encodePositiveFinite(node, "yfov", camera.yfov);
+    encodePositiveFinite(node, "aspect", camera.aspect);
+    encodeFinite(node, "nearClip", camera.nearClip);
+    encodeFinite(node, "farClip", camera.farClip);
     node["renderToTexture"] = camera.renderToTexture;
     node["transparentSort"] = camera.transparentSort;
     node["useTarget"] = camera.useTarget;
@@ -3830,16 +3957,16 @@ CameraComponent editor::Stream::decodeCameraComponent(const YAML::Node& node, co
     }
 
     if (node["type"]) camera.type = stringToCameraType(node["type"].as<std::string>());
-    if (node["target"]) camera.target = decodeVector3(node["target"]);
-    if (node["up"]) camera.up = decodeVector3(node["up"]);
-    if (node["leftClip"]) camera.leftClip = node["leftClip"].as<float>();
-    if (node["rightClip"]) camera.rightClip = node["rightClip"].as<float>();
-    if (node["bottomClip"]) camera.bottomClip = node["bottomClip"].as<float>();
-    if (node["topClip"]) camera.topClip = node["topClip"].as<float>();
-    if (node["yfov"]) camera.yfov = node["yfov"].as<float>();
-    if (node["aspect"]) camera.aspect = node["aspect"].as<float>();
-    if (node["nearClip"]) camera.nearClip = node["nearClip"].as<float>();
-    if (node["farClip"]) camera.farClip = node["farClip"].as<float>();
+    camera.target = decodeFiniteVector3(node["target"], camera.target);
+    camera.up = decodeFiniteVector3(node["up"], camera.up);
+    camera.leftClip = decodeFinite(node["leftClip"], camera.leftClip);
+    camera.rightClip = decodeFinite(node["rightClip"], camera.rightClip);
+    camera.bottomClip = decodeFinite(node["bottomClip"], camera.bottomClip);
+    camera.topClip = decodeFinite(node["topClip"], camera.topClip);
+    camera.yfov = decodePositiveFinite(node["yfov"], camera.yfov);
+    camera.aspect = decodePositiveFinite(node["aspect"], camera.aspect);
+    camera.nearClip = decodeFinite(node["nearClip"], camera.nearClip);
+    camera.farClip = decodeFinite(node["farClip"], camera.farClip);
     if (node["renderToTexture"]) camera.renderToTexture = node["renderToTexture"].as<bool>();
     if (node["transparentSort"]) camera.transparentSort = node["transparentSort"].as<bool>();
     if (node["useTarget"]) camera.useTarget = node["useTarget"].as<bool>();
@@ -3854,19 +3981,19 @@ YAML::Node editor::Stream::encodeSoundComponent(const SoundComponent& audio) {
     node["state"] = soundStateToString(audio.state);
     if (!audio.filename.empty()) node["filename"] = audio.filename;
     node["enableClocked"] = audio.enableClocked;
-    node["volume"] = audio.volume;
-    node["speed"] = audio.speed;
-    node["pan"] = audio.pan;
+    encodeFinite(node, "volume", audio.volume);
+    encodeFinite(node, "speed", audio.speed);
+    encodeFinite(node, "pan", audio.pan);
     node["looping"] = audio.looping;
-    node["loopingPoint"] = audio.loopingPoint;
+    encodeFinite(node, "loopingPoint", audio.loopingPoint);
     node["protectVoice"] = audio.protectVoice;
     node["inaudibleBehaviorMustTick"] = audio.inaudibleBehaviorMustTick;
     node["inaudibleBehaviorKill"] = audio.inaudibleBehaviorKill;
-    node["minDistance"] = audio.minDistance;
-    node["maxDistance"] = audio.maxDistance;
+    encodeFinite(node, "minDistance", audio.minDistance);
+    encodeFinite(node, "maxDistance", audio.maxDistance);
     node["attenuationModel"] = soundAttenuationToString(audio.attenuationModel);
-    node["attenuationRolloffFactor"] = audio.attenuationRolloffFactor;
-    node["dopplerFactor"] = audio.dopplerFactor;
+    encodeFinite(node, "attenuationRolloffFactor", audio.attenuationRolloffFactor);
+    encodeFinite(node, "dopplerFactor", audio.dopplerFactor);
 
     return node;
 }
@@ -3883,19 +4010,19 @@ SoundComponent editor::Stream::decodeSoundComponent(const YAML::Node& node, cons
     if (node["state"]) audio.state = stringToSoundState(node["state"].as<std::string>());
     if (node["filename"]) audio.filename = node["filename"].as<std::string>();
     if (node["enableClocked"]) audio.enableClocked = node["enableClocked"].as<bool>();
-    if (node["volume"]) audio.volume = node["volume"].as<double>();
-    if (node["speed"]) audio.speed = node["speed"].as<float>();
-    if (node["pan"]) audio.pan = node["pan"].as<float>();
+    if (node["volume"]) audio.volume = decodeFiniteDouble(node["volume"], audio.volume);
+    if (node["speed"]) audio.speed = decodeFinite(node["speed"], audio.speed);
+    if (node["pan"]) audio.pan = decodeFinite(node["pan"], audio.pan);
     if (node["looping"]) audio.looping = node["looping"].as<bool>();
-    if (node["loopingPoint"]) audio.loopingPoint = node["loopingPoint"].as<double>();
+    if (node["loopingPoint"]) audio.loopingPoint = decodeFiniteDouble(node["loopingPoint"], audio.loopingPoint);
     if (node["protectVoice"]) audio.protectVoice = node["protectVoice"].as<bool>();
     if (node["inaudibleBehaviorMustTick"]) audio.inaudibleBehaviorMustTick = node["inaudibleBehaviorMustTick"].as<bool>();
     if (node["inaudibleBehaviorKill"]) audio.inaudibleBehaviorKill = node["inaudibleBehaviorKill"].as<bool>();
-    if (node["minDistance"]) audio.minDistance = node["minDistance"].as<float>();
-    if (node["maxDistance"]) audio.maxDistance = node["maxDistance"].as<float>();
+    if (node["minDistance"]) audio.minDistance = decodeFinite(node["minDistance"], audio.minDistance);
+    if (node["maxDistance"]) audio.maxDistance = decodeFinite(node["maxDistance"], audio.maxDistance);
     if (node["attenuationModel"]) audio.attenuationModel = stringToSoundAttenuation(node["attenuationModel"].as<std::string>());
-    if (node["attenuationRolloffFactor"]) audio.attenuationRolloffFactor = node["attenuationRolloffFactor"].as<float>();
-    if (node["dopplerFactor"]) audio.dopplerFactor = node["dopplerFactor"].as<float>();
+    if (node["attenuationRolloffFactor"]) audio.attenuationRolloffFactor = decodeFinite(node["attenuationRolloffFactor"], audio.attenuationRolloffFactor);
+    if (node["dopplerFactor"]) audio.dopplerFactor = decodeFinite(node["dopplerFactor"], audio.dopplerFactor);
 
     bool keepLoadedSample = oldAudio && oldFilename == audio.filename && oldAudio->sample && oldAudio->loaded;
     if (!keepLoadedSample && oldAudio && !oldFilename.empty()) {

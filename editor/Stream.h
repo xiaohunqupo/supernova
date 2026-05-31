@@ -87,6 +87,18 @@ namespace doriax::editor {
         static std::string textureStrategyToString(TextureStrategy strategy);
         static TextureStrategy stringToTextureStrategy(const std::string& str);
 
+        static float finiteOr(float value, float fallback = 0.0f);
+        static double finiteOr(double value, double fallback = 0.0);
+        static float positiveFiniteOr(float value, float fallback = 1.0f);
+        static float decodeFinite(const YAML::Node& node, float fallback);
+        static double decodeFiniteDouble(const YAML::Node& node, double fallback);
+        static float decodePositiveFinite(const YAML::Node& node, float fallback);
+        static void encodeFinite(YAML::Node& node, const char* key, float value);
+        static void encodeFinite(YAML::Node& node, const char* key, double value);
+        static void encodePositiveFinite(YAML::Node& node, const char* key, float value);
+        static void encodeFiniteVector3(YAML::Node& node, const char* key, const Vector3& value);
+        static Vector3 decodeFiniteVector3(const YAML::Node& node, const Vector3& fallback);
+
         // ==============================
 
         static YAML::Node encodeVector2(const Vector2& vec);

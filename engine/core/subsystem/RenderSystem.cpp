@@ -2163,7 +2163,8 @@ void RenderSystem::updateCameraSize(Entity entity){
             float newBottom = rect.getY();
             float newRight = rect.getWidth();
             float newTop = rect.getHeight();
-            float newAspect = rect.getWidth() / rect.getHeight();
+            if (newRight <= 0.0f || newTop <= 0.0f) return;
+            float newAspect = newRight / newTop;
 
             if ((camera.leftClip != newLeft) || (camera.bottomClip != newBottom) || (camera.rightClip != newRight) || (camera.topClip != newTop) || (camera.aspect != newAspect)){
                 camera.leftClip = newLeft;

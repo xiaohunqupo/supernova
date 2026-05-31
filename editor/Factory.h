@@ -66,6 +66,7 @@ namespace doriax::editor{
         static std::string formatQuaternion(const Quaternion& q);
         static std::string formatBool(bool value);
         static std::string formatFloat(float value);
+        static std::string formatPositiveFloat(float value, float fallback = 1.0f);
         static std::string formatDouble(double value);
         static std::string formatInt(int value);
         static std::string formatUInt(unsigned int value);
