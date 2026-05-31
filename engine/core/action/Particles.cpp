@@ -4,6 +4,8 @@
 
 #include "Particles.h"
 
+#include "subsystem/ActionSystem.h"
+
 using namespace doriax;
 
 Particles::Particles(Scene* scene): Action(scene){
@@ -16,6 +18,10 @@ Particles::Particles(Scene* scene, Entity entity): Action(scene, entity){
 
 Particles::~Particles(){
 
+}
+
+void Particles::reset(){
+    scene->getSystem<ActionSystem>()->particleActionReset(getEntity());
 }
 
 void Particles::setMaxParticles(unsigned int maxParticles){

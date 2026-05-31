@@ -1031,6 +1031,47 @@ void ActionSystem::particleActionStart(ParticlesComponent& particles, PointsComp
     particles.currentBurst = 0;
 }
 
+void ActionSystem::particleActionReset(Entity entity){
+    ActionComponent* action = scene->findComponent<ActionComponent>(entity);
+    ParticlesComponent* particles = scene->findComponent<ParticlesComponent>(entity);
+    if (!action || !particles) {
+        return;
+    }
+
+    action->state = ActionState::Stopped;
+    action->timecount = 0.0f;
+    action->startTrigger = false;
+    action->stopTrigger = false;
+    action->pauseTrigger = false;
+
+    particles->particles.clear();
+    particles->newParticlesCount = 0.0f;
+    particles->lastUsedParticle = 0;
+    particles->currentBurst = 0;
+    particles->emitter = false;
+
+    if (action->target == NULL_ENTITY) {
+        return;
+    }
+
+    if (PointsComponent* points = scene->findComponent<PointsComponent>(action->target)) {
+        points->points.clear();
+        points->renderPoints.clear();
+        points->numVisible = 0;
+        points->needUpdate = true;
+        points->needUpdateBuffer = true;
+    }
+
+    if (InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(action->target)) {
+        for (InstanceData& instance : instmesh->instances) {
+            instance.visible = false;
+        }
+        instmesh->renderInstances.clear();
+        instmesh->numVisible = 0;
+        instmesh->needUpdateInstances = true;
+    }
+}
+
 void ActionSystem::particlesActionUpdate(double dt, Entity entity, Entity target, ActionComponent& action, ParticlesComponent& particles, InstancedMeshComponent& instmesh){
     SpriteComponent* sprite = scene->findComponent<SpriteComponent>(target);
     Transform* targetTransform = scene->findComponent<Transform>(target);

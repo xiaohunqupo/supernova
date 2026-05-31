@@ -16,6 +16,8 @@ namespace doriax{
         Particles(Scene* scene, Entity entity);
         virtual ~Particles();
 
+        void reset();
+
         void setMaxParticles(unsigned int maxParticles);
         unsigned int getMaxParticles() const;
 

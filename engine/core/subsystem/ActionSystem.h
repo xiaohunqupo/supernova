@@ -129,6 +129,7 @@ namespace doriax{
 		void actionStart(Entity entity);
 		void actionStop(Entity entity);
 		void actionPause(Entity entity);
+		void particleActionReset(Entity entity);
 
 		void updateAnimationPreview(double dt, Entity entity);
 		void updateActionPreview(double dt, Entity entity);
