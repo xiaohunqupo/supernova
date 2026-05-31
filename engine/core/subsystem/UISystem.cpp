@@ -1740,6 +1740,24 @@ bool UISystem::isTextEditFocused(){
     return false;
 }
 
+void UISystem::resetButtonStates() {
+    auto buttons = scene->getComponentArray<ButtonComponent>();
+    for (int i = 0; i < buttons->size(); i++) {
+        ButtonComponent& button = buttons->getComponentFromIndex(i);
+        if (!button.pressed) continue;
+
+        Entity entity = buttons->getEntity(i);
+        Signature signature = scene->getSignature(entity);
+        if (signature.test(scene->getComponentId<UIComponent>())) {
+            UIComponent& ui = scene->getComponent<UIComponent>(entity);
+            ui.texture = button.textureNormal;
+            ui.color = button.colorNormal;
+            ui.needUpdateTexture = true;
+        }
+        button.pressed = false;
+    }
+}
+
 bool UISystem::eventOnCharInput(wchar_t codepoint){
     auto layouts = scene->getComponentArray<UILayoutComponent>();
     for (int i = 0; i < layouts->size(); i++){

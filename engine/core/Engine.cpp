@@ -172,6 +172,7 @@ void Engine::removeScene(Scene* scene){
         auto it = std::find(scenes.begin(), scenes.end(), scene);
 
         if (it != scenes.end()) {
+            scene->getSystem<UISystem>()->resetButtonStates();
             scenes.erase(it);
         }
 
