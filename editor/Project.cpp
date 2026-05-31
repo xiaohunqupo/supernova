@@ -2226,7 +2226,10 @@ void editor::Project::copyEngineApiToProject() {
             std::filesystem::create_directories(getProjectInternalPath());
         }
 
-        // Copy only headers with update_existing - only copies files that are newer
+        int updatedFiles = 0;
+
+        // Sync only files whose contents actually changed so reopening the editor
+        // does not touch header timestamps and force a rebuild of game scripts.
         for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(engineApiSource)) {
             if (dirEntry.is_regular_file()) {
                 auto ext = dirEntry.path().extension().string();
@@ -2234,12 +2237,25 @@ void editor::Project::copyEngineApiToProject() {
                     auto relPath = std::filesystem::relative(dirEntry.path(), engineApiSource);
                     auto destPath = engineApiDest / relPath;
                     std::filesystem::create_directories(destPath.parent_path());
-                    std::filesystem::copy_file(dirEntry.path(), destPath, std::filesystem::copy_options::update_existing);
+
+                    std::ifstream sourceFile(dirEntry.path(), std::ios::in | std::ios::binary);
+                    if (!sourceFile) {
+                        Out::warning("Failed to read engine API source file: %s", dirEntry.path().string().c_str());
+                        continue;
+                    }
+
+                    std::string sourceContent(
+                        (std::istreambuf_iterator<char>(sourceFile)),
+                        std::istreambuf_iterator<char>());
+
+                    if (FileUtils::writeIfChanged(destPath, sourceContent)) {
+                        updatedFiles++;
+                    }
                 }
             }
         }
 
-        Out::info("Updated engine API in project: %s", engineApiDest.string().c_str());
+        Out::info("Synced engine API in project: %s (%d files updated)", engineApiDest.string().c_str(), updatedFiles);
 
     } catch (const std::exception& e) {
         Out::error("Failed to copy engine API: %s", e.what());
