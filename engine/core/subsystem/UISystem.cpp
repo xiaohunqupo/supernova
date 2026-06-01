@@ -1850,8 +1850,8 @@ bool UISystem::eventOnPointerDown(float x, float y){
                     ui.texture = button.texturePressed;
                     ui.color = button.colorPressed;
                     ui.needUpdateTexture = true;
-                    button.onPress.call();
                     button.pressed = true;
+                    button.onPress.call();
                 }
             }
 
