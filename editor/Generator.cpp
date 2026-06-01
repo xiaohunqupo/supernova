@@ -1044,6 +1044,7 @@ void editor::Generator::configure(const std::vector<editor::SceneBuildInfo>& sce
         std::string sceneName = Factory::toIdentifier(sceneData.name);
         mainContent += "void create_" + sceneName + "(Scene* scene);\n";
     }
+    mainContent += "extern \"C\" void initScripts(doriax::Scene* scene);\n";
     mainContent += "extern \"C\" void cleanupScripts(doriax::Scene* scene);\n";
     mainContent += "\n";
 
@@ -1062,10 +1063,29 @@ void editor::Generator::configure(const std::vector<editor::SceneBuildInfo>& sce
         mainContent += "void load_" + stackId + "() {\n";
         for (const auto sceneId : sceneData.involvedScenes) {
             std::string sceneName = "_" + Factory::toIdentifier(sceneIdToName[sceneId]);
+            mainContent += "    bool " + sceneName + "_needsInit = false;\n";
+        }
+        mainContent += "\n";
+        for (const auto sceneId : sceneData.involvedScenes) {
+            std::string sceneName = "_" + Factory::toIdentifier(sceneIdToName[sceneId]);
             mainContent += "    if (!" + sceneName + "){\n";
             mainContent += "        " + sceneName + " = new Scene();\n";
-            mainContent += "        create" + sceneName + "(" + sceneName + ");\n";
             mainContent += "        SceneManager::setScenePtr(" + std::to_string(sceneId) + ", " + sceneName + ");\n";
+            mainContent += "        " + sceneName + "_needsInit = true;\n";
+            mainContent += "    }\n";
+        }
+        mainContent += "\n";
+        for (const auto sceneId : sceneData.involvedScenes) {
+            std::string sceneName = "_" + Factory::toIdentifier(sceneIdToName[sceneId]);
+            mainContent += "    if (" + sceneName + "_needsInit) {\n";
+            mainContent += "        create" + sceneName + "(" + sceneName + ");\n";
+            mainContent += "    }\n";
+        }
+        mainContent += "\n";
+        for (const auto sceneId : sceneData.involvedScenes) {
+            std::string sceneName = "_" + Factory::toIdentifier(sceneIdToName[sceneId]);
+            mainContent += "    if (" + sceneName + "_needsInit) {\n";
+            mainContent += "        initScripts(" + sceneName + ");\n";
             mainContent += "    }\n";
         }
         mainContent += "\n";

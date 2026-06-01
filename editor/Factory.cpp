@@ -1933,8 +1933,6 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setGlobalIllumination(" << formatVector3(scene->getGlobalIlluminationColor()) << ");\n";
     out << ind2 << "scene->setLightState(" << formatLightState(scene->getLightState()) << ");\n";
     out << ind2 << "scene->setEnableUIEvents(" << formatUIEventState(scene->getEnableUIEvents()) << ");\n";
-    out << "\n";
-    out << ind2 << "initScripts(scene);\n";
     out << ind << "}\n";
 
     return out.str();
