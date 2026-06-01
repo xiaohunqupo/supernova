@@ -1455,8 +1455,6 @@ void editor::SceneWindow::show() {
         }else{
             if (hasNotification[sceneProject.id]) App::popTabNotificationStyle();
             sceneProject.isVisible = false;
-            width.erase(sceneProject.id);
-            height.erase(sceneProject.id);
         }
         ImGui::End();
 
