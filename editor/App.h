@@ -94,6 +94,7 @@ namespace doriax::editor{
         bool isDroppedExternalPaths;
 
         uint32_t lastActivatedScene;
+        uint32_t pendingResizeScene = NULL_PROJECT_SCENE;
 
         enum class LastFocusedWindow {
             None,

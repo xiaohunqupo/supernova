@@ -1800,12 +1800,13 @@ void editor::Project::closeScene(uint32_t sceneId, bool systemClose) {
 
     // If the scene was never saved, remove it entirely
     if (it->filepath.empty()) {
-        editor::getEditorHost().clearSceneWindowState(sceneId);
         scenes.erase(it);
     } else {
         it->opened = false;
         it->expandedInline = false;
     }
+
+    editor::getEditorHost().clearSceneWindowState(sceneId);
 
     if (!systemClose){
         saveProjectFile();

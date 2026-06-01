@@ -1070,11 +1070,17 @@ void editor::App::engineRender(){
                 }
                 if (lastActivatedScene != sceneProject.id) {
                     lastActivatedScene = sceneProject.id;
+                    pendingResizeScene = sceneProject.id;
                     sceneChanged = true;
                     #ifdef _DEBUG
                     printf("DEBUG: Activated scene %u\n", lastActivatedScene);
                     #endif
                 }
+            }
+
+            if (pendingResizeScene == sceneProject.id && width != 0 && height != 0) {
+                sceneChanged = true;
+                pendingResizeScene = NULL_PROJECT_SCENE;
             }
 
             if (width != 0 && height != 0){
@@ -1297,6 +1303,7 @@ void editor::App::handleExternalDragLeave() {
 
 void editor::App::resetLastActivatedScene(){
     lastActivatedScene = NULL_PROJECT_SCENE;
+    pendingResizeScene = NULL_PROJECT_SCENE;
 }
 
 bool editor::App::shouldSyncEngineApi() const {
