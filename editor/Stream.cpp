@@ -3118,10 +3118,10 @@ YAML::Node editor::Stream::encodeTransform(const Transform& transform) {
     transformNode["localMatrix"] = encodeMatrix4(transform.localMatrix);
     transformNode["modelMatrix"] = encodeMatrix4(transform.modelMatrix);
     transformNode["normalMatrix"] = encodeMatrix4(transform.normalMatrix);
-    transformNode["modelViewProjectionMatrix"] = encodeMatrix4(transform.modelViewProjectionMatrix);
+    //transformNode["modelViewProjectionMatrix"] = encodeMatrix4(transform.modelViewProjectionMatrix);
     transformNode["visible"] = transform.visible;
     //transformNode["parent"] = transform.parent;
-    transformNode["distanceToCamera"] = transform.distanceToCamera;
+    //transformNode["distanceToCamera"] = transform.distanceToCamera;
     transformNode["billboardRotation"] = encodeQuaternion(transform.billboardRotation);
     transformNode["billboard"] = transform.billboard;
     transformNode["fakeBillboard"] = transform.fakeBillboard;
@@ -3149,10 +3149,10 @@ Transform editor::Stream::decodeTransform(const YAML::Node& node, const Transfor
     if (node["localMatrix"]) transform.localMatrix = decodeMatrix4(node["localMatrix"]);
     if (node["modelMatrix"]) transform.modelMatrix = decodeMatrix4(node["modelMatrix"]);
     if (node["normalMatrix"]) transform.normalMatrix = decodeMatrix4(node["normalMatrix"]);
-    if (node["modelViewProjectionMatrix"]) transform.modelViewProjectionMatrix = decodeMatrix4(node["modelViewProjectionMatrix"]);
+    //if (node["modelViewProjectionMatrix"]) transform.modelViewProjectionMatrix = decodeMatrix4(node["modelViewProjectionMatrix"]);
     if (node["visible"]) transform.visible = node["visible"].as<bool>();
     //transform.parent = node["parent"].as<Entity>();
-    if (node["distanceToCamera"]) transform.distanceToCamera = node["distanceToCamera"].as<float>();
+    //if (node["distanceToCamera"]) transform.distanceToCamera = node["distanceToCamera"].as<float>();
     if (node["billboardRotation"]) transform.billboardRotation = decodeQuaternion(node["billboardRotation"]);
     if (node["billboard"]) transform.billboard = node["billboard"].as<bool>();
     if (node["fakeBillboard"]) transform.fakeBillboard = node["fakeBillboard"].as<bool>();
