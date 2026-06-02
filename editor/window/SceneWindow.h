@@ -39,7 +39,6 @@ namespace doriax::editor {
         std::map<uint32_t, int> height;
 
         std::map<uint32_t, bool> hasNotification;
-        std::map<uint32_t, ScenePlayState> lastPlayState;
 
         std::vector<uint32_t> closeSceneQueue;
 

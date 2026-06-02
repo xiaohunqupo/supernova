@@ -80,7 +80,6 @@ void editor::SceneWindow::resetProjectState() {
     width.clear();
     height.clear();
     hasNotification.clear();
-    lastPlayState.clear();
     closeSceneQueue.clear();
 }
 
@@ -91,7 +90,6 @@ void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
     width.erase(sceneId);
     height.erase(sceneId);
     hasNotification.erase(sceneId);
-    lastPlayState.erase(sceneId);
 
     closeSceneQueue.erase(
         std::remove(closeSceneQueue.begin(), closeSceneQueue.end(), sceneId),
@@ -1164,27 +1162,27 @@ void editor::SceneWindow::show() {
         bool canClose = openedScenesCount > 1;
         bool isOpen = true;
 
-        // Detect play state transition to trigger notification
-        ScenePlayState prevState = lastPlayState[sceneProject.id];
-        if (sceneProject.playState == ScenePlayState::PLAYING && prevState != ScenePlayState::PLAYING) {
-            if (!sceneProject.isVisible) {
-                hasNotification[sceneProject.id] = true;
-            }
-        }
-        if (sceneProject.playState == ScenePlayState::STOPPED && prevState != ScenePlayState::STOPPED) {
-            hasNotification[sceneProject.id] = false;
-        }
-        lastPlayState[sceneProject.id] = sceneProject.playState;
+        const bool isRuntimeActive = sceneProject.playState == ScenePlayState::PLAYING
+            || sceneProject.playState == ScenePlayState::PAUSED;
 
         if (hasNotification[sceneProject.id]) {
             App::pushTabNotificationStyle();
         }
         ImGuiWindowFlags windowFlags = hasNotification[sceneProject.id] ? ImGuiWindowFlags_UnsavedDocument : 0;
         ImGui::SetNextWindowSizeConstraints(ImVec2(200, 200), ImVec2(FLT_MAX, FLT_MAX));
-        if (ImGui::Begin(getWindowTitle(sceneProject).c_str(), canClose ? &isOpen : nullptr, windowFlags)) {
-            if (hasNotification[sceneProject.id]) App::popTabNotificationStyle();
-            sceneProject.isVisible = true;
+        const bool sceneWindowVisible = ImGui::Begin(getWindowTitle(sceneProject).c_str(), canClose ? &isOpen : nullptr, windowFlags);
+        if (hasNotification[sceneProject.id]) App::popTabNotificationStyle();
+
+        if (!isRuntimeActive) {
             hasNotification[sceneProject.id] = false;
+        } else if (sceneWindowVisible) {
+            hasNotification[sceneProject.id] = false;
+        } else {
+            hasNotification[sceneProject.id] = true;
+        }
+
+        if (sceneWindowVisible) {
+            sceneProject.isVisible = true;
 
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
                 windowFocused = true;
@@ -1452,8 +1450,7 @@ void editor::SceneWindow::show() {
                 sceneEventHandler(&sceneProject);
             }
             ImGui::EndChild();
-        }else{
-            if (hasNotification[sceneProject.id]) App::popTabNotificationStyle();
+        } else {
             sceneProject.isVisible = false;
         }
         ImGui::End();
