@@ -676,8 +676,15 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                 std::vector<Entity> virtualChildren = ProjectUtils::getVirtualChildren(sceneProject->scene, draggedEntities);
                 exportEntities.insert(exportEntities.end(), virtualChildren.begin(), virtualChildren.end());
 
-                if (draggedEntities.size() == 1 && exportEntities.size() == 1){
-                    YAML::Node entityData = Stream::encodeEntity(draggedEntities[0], sceneProject->scene, project, sceneProject);
+                if (draggedEntities.size() == 1 && draggedEntities[0] == node.id){
+                    YAML::Node entityData;
+                    if (exportEntities.size() == 1) {
+                        entityData = Stream::encodeEntity(draggedEntities[0], sceneProject->scene, project, sceneProject);
+                    } else {
+                        // Embed the full export data (including virtual action children) in the entity payload.
+                        // Structure uses only the EntityPayload header for reparenting; Resources uses the YAML tail.
+                        entityData = Stream::encodeEntitySelection(exportEntities, sceneProject->scene);
+                    }
 
                     std::string yamlString = YAML::Dump(entityData);
 

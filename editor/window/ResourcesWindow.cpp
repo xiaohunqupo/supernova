@@ -1664,6 +1664,11 @@ void editor::ResourcesWindow::saveEntityFile(const fs::path& directory, const ch
     std::string entityName = "Bundle";
     if (entityNode["name"]) {
         entityName = entityNode["name"].as<std::string>();
+    } else if (entityNode["members"] && entityNode["members"].IsSequence() && entityNode["members"].size() > 0) {
+        YAML::Node firstMember = entityNode["members"][0];
+        if (firstMember["name"]) {
+            entityName = firstMember["name"].as<std::string>();
+        }
     }
 
     std::string baseName = entityName.empty() ? "Bundle" : entityName;
