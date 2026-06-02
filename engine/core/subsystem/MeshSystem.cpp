@@ -25,6 +25,7 @@
 #include <utility>
 #include "tiny_obj_loader.h"
 #include "tiny_gltf.h"
+#include "pool/ObjModelData.h"
 
 using namespace doriax;
 
@@ -35,9 +36,7 @@ struct MeshSystem::AsyncModelLoadResult {
     std::string warn;
     std::string err;
     std::shared_ptr<tinygltf::Model> gltfModel;
-    tinyobj::attrib_t objAttrib;
-    std::vector<tinyobj::shape_t> objShapes;
-    std::vector<tinyobj::material_t> objMaterials;
+    std::shared_ptr<ObjModelData> objModel;
 };
 
 std::mutex& MeshSystem::getAsyncModelMutex(){
@@ -700,7 +699,8 @@ std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::loadModelFileOnWor
         if (obj){
             tinyobj::FileReader::externalFunc = readFileToString;
             std::string baseDir = FileData::getBaseDir(filename);
-            result->success = tinyobj::LoadObj(&result->objAttrib, &result->objShapes, &result->objMaterials, &result->warn, &result->err, filename.c_str(), baseDir.c_str());
+            result->objModel = std::make_shared<ObjModelData>();
+            result->success = tinyobj::LoadObj(&result->objModel->attrib, &result->objModel->shapes, &result->objModel->materials, &result->warn, &result->err, filename.c_str(), baseDir.c_str());
         }else{
             result->gltfModel = std::make_shared<tinygltf::Model>();
 
@@ -2221,7 +2221,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     const std::string poolKey = getModelFilenameKey(filename);
 
     // If parsed data is already cached, skip the async background-thread entirely.
-    if (asyncLoad && ModelPool::get(poolKey)){
+    if (asyncLoad && ModelPool::getGLTF(poolKey)){
         asyncLoad = false;
     }
 
@@ -2258,17 +2258,17 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
     if (asyncLoad){
         // Async loader already produced a parsed model; reuse it (and cache it).
-        auto cached = ModelPool::get(poolKey);
+        auto cached = ModelPool::getGLTF(poolKey);
         if (cached){
             model.gltfModel = cached;
         }else{
             model.gltfModel = asyncResult->gltfModel;
-            ModelPool::add(poolKey, model.gltfModel);
+            ModelPool::addGLTF(poolKey, model.gltfModel);
         }
         res = true;
     }else{
         // Try cache before hitting disk.
-        auto cached = ModelPool::get(poolKey);
+        auto cached = ModelPool::getGLTF(poolKey);
         if (cached){
             model.gltfModel = cached;
             res = true;
@@ -2300,7 +2300,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 return false;
             }
 
-            ModelPool::add(poolKey, model.gltfModel);
+            ModelPool::addGLTF(poolKey, model.gltfModel);
         }
     }
 
@@ -3054,10 +3054,17 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 }
 
 bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLoad){
+    const std::string poolKey = getModelFilenameKey(filename);
+
+    // If parsed data is already cached, skip the async background-thread entirely.
+    if (asyncLoad && ModelPool::getObj(poolKey)){
+        asyncLoad = false;
+    }
+
     std::shared_ptr<AsyncModelLoadResult> asyncResult;
     if (asyncLoad){
         asyncResult = pollOrStartAsyncModelLoad(filename, true);
-        if (!asyncResult || !asyncResult->success){
+        if (!asyncResult || !asyncResult->success || !asyncResult->objModel){
             return false;
         }
     }
@@ -3075,14 +3082,6 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
     mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
     mesh.numSubmeshes = 1;
 
-    tinyobj::attrib_t localAttrib;
-    std::vector<tinyobj::shape_t> localShapes;
-    std::vector<tinyobj::material_t> localMaterials;
-
-    tinyobj::attrib_t* attrib = &localAttrib;
-    std::vector<tinyobj::shape_t>* shapes = &localShapes;
-    std::vector<tinyobj::material_t>* materials = &localMaterials;
-
     std::string warn;
     std::string err;
 
@@ -3090,27 +3089,46 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
     std::string baseDir = FileData::getBaseDir(filename);
 
-    bool ret = true;
+    bool ret = false;
+
     if (asyncLoad){
-        attrib = &asyncResult->objAttrib;
-        shapes = &asyncResult->objShapes;
-        materials = &asyncResult->objMaterials;
+        auto cached = ModelPool::getObj(poolKey);
+        if (cached){
+            model.objModel = cached;
+        }else{
+            model.objModel = asyncResult->objModel;
+            ModelPool::addObj(poolKey, model.objModel);
+        }
+        ret = true;
     }else{
-        ret = tinyobj::LoadObj(attrib, shapes, materials, &warn, &err, filename.c_str(), baseDir.c_str());
+        auto cached = ModelPool::getObj(poolKey);
+        if (cached){
+            model.objModel = cached;
+            ret = true;
+        }else{
+            model.objModel = std::make_shared<ObjModelData>();
+            ret = tinyobj::LoadObj(&model.objModel->attrib, &model.objModel->shapes, &model.objModel->materials, &warn, &err, filename.c_str(), baseDir.c_str());
 
-        if (!warn.empty()) {
-            Log::warn("Loading OBJ model (%s): %s", filename.c_str(), warn.c_str());
-        }
+            if (!warn.empty()) {
+                Log::warn("Loading OBJ model (%s): %s", filename.c_str(), warn.c_str());
+            }
 
-        if (!err.empty()) {
-            Log::error("Can't load OBJ model (%s): %s", filename.c_str(), err.c_str());
-            return false;
-        }
+            if (!err.empty()) {
+                Log::error("Can't load OBJ model (%s): %s", filename.c_str(), err.c_str());
+                return false;
+            }
 
-        if (!ret) {
-            return false;
+            if (!ret) {
+                return false;
+            }
+
+            ModelPool::addObj(poolKey, model.objModel);
         }
     }
+
+    tinyobj::attrib_t& attrib = model.objModel->attrib;
+    std::vector<tinyobj::shape_t>& shapes = model.objModel->shapes;
+    std::vector<tinyobj::material_t>& materials = model.objModel->materials;
 
     mesh.buffer.clear();
     mesh.buffer.addAttribute(AttributeType::POSITION, 3);
@@ -3118,8 +3136,8 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
     mesh.buffer.addAttribute(AttributeType::NORMAL, 3);
     mesh.buffer.addAttribute(AttributeType::COLOR, 4);
 
-    if (materials->size() > 0){
-        mesh.numSubmeshes = materials->size();
+    if (materials.size() > 0){
+        mesh.numSubmeshes = materials.size();
 
     }
 
@@ -3132,7 +3150,7 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
         ResourceProgress::updateProgress(buildId, 0.4f); // Materials setup
     }
 
-    const bool hasMaterials = !materials->empty();
+    const bool hasMaterials = !materials.empty();
 
     for (size_t i = 0; i < mesh.numSubmeshes; i++) {
         // Update progress for material processing
@@ -3150,7 +3168,7 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
         // Convert the blinn-phong model to the pbr metallic-roughness model
         // Based on https://github.com/CesiumGS/obj2gltf
-        const tinyobj::material_t& objMaterial = (*materials)[i];
+        const tinyobj::material_t& objMaterial = materials[i];
         const float specularIntensity = objMaterial.specular[0] * 0.2125 + objMaterial.specular[1] * 0.7154 + objMaterial.specular[2] * 0.0721; //luminance
 
         float roughnessFactor = objMaterial.shininess;
@@ -3198,55 +3216,55 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
     Attribute* attColor = mesh.buffer.getAttribute(AttributeType::COLOR);
 
     std::vector<std::vector<uint16_t>> indexMap;
-    if (materials->size() > 0) {
-        indexMap.resize(materials->size());
+    if (materials.size() > 0) {
+        indexMap.resize(materials.size());
     }else{
         indexMap.resize(1);
     }
 
-    for (size_t i = 0; i < shapes->size(); i++) {
+    for (size_t i = 0; i < shapes.size(); i++) {
         // Update progress for shape processing
         if (asyncLoad) {
-            float shapeProgress = 0.6f + (0.3f * (float(i) / float(shapes->size())));
+            float shapeProgress = 0.6f + (0.3f * (float(i) / float(shapes.size())));
             ResourceProgress::updateProgress(buildId, shapeProgress);
         }
 
         size_t index_offset = 0;
-        for (size_t f = 0; f < (*shapes)[i].mesh.num_face_vertices.size(); f++) {
-            size_t fnum = (*shapes)[i].mesh.num_face_vertices[f];
+        for (size_t f = 0; f < shapes[i].mesh.num_face_vertices.size(); f++) {
+            size_t fnum = shapes[i].mesh.num_face_vertices[f];
 
-            int material_id = (*shapes)[i].mesh.material_ids[f];
+            int material_id = shapes[i].mesh.material_ids[f];
             if (material_id < 0 || material_id >= static_cast<int>(indexMap.size()))
                 material_id = 0;
 
             // For each vertex in the face
             for (size_t v = 0; v < fnum; v++) {
-                tinyobj::index_t idx = (*shapes)[i].mesh.indices[index_offset + v];
+                tinyobj::index_t idx = shapes[i].mesh.indices[index_offset + v];
 
                 indexMap[material_id].push_back(mesh.buffer.getCount());
 
                     mesh.buffer.addVector3(attVertex,
-                                        Vector3(attrib->vertices[3*idx.vertex_index+0],
-                                                attrib->vertices[3*idx.vertex_index+1],
-                                                attrib->vertices[3*idx.vertex_index+2]));
+                                        Vector3(attrib.vertices[3*idx.vertex_index+0],
+                                                attrib.vertices[3*idx.vertex_index+1],
+                                                attrib.vertices[3*idx.vertex_index+2]));
 
-                if (attrib->texcoords.size() > 0) {
+                if (attrib.texcoords.size() > 0) {
                         mesh.buffer.addVector2(attTexcoord,
-                                            Vector2(attrib->texcoords[2 * idx.texcoord_index + 0],
-                                                    1.0f - attrib->texcoords[2 * idx.texcoord_index + 1]));
+                                            Vector2(attrib.texcoords[2 * idx.texcoord_index + 0],
+                                                    1.0f - attrib.texcoords[2 * idx.texcoord_index + 1]));
                 }
-                if (attrib->normals.size() > 0) {
+                if (attrib.normals.size() > 0) {
                         mesh.buffer.addVector3(attNormal,
-                                            Vector3(attrib->normals[3 * idx.normal_index + 0],
-                                                    attrib->normals[3 * idx.normal_index + 1],
-                                                    attrib->normals[3 * idx.normal_index + 2]));
+                                            Vector3(attrib.normals[3 * idx.normal_index + 0],
+                                                    attrib.normals[3 * idx.normal_index + 1],
+                                                    attrib.normals[3 * idx.normal_index + 2]));
                 }
 
-                if (attrib->colors.size() > 0){
+                if (attrib.colors.size() > 0){
                         mesh.buffer.addVector4(attColor,
-                                            Vector4(attrib->colors[3 * idx.vertex_index + 0],
-                                                    attrib->colors[3 * idx.vertex_index + 1],
-                                                    attrib->colors[3 * idx.vertex_index + 2],
+                                            Vector4(attrib.colors[3 * idx.vertex_index + 0],
+                                                    attrib.colors[3 * idx.vertex_index + 1],
+                                                    attrib.colors[3 * idx.vertex_index + 2],
                                                     1.0));
                 }else{
                         mesh.buffer.addVector4(attColor, Vector4(1.0, 1.0, 1.0, 1.0));
@@ -3342,8 +3360,13 @@ void MeshSystem::destroyModel(ModelComponent& model){
         model.gltfModel.reset();
     }
 
+    if (model.objModel){
+        model.objModel.reset();
+    }
+
     if (!model.loadedFilename.empty()){
-        ModelPool::remove(model.loadedFilename);
+        ModelPool::removeGLTF(model.loadedFilename);
+        ModelPool::removeObj(model.loadedFilename);
     }
 
     model.morphNameMapping.clear();

@@ -15,8 +15,11 @@ namespace tinygltf {class Model;}
 
 namespace doriax{
 
+    struct ObjModelData;
+
     struct DORIAX_API ModelComponent{
         std::shared_ptr<tinygltf::Model> gltfModel;
+        std::shared_ptr<ObjModelData> objModel;
 
         Matrix4 inverseDerivedTransform;
         
