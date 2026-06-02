@@ -300,6 +300,8 @@ namespace doriax::editor {
         bool findRefocusInput = false;
         bool pendingFocus = false;
         bool findLastCaseSensitive = false;
+        bool showContextMenu = false;
+        ImVec2 contextMenuPos;
 
         // Visual settings
         ImVec4 palette[static_cast<int>(TokenType::Count)];
@@ -390,7 +392,10 @@ namespace doriax::editor {
         void renderAutoComplete(const ImVec2& origin);
         void renderTooltip();
         void renderFindDialog(const ImVec2& editorPos, const ImVec2& editorSize);
+        void renderContextMenu();
         void renderMinimap(ImDrawList* drawList, const ImVec2& origin, const ImVec2& size);
+
+        void placeCursorAtClick(const TextPosition& clickPos);
 
         char getCharAt(const TextPosition& pos) const;
         char findMatchingBracket(const TextPosition& pos, TextPosition& matchPos) const;

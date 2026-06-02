@@ -43,6 +43,7 @@ namespace doriax::editor {
         bool autoScroll;                // when true, keep pinned to bottom
         bool autoScrollLockedButton;    // the button state
         float lastScrollY;              // track last scroll position to detect manual scrolling
+        bool pendingScrollToBottom;       // one-shot scroll from context menu
 
         // Search options
         bool searchMatchCase;           // enable case-sensitive search
@@ -63,6 +64,11 @@ namespace doriax::editor {
 
         // Text filter helper honoring match-case
         bool passTextFilter(const char* text) const;
+
+        std::string buildCopyText(int startInclusive, int endExclusive) const;
+        bool copySelectionToClipboard();
+        void copyAllToClipboard();
+        void selectAll();
 
     public:
         static constexpr const char* WINDOW_NAME = "Output";

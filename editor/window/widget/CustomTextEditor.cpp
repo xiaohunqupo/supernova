@@ -3060,7 +3060,6 @@ void CustomTextEditor::handleKeyboardInput() {
 void CustomTextEditor::handleMouseInput() {
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 mousePos = io.MousePos;
-    ImVec2 windowPos = ImGui::GetWindowPos();
     ImVec2 contentPos = ImGui::GetCursorScreenPos();
 
     bool ctrl = io.KeyCtrl;
@@ -3068,6 +3067,7 @@ void CustomTextEditor::handleMouseInput() {
     bool alt = io.KeyAlt;
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        showContextMenu = false;
         TextPosition clickPos = screenToText(mousePos, contentPos);
 
         auto now = std::chrono::steady_clock::now();
@@ -3227,6 +3227,13 @@ void CustomTextEditor::handleMouseInput() {
     // Update param hint after mouse clicks may move cursor
     if (showParamHint && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         updateParamHint();
+    }
+
+    if (!suggestionsHovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+        placeCursorAtClick(screenToText(mousePos, contentPos));
+        CloseAutoComplete();
+        showContextMenu = true;
+        contextMenuPos = mousePos;
     }
 }
 
@@ -3814,6 +3821,81 @@ void CustomTextEditor::renderFindDialog(const ImVec2& editorPos, const ImVec2& e
     ImGui::PopStyleVar(2);
 }
 
+void CustomTextEditor::placeCursorAtClick(const TextPosition& clickPos) {
+    for (const auto& cursor : cursors) {
+        if (!cursor.selection.isEmpty()) {
+            TextPosition min = cursor.selection.getMin();
+            TextPosition max = cursor.selection.getMax();
+            if (clickPos >= min && clickPos < max) {
+                return;
+            }
+        }
+    }
+
+    cursors.clear();
+    Cursor cursor;
+    cursor.position = clickPos;
+    cursor.selection.start = clickPos;
+    cursor.selection.end = clickPos;
+    cursors.push_back(cursor);
+    primaryCursor = 0;
+}
+
+void CustomTextEditor::renderContextMenu() {
+    if (!showContextMenu) {
+        return;
+    }
+
+    ImGui::SetNextWindowPos(contextMenuPos, ImGuiCond_Always);
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing;
+
+    ImGui::PushID(this);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 6));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.12f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.3f, 0.3f, 0.8f));
+
+    if (ImGui::Begin("##ContextMenu", nullptr, flags)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            showContextMenu = false;
+        } else if (!ImGui::IsWindowHovered() &&
+                   (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))) {
+            showContextMenu = false;
+        } else {
+            const bool canUseClipboard = ImGui::GetClipboardText() != nullptr;
+            const bool canEdit = !readOnly;
+            const bool hasLine = !lines.empty();
+
+            auto menuItem = [&](const char* label, const char* shortcut, bool enabled, auto action) {
+                if (ImGui::MenuItem(label, shortcut, false, enabled)) {
+                    action();
+                    showContextMenu = false;
+                }
+            };
+
+            menuItem(ICON_FA_ROTATE_LEFT " Undo", "Ctrl+Z", canEdit && CanUndo(), [&] { Undo(); });
+            menuItem(ICON_FA_ROTATE_RIGHT " Redo", "Ctrl+Y", canEdit && CanRedo(), [&] { Redo(); });
+            ImGui::Separator();
+            menuItem(ICON_FA_SCISSORS " Cut", "Ctrl+X", canEdit && hasLine, [&] { Cut(); });
+            menuItem(ICON_FA_COPY " Copy", "Ctrl+C", hasLine, [&] { Copy(); });
+            menuItem(ICON_FA_PASTE " Paste", "Ctrl+V", canEdit && canUseClipboard, [&] { Paste(); });
+            ImGui::Separator();
+            menuItem(ICON_FA_I_CURSOR " Select All", "Ctrl+A", hasLine, [&] { SelectAll(); });
+            ImGui::Separator();
+            menuItem(ICON_FA_MAGNIFYING_GLASS " Find", "Ctrl+F", true, [&] { OpenFind(); });
+        }
+    }
+    ImGui::End();
+
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(3);
+    ImGui::PopID();
+}
+
 void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, backgroundColor);
 
@@ -3827,6 +3909,7 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
     if (contentSize.x == 0) contentSize.x = ImGui::GetContentRegionAvail().x;
     if (contentSize.y == 0) contentSize.y = ImGui::GetContentRegionAvail().y;
 
+    ImGui::PushID(this);
     if (ImGui::BeginChild(title, contentSize, border ? ImGuiChildFlags_Borders : ImGuiChildFlags_None, flags)) {
         // Auto-focus editor child when parent window is focused but child is not
         // (e.g., user clicked the window tab/title bar)
@@ -3948,26 +4031,6 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
         renderText(drawList, origin, startLine, endLine);
         renderCursors(drawList, origin);
 
-        // Context Menu
-        ImGui::PushFont(ImGui::GetIO().FontDefault);
-        if (ImGui::BeginPopupContextWindow("##EditorContextMenu")) {
-            if (ImGui::MenuItem(ICON_FA_SCISSORS " Cut", "Ctrl+X", false, !readOnly && HasSelection())) {
-                Cut();
-            }
-            if (ImGui::MenuItem(ICON_FA_COPY " Copy", "Ctrl+C", false, HasSelection())) {
-                Copy();
-            }
-            if (ImGui::MenuItem(ICON_FA_PASTE " Paste", "Ctrl+V", false, !readOnly && ImGui::GetClipboardText() != nullptr)) {
-                Paste();
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem(ICON_FA_MAGNIFYING_GLASS " Find", "Ctrl+F")) {
-                OpenFind();
-            }
-            ImGui::EndPopup();
-        }
-        ImGui::PopFont();
-
         // Render Find Dialog
         ImGui::PushFont(ImGui::GetIO().FontDefault);
         renderFindDialog(ImGui::GetWindowPos(), contentSize);
@@ -3975,10 +4038,15 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
 
     }
     ImGui::EndChild();
+    ImGui::PopID();
 
     ImGui::PopStyleColor();
 
-    // Render tooltip overlay
+    // Context menu is a top-level window (ImGui popups do not work reliably inside this child).
+    ImGui::PushFont(ImGui::GetIO().FontDefault);
+    renderContextMenu();
+    ImGui::PopFont();
+
     renderTooltip();
 }
 
