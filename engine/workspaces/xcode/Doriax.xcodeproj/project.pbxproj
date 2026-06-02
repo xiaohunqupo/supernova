@@ -10,6 +10,7 @@
 		1721303B2FB012BD00390DC2 /* SoundPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1721303A2FB012BD00390DC2 /* SoundPool.cpp */; };
 		1721303C2FB012BD00390DC2 /* SoundPool.h in Headers */ = {isa = PBXBuildFile; fileRef = 172130392FB012BD00390DC2 /* SoundPool.h */; };
 		1721303D2FB012BD00390DC2 /* SoundPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1721303A2FB012BD00390DC2 /* SoundPool.cpp */; };
+		17235AD82FCF546A00AF8D04 /* ObjModelData.h in Headers */ = {isa = PBXBuildFile; fileRef = 17235AD72FCF546A00AF8D04 /* ObjModelData.h */; };
 		172A59A52FC4CF36002FDFCA /* ShaderBuildTypes.h in Headers */ = {isa = PBXBuildFile; fileRef = 172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */; };
 		1787AD8E2F673CE000DB1D75 /* BundleComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 1787AD8D2F673CE000DB1D75 /* BundleComponent.h */; };
 		1787AD942F6C333300DB1D75 /* SceneManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD922F6C333300DB1D75 /* SceneManager.cpp */; };
@@ -1286,6 +1287,7 @@
 /* Begin PBXFileReference section */
 		172130392FB012BD00390DC2 /* SoundPool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SoundPool.h; sourceTree = "<group>"; };
 		1721303A2FB012BD00390DC2 /* SoundPool.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SoundPool.cpp; sourceTree = "<group>"; };
+		17235AD72FCF546A00AF8D04 /* ObjModelData.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjModelData.h; sourceTree = "<group>"; };
 		172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderBuildTypes.h; sourceTree = "<group>"; };
 		1787AD8D2F673CE000DB1D75 /* BundleComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleComponent.h; sourceTree = "<group>"; };
 		1787AD8F2F6C333300DB1D75 /* BundleManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleManager.h; sourceTree = "<group>"; };
@@ -4027,6 +4029,7 @@
 				7157764D2B050C230049C970 /* FontPool.cpp */,
 				17C554F62FB903B0008804C2 /* ModelPool.h */,
 				17C554F72FB903B0008804C2 /* ModelPool.cpp */,
+				17235AD72FCF546A00AF8D04 /* ObjModelData.h */,
 				71BE623725B1DB9E006D6E02 /* ShaderPool.h */,
 				71BE623525B1DB9E006D6E02 /* ShaderPool.cpp */,
 				172130392FB012BD00390DC2 /* SoundPool.h */,
@@ -4311,6 +4314,7 @@
 				718FDDF72837CA9A00AF314C /* glsl100.h in Headers */,
 				71E54516284D5BE000C68FAB /* RotateTracksComponent.h in Headers */,
 				172A59A52FC4CF36002FDFCA /* ShaderBuildTypes.h in Headers */,
+				17235AD82FCF546A00AF8D04 /* ObjModelData.h in Headers */,
 				717AD96F290B661A007D7DB5 /* AudioSystem.h in Headers */,
 				7128D10225C2354A00965B51 /* SystemRender.h in Headers */,
 				715253542CD057C400D294D8 /* Sphere.h in Headers */,
