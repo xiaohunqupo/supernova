@@ -1,5 +1,6 @@
 #include "Exporter.h"
 #include "EditorHost.h"
+#include "Factory.h"
 #include "Out.h"
 #include "Stream.h"
 #include "util/Base64.h"
@@ -711,6 +712,29 @@ bool editor::Exporter::copyEngine() {
         setError("Failed to copy CMakeLists.txt: " + ec.message());
         return false;
     }
+
+    std::string appName = Factory::toIdentifier(project->getName());
+    if (appName.empty()) {
+        appName = "doriax-project";
+    }
+
+    std::ifstream cmakeIfs(cmakeDst, std::ios::in | std::ios::binary);
+    if (!cmakeIfs) {
+        setError("Failed to read exported CMakeLists.txt");
+        return false;
+    }
+    std::string cmakeContent((std::istreambuf_iterator<char>(cmakeIfs)), std::istreambuf_iterator<char>());
+    cmakeIfs.close();
+
+    const std::string defaultAppName = "set(APP_NAME doriax-project)";
+    const std::string patchedAppName = "set(APP_NAME " + appName + ")";
+    const size_t appNamePos = cmakeContent.find(defaultAppName);
+    if (appNamePos == std::string::npos) {
+        setError("Exported CMakeLists.txt is missing default APP_NAME");
+        return false;
+    }
+    cmakeContent.replace(appNamePos, defaultAppName.size(), patchedAppName);
+    FileUtils::writeIfChanged(cmakeDst, cmakeContent);
 
     return true;
 }
