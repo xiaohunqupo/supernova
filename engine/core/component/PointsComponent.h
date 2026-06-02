@@ -14,7 +14,7 @@ namespace doriax{
     struct PointData{
         Vector3 position = Vector3(0.0, 0.0, 0.0);
         Vector4 color = Vector4(1.0, 1.0, 1.0, 1.0);
-        float size = 1;
+        float size = 1; // world-space diameter (matches mesh extent at unit scale)
         float rotation = 0;
         Rect textureRect = Rect(0.0, 0.0, 1.0, 1.0);
         bool visible = true;

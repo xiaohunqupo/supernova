@@ -1553,7 +1553,50 @@ bool RenderSystem::loadLines(Entity entity, LinesComponent& lines, uint8_t pipel
     return true;
 }
 
-bool RenderSystem::drawPoints(PointsComponent& points, Transform& transform, Transform& camTransform, bool renderToTexture){
+float RenderSystem::getPointsViewportHeight(const CameraComponent& camera) const{
+    if (camera.renderToTexture && camera.framebuffer){
+        return (float)camera.framebuffer->getHeight();
+    }
+    if (Framebuffer* engineFb = Engine::getFramebuffer()){
+        if (engineFb->isCreated()){
+            return (float)engineFb->getHeight();
+        }
+    }
+    float viewHeight = Engine::getViewRect().getHeight();
+    if (viewHeight > 0.0f){
+        return viewHeight;
+    }
+    return (float)Engine::getCanvasHeight();
+}
+
+float RenderSystem::computePointsScale(const CameraComponent& camera, float viewportHeight) const{
+    if (viewportHeight <= 0.0f){
+        return 1.0f;
+    }
+
+    if (camera.type == CameraType::CAMERA_PERSPECTIVE){
+        float tanHalfFov = tanf(camera.yfov * 0.5f);
+        if (tanHalfFov <= 0.0f){
+            return 1.0f;
+        }
+        return viewportHeight / (2.0f * tanHalfFov);
+    }
+
+    float orthoHeight = 0.0f;
+    if (camera.type == CameraType::CAMERA_UI){
+        orthoHeight = fabsf(camera.topClip - camera.bottomClip);
+    }else{
+        orthoHeight = camera.topClip - camera.bottomClip;
+    }
+
+    if (orthoHeight <= 0.0f){
+        return 1.0f;
+    }
+
+    return viewportHeight / orthoHeight;
+}
+
+bool RenderSystem::drawPoints(PointsComponent& points, Transform& transform, CameraComponent& camera, Transform& camTransform, bool renderToTexture){
     if (points.loaded && points.numVisible > 0){
 
         if (points.needUpdateTexture || points.texture.isFramebufferOutdated()){
@@ -1579,7 +1622,10 @@ bool RenderSystem::drawPoints(PointsComponent& points, Transform& transform, Tra
             points.needReload = true;
             return false;
         }
-        render.applyUniformBlock(points.slotVSParams, sizeof(float) * 16, &transform.modelViewProjectionMatrix);
+        vs_points_params_t vsParams = {};
+        vsParams.mvpMatrix = transform.modelViewProjectionMatrix;
+        vsParams.pointScale = computePointsScale(camera, getPointsViewportHeight(camera));
+        render.applyUniformBlock(points.slotVSParams, sizeof(vs_points_params_t), &vsParams);
         render.draw(points.numVisible, 1);
     }
 
@@ -1996,15 +2042,7 @@ void RenderSystem::updateSkyViewProjection(SkyComponent& sky, CameraComponent& c
 }
 
 void RenderSystem::updatePoints(PointsComponent& points, Transform& transform, CameraComponent& camera, Transform& camTransform){
-    // point particle sizes are in pixels, need to convert it to canvas size
-    float sizeScale = 1.0f;
-    int canvasW = Engine::getCanvasWidth();
-    int canvasH = Engine::getCanvasHeight();
-    if (canvasW > 0 && canvasH > 0){
-        float sizeScaleW = System::instance().getScreenWidth() / (float)canvasW;
-        float sizeScaleH = System::instance().getScreenHeight() / (float)canvasH;
-        sizeScale = std::max(sizeScaleW, sizeScaleH);
-    }
+    float worldScale = std::max(transform.worldScale.x, std::max(transform.worldScale.y, transform.worldScale.z));
 
     points.numVisible = 0;
     size_t pointsSize = (points.points.size() < points.maxPoints)? points.points.size() : points.maxPoints;
@@ -2017,7 +2055,7 @@ void RenderSystem::updatePoints(PointsComponent& points, Transform& transform, C
             PointRenderData& renderPoint = points.renderPoints[points.numVisible];
             renderPoint.position = points.points[i].position;
             renderPoint.color = points.points[i].color;
-            renderPoint.size = points.points[i].size * sizeScale;
+            renderPoint.size = points.points[i].size * worldScale;
             renderPoint.rotation = points.points[i].rotation;
             renderPoint.textureRect = points.points[i].textureRect;
             points.numVisible++;
@@ -3350,7 +3388,7 @@ void RenderSystem::draw(){
 
                 if (transform.visible){
                     if (!points.transparent || !camera.transparentSort){
-                        drawPoints(points, transform, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+                        drawPoints(points, transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
                     }else{
                         transparentRenders.push({TransparentRenderType::POINTS, nullptr, &points, nullptr, nullptr, &transform, transform.distanceToCamera});
                     }
@@ -3381,7 +3419,7 @@ void RenderSystem::draw(){
             if (renderData.type == TransparentRenderType::MESH){
                 drawMesh(*renderData.mesh, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), renderData.instmesh, renderData.terrain);
             }else if (renderData.type == TransparentRenderType::POINTS){
-                drawPoints(*renderData.points, *renderData.transform, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+                drawPoints(*renderData.points, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
             }
 
             transparentRenders.pop();

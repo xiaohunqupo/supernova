@@ -2,6 +2,7 @@
 
 uniform u_vs_pointsParams {
     mat4 mvpMatrix;
+    float pointScale;
 } pointsParams;
 
 in vec3 a_position;
@@ -44,5 +45,8 @@ void main() {
     #endif
 
     gl_Position = pointsParams.mvpMatrix * vec4(a_position, 1.0);
-    gl_PointSize = a_pointsize / gl_Position.w;
+
+    // gl_Position.w is the eye-space depth for perspective and exactly 1.0 for
+    // ortho/UI, so this single expression gives world-space sizing in both cases.
+    gl_PointSize = max(a_pointsize * pointsParams.pointScale / gl_Position.w, 1.0);
 }

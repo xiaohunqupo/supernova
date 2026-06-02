@@ -59,6 +59,12 @@ namespace doriax{
 	    Matrix4 lightSpaceMatrix;
 	} vs_depth_t;
 
+	typedef struct vs_points_params_t {
+		Matrix4 mvpMatrix;
+		float pointScale;
+		float padding[3];
+	} vs_points_params_t;
+
 	typedef struct check_load_t {
 		Scene* scene;
 		Entity entity;
@@ -148,7 +154,9 @@ namespace doriax{
 		bool drawUI(UIComponent& ui, Transform& transform, bool renderToTexture);
 		void destroyUI(Entity entity, UIComponent& ui);
 
-		bool drawPoints(PointsComponent& points, Transform& transform, Transform& camTransform, bool renderToTexture);
+		bool drawPoints(PointsComponent& points, Transform& transform, CameraComponent& camera, Transform& camTransform, bool renderToTexture);
+		float getPointsViewportHeight(const CameraComponent& camera) const;
+		float computePointsScale(const CameraComponent& camera, float viewportHeight) const;
 		void destroyPoints(Entity entity, PointsComponent& points);
 
 		bool drawLines(LinesComponent& lines, Transform& transform, Transform& camTransform, bool renderToTexture);
