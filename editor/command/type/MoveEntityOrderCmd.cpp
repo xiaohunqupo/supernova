@@ -39,9 +39,7 @@ bool editor::MoveEntityOrderCmd::execute(){
                 fs::path parentBundlePath = project->findEntityBundlePathFor(sceneId, transformTarget->parent);
 
                 EntityBundle* sourceBundle = project->getEntityBundle(sourceBundlePath);
-                uint32_t sourceInstanceId = sourceBundle->getInstanceId(sceneId, source);
-
-                bool isSourceRoot = sourceBundle && (sourceBundle->getRootEntity(sceneId, sourceInstanceId) == source);
+                bool isSourceRoot = sourceBundle && (sourceBundle->getRootEntity(sceneId, source) == source);
 
                 if (parentBundlePath != sourceBundlePath && targetBundlePath != sourceBundlePath && !isSourceRoot){
                     Out::error("Cannot move bundle entity %u outside entity bundle", source);
