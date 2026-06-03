@@ -3802,21 +3802,8 @@ bool editor::Project::createEntityBundle(uint32_t sceneId, fs::path filepath, YA
         rootName = "Bundle";
     }
 
-    std::string uniqueRootName = rootName;
-    unsigned int nameCount = 2;
-    bool foundName = true;
-    while (foundName) {
-        foundName = false;
-        for (Entity sceneEntity : sceneProject->entities) {
-            if (scene->getEntityName(sceneEntity) == uniqueRootName) {
-                uniqueRootName = rootName + " " + std::to_string(nameCount++);
-                foundName = true;
-                break;
-            }
-        }
-    }
-
-    scene->setEntityName(rootEntity, uniqueRootName);
+    std::unordered_set<Entity> ignoredEntities(branchEntities.begin(), branchEntities.end());
+    scene->setEntityName(rootEntity, ProjectUtils::makeUniqueEntityName(scene, sceneProject->entities, rootName, ignoredEntities));
     sceneProject->entities.push_back(rootEntity);
 
     Entity firstBundleEntity = NULL_ENTITY;
@@ -5782,7 +5769,11 @@ void editor::Project::registerBundleManager() {
                 if (!sceneProject) return;
 
                 // Set up root entity (matching createEntityBundle pattern)
-                scene->setEntityName(root, bundlePath.stem().string());
+                std::string rootName = bundlePath.stem().string();
+                if (rootName.empty()) {
+                    rootName = "Bundle";
+                }
+                scene->setEntityName(root, ProjectUtils::makeUniqueEntityName(scene, sceneProject->entities, rootName));
 
                 BundleComponent bundleComp;
                 bundleComp.name = bundlePath.stem().string();

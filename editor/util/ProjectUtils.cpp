@@ -191,6 +191,34 @@ bool editor::ProjectUtils::canMoveLockedEntityOrder(Scene* scene, Entity source,
     return getEffectiveParent(scene, source) == getEffectiveParent(scene, target);
 }
 
+std::string editor::ProjectUtils::makeUniqueEntityName(Scene* scene, const std::vector<Entity>& entities, const std::string& baseName, const std::unordered_set<Entity>& ignoredEntities) {
+    if (!scene || baseName.empty()) {
+        return baseName;
+    }
+
+    std::string uniqueName = baseName;
+    unsigned int nameCount = 2;
+
+    while (true) {
+        bool foundName = false;
+        for (Entity sceneEntity : entities) {
+            if (ignoredEntities.find(sceneEntity) != ignoredEntities.end()) {
+                continue;
+            }
+
+            if (scene->getEntityName(sceneEntity) == uniqueName) {
+                uniqueName = baseName + " " + std::to_string(nameCount++);
+                foundName = true;
+                break;
+            }
+        }
+
+        if (!foundName) {
+            return uniqueName;
+        }
+    }
+}
+
 size_t editor::ProjectUtils::getTransformIndex(EntityRegistry* registry, Entity entity){
     Signature signature = registry->getSignature(entity);
     if (signature.test(registry->getComponentId<Transform>())) {

@@ -2,6 +2,7 @@
 
 #include "editor/Out.h"
 #include "Stream.h"
+#include "util/ProjectUtils.h"
 
 using namespace doriax;
 
@@ -86,7 +87,7 @@ bool editor::ImportEntityBundleCmd::execute(){
     if (rootName.empty()) {
         rootName = "Bundle";
     }
-    scene->setEntityName(rootEntity, rootName);
+    scene->setEntityName(rootEntity, ProjectUtils::makeUniqueEntityName(scene, sceneProject->entities, rootName));
     sceneProject->entities.push_back(rootEntity);
 
     // Reparent under drop target if provided

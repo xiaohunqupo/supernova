@@ -25,6 +25,7 @@ public:
     static bool isEntityLocked(Scene* scene, Entity entity);
     static Entity getEffectiveParent(Scene* scene, Entity entity);
     static bool canMoveLockedEntityOrder(Scene* scene, Entity source, Entity target, InsertionType type);
+    static std::string makeUniqueEntityName(Scene* scene, const std::vector<Entity>& entities, const std::string& baseName, const std::unordered_set<Entity>& ignoredEntities = {});
 
     static size_t getTransformIndex(EntityRegistry* registry, Entity entity);
     static void sortEntitiesByTransformOrder(EntityRegistry* registry, std::vector<Entity>& entities);
