@@ -76,6 +76,9 @@ namespace doriax{
         void applyAnchorPreset(UILayoutComponent& layout);
         void changeFlipY(UIComponent& ui, CameraComponent& camera);
 
+        Entity findNearestLayoutParent(Entity startParent) const;
+        void convertLayoutSpaceToLocalParentSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const;
+
         void destroyText(TextComponent& text);
         void destroyButton(ButtonComponent& button);
         void destroyPanel(PanelComponent& panel);

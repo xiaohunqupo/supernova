@@ -39,8 +39,32 @@ UISystem::UISystem(Scene* scene): SubSystem(scene){
 UISystem::~UISystem(){
 }
 
+Entity UISystem::findNearestLayoutParent(Entity startParent) const{
+    Entity ancestor = startParent;
+    while (ancestor != NULL_ENTITY) {
+        if (scene->findComponent<UILayoutComponent>(ancestor)) {
+            return ancestor;
+        }
+        Transform* ancestorTransform = scene->findComponent<Transform>(ancestor);
+        ancestor = ancestorTransform ? ancestorTransform->parent : NULL_ENTITY;
+    }
+    return NULL_ENTITY;
+}
+
+void UISystem::convertLayoutSpaceToLocalParentSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const{
+    Entity walk = transformParent;
+    while (walk != NULL_ENTITY && walk != layoutParent) {
+        Transform* walkTransform = scene->findComponent<Transform>(walk);
+        if (walkTransform) {
+            posX -= walkTransform->position.x;
+            posY -= walkTransform->position.y;
+        }
+        walk = walkTransform ? walkTransform->parent : NULL_ENTITY;
+    }
+}
+
 Rect UISystem::getAnchorReferenceRect(const UILayoutComponent& layout, const Transform& transform, bool worldPosition){
-    if (transform.parent == NULL_ENTITY){
+    auto canvasRect = [this]() {
         int finalCanvasWidth = Engine::getCanvasWidth();
         if (anchorReferenceWidth != 0)
             finalCanvasWidth = anchorReferenceWidth;
@@ -50,21 +74,40 @@ Rect UISystem::getAnchorReferenceRect(const UILayoutComponent& layout, const Tra
             finalCanvasHeight = anchorReferenceHeight;
 
         return Rect(0, 0, finalCanvasWidth, finalCanvasHeight);
+    };
+
+    if (transform.parent == NULL_ENTITY){
+        return canvasRect();
     }
 
-    UILayoutComponent* parentlayout = scene->findComponent<UILayoutComponent>(transform.parent);
-    if (!parentlayout){
-        return Rect(0, 0, 0, 0);
+    // Bundle roots and other non-UI parents have no UILayout; walk up to the nearest layout parent.
+    Entity layoutParent = findNearestLayoutParent(transform.parent);
+
+    if (layoutParent == NULL_ENTITY){
+        Rect boxRect = canvasRect();
+        if (worldPosition) {
+            Entity walk = transform.parent;
+            while (walk != NULL_ENTITY) {
+                Transform* walkTransform = scene->findComponent<Transform>(walk);
+                if (walkTransform) {
+                    boxRect.setX(boxRect.getX() + walkTransform->worldPosition.x);
+                    boxRect.setY(boxRect.getY() + walkTransform->worldPosition.y);
+                }
+                walk = walkTransform ? walkTransform->parent : NULL_ENTITY;
+            }
+        }
+        return boxRect;
     }
 
+    UILayoutComponent* parentlayout = scene->findComponent<UILayoutComponent>(layoutParent);
     Rect boxRect = Rect(0, 0, parentlayout->width, parentlayout->height);
 
-    UIContainerComponent* parentcontainer = scene->findComponent<UIContainerComponent>(transform.parent);
+    UIContainerComponent* parentcontainer = scene->findComponent<UIContainerComponent>(layoutParent);
     if (parentcontainer){
         boxRect = parentcontainer->boxes[layout.containerBoxIndex].rect;
     }
 
-    ImageComponent* parentimage = scene->findComponent<ImageComponent>(transform.parent);
+    ImageComponent* parentimage = scene->findComponent<ImageComponent>(layoutParent);
     if (parentimage && !layout.ignoreScissor){
         boxRect.setX(boxRect.getX() + parentimage->patchMarginLeft);
         boxRect.setWidth(boxRect.getWidth() - parentimage->patchMarginRight - parentimage->patchMarginLeft);
@@ -73,7 +116,7 @@ Rect UISystem::getAnchorReferenceRect(const UILayoutComponent& layout, const Tra
     }
 
     if (worldPosition){
-        Transform* parentTransform = scene->findComponent<Transform>(transform.parent);
+        Transform* parentTransform = scene->findComponent<Transform>(layoutParent);
         if (parentTransform){
             Vector3 worldPos = parentTransform->worldPosition;
             boxRect.setX(boxRect.getX() + worldPos.x);
@@ -1271,9 +1314,10 @@ void UISystem::update(double dt){
 
         if (signature.test(scene->getComponentId<Transform>())){
             Transform& transform = scene->getComponent<Transform>(entity);
-            UILayoutComponent* parentlayout = scene->findComponent<UILayoutComponent>(transform.parent);
-            if (parentlayout){
-                UIContainerComponent* parentcontainer = scene->findComponent<UIContainerComponent>(transform.parent);
+            Entity layoutParentEntity = findNearestLayoutParent(transform.parent);
+            if (layoutParentEntity != NULL_ENTITY){
+                UILayoutComponent* parentlayout = scene->findComponent<UILayoutComponent>(layoutParentEntity);
+                UIContainerComponent* parentcontainer = scene->findComponent<UIContainerComponent>(layoutParentEntity);
                 if (parentcontainer && transform.visible){
                     if (parentcontainer->numBoxes < MAX_CONTAINER_BOXES){
                         layout.containerBoxIndex = parentcontainer->numBoxes;
@@ -1290,9 +1334,9 @@ void UISystem::update(double dt){
                     }
                 }
 
-                PanelComponent* parentpanel = scene->findComponent<PanelComponent>(transform.parent);
+                PanelComponent* parentpanel = scene->findComponent<PanelComponent>(layoutParentEntity);
                 if (parentpanel){
-                    layout.panel = transform.parent;
+                    layout.panel = layoutParentEntity;
                 }
 
                 if (parentlayout->panel != NULL_ENTITY){
@@ -1434,7 +1478,10 @@ void UISystem::update(double dt){
 
         if (signature.test(scene->getComponentId<Transform>())){
             Transform& transform = scene->getComponent<Transform>(entity);
-            UIContainerComponent* parentcontainer = scene->findComponent<UIContainerComponent>(transform.parent);
+            Entity layoutParentEntity = findNearestLayoutParent(transform.parent);
+            UIContainerComponent* parentcontainer = layoutParentEntity != NULL_ENTITY
+                ? scene->findComponent<UIContainerComponent>(layoutParentEntity)
+                : nullptr;
             if (parentcontainer && layout.containerBoxIndex >= 0){
                 parentcontainer->boxes[layout.containerBoxIndex].rect = Rect(0, 0, layout.width, layout.height);
             }
@@ -1499,6 +1546,11 @@ void UISystem::update(double dt){
 
                 posX += layout.positionOffset.x;
                 posY += layout.positionOffset.y;
+
+                if (transform.parent != NULL_ENTITY){
+                    Entity layoutParentEntity = findNearestLayoutParent(transform.parent);
+                    convertLayoutSpaceToLocalParentSpace(transform.parent, layoutParentEntity, posX, posY);
+                }
 
                 if (posX != transform.position.x || posY != transform.position.y){
                     transform.position.x = posX;
