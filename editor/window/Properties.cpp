@@ -10009,8 +10009,9 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
 }
 
 void editor::Properties::drawBundleComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    beginTable(cpType, getLabelSize("Name"));
+    beginTable(cpType, getLabelSize("Path"));
     propertyRow(RowPropertyType::Label, cpType, "name", "Name", sceneProject, entities);
+    propertyRow(RowPropertyType::Label, cpType, "path", "Path", sceneProject, entities);
     endTable();
 }
 
