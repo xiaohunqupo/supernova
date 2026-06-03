@@ -477,6 +477,33 @@ void UISystem::createTextEditObjects(Entity entity, TextEditComponent& textedit)
     }
 }
 
+void UISystem::applyButtonVisual(ButtonComponent& button, UIComponent& ui){
+    Texture targetTexture;
+    Vector4 targetColor;
+
+    if (button.disabled){
+        targetTexture = button.textureDisabled;
+        targetColor = button.colorDisabled;
+    }else if (button.pressed){
+        targetTexture = button.texturePressed;
+        targetColor = button.colorPressed;
+    }else if (button.hovered){
+        bool hasHoveredTexture = !button.textureHovered.empty() &&
+            (!button.textureHovered.getId().empty() || button.textureHovered.isFramebuffer());
+        targetTexture = hasHoveredTexture ? button.textureHovered : button.textureNormal;
+        targetColor = button.colorHovered;
+    }else{
+        targetTexture = button.textureNormal;
+        targetColor = button.colorNormal;
+    }
+
+    if (ui.texture != targetTexture){
+        ui.texture = targetTexture;
+        ui.needUpdateTexture = true;
+    }
+    ui.color = targetColor;
+}
+
 void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
     createButtonObjects(entity, button);
 
@@ -484,10 +511,15 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
         if (!button.textureNormal.load()){
             button.textureNormal = ui.texture;
         }
+        Vector4 oldColorNormal = button.colorNormal;
         if (button.colorNormal == Vector4(1.0, 1.0, 1.0, 1.0)){
             button.colorNormal = ui.color;
         }
+        if (button.colorHovered == oldColorNormal){
+            button.colorHovered = button.colorNormal;
+        }
         button.textureNormal.load();
+        button.textureHovered.load();
         button.texturePressed.load();
         button.textureDisabled.load();
     }
@@ -499,27 +531,7 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
     labeltext.needUpdateText = true;
     createOrUpdateText(labeltext, labelui, labellayout);
 
-    if (button.disabled){
-        if (ui.texture != button.textureDisabled){
-            ui.texture = button.textureDisabled;
-            ui.needUpdateTexture = true;
-        }
-        ui.color = button.colorDisabled;
-    }else{
-        if (!button.pressed){
-            if (ui.texture != button.textureNormal){
-                ui.texture = button.textureNormal;
-                ui.needUpdateTexture = true;
-            }
-            ui.color = button.colorNormal;
-        }else{
-            if (ui.texture != button.texturePressed){
-                ui.texture = button.texturePressed;
-                ui.needUpdateTexture = true;
-            }
-            ui.color = button.colorPressed;
-        }
-    }
+    applyButtonVisual(button, ui);
 }
 
 void UISystem::updatePanel(Entity entity, PanelComponent& panel, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
@@ -998,6 +1010,7 @@ void UISystem::destroyText(TextComponent& text){
 
 void UISystem::destroyButton(ButtonComponent& button){
     button.textureNormal.destroy();
+    button.textureHovered.destroy();
     button.texturePressed.destroy();
     button.textureDisabled.destroy();
 
@@ -1756,13 +1769,11 @@ void UISystem::resetButtonStates() {
 
         Entity entity = buttons->getEntity(i);
         Signature signature = scene->getSignature(entity);
+        button.pressed = false;
         if (signature.test(scene->getComponentId<UIComponent>())) {
             UIComponent& ui = scene->getComponent<UIComponent>(entity);
-            ui.texture = button.textureNormal;
-            ui.color = button.colorNormal;
-            ui.needUpdateTexture = true;
+            applyButtonVisual(button, ui);
         }
-        button.pressed = false;
     }
 }
 
@@ -1859,10 +1870,8 @@ bool UISystem::eventOnPointerDown(float x, float y){
             if (signature.test(scene->getComponentId<ButtonComponent>())){
                 ButtonComponent& button = scene->getComponent<ButtonComponent>(lastUIFromPointer);
                 if (!button.disabled && !button.pressed){
-                    ui.texture = button.texturePressed;
-                    ui.color = button.colorPressed;
-                    ui.needUpdateTexture = true;
                     button.pressed = true;
+                    applyButtonVisual(button, ui);
                     button.onPress.call();
                 }
             }
@@ -1990,10 +1999,8 @@ bool UISystem::eventOnPointerUp(float x, float y){
             if (signature.test(scene->getComponentId<ButtonComponent>())){
                 ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
                 if (!button.disabled && button.pressed){
-                    ui.texture = button.textureNormal;
-                    ui.color = button.colorNormal;
-                    ui.needUpdateTexture = true;
                     button.pressed = false;
+                    applyButtonVisual(button, ui);
                     button.onRelease.call();
                 }
             }
@@ -2135,6 +2142,12 @@ bool UISystem::eventOnPointerMove(float x, float y){
                 Transform& transform = scene->getComponent<Transform>(lastUIFromPointerHover);
                 UIComponent& ui = scene->getComponent<UIComponent>(lastUIFromPointerHover);
 
+                if (signature.test(scene->getComponentId<ButtonComponent>())){
+                    ButtonComponent& button = scene->getComponent<ButtonComponent>(lastUIFromPointerHover);
+                    button.hovered = false;
+                    applyButtonVisual(button, ui);
+                }
+
                 ui.onPointerLeave.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
             }
         }
@@ -2144,6 +2157,12 @@ bool UISystem::eventOnPointerMove(float x, float y){
             if (signature.test(scene->getComponentId<Transform>()) && signature.test(scene->getComponentId<UIComponent>())){
                 Transform& transform = scene->getComponent<Transform>(currentUIFromPointerHover);
                 UIComponent& ui = scene->getComponent<UIComponent>(currentUIFromPointerHover);
+
+                if (signature.test(scene->getComponentId<ButtonComponent>())){
+                    ButtonComponent& button = scene->getComponent<ButtonComponent>(currentUIFromPointerHover);
+                    button.hovered = true;
+                    applyButtonVisual(button, ui);
+                }
 
                 ui.onPointerEnter.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
             }

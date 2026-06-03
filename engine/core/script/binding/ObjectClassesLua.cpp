@@ -730,12 +730,16 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("labelFont", &Button::getLabelFont, &Button::setLabelFont)
         .addProperty("labelFontSize", &Button::getLabelFontSize, &Button::setLabelFontSize)
         .addFunction("setTextureNormal", (void(Button::*)(const std::string&))&Button::setTextureNormal)
+        .addFunction("setTextureHovered", (void(Button::*)(const std::string&))&Button::setTextureHovered)
         .addFunction("setTexturePressed", (void(Button::*)(const std::string&))&Button::setTexturePressed)
         .addFunction("setTextureDisabled", (void(Button::*)(const std::string&))&Button::setTextureDisabled)
         .addProperty("colorNormal", &Button::getColorNormal, (void(Button::*)(Vector4))&Button::setColorNormal)
         .addFunction("setColorNormal", 
             luabridge::overload<const float, const float, const float>(&Button::setColorNormal),
             luabridge::overload<const float, const float, const float, const float>(&Button::setColorNormal))
+        .addProperty("colorHovered", &Button::getColorHovered, (void(Button::*)(Vector4))&Button::setColorHovered)
+        .addFunction("setColorHovered", luabridge::overload<const float, const float, const float, const float>(&Button::setColorHovered),
+            luabridge::overload<const float, const float, const float>(&Button::setColorHovered))
         .addProperty("colorPressed", &Button::getColorPressed, (void(Button::*)(Vector4))&Button::setColorPressed)
         .addFunction("setColorPressed", 
             luabridge::overload<const float, const float, const float>(&Button::setColorPressed),

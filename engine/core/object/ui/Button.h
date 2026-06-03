@@ -32,6 +32,7 @@ namespace doriax{
         unsigned int getLabelFontSize() const;
 
         void setTextureNormal(const std::string& path);
+        void setTextureHovered(const std::string& path);
         void setTexturePressed(const std::string& path);
         void setTextureDisabled(const std::string& path);
 
@@ -39,6 +40,11 @@ namespace doriax{
         void setColorNormal(const float red, const float green, const float blue, const float alpha);
         void setColorNormal(const float red, const float green, const float blue);
         Vector4 getColorNormal() const;
+
+        void setColorHovered(Vector4 color);
+        void setColorHovered(const float red, const float green, const float blue, const float alpha);
+        void setColorHovered(const float red, const float green, const float blue);
+        Vector4 getColorHovered() const;
 
         void setColorPressed(Vector4 color);
         void setColorPressed(const float red, const float green, const float blue, const float alpha);

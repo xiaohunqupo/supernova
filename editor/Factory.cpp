@@ -808,9 +808,11 @@ std::string editor::Factory::createButtonComponent(int indentSpaces, EntityRegis
     code << ind << "ButtonComponent button;\n";
     code << ind << "button.label = " << formatUInt(button.label) << ";\n";
     code << formatTexture(indentSpaces, button.textureNormal, "button.textureNormal", projectPath);
+    code << formatTexture(indentSpaces, button.textureHovered, "button.textureHovered", projectPath);
     code << formatTexture(indentSpaces, button.texturePressed, "button.texturePressed", projectPath);
     code << formatTexture(indentSpaces, button.textureDisabled, "button.textureDisabled", projectPath);
     code << ind << "button.colorNormal = " << formatVector4(button.colorNormal) << ";\n";
+    code << ind << "button.colorHovered = " << formatVector4(button.colorHovered) << ";\n";
     code << ind << "button.colorPressed = " << formatVector4(button.colorPressed) << ";\n";
     code << ind << "button.colorDisabled = " << formatVector4(button.colorDisabled) << ";\n";
     code << ind << "button.disabled = " << formatBool(button.disabled) << ";\n";

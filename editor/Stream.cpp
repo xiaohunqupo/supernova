@@ -3394,9 +3394,11 @@ YAML::Node editor::Stream::encodeButtonComponent(const ButtonComponent& button) 
     YAML::Node node;
     node["label"] = button.label;
     node["textureNormal"] = encodeTexture(button.textureNormal);
+    node["textureHovered"] = encodeTexture(button.textureHovered);
     node["texturePressed"] = encodeTexture(button.texturePressed);
     node["textureDisabled"] = encodeTexture(button.textureDisabled);
     node["colorNormal"] = encodeVector4(button.colorNormal);
+    node["colorHovered"] = encodeVector4(button.colorHovered);
     node["colorPressed"] = encodeVector4(button.colorPressed);
     node["colorDisabled"] = encodeVector4(button.colorDisabled);
     node["disabled"] = button.disabled;
@@ -3412,9 +3414,11 @@ ButtonComponent editor::Stream::decodeButtonComponent(const YAML::Node& node, co
 
     if (node["label"]) button.label = node["label"].as<Entity>();
     if (node["textureNormal"]) button.textureNormal = decodeTexture(node["textureNormal"]);
+    if (node["textureHovered"]) button.textureHovered = decodeTexture(node["textureHovered"]);
     if (node["texturePressed"]) button.texturePressed = decodeTexture(node["texturePressed"]);
     if (node["textureDisabled"]) button.textureDisabled = decodeTexture(node["textureDisabled"]);
     if (node["colorNormal"]) button.colorNormal = decodeVector4(node["colorNormal"]);
+    if (node["colorHovered"]) button.colorHovered = decodeVector4(node["colorHovered"]);
     if (node["colorPressed"]) button.colorPressed = decodeVector4(node["colorPressed"]);
     if (node["colorDisabled"]) button.colorDisabled = decodeVector4(node["colorDisabled"]);
     if (node["disabled"]) button.disabled = node["disabled"].as<bool>();

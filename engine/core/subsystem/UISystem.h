@@ -54,6 +54,7 @@ namespace doriax{
         void createText(TextComponent& text, UIComponent& ui, UILayoutComponent& layout);
 
         //Button
+        void applyButtonVisual(ButtonComponent& button, UIComponent& ui);
         void updateButton(Entity entity, ButtonComponent& button, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout);
 
         //Panel

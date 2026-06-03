@@ -92,6 +92,12 @@ void Button::setTextureNormal(const std::string& path){
     setTexture(path);
 }
 
+void Button::setTextureHovered(const std::string& path){
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    btcomp.textureHovered.setPath(path);
+    btcomp.needUpdateButton = true;
+}
+
 void Button::setTexturePressed(const std::string& path){
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     btcomp.texturePressed.setPath(path);
@@ -106,7 +112,11 @@ void Button::setTextureDisabled(const std::string& path){
 
 void Button::setColorNormal(Vector4 color){
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    Vector4 oldColorNormal = btcomp.colorNormal;
     btcomp.colorNormal = Color::sRGBToLinear(color);
+    if (btcomp.colorHovered == oldColorNormal){
+        btcomp.colorHovered = btcomp.colorNormal;
+    }
     btcomp.needUpdateButton = true;
 
     setColor(color);
@@ -123,6 +133,25 @@ void Button::setColorNormal(const float red, const float green, const float blue
 Vector4 Button::getColorNormal() const{
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     return Color::linearTosRGB(btcomp.colorNormal);
+}
+
+void Button::setColorHovered(Vector4 color){
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    btcomp.colorHovered = Color::sRGBToLinear(color);
+    btcomp.needUpdateButton = true;
+}
+
+void Button::setColorHovered(const float red, const float green, const float blue, const float alpha){
+    setColorHovered(Vector4(red, green, blue, alpha));
+}
+
+void Button::setColorHovered(const float red, const float green, const float blue){
+    setColorHovered(Vector4(red, green, blue, getColorHovered().w));
+}
+
+Vector4 Button::getColorHovered() const{
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    return Color::linearTosRGB(btcomp.colorHovered);
 }
 
 void Button::setColorPressed(Vector4 color){
