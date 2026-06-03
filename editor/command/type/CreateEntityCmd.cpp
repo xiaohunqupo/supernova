@@ -188,7 +188,6 @@ bool editor::CreateEntityCmd::execute(){
 
         scene->addComponent<Transform>(entity, {});
         scene->addComponent<UILayoutComponent>(entity, {});
-        scene->addComponent<UIComponent>(entity, {});
         scene->addComponent<UIContainerComponent>(entity, {});
 
         UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
