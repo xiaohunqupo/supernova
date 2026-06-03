@@ -42,9 +42,16 @@ namespace doriax{
 
         FunctionSubscribe<void()> onGetFocus;
         FunctionSubscribe<void()> onLostFocus;
+        FunctionSubscribe<void(float, float)> onPointerEnter;
+        FunctionSubscribe<void(float, float)> onPointerLeave;
         FunctionSubscribe<void(float, float)> onPointerMove;
         FunctionSubscribe<void(float, float)> onPointerDown;
         FunctionSubscribe<void(float, float)> onPointerUp;
+        FunctionSubscribe<void(float, float)> onClick;
+        FunctionSubscribe<void(float, float)> onDoubleClick;
+        FunctionSubscribe<void(float, float)> onDragStart;
+        FunctionSubscribe<void(float, float)> onDrag;
+        FunctionSubscribe<void(float, float)> onDragEnd;
 
         bool automaticFlipY = true;
         bool flipY = false;

@@ -463,6 +463,10 @@ float Engine::getDeltatime(){
     return deltatime;
 }
 
+double Engine::getSystemTime(){
+    return stm_sec(stm_now());
+}
+
 void Engine::setAsyncLoading(bool enable){
     #ifndef NO_THREAD_SUPPORT
         asyncLoading = enable;

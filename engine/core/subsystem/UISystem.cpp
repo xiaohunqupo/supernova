@@ -15,14 +15,22 @@
 
 using namespace doriax;
 
+static constexpr float UI_DRAG_START_DISTANCE = 4.0f;
+static constexpr double UI_DOUBLE_CLICK_TIME = 0.3;
 
 UISystem::UISystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<UILayoutComponent>());
 
     eventId.clear();
     lastUIFromPointer = NULL_ENTITY;
+    lastUIFromPointerHover = NULL_ENTITY;
+    lastUIFromClick = NULL_ENTITY;
     lastPanelFromPointer = NULL_ENTITY;
+    lastPointerDownPos = Vector2(-1, -1);
     lastPointerPos = Vector2(-1, -1);
+    pointerDragging = false;
+    pointerInternalGesture = false;
+    lastClickTime = -1.0;
 
     anchorReferenceWidth = 0;
     anchorReferenceHeight = 0;
@@ -1793,7 +1801,10 @@ bool UISystem::eventOnCharInput(wchar_t codepoint){
 bool UISystem::eventOnPointerDown(float x, float y){
     lastUIFromPointer = NULL_ENTITY;
     lastPanelFromPointer = NULL_ENTITY;
+    lastPointerDownPos = Vector2(x, y);
     lastPointerPos = Vector2(x, y);
+    pointerDragging = false;
+    pointerInternalGesture = false;
 
     auto layouts = scene->getComponentArray<UILayoutComponent>();
 
@@ -1843,6 +1854,7 @@ bool UISystem::eventOnPointerDown(float x, float y){
         if (signature.test(scene->getComponentId<Transform>()) && signature.test(scene->getComponentId<UIComponent>())){
             Transform& transform = scene->getComponent<Transform>(lastUIFromPointer);
             UIComponent& ui = scene->getComponent<UIComponent>(lastUIFromPointer);
+            ui.pointerMoved = false;
             
             if (signature.test(scene->getComponentId<ButtonComponent>())){
                 ButtonComponent& button = scene->getComponent<ButtonComponent>(lastUIFromPointer);
@@ -1873,6 +1885,7 @@ bool UISystem::eventOnPointerDown(float x, float y){
 
                 if (isCoordInside(x, y, bartransform, barlayout)){
                     scrollbar.barPointerDown = true;
+                    pointerInternalGesture = true;
                     if (scrollbar.type == ScrollbarType::VERTICAL){
                         scrollbar.barPointerPos = y - transform.worldPosition.y - (bartransform.position.y * bartransform.worldScale.y);
                     }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
@@ -1908,11 +1921,16 @@ bool UISystem::eventOnPointerDown(float x, float y){
                     }else{
                         panel.edgePointerDown = PanelEdge::NONE;
                     }
+
+                    if (panel.edgePointerDown != PanelEdge::NONE){
+                        pointerInternalGesture = true;
+                    }
                 }
 
                 if (panel.canMove){
                     if (isCoordInside(x, y, headertransform, headerlayout)){
                         panel.headerPointerDown = true;
+                        pointerInternalGesture = true;
                     }
                 }
             }
@@ -1946,6 +1964,8 @@ bool UISystem::eventOnPointerUp(float x, float y){
     lastPointerPos = Vector2(-1, -1);
 
     auto layouts = scene->getComponentArray<UILayoutComponent>();
+    Entity currentUIFromPointer = NULL_ENTITY;
+
     for (int i = 0; i < layouts->size(); i++){
         UILayoutComponent& layout = layouts->getComponentFromIndex(i);
 
@@ -1954,6 +1974,18 @@ bool UISystem::eventOnPointerUp(float x, float y){
         if (signature.test(scene->getComponentId<Transform>()) && signature.test(scene->getComponentId<UIComponent>())){
             Transform& transform = scene->getComponent<Transform>(entity);
             UIComponent& ui = scene->getComponent<UIComponent>(entity);
+
+            if (transform.visible && signature.test(scene->getComponentId<ImageComponent>())){
+                Rect uirect(transform.worldPosition.x, transform.worldPosition.y, layout.width * transform.worldScale.x, layout.height * transform.worldScale.y);
+
+                if (layout.panel != NULL_ENTITY){
+                    uirect = fitOnPanel(uirect, layout.panel);
+                }
+
+                if (uirect.contains(Vector2(x, y)) && !layout.ignoreEvents){
+                    currentUIFromPointer = entity;
+                }
+            }
 
             if (signature.test(scene->getComponentId<ButtonComponent>())){
                 ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
@@ -1987,7 +2019,41 @@ bool UISystem::eventOnPointerUp(float x, float y){
         }
     }
 
+    if (lastUIFromPointer != NULL_ENTITY){
+        Signature signature = scene->getSignature(lastUIFromPointer);
+        if (signature.test(scene->getComponentId<Transform>()) && signature.test(scene->getComponentId<UIComponent>())){
+            Transform& transform = scene->getComponent<Transform>(lastUIFromPointer);
+            UIComponent& ui = scene->getComponent<UIComponent>(lastUIFromPointer);
+
+            if (pointerDragging){
+                ui.onDragEnd.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
+            }else if (!pointerInternalGesture && currentUIFromPointer == lastUIFromPointer){
+                bool canClick = true;
+                if (signature.test(scene->getComponentId<ButtonComponent>())){
+                    ButtonComponent& button = scene->getComponent<ButtonComponent>(lastUIFromPointer);
+                    canClick = !button.disabled;
+                }
+
+                if (canClick){
+                    ui.onClick.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
+
+                    double clickTime = Engine::getSystemTime();
+                    if (lastUIFromClick == lastUIFromPointer && clickTime - lastClickTime <= UI_DOUBLE_CLICK_TIME){
+                        ui.onDoubleClick.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
+                        lastUIFromClick = NULL_ENTITY;
+                        lastClickTime = -1.0;
+                    }else{
+                        lastUIFromClick = lastUIFromPointer;
+                        lastClickTime = clickTime;
+                    }
+                }
+            }
+        }
+    }
+
     lastPanelFromPointer = NULL_ENTITY;
+    pointerDragging = false;
+    pointerInternalGesture = false;
 
     if (lastUIFromPointer != NULL_ENTITY){
         lastUIFromPointer = NULL_ENTITY;
@@ -2003,6 +2069,7 @@ bool UISystem::eventOnPointerMove(float x, float y){
     auto layouts = scene->getComponentArray<UILayoutComponent>();
 
     CursorType cursor = CursorType::ARROW;
+    Entity currentUIFromPointerHover = NULL_ENTITY;
 
     for (int i = 0; i < layouts->size(); i++){
         UILayoutComponent& layout = layouts->getComponentFromIndex(i);
@@ -2021,6 +2088,7 @@ bool UISystem::eventOnPointerMove(float x, float y){
                     }
 
                     if (uirect.contains(Vector2(x, y)) && !layout.ignoreEvents){
+                        currentUIFromPointerHover = entity;
                         cursor = CursorType::ARROW;
 
                         if (signature.test(scene->getComponentId<TextEditComponent>())){
@@ -2060,6 +2128,30 @@ bool UISystem::eventOnPointerMove(float x, float y){
         }
     }
 
+    if (currentUIFromPointerHover != lastUIFromPointerHover){
+        if (lastUIFromPointerHover != NULL_ENTITY){
+            Signature signature = scene->getSignature(lastUIFromPointerHover);
+            if (signature.test(scene->getComponentId<Transform>()) && signature.test(scene->getComponentId<UIComponent>())){
+                Transform& transform = scene->getComponent<Transform>(lastUIFromPointerHover);
+                UIComponent& ui = scene->getComponent<UIComponent>(lastUIFromPointerHover);
+
+                ui.onPointerLeave.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
+            }
+        }
+
+        if (currentUIFromPointerHover != NULL_ENTITY){
+            Signature signature = scene->getSignature(currentUIFromPointerHover);
+            if (signature.test(scene->getComponentId<Transform>()) && signature.test(scene->getComponentId<UIComponent>())){
+                Transform& transform = scene->getComponent<Transform>(currentUIFromPointerHover);
+                UIComponent& ui = scene->getComponent<UIComponent>(currentUIFromPointerHover);
+
+                ui.onPointerEnter.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
+            }
+        }
+
+        lastUIFromPointerHover = currentUIFromPointerHover;
+    }
+
     if (lastUIFromPointer != NULL_ENTITY){
         UILayoutComponent& layout = layouts->getComponentFromIndex(layouts->getIndex(lastUIFromPointer));
         Signature signature = scene->getSignature(lastUIFromPointer);
@@ -2069,9 +2161,22 @@ bool UISystem::eventOnPointerMove(float x, float y){
         if (signature.test(scene->getComponentId<Transform>()) && signature.test(scene->getComponentId<UIComponent>())){
             Transform& transform = scene->getComponent<Transform>(lastUIFromPointer);
             UIComponent& ui = scene->getComponent<UIComponent>(lastUIFromPointer);
+            float localX = x - transform.worldPosition.x;
+            float localY = y - transform.worldPosition.y;
 
-            ui.onPointerMove.call(x - transform.worldPosition.x, y - transform.worldPosition.y);
+            ui.onPointerMove.call(localX, localY);
             ui.pointerMoved = true;
+
+            if (!pointerInternalGesture){
+                if (!pointerDragging && Vector2(x, y).squaredDistance(lastPointerDownPos) >= UI_DRAG_START_DISTANCE * UI_DRAG_START_DISTANCE){
+                    pointerDragging = true;
+                    ui.onDragStart.call(localX, localY);
+                }
+
+                if (pointerDragging){
+                    ui.onDrag.call(localX, localY);
+                }
+            }
         }
 
         if (signature.test(scene->getComponentId<ScrollbarComponent>())){
@@ -2222,6 +2327,24 @@ void UISystem::onComponentAdded(Entity entity, ComponentId componentId) {
 }
 
 void UISystem::onComponentRemoved(Entity entity, ComponentId componentId) {
+	if (componentId == scene->getComponentId<UIComponent>() ||
+		componentId == scene->getComponentId<UILayoutComponent>() ||
+		componentId == scene->getComponentId<ImageComponent>() ||
+		componentId == scene->getComponentId<Transform>()) {
+		if (entity == lastUIFromPointer) {
+			lastUIFromPointer = NULL_ENTITY;
+			pointerDragging = false;
+			pointerInternalGesture = false;
+		}
+		if (entity == lastUIFromPointerHover) {
+			lastUIFromPointerHover = NULL_ENTITY;
+		}
+		if (entity == lastUIFromClick) {
+			lastUIFromClick = NULL_ENTITY;
+			lastClickTime = -1.0;
+		}
+	}
+
 	if (componentId == scene->getComponentId<ButtonComponent>()) {
 		ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
 		destroyButton(button);

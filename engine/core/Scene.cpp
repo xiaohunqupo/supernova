@@ -78,9 +78,16 @@ void Scene::removeSubscriptionsByTag(const std::string& substring) {
     removeComponentSubscriptionsByTag<UIComponent>(this, substring, [](UIComponent& ui, const std::string& tag) {
         ui.onGetFocus.removeByTagSubstring(tag);
         ui.onLostFocus.removeByTagSubstring(tag);
+        ui.onPointerEnter.removeByTagSubstring(tag);
+        ui.onPointerLeave.removeByTagSubstring(tag);
         ui.onPointerMove.removeByTagSubstring(tag);
         ui.onPointerDown.removeByTagSubstring(tag);
         ui.onPointerUp.removeByTagSubstring(tag);
+        ui.onClick.removeByTagSubstring(tag);
+        ui.onDoubleClick.removeByTagSubstring(tag);
+        ui.onDragStart.removeByTagSubstring(tag);
+        ui.onDrag.removeByTagSubstring(tag);
+        ui.onDragEnd.removeByTagSubstring(tag);
     });
 
     removeComponentSubscriptionsByTag<ButtonComponent>(this, substring, [](ButtonComponent& button, const std::string& tag) {

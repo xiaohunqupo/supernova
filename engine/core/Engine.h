@@ -281,6 +281,9 @@ namespace doriax {
         static float getFramerate();
         static float getDeltatime();
 
+        // Monotonic wall-clock time in seconds, independent of scene pause / update loop.
+        static double getSystemTime();
+
         static void setAsyncLoading(bool enable);
         static bool isAsyncLoading();
 

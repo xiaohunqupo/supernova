@@ -28,9 +28,15 @@ namespace doriax{
 
         std::string eventId;
         Entity lastUIFromPointer;
+        Entity lastUIFromPointerHover;
+        Entity lastUIFromClick;
         Entity lastPanelFromPointer;
+        Vector2 lastPointerDownPos;
         Vector2 lastPointerPos;
         Vector2 panelSizeAcc; // to add accumulation from float to int
+        bool pointerDragging;
+        bool pointerInternalGesture; // gesture captured by a built-in widget (panel move/resize, scrollbar)
+        double lastClickTime; // monotonic wall-clock seconds (Engine::getSystemTime)
 
         int anchorReferenceWidth;
         int anchorReferenceHeight;
