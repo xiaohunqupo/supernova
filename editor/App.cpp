@@ -991,6 +991,8 @@ void editor::App::show(){
 }
 
 void editor::App::engineInit(int argc, char** argv) {
+    Engine::systemInit(argc, argv, new editor::Platform(&project));
+
     // Check if there's a last opened project
     std::filesystem::path lastProjectPath = AppSettings::getLastProjectPath();
 
@@ -1006,8 +1008,6 @@ void editor::App::engineInit(int argc, char** argv) {
         // No last project, create a new temp project
         project.createTempProject("MyDoriaxProject");
     }
-
-    Engine::systemInit(argc, argv, new editor::Platform(&project));
 
     Engine::pauseGameEvents(true);
 

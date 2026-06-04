@@ -550,6 +550,11 @@ void UISystem::applyButtonVisual(ButtonComponent& button, UIComponent& ui){
 void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
     createButtonObjects(entity, button);
 
+    if (button.label == NULL_ENTITY || !scene->findComponent<TextComponent>(button.label)){
+        applyButtonVisual(button, ui);
+        return;
+    }
+
     if (!ui.loaded){
         if (!button.textureNormal.load()){
             button.textureNormal = ui.texture;
@@ -1058,11 +1063,6 @@ void UISystem::destroyButton(ButtonComponent& button){
     button.textureDisabled.destroy();
 
     button.needUpdateButton = true;
-
-    if (button.label != NULL_ENTITY){
-        scene->destroyEntity(button.label);
-        button.label = NULL_ENTITY;
-    }
 }
 
 void UISystem::destroyPanel(PanelComponent& panel){
@@ -2418,6 +2418,10 @@ void UISystem::onComponentRemoved(Entity entity, ComponentId componentId) {
 
 	if (componentId == scene->getComponentId<ButtonComponent>()) {
 		ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
+		if (button.label != NULL_ENTITY){
+			scene->destroyEntity(button.label);
+			button.label = NULL_ENTITY;
+		}
 		destroyButton(button);
 	} else if (componentId == scene->getComponentId<PanelComponent>()) {
 		PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
