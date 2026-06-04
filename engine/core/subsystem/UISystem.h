@@ -7,6 +7,8 @@
 
 #include "SubSystem.h"
 
+#include <vector>
+
 #include "component/UILayoutComponent.h"
 #include "component/UIContainerComponent.h"
 #include "component/TextComponent.h"
@@ -73,11 +75,15 @@ namespace doriax{
         bool isCoordInside(float x, float y, Transform& transform, UILayoutComponent& layout);
         bool isCoordInside(float x, float y, Transform& transform, UILayoutComponent& layout, Vector2 center);
 
+        static Rect transformRectToWorldAxisAligned(const Rect& rect, const Matrix4& matrix);
+        Entity findNearestLayoutParent(Entity startParent) const;
+        Vector3 mapLayoutPointToParentLocalSpace(float posX, float posY, Entity layoutParent, Entity targetParent) const;
+        Vector3 mapParentLocalPointToLayoutSpace(float posX, float posY, Entity layoutParent, Entity sourceParent) const;
+        void convertLayoutSpaceToLocalParentSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const;
+        void convertLocalParentSpaceToLayoutSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const;
+
         void applyAnchorPreset(UILayoutComponent& layout);
         void changeFlipY(UIComponent& ui, CameraComponent& camera);
-
-        Entity findNearestLayoutParent(Entity startParent) const;
-        void convertLayoutSpaceToLocalParentSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const;
 
         void destroyText(TextComponent& text);
         void destroyButton(ButtonComponent& button);

@@ -5,6 +5,8 @@
 #include "UISystem.h"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
 #include "Scene.h"
 #include "Input.h"
 #include "Engine.h"
@@ -17,7 +19,6 @@ using namespace doriax;
 
 static constexpr float UI_DRAG_START_DISTANCE = 4.0f;
 static constexpr double UI_DOUBLE_CLICK_TIME = 0.3;
-
 UISystem::UISystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<UILayoutComponent>());
 
@@ -37,112 +38,6 @@ UISystem::UISystem(Scene* scene): SubSystem(scene){
 }
 
 UISystem::~UISystem(){
-}
-
-Entity UISystem::findNearestLayoutParent(Entity startParent) const{
-    Entity ancestor = startParent;
-    while (ancestor != NULL_ENTITY) {
-        if (scene->findComponent<UILayoutComponent>(ancestor)) {
-            return ancestor;
-        }
-        Transform* ancestorTransform = scene->findComponent<Transform>(ancestor);
-        ancestor = ancestorTransform ? ancestorTransform->parent : NULL_ENTITY;
-    }
-    return NULL_ENTITY;
-}
-
-void UISystem::convertLayoutSpaceToLocalParentSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const{
-    Entity walk = transformParent;
-    while (walk != NULL_ENTITY && walk != layoutParent) {
-        Transform* walkTransform = scene->findComponent<Transform>(walk);
-        if (walkTransform) {
-            posX -= walkTransform->position.x;
-            posY -= walkTransform->position.y;
-        }
-        walk = walkTransform ? walkTransform->parent : NULL_ENTITY;
-    }
-}
-
-Rect UISystem::getAnchorReferenceRect(const UILayoutComponent& layout, const Transform& transform, bool worldPosition){
-    auto canvasRect = [this]() {
-        int finalCanvasWidth = Engine::getCanvasWidth();
-        if (anchorReferenceWidth != 0)
-            finalCanvasWidth = anchorReferenceWidth;
-
-        int finalCanvasHeight = Engine::getCanvasHeight();
-        if (anchorReferenceHeight != 0)
-            finalCanvasHeight = anchorReferenceHeight;
-
-        return Rect(0, 0, finalCanvasWidth, finalCanvasHeight);
-    };
-
-    if (transform.parent == NULL_ENTITY){
-        return canvasRect();
-    }
-
-    // Bundle roots and other non-UI parents have no UILayout; walk up to the nearest layout parent.
-    Entity layoutParent = findNearestLayoutParent(transform.parent);
-
-    if (layoutParent == NULL_ENTITY){
-        Rect boxRect = canvasRect();
-        if (worldPosition) {
-            Entity walk = transform.parent;
-            while (walk != NULL_ENTITY) {
-                Transform* walkTransform = scene->findComponent<Transform>(walk);
-                if (walkTransform) {
-                    boxRect.setX(boxRect.getX() + walkTransform->worldPosition.x);
-                    boxRect.setY(boxRect.getY() + walkTransform->worldPosition.y);
-                }
-                walk = walkTransform ? walkTransform->parent : NULL_ENTITY;
-            }
-        }
-        return boxRect;
-    }
-
-    UILayoutComponent* parentlayout = scene->findComponent<UILayoutComponent>(layoutParent);
-    Rect boxRect = Rect(0, 0, parentlayout->width, parentlayout->height);
-
-    UIContainerComponent* parentcontainer = scene->findComponent<UIContainerComponent>(layoutParent);
-    if (parentcontainer){
-        boxRect = parentcontainer->boxes[layout.containerBoxIndex].rect;
-    }
-
-    ImageComponent* parentimage = scene->findComponent<ImageComponent>(layoutParent);
-    if (parentimage && !layout.ignoreScissor){
-        boxRect.setX(boxRect.getX() + parentimage->patchMarginLeft);
-        boxRect.setWidth(boxRect.getWidth() - parentimage->patchMarginRight - parentimage->patchMarginLeft);
-        boxRect.setY(boxRect.getY() + parentimage->patchMarginTop);
-        boxRect.setHeight(boxRect.getHeight() - parentimage->patchMarginBottom - parentimage->patchMarginTop);
-    }
-
-    if (worldPosition){
-        Transform* parentTransform = scene->findComponent<Transform>(layoutParent);
-        if (parentTransform){
-            Vector3 worldPos = parentTransform->worldPosition;
-            boxRect.setX(boxRect.getX() + worldPos.x);
-            boxRect.setY(boxRect.getY() + worldPos.y);
-        }
-    }
-
-    return boxRect;
-}
-
-void UISystem::setAnchorReferenceSize(int width, int height){
-    this->anchorReferenceWidth = width;
-    this->anchorReferenceHeight = height;
-}
-
-void UISystem::clearAnchorReferenceSize(){
-    this->anchorReferenceWidth = 0;
-    this->anchorReferenceHeight = 0;
-}
-
-int UISystem::getAnchorReferenceWidth() const{
-    return anchorReferenceWidth;
-}
-
-int UISystem::getAnchorReferenceHeight() const{
-    return anchorReferenceHeight;
 }
 
 bool UISystem::createImagePatches(ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
@@ -886,6 +781,160 @@ bool UISystem::createOrUpdateText(TextComponent& text, UIComponent& ui, UILayout
     return true;
 }
 
+// --- Layout / anchor ---
+
+Entity UISystem::findNearestLayoutParent(Entity startParent) const{
+    Entity ancestor = startParent;
+    while (ancestor != NULL_ENTITY) {
+        if (scene->findComponent<UILayoutComponent>(ancestor)) {
+            return ancestor;
+        }
+        Transform* ancestorTransform = scene->findComponent<Transform>(ancestor);
+        ancestor = ancestorTransform ? ancestorTransform->parent : NULL_ENTITY;
+    }
+    return NULL_ENTITY;
+}
+
+Rect UISystem::transformRectToWorldAxisAligned(const Rect& rect, const Matrix4& matrix){
+    const Vector3 corners[4] = {
+        matrix * Vector3(rect.getX(), rect.getY(), 0.0f),
+        matrix * Vector3(rect.getX() + rect.getWidth(), rect.getY(), 0.0f),
+        matrix * Vector3(rect.getX(), rect.getY() + rect.getHeight(), 0.0f),
+        matrix * Vector3(rect.getX() + rect.getWidth(), rect.getY() + rect.getHeight(), 0.0f),
+    };
+
+    float minX = corners[0].x;
+    float maxX = corners[0].x;
+    float minY = corners[0].y;
+    float maxY = corners[0].y;
+
+    for (int i = 1; i < 4; ++i) {
+        minX = std::min(minX, corners[i].x);
+        maxX = std::max(maxX, corners[i].x);
+        minY = std::min(minY, corners[i].y);
+        maxY = std::max(maxY, corners[i].y);
+    }
+
+    return Rect(minX, minY, maxX - minX, maxY - minY);
+}
+
+Vector3 UISystem::mapLayoutPointToParentLocalSpace(float posX, float posY, Entity layoutParent, Entity targetParent) const{
+    if (layoutParent == NULL_ENTITY || targetParent == NULL_ENTITY || layoutParent == targetParent) {
+        return Vector3(posX, posY, 0.0f);
+    }
+
+    const Transform& layoutTransform = scene->getComponent<Transform>(layoutParent);
+    const Transform& targetTransform = scene->getComponent<Transform>(targetParent);
+
+    Vector3 worldPoint = layoutTransform.modelMatrix * Vector3(posX, posY, 0.0f);
+    Matrix4 targetToLayout = targetTransform.modelMatrix.inverse();
+    if (!targetToLayout.isValid()) {
+        return Vector3(posX, posY, 0.0f);
+    }
+
+    return targetToLayout * worldPoint;
+}
+
+Vector3 UISystem::mapParentLocalPointToLayoutSpace(float posX, float posY, Entity layoutParent, Entity sourceParent) const{
+    if (layoutParent == NULL_ENTITY || sourceParent == NULL_ENTITY || layoutParent == sourceParent) {
+        return Vector3(posX, posY, 0.0f);
+    }
+
+    const Transform& layoutTransform = scene->getComponent<Transform>(layoutParent);
+    const Transform& sourceTransform = scene->getComponent<Transform>(sourceParent);
+
+    Vector3 worldPoint = sourceTransform.modelMatrix * Vector3(posX, posY, 0.0f);
+    Matrix4 layoutToWorld = layoutTransform.modelMatrix.inverse();
+    if (!layoutToWorld.isValid()) {
+        return Vector3(posX, posY, 0.0f);
+    }
+
+    return layoutToWorld * worldPoint;
+}
+
+void UISystem::convertLayoutSpaceToLocalParentSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const{
+    Vector3 localPoint = mapLayoutPointToParentLocalSpace(posX, posY, layoutParent, transformParent);
+    posX = localPoint.x;
+    posY = localPoint.y;
+}
+
+void UISystem::convertLocalParentSpaceToLayoutSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const{
+    Vector3 layoutPoint = mapParentLocalPointToLayoutSpace(posX, posY, layoutParent, transformParent);
+    posX = layoutPoint.x;
+    posY = layoutPoint.y;
+}
+
+Rect UISystem::getAnchorReferenceRect(const UILayoutComponent& layout, const Transform& transform, bool worldPosition){
+    auto canvasRect = [this]() {
+        int finalCanvasWidth = Engine::getCanvasWidth();
+        if (anchorReferenceWidth != 0)
+            finalCanvasWidth = anchorReferenceWidth;
+
+        int finalCanvasHeight = Engine::getCanvasHeight();
+        if (anchorReferenceHeight != 0)
+            finalCanvasHeight = anchorReferenceHeight;
+
+        return Rect(0, 0, finalCanvasWidth, finalCanvasHeight);
+    };
+
+    if (transform.parent == NULL_ENTITY){
+        return canvasRect();
+    }
+
+    // Bundle roots and other non-UI parents have no UILayout; walk up to the nearest layout parent.
+    Entity layoutParent = findNearestLayoutParent(transform.parent);
+
+    if (layoutParent == NULL_ENTITY){
+        Rect boxRect = canvasRect();
+        if (worldPosition && transform.parent != NULL_ENTITY) {
+            const Transform& parentTransform = scene->getComponent<Transform>(transform.parent);
+            boxRect = transformRectToWorldAxisAligned(boxRect, parentTransform.modelMatrix);
+        }
+        return boxRect;
+    }
+
+    UILayoutComponent* parentlayout = scene->findComponent<UILayoutComponent>(layoutParent);
+    Rect boxRect = Rect(0, 0, parentlayout->width, parentlayout->height);
+
+    UIContainerComponent* parentcontainer = scene->findComponent<UIContainerComponent>(layoutParent);
+    if (parentcontainer){
+        boxRect = parentcontainer->boxes[layout.containerBoxIndex].rect;
+    }
+
+    ImageComponent* parentimage = scene->findComponent<ImageComponent>(layoutParent);
+    if (parentimage && !layout.ignoreScissor){
+        boxRect.setX(boxRect.getX() + parentimage->patchMarginLeft);
+        boxRect.setWidth(boxRect.getWidth() - parentimage->patchMarginRight - parentimage->patchMarginLeft);
+        boxRect.setY(boxRect.getY() + parentimage->patchMarginTop);
+        boxRect.setHeight(boxRect.getHeight() - parentimage->patchMarginBottom - parentimage->patchMarginTop);
+    }
+
+    if (worldPosition){
+        const Transform& layoutTransform = scene->getComponent<Transform>(layoutParent);
+        boxRect = transformRectToWorldAxisAligned(boxRect, layoutTransform.modelMatrix);
+    }
+
+    return boxRect;
+}
+
+void UISystem::setAnchorReferenceSize(int width, int height){
+    this->anchorReferenceWidth = width;
+    this->anchorReferenceHeight = height;
+}
+
+void UISystem::clearAnchorReferenceSize(){
+    this->anchorReferenceWidth = 0;
+    this->anchorReferenceHeight = 0;
+}
+
+int UISystem::getAnchorReferenceWidth() const{
+    return anchorReferenceWidth;
+}
+
+int UISystem::getAnchorReferenceHeight() const{
+    return anchorReferenceHeight;
+}
+
 void UISystem::applyAnchorPreset(UILayoutComponent& layout){
     if (layout.anchorPreset == AnchorPreset::TOP_LEFT){
         layout.anchorPointLeft = 0;
@@ -1515,8 +1564,16 @@ void UISystem::update(double dt){
 
                 if (layout.anchorPreset == AnchorPreset::NONE && layout.needUpdateAnchorOffsets){
                     // Convert current manual transform/size back into anchor offsets
-                    float rawPosX = transform.position.x - layout.positionOffset.x;
-                    float rawPosY = transform.position.y - layout.positionOffset.y;
+                    float rawPosX = transform.position.x;
+                    float rawPosY = transform.position.y;
+
+                    if (transform.parent != NULL_ENTITY){
+                        Entity layoutParentEntity = findNearestLayoutParent(transform.parent);
+                        convertLocalParentSpaceToLayoutSpace(transform.parent, layoutParentEntity, rawPosX, rawPosY);
+                    }
+
+                    rawPosX -= layout.positionOffset.x;
+                    rawPosY -= layout.positionOffset.y;
 
                     layout.anchorOffsetLeft = rawPosX - abAnchorLeft;
                     layout.anchorOffsetTop = rawPosY - abAnchorTop;
@@ -1559,10 +1616,18 @@ void UISystem::update(double dt){
                 }
 
             }else{
-                layout.anchorOffsetLeft = transform.position.x - abAnchorLeft;
-                layout.anchorOffsetTop = transform.position.y - abAnchorTop;
-                layout.anchorOffsetRight = layout.width + transform.position.x - abAnchorRight;
-                layout.anchorOffsetBottom = layout.height + transform.position.y - abAnchorBottom;
+                float layoutPosX = transform.position.x;
+                float layoutPosY = transform.position.y;
+
+                if (transform.parent != NULL_ENTITY){
+                    Entity layoutParentEntity = findNearestLayoutParent(transform.parent);
+                    convertLocalParentSpaceToLayoutSpace(transform.parent, layoutParentEntity, layoutPosX, layoutPosY);
+                }
+
+                layout.anchorOffsetLeft = layoutPosX - abAnchorLeft;
+                layout.anchorOffsetTop = layoutPosY - abAnchorTop;
+                layout.anchorOffsetRight = layout.width + layoutPosX - abAnchorRight;
+                layout.anchorOffsetBottom = layout.height + layoutPosY - abAnchorBottom;
             }
         }
 
