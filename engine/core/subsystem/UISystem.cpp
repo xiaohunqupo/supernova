@@ -550,11 +550,6 @@ void UISystem::applyButtonVisual(ButtonComponent& button, UIComponent& ui){
 void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
     createButtonObjects(entity, button);
 
-    if (button.label == NULL_ENTITY || !scene->findComponent<TextComponent>(button.label)){
-        applyButtonVisual(button, ui);
-        return;
-    }
-
     if (!ui.loaded){
         if (!button.textureNormal.load()){
             button.textureNormal = ui.texture;
@@ -570,6 +565,11 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
         button.textureHovered.load();
         button.texturePressed.load();
         button.textureDisabled.load();
+    }
+
+    if (button.label == NULL_ENTITY || !scene->findComponent<TextComponent>(button.label)){
+        applyButtonVisual(button, ui);
+        return;
     }
 
     TextComponent& labeltext = scene->getComponent<TextComponent>(button.label);
