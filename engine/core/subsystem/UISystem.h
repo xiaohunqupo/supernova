@@ -87,9 +87,8 @@ namespace doriax{
 
         void destroyText(TextComponent& text);
         void destroyButton(ButtonComponent& button);
-        void destroyPanel(PanelComponent& panel);
-        void destroyScrollbar(ScrollbarComponent& scrollbar);
-        void destroyTextEdit(TextEditComponent& textedit);
+
+        bool isEntityChild(Entity child, Entity parent) const;
 
     public:
         UISystem(Scene* scene);

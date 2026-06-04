@@ -1112,43 +1112,13 @@ void UISystem::destroyButton(ButtonComponent& button){
     button.needUpdateButton = true;
 }
 
-void UISystem::destroyPanel(PanelComponent& panel){
-    panel.needUpdatePanel = true;
+bool UISystem::isEntityChild(Entity child, Entity parent) const{
+    if (child == NULL_ENTITY || parent == NULL_ENTITY){
+        return false;
+    }
 
-    if (panel.headertext != NULL_ENTITY){
-        scene->destroyEntity(panel.headertext);
-        panel.headertext = NULL_ENTITY;
-    }
-    if (panel.headercontainer != NULL_ENTITY){
-        scene->destroyEntity(panel.headercontainer);
-        panel.headercontainer = NULL_ENTITY;
-    }
-    if (panel.headerimage != NULL_ENTITY){
-        scene->destroyEntity(panel.headerimage);
-        panel.headerimage = NULL_ENTITY;
-    }
-}
-
-void UISystem::destroyScrollbar(ScrollbarComponent& scrollbar){
-    scrollbar.needUpdateScrollbar = true;
-
-    if (scrollbar.bar != NULL_ENTITY){
-        scene->destroyEntity(scrollbar.bar);
-        scrollbar.bar = NULL_ENTITY;
-    }
-}
-
-void UISystem::destroyTextEdit(TextEditComponent& textedit){
-    textedit.needUpdateTextEdit = true;
-
-    if (textedit.text != NULL_ENTITY){
-        scene->destroyEntity(textedit.text);
-        textedit.text = NULL_ENTITY;
-    }
-    if (textedit.cursor != NULL_ENTITY){
-        scene->destroyEntity(textedit.cursor);
-        textedit.cursor = NULL_ENTITY;
-    }
+    Transform* transform = scene->findComponent<Transform>(child);
+    return transform && transform->parent == parent;
 }
 
 void UISystem::load(){
@@ -1171,21 +1141,6 @@ void UISystem::destroy(){
             ButtonComponent &button = scene->getComponent<ButtonComponent>(entity);
 
             destroyButton(button);
-        }
-        if (signature.test(scene->getComponentId<PanelComponent>())){
-            PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
-
-            destroyPanel(panel);
-        }
-        if (signature.test(scene->getComponentId<ScrollbarComponent>())){
-            ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
-
-            destroyScrollbar(scrollbar);
-        }
-        if (signature.test(scene->getComponentId<TextEditComponent>())) {
-            TextEditComponent &textedit = scene->getComponent<TextEditComponent>(entity);
-
-            destroyTextEdit(textedit);
         }
     }
 }
@@ -2479,19 +2434,54 @@ void UISystem::onComponentRemoved(Entity entity, ComponentId componentId) {
 	if (componentId == scene->getComponentId<ButtonComponent>()) {
 		ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
 		if (button.label != NULL_ENTITY){
-			scene->destroyEntity(button.label);
+			if (isEntityChild(button.label, entity)){
+				scene->destroyEntity(button.label);
+			}
 			button.label = NULL_ENTITY;
 		}
 		destroyButton(button);
 	} else if (componentId == scene->getComponentId<PanelComponent>()) {
 		PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
-		destroyPanel(panel);
+		if (panel.headertext != NULL_ENTITY){
+			if (isEntityChild(panel.headertext, entity)){
+				scene->destroyEntity(panel.headertext);
+			}
+			panel.headertext = NULL_ENTITY;
+		}
+		if (panel.headercontainer != NULL_ENTITY){
+			if (isEntityChild(panel.headercontainer, entity)){
+				scene->destroyEntity(panel.headercontainer);
+			}
+			panel.headercontainer = NULL_ENTITY;
+		}
+		if (panel.headerimage != NULL_ENTITY){
+			if (isEntityChild(panel.headerimage, entity)){
+				scene->destroyEntity(panel.headerimage);
+			}
+			panel.headerimage = NULL_ENTITY;
+		}
 	} else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
 		ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
-		destroyScrollbar(scrollbar);
+		if (scrollbar.bar != NULL_ENTITY){
+			if (isEntityChild(scrollbar.bar, entity)){
+				scene->destroyEntity(scrollbar.bar);
+			}
+			scrollbar.bar = NULL_ENTITY;
+		}
 	} else if (componentId == scene->getComponentId<TextEditComponent>()) {
 		TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
-		destroyTextEdit(textedit);
+		if (textedit.text != NULL_ENTITY){
+			if (isEntityChild(textedit.text, entity)){
+				scene->destroyEntity(textedit.text);
+			}
+			textedit.text = NULL_ENTITY;
+		}
+		if (textedit.cursor != NULL_ENTITY){
+			if (isEntityChild(textedit.cursor, entity)){
+				scene->destroyEntity(textedit.cursor);
+			}
+			textedit.cursor = NULL_ENTITY;
+		}
 	} else if (componentId == scene->getComponentId<TextComponent>()) {
 		TextComponent& text = scene->getComponent<TextComponent>(entity);
 		destroyText(text);
