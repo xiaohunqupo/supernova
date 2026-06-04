@@ -89,6 +89,21 @@ AABB editor::SceneRender::getAABB(Entity entity, bool local){
         }else{
             return ui.worldAABB;
         }
+    }else if (signature.test(scene->getComponentId<UILayoutComponent>())){
+        UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
+        if (layout.width > 0 && layout.height > 0){
+            Vector2 center = GraphicUtils::getUILayoutCenter(scene, entity, layout);
+            AABB aabb = AABB(-center.x, -center.y, 0, layout.width-center.x, layout.height-center.y, 0);
+            if (local){
+                return aabb;
+            }else{
+                if (signature.test(scene->getComponentId<Transform>())){
+                    Transform& transform = scene->getComponent<Transform>(entity);
+                    return transform.modelMatrix * aabb;
+                }
+                return aabb;
+            }
+        }
     }else if (signature.test(scene->getComponentId<CameraComponent>()) && signature.test(scene->getComponentId<Transform>())){
         CameraComponent& sceneCamera = scene->getComponent<CameraComponent>(camera->getEntity());
 
@@ -223,6 +238,17 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
                 return ui.aabb.getOBB();
             }else{
                 return modelMatrix * ui.aabb.getOBB();
+            }
+        }else if (signature.test(scene->getComponentId<UILayoutComponent>())){
+            UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
+            if (layout.width > 0 && layout.height > 0){
+                Vector2 center = GraphicUtils::getUILayoutCenter(scene, entity, layout);
+                AABB aabb = AABB(-center.x, -center.y, 0, layout.width-center.x, layout.height-center.y, 0);
+                if (local){
+                    return aabb.getOBB();
+                }else{
+                    return modelMatrix * aabb.getOBB();
+                }
             }
         }else if (signature.test(scene->getComponentId<CameraComponent>())){
             CameraComponent& sceneCamera = scene->getComponent<CameraComponent>(camera->getEntity());
