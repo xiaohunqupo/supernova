@@ -4912,6 +4912,7 @@ void editor::Properties::drawButtonComponent(ComponentType cpType, SceneProject*
     };
 
     beginTable(cpType, getLabelSize("Texture Disabled"));
+    propertyRow(RowPropertyType::LocalEntity, cpType, "label", "Label", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Bool, cpType, "disabled", "Disabled", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Texture, cpType, "textureNormal", "Texture Normal", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Texture, cpType, "textureHovered", "Texture Hovered", sceneProject, entities, settings);

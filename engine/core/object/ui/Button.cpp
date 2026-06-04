@@ -5,6 +5,7 @@
 #include "Button.h"
 
 #include "component/TextComponent.h"
+#include "component/UIComponent.h"
 #include "subsystem/UISystem.h"
 
 using namespace doriax;
@@ -19,13 +20,29 @@ Button::Button(Scene* scene, Entity entity): Image(scene, entity){
 Button::~Button(){
 }
 
-Text Button::getLabelObject() const{
+bool Button::hasLabel() const{
+    const ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    return btcomp.label != NULL_ENTITY && scene->findComponent<TextComponent>(btcomp.label) != nullptr;
+}
+
+void Button::ensureLabel(){
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    if (!hasLabel()){
+        scene->getSystem<UISystem>()->createButtonObjects(getEntity(), btcomp);
+    }
+}
+
+Text Button::getLabelObject() const{
+    const ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    if (!hasLabel()){
+        return Text(scene, NULL_ENTITY);
+    }
 
     return Text(scene, btcomp.label);
 }
 
 void Button::setLabel(const std::string& text){
+    ensureLabel();
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(btcomp.label);
 
@@ -36,6 +53,10 @@ void Button::setLabel(const std::string& text){
 }
 
 std::string Button::getLabel() const{
+    if (!hasLabel()){
+        return "";
+    }
+
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(btcomp.label);
 
@@ -43,6 +64,7 @@ std::string Button::getLabel() const{
 }
 
 void Button::setLabelColor(Vector4 color){
+    ensureLabel();
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     UIComponent& uilabel = scene->getComponent<UIComponent>(btcomp.label);
 
@@ -54,6 +76,10 @@ void Button::setLabelColor(const float red, const float green, const float blue,
 }
 
 Vector4 Button::getLabelColor() const{
+    if (!hasLabel()){
+        return Vector4(0.0, 0.0, 0.0, 1.0);
+    }
+
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     UIComponent& uilabel = scene->getComponent<UIComponent>(btcomp.label);
 
@@ -61,12 +87,17 @@ Vector4 Button::getLabelColor() const{
 }
 
 void Button::setLabelFont(const std::string& font){
+    ensureLabel();
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     getLabelObject().setFont(font);
     btcomp.needUpdateButton = true;
 }
 
 std::string Button::getLabelFont() const{
+    if (!hasLabel()){
+        return "";
+    }
+
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(btcomp.label);
 
@@ -74,14 +105,21 @@ std::string Button::getLabelFont() const{
 }
 
 void Button::setLabelFontSize(unsigned int fontSize){
+    ensureLabel();
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     getLabelObject().setFontSize(fontSize);
     btcomp.needUpdateButton = true;
 }
 
 unsigned int Button::getLabelFontSize() const{
+    if (!hasLabel()){
+        return 0;
+    }
+
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
-    return getLabelObject().getFontSize();
+    TextComponent& textcomp = scene->getComponent<TextComponent>(btcomp.label);
+
+    return textcomp.fontSize;
 }
 
 void Button::setTextureNormal(const std::string& path){

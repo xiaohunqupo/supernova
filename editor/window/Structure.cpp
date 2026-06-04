@@ -364,7 +364,7 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
     }else if (signature.test(scene->getComponentId<LinesComponent>())){
         return ICON_FA_GRIP_LINES;
     }else if (signature.test(scene->getComponentId<PointsComponent>())){
-        return ICON_FA_CIRCLE_DOT;
+        return ICON_FA_CIRCLE;
     }else if (signature.test(scene->getComponentId<ActionComponent>())){
         return ICON_FA_PLAY;
     }else if (signature.test(scene->getComponentId<SoundComponent>())){

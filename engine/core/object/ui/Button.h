@@ -10,12 +10,15 @@
 
 namespace doriax{
     class DORIAX_API Button: public Image{
+    private:
+        void ensureLabel();
 
     public:
         Button(Scene* scene);
         Button(Scene* scene, Entity entity);
         virtual ~Button();
 
+        bool hasLabel() const;
         Text getLabelObject() const;
 
         void setLabel(const std::string& text);

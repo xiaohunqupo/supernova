@@ -443,8 +443,6 @@ void UISystem::applyButtonVisual(ButtonComponent& button, UIComponent& ui){
 }
 
 void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
-    createButtonObjects(entity, button);
-
     if (!ui.loaded){
         if (!button.textureNormal.load()){
             button.textureNormal = ui.texture;
@@ -2447,10 +2445,7 @@ bool UISystem::isCoordInside(float x, float y, Transform& transform, UILayoutCom
 
 
 void UISystem::onComponentAdded(Entity entity, ComponentId componentId) {
-	if (componentId == scene->getComponentId<ButtonComponent>()) {
-		ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
-		createButtonObjects(entity, button);
-	} else if (componentId == scene->getComponentId<PanelComponent>()) {
+	if (componentId == scene->getComponentId<PanelComponent>()) {
 		PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
 		createPanelObjects(entity, panel);
 	} else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
