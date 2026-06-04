@@ -465,12 +465,14 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
 
         if (selEntities.size() == 1){
             Signature signature = scene->getSignature(selEntities[0]);
-            bool isTilemap = signature.test(scene->getComponentId<TilemapComponent>());
             bool isCamera = signature.test(scene->getComponentId<CameraComponent>());
             bool isInstancedMesh = signature.test(scene->getComponentId<InstancedMeshComponent>());
+            bool canResize2D = signature.test(scene->getComponentId<UILayoutComponent>())
+                || signature.test(scene->getComponentId<SpriteComponent>())
+                || (signature.test(scene->getComponentId<TilemapComponent>()) && selectedTileIndex >= 0);
 
             showCross = signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>());
-            showRects = (!isTilemap || selectedTileIndex >= 0) && !isCamera && !isInstancedMesh && !showCross;
+            showRects = canResize2D && !isCamera && !isInstancedMesh && !showCross;
         }
 
         toolslayer.setShowObject2DRects(showRects);
