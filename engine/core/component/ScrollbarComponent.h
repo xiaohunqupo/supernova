@@ -6,6 +6,7 @@
 #define SCROLLBAR_COMPONENT_H
 
 #include "util/FunctionSubscribe.h"
+#include "ecs/Entity.h"
 
 namespace doriax{
 

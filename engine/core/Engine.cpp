@@ -214,8 +214,8 @@ void Engine::removeAllScenes(){
     if (Engine::isAsyncThread())
         drawSemaphore.acquire();
 
-        scenes.clear();
-        mainScene = NULL;
+    scenes.clear();
+    mainScene = NULL;
 
     if (Engine::isAsyncThread())
         drawSemaphore.release();

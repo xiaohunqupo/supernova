@@ -1,7 +1,5 @@
 #include "Catalog.h"
 
-#include "Scene.h"
-#include "yaml-cpp/yaml.h"
 #include "Stream.h"
 
 #include <cctype>

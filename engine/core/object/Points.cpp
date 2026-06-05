@@ -3,7 +3,6 @@
 //
 
 #include "Points.h"
-#include "util/Angle.h"
 #include "subsystem/RenderSystem.h"
 
 using namespace doriax;

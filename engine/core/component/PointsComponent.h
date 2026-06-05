@@ -7,6 +7,10 @@
 
 #include "util/SpriteFrameData.h"
 #include "util/HybridArray.h"
+#include "buffer/ExternalBuffer.h"
+#include "render/ObjectRender.h"
+#include "render/ShaderRender.h"
+#include "texture/Texture.h"
 #include "Engine.h"
 
 namespace doriax{

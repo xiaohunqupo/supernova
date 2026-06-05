@@ -5,7 +5,8 @@
 #ifndef MODEL_COMPONENT_H
 #define MODEL_COMPONENT_H
 
-#include "buffer/ExternalBuffer.h"
+#include "ecs/Entity.h"
+#include "math/Matrix4.h"
 #include <vector>
 #include <map>
 #include <memory>

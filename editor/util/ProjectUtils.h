@@ -3,8 +3,6 @@
 #include "lua.hpp"
 
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 
 #include "LuaBridge.h"
 #include "Out.h"
@@ -13,6 +11,7 @@
 #include "script/ScriptProperty.h"
 
 #include "texture/Texture.h"
+#include "ecs/Entity.h"
 
 #include "command/Command.h"
 

@@ -5,7 +5,6 @@
 #ifndef UI_COMPONENT_H
 #define UI_COMPONENT_H
 
-#include "buffer/Buffer.h"
 #include "texture/Texture.h"
 #include "render/ObjectRender.h"
 #include "buffer/InterleavedBuffer.h"

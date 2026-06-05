@@ -2,7 +2,6 @@
 
 #include "imgui_internal.h"
 #include "Platform.h"
-#include "Doriax.h"
 #include "Backend.h"
 
 #include "external/IconsFontAwesome6.h"

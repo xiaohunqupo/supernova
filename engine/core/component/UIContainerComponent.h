@@ -8,6 +8,7 @@
 #define MAX_CONTAINER_BOXES 30
 
 #include "math/Rect.h"
+#include "ecs/Entity.h"
 
 namespace doriax{
 
