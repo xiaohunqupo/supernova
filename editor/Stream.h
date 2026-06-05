@@ -81,6 +81,9 @@ namespace doriax::editor {
         static std::string containerTypeToString(ContainerType type);
         static ContainerType stringToContainerType(const std::string& str);
 
+        static std::string scrollbarTypeToString(ScrollbarType type);
+        static ScrollbarType stringToScrollbarType(const std::string& str);
+
         static std::string scalingModeToString(Scaling mode);
         static Scaling stringToScalingMode(const std::string& str);
 
@@ -196,6 +199,9 @@ namespace doriax::editor {
 
         static YAML::Node encodeButtonComponent(const ButtonComponent& button);
         static ButtonComponent decodeButtonComponent(const YAML::Node& node, const ButtonComponent* oldButton = nullptr);
+
+        static YAML::Node encodeScrollbarComponent(const ScrollbarComponent& scrollbar);
+        static ScrollbarComponent decodeScrollbarComponent(const YAML::Node& node, const ScrollbarComponent* oldScrollbar = nullptr);
 
         static YAML::Node encodeUILayoutComponent(const UILayoutComponent& layout);
         static UILayoutComponent decodeUILayoutComponent(const YAML::Node& node, const UILayoutComponent* oldLayout = nullptr);

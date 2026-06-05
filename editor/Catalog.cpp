@@ -181,6 +181,13 @@ namespace {
         makeFastProperty<ButtonComponent, bool, &ButtonComponent::disabled>("disabled", PropertyType::Bool, UpdateFlags_None),
     };
 
+    static const FastPropertyDescriptor kScrollbarProperties[] = {
+        makeFastProperty<ScrollbarComponent, Entity, &ScrollbarComponent::bar>("bar", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<ScrollbarComponent, ScrollbarType, &ScrollbarComponent::type>("type", PropertyType::Enum, UpdateFlags_None),
+        makeFastProperty<ScrollbarComponent, float, &ScrollbarComponent::barSize>("barSize", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<ScrollbarComponent, float, &ScrollbarComponent::step>("step", PropertyType::Float, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kSpriteTopProperties[] = {
         makeFastPropertyNoDefault<SpriteComponent, unsigned int, &SpriteComponent::width>("width", PropertyType::UInt, UpdateFlags_Sprite),
         makeFastPropertyNoDefault<SpriteComponent, unsigned int, &SpriteComponent::height>("height", PropertyType::UInt, UpdateFlags_Sprite),
@@ -919,6 +926,10 @@ namespace {
 
     PropertyData resolveButtonPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<ButtonComponent*>(comp), propertyName, kButtonProperties);
+    }
+
+    PropertyData resolveScrollbarPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<ScrollbarComponent*>(comp), propertyName, kScrollbarProperties);
     }
 
     PropertyData getSpritePropertyFast(SpriteComponent* comp, const std::string& propertyName) {
@@ -1834,6 +1845,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kButtonProperties);
     }
 
+    void enumerateScrollbarProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kScrollbarProperties);
+    }
+
     void enumerateSpriteProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
         SpriteComponent* comp = static_cast<SpriteComponent*>(compRef);
         SpriteComponent& def = getDefaultComponent<SpriteComponent>();
@@ -2438,6 +2453,7 @@ namespace {
         {ComponentType::UIContainerComponent, &findComponentPtr<UIContainerComponent>, &resolveUIContainerPropertyFast, &enumerateUIContainerProperties},
         {ComponentType::ImageComponent, &findComponentPtr<ImageComponent>, &resolveImagePropertyFast, &enumerateImageProperties},
         {ComponentType::ButtonComponent, &findComponentPtr<ButtonComponent>, &resolveButtonPropertyFast, &enumerateButtonProperties},
+        {ComponentType::ScrollbarComponent, &findComponentPtr<ScrollbarComponent>, &resolveScrollbarPropertyFast, &enumerateScrollbarProperties},
         {ComponentType::SpriteComponent, &findComponentPtr<SpriteComponent>, &resolveSpritePropertyFast, &enumerateSpriteProperties},
         {ComponentType::TilemapComponent, &findComponentPtr<TilemapComponent>, &resolveTilemapPropertyFast, &enumerateTilemapProperties},
         {ComponentType::TerrainComponent, &findComponentPtr<TerrainComponent>, &resolveTerrainPropertyFast, &enumerateTerrainProperties},
@@ -3322,6 +3338,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::ButtonComponent: {
             YAML::Node encoded = Stream::encodeButtonComponent(sourceRegistry->getComponent<ButtonComponent>(sourceEntity));
             targetRegistry->getComponent<ButtonComponent>(targetEntity) = Stream::decodeButtonComponent(encoded);
+            break;
+        }
+
+        case ComponentType::ScrollbarComponent: {
+            YAML::Node encoded = Stream::encodeScrollbarComponent(sourceRegistry->getComponent<ScrollbarComponent>(sourceEntity));
+            targetRegistry->getComponent<ScrollbarComponent>(targetEntity) = Stream::decodeScrollbarComponent(encoded);
             break;
         }
 

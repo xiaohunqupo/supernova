@@ -177,6 +177,10 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Button", EntityCreationType::BUTTON, parent, addToBundle));
             openParent = parent;
         }
+        if (ImGui::MenuItem(ICON_FA_ARROWS_UP_DOWN"  Scrollbar")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Scrollbar", EntityCreationType::SCROLLBAR, parent, addToBundle));
+            openParent = parent;
+        }
         ImGui::EndMenu();
     }
 
@@ -341,6 +345,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_OBJECT_GROUP;
     }else if (signature.test(scene->getComponentId<ButtonComponent>())){
         return ICON_FA_SQUARE_CARET_RIGHT;
+    }else if (signature.test(scene->getComponentId<ScrollbarComponent>())){
+        return ICON_FA_ARROWS_UP_DOWN;
     }else if (signature.test(scene->getComponentId<TextComponent>())){
         return ICON_FA_FONT;
     }else if (signature.test(scene->getComponentId<TextEditComponent>())){

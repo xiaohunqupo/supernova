@@ -24,6 +24,7 @@ namespace doriax::editor{
         TILEMAP,
         TEXT,
         BUTTON,
+        SCROLLBAR,
         CONTAINER,
         POINT_LIGHT,
         DIRECTIONAL_LIGHT,

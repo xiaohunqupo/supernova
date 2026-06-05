@@ -158,6 +158,13 @@ Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
         }
     }
 
+    if (parentSignature.test(scene->getComponentId<ScrollbarComponent>())){
+        ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(parent);
+        if (scrollbar.bar == entity){
+            return parent;
+        }
+    }
+
     return NULL_ENTITY;
 }
 
@@ -620,8 +627,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<ScrollbarComponent>(entity, {});
             }else{
-                registry->addComponent<ScrollbarComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<ScrollbarComponent>(entity, Stream::decodeScrollbarComponent(componentNode));
             }
             break;
         case ComponentType::SkyComponent:
@@ -983,7 +989,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::ScrollbarComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodeScrollbarComponent(registry->getComponent<ScrollbarComponent>(entity));
             }
             registry->removeComponent<ScrollbarComponent>(entity);
             break;
@@ -1392,11 +1398,11 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<FogComponent>()))         return "Fog";
     if (signature.test(scene->getComponentId<SoundComponent>()))       return "Sound";
     if (signature.test(scene->getComponentId<ButtonComponent>()))      return "Button";
+    if (signature.test(scene->getComponentId<ScrollbarComponent>()))   return "Scrollbar";
     if (signature.test(scene->getComponentId<TextEditComponent>()))    return "TextEdit";
     if (signature.test(scene->getComponentId<TextComponent>()))        return "Text";
-    if (signature.test(scene->getComponentId<ImageComponent>()))       return "Image";
     if (signature.test(scene->getComponentId<PanelComponent>()))       return "Panel";
-    if (signature.test(scene->getComponentId<ScrollbarComponent>()))   return "Scrollbar";
+    if (signature.test(scene->getComponentId<ImageComponent>()))       return "Image";
     if (signature.test(scene->getComponentId<UIContainerComponent>())) return "Container";
     if (signature.test(scene->getComponentId<UIComponent>()))          return "UILayout";
     if (signature.test(scene->getComponentId<LightComponent>()))       return "Light";

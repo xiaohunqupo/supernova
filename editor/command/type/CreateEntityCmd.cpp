@@ -184,6 +184,28 @@ bool editor::CreateEntityCmd::execute(){
         textComp.text = "Button";
         textComp.needUpdateText = true;
 
+    }else if (type == EntityCreationType::SCROLLBAR){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<UILayoutComponent>(entity, {});
+        scene->addComponent<UIComponent>(entity, {});
+        scene->addComponent<ScrollbarComponent>(entity, {});
+        scene->addComponent<ImageComponent>(entity, {});
+
+        UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
+        layout.width = 16;
+        layout.height = 200;
+
+        ScrollbarComponent& scrollbarComp = scene->getComponent<ScrollbarComponent>(entity);
+        scene->getSystem<UISystem>()->createScrollbarObjects(entity, scrollbarComp);
+
+        childEntity = scrollbarComp.bar;
+
+        scene->setEntityName(childEntity, "Bar");
+
+        UIComponent& barUi = scene->getComponent<UIComponent>(childEntity);
+        barUi.color = Vector4(0.45f, 0.45f, 0.5f, 1.0f);
+
     }else if (type == EntityCreationType::CONTAINER){
 
         scene->addComponent<Transform>(entity, {});

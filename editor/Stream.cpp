@@ -540,6 +540,19 @@ ContainerType editor::Stream::stringToContainerType(const std::string& str) {
     return ContainerType::VERTICAL;
 }
 
+std::string editor::Stream::scrollbarTypeToString(ScrollbarType type) {
+    switch (type) {
+        case ScrollbarType::VERTICAL: return "vertical";
+        case ScrollbarType::HORIZONTAL: return "horizontal";
+        default: return "vertical";
+    }
+}
+
+ScrollbarType editor::Stream::stringToScrollbarType(const std::string& str) {
+    if (str == "horizontal") return ScrollbarType::HORIZONTAL;
+    return ScrollbarType::VERTICAL;
+}
+
 std::string editor::Stream::scalingModeToString(Scaling mode) {
     switch (mode) {
         case Scaling::FITWIDTH: return "fitwidth";
@@ -2376,6 +2389,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::ButtonComponent, true)] = encodeButtonComponent(button);
     }
 
+    if (signature.test(registry->getComponentId<ScrollbarComponent>())) {
+        ScrollbarComponent scrollbar = registry->getComponent<ScrollbarComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::ScrollbarComponent, true)] = encodeScrollbarComponent(scrollbar);
+    }
+
     if (signature.test(registry->getComponentId<UILayoutComponent>())) {
         UILayoutComponent layout = registry->getComponent<UILayoutComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::UILayoutComponent, true)] = encodeUILayoutComponent(layout);
@@ -2624,6 +2642,19 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             int flags = Catalog::getChangedUpdateFlags(ComponentType::ButtonComponent, existing, &button);
             registry->getComponent<ButtonComponent>(entity) = button;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::ScrollbarComponent, true);
+    if (compNode[compName]) {
+        ScrollbarComponent* existing = registry->findComponent<ScrollbarComponent>(entity);
+        ScrollbarComponent scrollbar = decodeScrollbarComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<ScrollbarComponent>())){
+            registry->addComponent<ScrollbarComponent>(entity, scrollbar);
+        }else{
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::ScrollbarComponent, existing, &scrollbar);
+            registry->getComponent<ScrollbarComponent>(entity) = scrollbar;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -3423,6 +3454,32 @@ ButtonComponent editor::Stream::decodeButtonComponent(const YAML::Node& node, co
     if (node["disabled"]) button.disabled = node["disabled"].as<bool>();
 
     return button;
+}
+
+YAML::Node editor::Stream::encodeScrollbarComponent(const ScrollbarComponent& scrollbar) {
+    YAML::Node node;
+    node["bar"] = scrollbar.bar;
+    node["type"] = scrollbarTypeToString(scrollbar.type);
+    node["barSize"] = scrollbar.barSize;
+    node["step"] = scrollbar.step;
+    return node;
+}
+
+ScrollbarComponent editor::Stream::decodeScrollbarComponent(const YAML::Node& node, const ScrollbarComponent* oldScrollbar) {
+    ScrollbarComponent scrollbar;
+
+    if (oldScrollbar) {
+        scrollbar = *oldScrollbar;
+    }
+
+    if (node["bar"]) scrollbar.bar = node["bar"].as<Entity>();
+    if (node["type"]) scrollbar.type = stringToScrollbarType(node["type"].as<std::string>());
+    if (node["barSize"]) scrollbar.barSize = node["barSize"].as<float>();
+    if (node["step"]) scrollbar.step = node["step"].as<float>();
+
+    scrollbar.needUpdateScrollbar = true;
+
+    return scrollbar;
 }
 
 YAML::Node editor::Stream::encodeUILayoutComponent(const UILayoutComponent& layout) {

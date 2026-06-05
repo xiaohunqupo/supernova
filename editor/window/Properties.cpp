@@ -5005,6 +5005,38 @@ void editor::Properties::drawButtonComponent(ComponentType cpType, SceneProject*
     endTable();
 }
 
+void editor::Properties::drawScrollbarComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    static std::vector<editor::EnumEntry> entriesScrollbarType = {
+        { (int)ScrollbarType::VERTICAL, "Vertical" },
+        { (int)ScrollbarType::HORIZONTAL, "Horizontal" }
+    };
+
+    RowSettings settings;
+    settings.onValueChanged = [sceneProject, entities](){
+        for (const Entity& entity : entities){
+            if (ScrollbarComponent* scrollbar = sceneProject->scene->findComponent<ScrollbarComponent>(entity)){
+                scrollbar->needUpdateScrollbar = true;
+            }
+        }
+    };
+
+    RowSettings settingsEnum;
+    settingsEnum.enumEntries = &entriesScrollbarType;
+    settingsEnum.onValueChanged = settings.onValueChanged;
+
+    RowSettings settingsFloat;
+    settingsFloat.stepSize = 0.01f;
+    settingsFloat.secondColSize = 6 * ImGui::GetFontSize();
+    settingsFloat.onValueChanged = settings.onValueChanged;
+
+    beginTable(cpType, getLabelSize("Bar Size"));
+    propertyRow(RowPropertyType::LocalEntity, cpType, "bar", "Bar", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Enum, cpType, "type", "Type", sceneProject, entities, settingsEnum);
+    propertyRow(RowPropertyType::Float_0_1, cpType, "barSize", "Bar Size", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float_0_1, cpType, "step", "Step", sceneProject, entities, settingsFloat);
+    endTable();
+}
+
 void editor::Properties::drawTextComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     RowSettings settingsInt;
     settingsInt.stepSize = 1.0f;
@@ -10648,6 +10680,8 @@ void editor::Properties::show(){
                     drawUIComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::ButtonComponent){
                     drawButtonComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::ScrollbarComponent){
+                    drawScrollbarComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::TextComponent){
                     drawTextComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::UILayoutComponent){

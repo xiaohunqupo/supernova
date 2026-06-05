@@ -283,6 +283,14 @@ std::string editor::Factory::formatContainerType(ContainerType type) {
     }
 }
 
+std::string editor::Factory::formatScrollbarType(ScrollbarType type) {
+    switch (type) {
+        case ScrollbarType::VERTICAL: return "ScrollbarType::VERTICAL";
+        case ScrollbarType::HORIZONTAL: return "ScrollbarType::HORIZONTAL";
+        default: return "ScrollbarType::VERTICAL";
+    }
+}
+
 std::string editor::Factory::formatLightType(LightType type) {
     switch (type) {
         case LightType::DIRECTIONAL: return "LightType::DIRECTIONAL";
@@ -817,6 +825,20 @@ std::string editor::Factory::createButtonComponent(int indentSpaces, EntityRegis
     code << ind << "button.colorDisabled = " << formatVector4(button.colorDisabled) << ";\n";
     code << ind << "button.disabled = " << formatBool(button.disabled) << ";\n";
     addComponentCode(code, ind, sceneName, entityName, entity, "ButtonComponent", "button", assignExisting);
+    return code.str();
+}
+
+std::string editor::Factory::createScrollbarComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<ScrollbarComponent>(entity)) return "";
+    ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "ScrollbarComponent scrollbar;\n";
+    code << ind << "scrollbar.bar = " << formatUInt(scrollbar.bar) << ";\n";
+    code << ind << "scrollbar.type = " << formatScrollbarType(scrollbar.type) << ";\n";
+    code << ind << "scrollbar.barSize = " << formatFloat(scrollbar.barSize) << ";\n";
+    code << ind << "scrollbar.step = " << formatFloat(scrollbar.step) << ";\n";
+    addComponentCode(code, ind, sceneName, entityName, entity, "ScrollbarComponent", "scrollbar", assignExisting);
     return code.str();
 }
 
@@ -1729,6 +1751,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::MeshComponent: return createMeshComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UIComponent: return createUIComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ButtonComponent: return createButtonComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::ScrollbarComponent: return createScrollbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UILayoutComponent: return createUILayoutComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UIContainerComponent: return createUIContainerComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TextComponent: return createTextComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
