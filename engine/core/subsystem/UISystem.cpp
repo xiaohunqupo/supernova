@@ -68,9 +68,9 @@ bool UISystem::createImagePatches(ImageComponent& img, UIComponent& ui, UILayout
 
     ui.primitiveType = PrimitiveType::TRIANGLES;
 
-	ui.buffer.clear();
-	ui.buffer.addAttribute(AttributeType::POSITION, 3);
-	ui.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
+    ui.buffer.clear();
+    ui.buffer.addAttribute(AttributeType::POSITION, 3);
+    ui.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
     ui.buffer.addAttribute(AttributeType::COLOR, 4);
     ui.buffer.setUsage(BufferUsage::DYNAMIC);
 
@@ -222,8 +222,8 @@ void UISystem::createText(TextComponent& text, UIComponent& ui, UILayoutComponen
     ui.primitiveType = PrimitiveType::TRIANGLES;
 
     ui.buffer.clear();
-	ui.buffer.addAttribute(AttributeType::POSITION, 3);
-	ui.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
+    ui.buffer.addAttribute(AttributeType::POSITION, 3);
+    ui.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
     ui.buffer.setUsage(BufferUsage::DYNAMIC);
 
     ui.indices.clear();
@@ -661,8 +661,8 @@ void UISystem::createUIPolygon(PolygonComponent& polygon, UIComponent& ui, UILay
     ui.primitiveType = PrimitiveType::TRIANGLE_STRIP;
 
     ui.buffer.clear();
-	ui.buffer.addAttribute(AttributeType::POSITION, 3);
-	ui.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
+    ui.buffer.addAttribute(AttributeType::POSITION, 3);
+    ui.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
     ui.buffer.addAttribute(AttributeType::COLOR, 4);
     ui.buffer.setUsage(BufferUsage::DYNAMIC);
 
@@ -2400,90 +2400,90 @@ bool UISystem::isCoordInside(float x, float y, Transform& transform, UILayoutCom
 
 
 void UISystem::onComponentAdded(Entity entity, ComponentId componentId) {
-	if (componentId == scene->getComponentId<PanelComponent>()) {
-		PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
-		createPanelObjects(entity, panel);
-	} else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
-		ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
-		createScrollbarObjects(entity, scrollbar);
-	} else if (componentId == scene->getComponentId<TextEditComponent>()) {
-		TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
-		createTextEditObjects(entity, textedit);
-	}
+    if (componentId == scene->getComponentId<PanelComponent>()) {
+        PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
+        createPanelObjects(entity, panel);
+    } else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
+        ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
+        createScrollbarObjects(entity, scrollbar);
+    } else if (componentId == scene->getComponentId<TextEditComponent>()) {
+        TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
+        createTextEditObjects(entity, textedit);
+    }
 }
 
 void UISystem::onComponentRemoved(Entity entity, ComponentId componentId) {
-	if (componentId == scene->getComponentId<UIComponent>() ||
-		componentId == scene->getComponentId<UILayoutComponent>() ||
-		componentId == scene->getComponentId<ImageComponent>() ||
-		componentId == scene->getComponentId<Transform>()) {
-		if (entity == lastUIFromPointer) {
-			lastUIFromPointer = NULL_ENTITY;
-			pointerDragging = false;
-			pointerInternalGesture = false;
-		}
-		if (entity == lastUIFromPointerHover) {
-			lastUIFromPointerHover = NULL_ENTITY;
-		}
-		if (entity == lastUIFromClick) {
-			lastUIFromClick = NULL_ENTITY;
-			lastClickTime = -1.0;
-		}
-	}
+    if (componentId == scene->getComponentId<UIComponent>() ||
+        componentId == scene->getComponentId<UILayoutComponent>() ||
+        componentId == scene->getComponentId<ImageComponent>() ||
+        componentId == scene->getComponentId<Transform>()) {
+        if (entity == lastUIFromPointer) {
+            lastUIFromPointer = NULL_ENTITY;
+            pointerDragging = false;
+            pointerInternalGesture = false;
+        }
+        if (entity == lastUIFromPointerHover) {
+            lastUIFromPointerHover = NULL_ENTITY;
+        }
+        if (entity == lastUIFromClick) {
+            lastUIFromClick = NULL_ENTITY;
+            lastClickTime = -1.0;
+        }
+    }
 
-	if (componentId == scene->getComponentId<ButtonComponent>()) {
-		ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
-		if (button.label != NULL_ENTITY){
-			if (isEntityChild(button.label, entity)){
-				scene->destroyEntity(button.label);
-			}
-			button.label = NULL_ENTITY;
-		}
-		destroyButton(button);
-	} else if (componentId == scene->getComponentId<PanelComponent>()) {
-		PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
-		if (panel.headertext != NULL_ENTITY){
-			if (isEntityChild(panel.headertext, entity)){
-				scene->destroyEntity(panel.headertext);
-			}
-			panel.headertext = NULL_ENTITY;
-		}
-		if (panel.headercontainer != NULL_ENTITY){
-			if (isEntityChild(panel.headercontainer, entity)){
-				scene->destroyEntity(panel.headercontainer);
-			}
-			panel.headercontainer = NULL_ENTITY;
-		}
-		if (panel.headerimage != NULL_ENTITY){
-			if (isEntityChild(panel.headerimage, entity)){
-				scene->destroyEntity(panel.headerimage);
-			}
-			panel.headerimage = NULL_ENTITY;
-		}
-	} else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
-		ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
-		if (scrollbar.bar != NULL_ENTITY){
-			if (isEntityChild(scrollbar.bar, entity)){
-				scene->destroyEntity(scrollbar.bar);
-			}
-			scrollbar.bar = NULL_ENTITY;
-		}
-	} else if (componentId == scene->getComponentId<TextEditComponent>()) {
-		TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
-		if (textedit.text != NULL_ENTITY){
-			if (isEntityChild(textedit.text, entity)){
-				scene->destroyEntity(textedit.text);
-			}
-			textedit.text = NULL_ENTITY;
-		}
-		if (textedit.cursor != NULL_ENTITY){
-			if (isEntityChild(textedit.cursor, entity)){
-				scene->destroyEntity(textedit.cursor);
-			}
-			textedit.cursor = NULL_ENTITY;
-		}
-	} else if (componentId == scene->getComponentId<TextComponent>()) {
-		TextComponent& text = scene->getComponent<TextComponent>(entity);
-		destroyText(text);
-	}
+    if (componentId == scene->getComponentId<ButtonComponent>()) {
+        ButtonComponent& button = scene->getComponent<ButtonComponent>(entity);
+        if (button.label != NULL_ENTITY){
+            if (isEntityChild(button.label, entity)){
+                scene->destroyEntity(button.label);
+            }
+            button.label = NULL_ENTITY;
+        }
+        destroyButton(button);
+    } else if (componentId == scene->getComponentId<PanelComponent>()) {
+        PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
+        if (panel.headertext != NULL_ENTITY){
+            if (isEntityChild(panel.headertext, entity)){
+                scene->destroyEntity(panel.headertext);
+            }
+            panel.headertext = NULL_ENTITY;
+        }
+        if (panel.headercontainer != NULL_ENTITY){
+            if (isEntityChild(panel.headercontainer, entity)){
+                scene->destroyEntity(panel.headercontainer);
+            }
+            panel.headercontainer = NULL_ENTITY;
+        }
+        if (panel.headerimage != NULL_ENTITY){
+            if (isEntityChild(panel.headerimage, entity)){
+                scene->destroyEntity(panel.headerimage);
+            }
+            panel.headerimage = NULL_ENTITY;
+        }
+    } else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
+        ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
+        if (scrollbar.bar != NULL_ENTITY){
+            if (isEntityChild(scrollbar.bar, entity)){
+                scene->destroyEntity(scrollbar.bar);
+            }
+            scrollbar.bar = NULL_ENTITY;
+        }
+    } else if (componentId == scene->getComponentId<TextEditComponent>()) {
+        TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
+        if (textedit.text != NULL_ENTITY){
+            if (isEntityChild(textedit.text, entity)){
+                scene->destroyEntity(textedit.text);
+            }
+            textedit.text = NULL_ENTITY;
+        }
+        if (textedit.cursor != NULL_ENTITY){
+            if (isEntityChild(textedit.cursor, entity)){
+                scene->destroyEntity(textedit.cursor);
+            }
+            textedit.cursor = NULL_ENTITY;
+        }
+    } else if (componentId == scene->getComponentId<TextComponent>()) {
+        TextComponent& text = scene->getComponent<TextComponent>(entity);
+        destroyText(text);
+    }
 }
