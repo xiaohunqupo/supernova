@@ -595,6 +595,7 @@ set(DORIAX_SRCS
     core/object/ui/Panel.cpp
     core/object/ui/Polygon.cpp
     core/object/ui/Scrollbar.cpp
+    core/object/ui/Progressbar.cpp
     core/object/ui/Text.cpp
     core/object/ui/TextEdit.cpp
     core/object/ui/UILayout.cpp

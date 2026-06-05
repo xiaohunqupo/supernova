@@ -553,6 +553,19 @@ ScrollbarType editor::Stream::stringToScrollbarType(const std::string& str) {
     return ScrollbarType::VERTICAL;
 }
 
+std::string editor::Stream::progressbarTypeToString(ProgressbarType type) {
+    switch (type) {
+        case ProgressbarType::VERTICAL: return "vertical";
+        case ProgressbarType::HORIZONTAL: return "horizontal";
+        default: return "horizontal";
+    }
+}
+
+ProgressbarType editor::Stream::stringToProgressbarType(const std::string& str) {
+    if (str == "vertical") return ProgressbarType::VERTICAL;
+    return ProgressbarType::HORIZONTAL;
+}
+
 std::string editor::Stream::scalingModeToString(Scaling mode) {
     switch (mode) {
         case Scaling::FITWIDTH: return "fitwidth";
@@ -2394,6 +2407,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::ScrollbarComponent, true)] = encodeScrollbarComponent(scrollbar);
     }
 
+    if (signature.test(registry->getComponentId<ProgressbarComponent>())) {
+        ProgressbarComponent progressbar = registry->getComponent<ProgressbarComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::ProgressbarComponent, true)] = encodeProgressbarComponent(progressbar);
+    }
+
     if (signature.test(registry->getComponentId<UILayoutComponent>())) {
         UILayoutComponent layout = registry->getComponent<UILayoutComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::UILayoutComponent, true)] = encodeUILayoutComponent(layout);
@@ -2655,6 +2673,19 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             int flags = Catalog::getChangedUpdateFlags(ComponentType::ScrollbarComponent, existing, &scrollbar);
             registry->getComponent<ScrollbarComponent>(entity) = scrollbar;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::ProgressbarComponent, true);
+    if (compNode[compName]) {
+        ProgressbarComponent* existing = registry->findComponent<ProgressbarComponent>(entity);
+        ProgressbarComponent progressbar = decodeProgressbarComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<ProgressbarComponent>())){
+            registry->addComponent<ProgressbarComponent>(entity, progressbar);
+        }else{
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::ProgressbarComponent, existing, &progressbar);
+            registry->getComponent<ProgressbarComponent>(entity) = progressbar;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -3480,6 +3511,30 @@ ScrollbarComponent editor::Stream::decodeScrollbarComponent(const YAML::Node& no
     scrollbar.needUpdateScrollbar = true;
 
     return scrollbar;
+}
+
+YAML::Node editor::Stream::encodeProgressbarComponent(const ProgressbarComponent& progressbar) {
+    YAML::Node node;
+    node["fill"] = progressbar.fill;
+    node["type"] = progressbarTypeToString(progressbar.type);
+    node["value"] = progressbar.value;
+    return node;
+}
+
+ProgressbarComponent editor::Stream::decodeProgressbarComponent(const YAML::Node& node, const ProgressbarComponent* oldProgressbar) {
+    ProgressbarComponent progressbar;
+
+    if (oldProgressbar) {
+        progressbar = *oldProgressbar;
+    }
+
+    if (node["fill"]) progressbar.fill = node["fill"].as<Entity>();
+    if (node["type"]) progressbar.type = stringToProgressbarType(node["type"].as<std::string>());
+    if (node["value"]) progressbar.value = node["value"].as<float>();
+
+    progressbar.needUpdateProgressbar = true;
+
+    return progressbar;
 }
 
 YAML::Node editor::Stream::encodeUILayoutComponent(const UILayoutComponent& layout) {

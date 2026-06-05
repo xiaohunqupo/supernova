@@ -188,6 +188,12 @@ namespace {
         makeFastProperty<ScrollbarComponent, float, &ScrollbarComponent::step>("step", PropertyType::Float, UpdateFlags_None),
     };
 
+    static const FastPropertyDescriptor kProgressbarProperties[] = {
+        makeFastProperty<ProgressbarComponent, Entity, &ProgressbarComponent::fill>("fill", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<ProgressbarComponent, ProgressbarType, &ProgressbarComponent::type>("type", PropertyType::Enum, UpdateFlags_None),
+        makeFastProperty<ProgressbarComponent, float, &ProgressbarComponent::value>("value", PropertyType::Float, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kSpriteTopProperties[] = {
         makeFastPropertyNoDefault<SpriteComponent, unsigned int, &SpriteComponent::width>("width", PropertyType::UInt, UpdateFlags_Sprite),
         makeFastPropertyNoDefault<SpriteComponent, unsigned int, &SpriteComponent::height>("height", PropertyType::UInt, UpdateFlags_Sprite),
@@ -930,6 +936,10 @@ namespace {
 
     PropertyData resolveScrollbarPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<ScrollbarComponent*>(comp), propertyName, kScrollbarProperties);
+    }
+
+    PropertyData resolveProgressbarPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<ProgressbarComponent*>(comp), propertyName, kProgressbarProperties);
     }
 
     PropertyData getSpritePropertyFast(SpriteComponent* comp, const std::string& propertyName) {
@@ -1849,6 +1859,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kScrollbarProperties);
     }
 
+    void enumerateProgressbarProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kProgressbarProperties);
+    }
+
     void enumerateSpriteProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
         SpriteComponent* comp = static_cast<SpriteComponent*>(compRef);
         SpriteComponent& def = getDefaultComponent<SpriteComponent>();
@@ -2454,6 +2468,7 @@ namespace {
         {ComponentType::ImageComponent, &findComponentPtr<ImageComponent>, &resolveImagePropertyFast, &enumerateImageProperties},
         {ComponentType::ButtonComponent, &findComponentPtr<ButtonComponent>, &resolveButtonPropertyFast, &enumerateButtonProperties},
         {ComponentType::ScrollbarComponent, &findComponentPtr<ScrollbarComponent>, &resolveScrollbarPropertyFast, &enumerateScrollbarProperties},
+        {ComponentType::ProgressbarComponent, &findComponentPtr<ProgressbarComponent>, &resolveProgressbarPropertyFast, &enumerateProgressbarProperties},
         {ComponentType::SpriteComponent, &findComponentPtr<SpriteComponent>, &resolveSpritePropertyFast, &enumerateSpriteProperties},
         {ComponentType::TilemapComponent, &findComponentPtr<TilemapComponent>, &resolveTilemapPropertyFast, &enumerateTilemapProperties},
         {ComponentType::TerrainComponent, &findComponentPtr<TerrainComponent>, &resolveTerrainPropertyFast, &enumerateTerrainProperties},
@@ -2611,6 +2626,8 @@ std::string editor::Catalog::getComponentName(ComponentType component, bool remo
         name = "PolygonComponent";
     }else if(component == ComponentType::PositionActionComponent){
         name = "PositionActionComponent";
+    }else if(component == ComponentType::ProgressbarComponent){
+        name = "ProgressbarComponent";
     }else if(component == ComponentType::RotateTracksComponent){
         name = "RotateTracksComponent";
     }else if(component == ComponentType::RotationActionComponent){
@@ -2726,6 +2743,8 @@ ComponentId editor::Catalog::getComponentId(const EntityRegistry* registry, Comp
             return registry->getComponentId<PolygonComponent>();
         case ComponentType::PositionActionComponent:
             return registry->getComponentId<PositionActionComponent>();
+        case ComponentType::ProgressbarComponent:
+            return registry->getComponentId<ProgressbarComponent>();
         case ComponentType::RotateTracksComponent:
             return registry->getComponentId<RotateTracksComponent>();
         case ComponentType::RotationActionComponent:
@@ -2822,6 +2841,8 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
         return ComponentType::PolygonComponent;
     }else if(normalizedName == "positionaction"){
         return ComponentType::PositionActionComponent;
+    }else if(normalizedName == "progressbar"){
+        return ComponentType::ProgressbarComponent;
     }else if(normalizedName == "rotatetracks"){
         return ComponentType::RotateTracksComponent;
     }else if(normalizedName == "rotationaction"){
@@ -2992,6 +3013,9 @@ std::vector<editor::ComponentType> editor::Catalog::findComponents(EntityRegistr
     }
     if (registry->findComponent<PositionActionComponent>(entity)){
         ret.push_back(ComponentType::PositionActionComponent);
+    }
+    if (registry->findComponent<ProgressbarComponent>(entity)){
+        ret.push_back(ComponentType::ProgressbarComponent);
     }
     if (registry->findComponent<RotateTracksComponent>(entity)){
         ret.push_back(ComponentType::RotateTracksComponent);
@@ -3344,6 +3368,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::ScrollbarComponent: {
             YAML::Node encoded = Stream::encodeScrollbarComponent(sourceRegistry->getComponent<ScrollbarComponent>(sourceEntity));
             targetRegistry->getComponent<ScrollbarComponent>(targetEntity) = Stream::decodeScrollbarComponent(encoded);
+            break;
+        }
+
+        case ComponentType::ProgressbarComponent: {
+            YAML::Node encoded = Stream::encodeProgressbarComponent(sourceRegistry->getComponent<ProgressbarComponent>(sourceEntity));
+            targetRegistry->getComponent<ProgressbarComponent>(targetEntity) = Stream::decodeProgressbarComponent(encoded);
             break;
         }
 

@@ -181,6 +181,10 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Scrollbar", EntityCreationType::SCROLLBAR, parent, addToBundle));
             openParent = parent;
         }
+        if (ImGui::MenuItem(ICON_FA_BARS_PROGRESS"  Progressbar")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Progressbar", EntityCreationType::PROGRESSBAR, parent, addToBundle));
+            openParent = parent;
+        }
         ImGui::EndMenu();
     }
 
@@ -347,6 +351,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_SQUARE_CARET_RIGHT;
     }else if (signature.test(scene->getComponentId<ScrollbarComponent>())){
         return ICON_FA_ARROWS_UP_DOWN;
+    }else if (signature.test(scene->getComponentId<ProgressbarComponent>())){
+        return ICON_FA_BARS_PROGRESS;
     }else if (signature.test(scene->getComponentId<TextComponent>())){
         return ICON_FA_FONT;
     }else if (signature.test(scene->getComponentId<TextEditComponent>())){

@@ -31,6 +31,7 @@
 #include "Button.h"
 #include "Panel.h"
 #include "Scrollbar.h"
+#include "Progressbar.h"
 #include "TextEdit.h"
 #include "Container.h"
 #include "Sound.h"
@@ -803,6 +804,26 @@ void LuaBinding::registerObjectClasses(lua_State *L){
             luabridge::overload<int>(&Scrollbar::setBarPatchMargin),
             luabridge::overload<int, int, int, int>(&Scrollbar::setBarPatchMargin))
         .addFunction("getScrollbarComponent", &Scrollbar::getComponent<ScrollbarComponent>)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .deriveClass<Progressbar, Image>("Progressbar")
+        .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
+        .addFunction("getFillObject", &Progressbar::getFillObject)
+        .addProperty("type", &Progressbar::getType, &Progressbar::setType)
+        .addProperty("value", &Progressbar::getValue, &Progressbar::setValue)
+        .addFunction("setFillTexture", 
+            luabridge::overload<const std::string&>(&Progressbar::setFillTexture),
+            luabridge::overload<Framebuffer*>(&Progressbar::setFillTexture))
+        .addProperty("fillColor", &Progressbar::getFillColor, (void(Progressbar::*)(Vector4))&Progressbar::setFillColor)
+        .addFunction("setFillColor", 
+            luabridge::overload<const float, const float, const float>(&Progressbar::setFillColor),
+            luabridge::overload<const float, const float, const float, const float>(&Progressbar::setFillColor))
+        .addProperty("fillAlpha", &Progressbar::getFillAlpha, &Progressbar::setFillAlpha)
+        .addFunction("setFillPatchMargin", 
+            luabridge::overload<int>(&Progressbar::setFillPatchMargin),
+            luabridge::overload<int, int, int, int>(&Progressbar::setFillPatchMargin))
+        .addFunction("getProgressbarComponent", &Progressbar::getComponent<ProgressbarComponent>)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

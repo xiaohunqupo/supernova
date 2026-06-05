@@ -264,6 +264,7 @@ namespace doriax::editor{
         void drawUIComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawButtonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawScrollbarComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
+        void drawProgressbarComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawTextComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawUILayoutComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawUIContainerComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

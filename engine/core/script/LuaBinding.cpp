@@ -36,6 +36,7 @@
 #include "object/ui/Button.h"
 #include "object/ui/Panel.h"
 #include "object/ui/Scrollbar.h"
+#include "object/ui/Progressbar.h"
 #include "object/ui/TextEdit.h"
 #include "object/physics/Body2D.h"
 #include "object/physics/Body3D.h"
@@ -499,6 +500,7 @@ bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, dori
     DISPATCH_TYPE(Button, "button");
     DISPATCH_TYPE(Panel, "panel");
     DISPATCH_TYPE(Scrollbar, "scrollbar");
+    DISPATCH_TYPE(Progressbar, "progressbar");
     DISPATCH_TYPE(TextEdit, "textedit");
     DISPATCH_TYPE(Bone, "bone");
     DISPATCH_TYPE(Body2D, "body2d");

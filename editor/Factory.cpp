@@ -291,6 +291,14 @@ std::string editor::Factory::formatScrollbarType(ScrollbarType type) {
     }
 }
 
+std::string editor::Factory::formatProgressbarType(ProgressbarType type) {
+    switch (type) {
+        case ProgressbarType::VERTICAL: return "ProgressbarType::VERTICAL";
+        case ProgressbarType::HORIZONTAL: return "ProgressbarType::HORIZONTAL";
+        default: return "ProgressbarType::HORIZONTAL";
+    }
+}
+
 std::string editor::Factory::formatLightType(LightType type) {
     switch (type) {
         case LightType::DIRECTIONAL: return "LightType::DIRECTIONAL";
@@ -839,6 +847,19 @@ std::string editor::Factory::createScrollbarComponent(int indentSpaces, EntityRe
     code << ind << "scrollbar.barSize = " << formatFloat(scrollbar.barSize) << ";\n";
     code << ind << "scrollbar.step = " << formatFloat(scrollbar.step) << ";\n";
     addComponentCode(code, ind, sceneName, entityName, entity, "ScrollbarComponent", "scrollbar", assignExisting);
+    return code.str();
+}
+
+std::string editor::Factory::createProgressbarComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<ProgressbarComponent>(entity)) return "";
+    ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "ProgressbarComponent progressbar;\n";
+    code << ind << "progressbar.fill = " << formatUInt(progressbar.fill) << ";\n";
+    code << ind << "progressbar.type = " << formatProgressbarType(progressbar.type) << ";\n";
+    code << ind << "progressbar.value = " << formatFloat(progressbar.value) << ";\n";
+    addComponentCode(code, ind, sceneName, entityName, entity, "ProgressbarComponent", "progressbar", assignExisting);
     return code.str();
 }
 
@@ -1752,6 +1773,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::UIComponent: return createUIComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ButtonComponent: return createButtonComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ScrollbarComponent: return createScrollbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::ProgressbarComponent: return createProgressbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UILayoutComponent: return createUILayoutComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UIContainerComponent: return createUIContainerComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TextComponent: return createTextComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);

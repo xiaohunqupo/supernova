@@ -78,6 +78,7 @@ namespace doriax::editor{
         ParticlesComponent,
         PolygonComponent,
         PositionActionComponent,
+        ProgressbarComponent,
         RotateTracksComponent,
         RotationActionComponent,
         ScaleActionComponent,

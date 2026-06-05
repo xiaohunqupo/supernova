@@ -382,6 +382,23 @@ void UISystem::createScrollbarObjects(Entity entity, ScrollbarComponent& scrollb
     }
 }
 
+void UISystem::createProgressbarObjects(Entity entity, ProgressbarComponent& progressbar){
+    if (progressbar.fill == NULL_ENTITY){
+        progressbar.fill = scene->createEntity();
+
+        scene->addComponent<Transform>(progressbar.fill);
+        scene->addComponent<UILayoutComponent>(progressbar.fill);
+        scene->addComponent<UIComponent>(progressbar.fill);
+        scene->addComponent<ImageComponent>(progressbar.fill);
+
+        scene->addEntityChild(entity, progressbar.fill, false);
+
+        UILayoutComponent& filllayout = scene->getComponent<UILayoutComponent>(progressbar.fill);
+
+        filllayout.ignoreEvents = true;
+    }
+}
+
 void UISystem::createTextEditObjects(Entity entity, TextEditComponent& textedit){
     if (textedit.text == NULL_ENTITY){
         textedit.text = scene->createEntity();
@@ -575,6 +592,40 @@ void UISystem::updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, Ima
     }
     barlayout.anchorPreset = AnchorPreset::NONE;
     barlayout.usingAnchors = true;
+}
+
+void UISystem::updateProgressbar(Entity entity, ProgressbarComponent& progressbar, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
+    createProgressbarObjects(entity, progressbar);
+
+    UILayoutComponent& filllayout = scene->getComponent<UILayoutComponent>(progressbar.fill);
+
+    if (progressbar.value > 1){
+        progressbar.value = 1;
+    }else if (progressbar.value < 0){
+        progressbar.value = 0;
+    }
+
+    if (progressbar.type == ProgressbarType::HORIZONTAL){
+        filllayout.anchorPointLeft = 0;
+        filllayout.anchorPointTop = 0;
+        filllayout.anchorPointRight = progressbar.value;
+        filllayout.anchorPointBottom = 1;
+        filllayout.anchorOffsetLeft = 0;
+        filllayout.anchorOffsetTop = 0;
+        filllayout.anchorOffsetRight = 0;
+        filllayout.anchorOffsetBottom = 0;
+    }else if (progressbar.type == ProgressbarType::VERTICAL){
+        filllayout.anchorPointLeft = 0;
+        filllayout.anchorPointTop = 1 - progressbar.value;
+        filllayout.anchorPointRight = 1;
+        filllayout.anchorPointBottom = 1;
+        filllayout.anchorOffsetLeft = 0;
+        filllayout.anchorOffsetTop = 0;
+        filllayout.anchorOffsetRight = 0;
+        filllayout.anchorOffsetBottom = 0;
+    }
+    filllayout.anchorPreset = AnchorPreset::NONE;
+    filllayout.usingAnchors = true;
 }
 
 void UISystem::updateTextEdit(Entity entity, TextEditComponent& textedit, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
@@ -1205,6 +1256,17 @@ void UISystem::createOrUpdateUiComponent(double dt, UILayoutComponent& layout, E
                 }
             }
 
+            // Progressbar
+            if (signature.test(scene->getComponentId<ProgressbarComponent>())){
+                ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(entity);
+
+                if (progressbar.needUpdateProgressbar){
+                    updateProgressbar(entity, progressbar, img, ui, layout);
+
+                    progressbar.needUpdateProgressbar = false;
+                }
+            }
+
             // Textedits
             if (signature.test(scene->getComponentId<TextEditComponent>())){
                 TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
@@ -1807,6 +1869,12 @@ void UISystem::update(double dt){
                 scrollbar.needUpdateScrollbar = true;
             }
 
+            if (signature.test(scene->getComponentId<ProgressbarComponent>())){
+                ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(entity);
+
+                progressbar.needUpdateProgressbar = true;
+            }
+
             layout.needUpdateSizes = false;
         }
 
@@ -2406,6 +2474,9 @@ void UISystem::onComponentAdded(Entity entity, ComponentId componentId) {
     } else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
         ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
         createScrollbarObjects(entity, scrollbar);
+    } else if (componentId == scene->getComponentId<ProgressbarComponent>()) {
+        ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(entity);
+        createProgressbarObjects(entity, progressbar);
     } else if (componentId == scene->getComponentId<TextEditComponent>()) {
         TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
         createTextEditObjects(entity, textedit);
@@ -2467,6 +2538,14 @@ void UISystem::onComponentRemoved(Entity entity, ComponentId componentId) {
                 scene->destroyEntity(scrollbar.bar);
             }
             scrollbar.bar = NULL_ENTITY;
+        }
+    } else if (componentId == scene->getComponentId<ProgressbarComponent>()) {
+        ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(entity);
+        if (progressbar.fill != NULL_ENTITY){
+            if (isEntityChild(progressbar.fill, entity)){
+                scene->destroyEntity(progressbar.fill);
+            }
+            progressbar.fill = NULL_ENTITY;
         }
     } else if (componentId == scene->getComponentId<TextEditComponent>()) {
         TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);

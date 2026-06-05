@@ -27,6 +27,7 @@
 #include "component/ImageComponent.h"
 #include "component/PanelComponent.h"
 #include "component/ScrollbarComponent.h"
+#include "component/ProgressbarComponent.h"
 #include "component/PolygonComponent.h"
 #include "component/Body2DComponent.h"
 #include "component/Body3DComponent.h"
@@ -161,6 +162,13 @@ Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
     if (parentSignature.test(scene->getComponentId<ScrollbarComponent>())){
         ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(parent);
         if (scrollbar.bar == entity){
+            return parent;
+        }
+    }
+
+    if (parentSignature.test(scene->getComponentId<ProgressbarComponent>())){
+        ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(parent);
+        if (progressbar.fill == entity){
             return parent;
         }
     }
@@ -588,6 +596,13 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
                 registry->addComponent<PositionActionComponent>(entity, Stream::decodePositionActionComponent(componentNode));
             }
             break;
+        case ComponentType::ProgressbarComponent:
+            if (!componentNode.IsDefined() || componentNode.IsNull()){
+                registry->addComponent<ProgressbarComponent>(entity, {});
+            }else{
+                registry->addComponent<ProgressbarComponent>(entity, Stream::decodeProgressbarComponent(componentNode));
+            }
+            break;
         case ComponentType::RotateTracksComponent:
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<RotateTracksComponent>(entity, {});
@@ -956,6 +971,12 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
                 oldComponent = Stream::encodePositionActionComponent(registry->getComponent<PositionActionComponent>(entity));
             }
             registry->removeComponent<PositionActionComponent>(entity);
+            break;
+        case ComponentType::ProgressbarComponent:
+            if (encodeComponent){
+                oldComponent = Stream::encodeProgressbarComponent(registry->getComponent<ProgressbarComponent>(entity));
+            }
+            registry->removeComponent<ProgressbarComponent>(entity);
             break;
         case ComponentType::RotateTracksComponent:
             if (encodeComponent){
@@ -1399,6 +1420,7 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<SoundComponent>()))       return "Sound";
     if (signature.test(scene->getComponentId<ButtonComponent>()))      return "Button";
     if (signature.test(scene->getComponentId<ScrollbarComponent>()))   return "Scrollbar";
+    if (signature.test(scene->getComponentId<ProgressbarComponent>())) return "Progressbar";
     if (signature.test(scene->getComponentId<TextEditComponent>()))    return "TextEdit";
     if (signature.test(scene->getComponentId<TextComponent>()))        return "Text";
     if (signature.test(scene->getComponentId<PanelComponent>()))       return "Panel";

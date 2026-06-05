@@ -206,6 +206,31 @@ bool editor::CreateEntityCmd::execute(){
         UIComponent& barUi = scene->getComponent<UIComponent>(childEntity);
         barUi.color = Vector4(0.45f, 0.45f, 0.5f, 1.0f);
 
+    }else if (type == EntityCreationType::PROGRESSBAR){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<UILayoutComponent>(entity, {});
+        scene->addComponent<UIComponent>(entity, {});
+        scene->addComponent<ProgressbarComponent>(entity, {});
+        scene->addComponent<ImageComponent>(entity, {});
+
+        UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
+        layout.width = 200;
+        layout.height = 16;
+
+        ProgressbarComponent& progressbarComp = scene->getComponent<ProgressbarComponent>(entity);
+        scene->getSystem<UISystem>()->createProgressbarObjects(entity, progressbarComp);
+
+        childEntity = progressbarComp.fill;
+
+        scene->setEntityName(childEntity, "Fill");
+
+        UIComponent& fillUi = scene->getComponent<UIComponent>(childEntity);
+        fillUi.color = Vector4(0.3f, 0.7f, 0.4f, 1.0f);
+
+        progressbarComp.value = 0.5f;
+        progressbarComp.needUpdateProgressbar = true;
+
     }else if (type == EntityCreationType::CONTAINER){
 
         scene->addComponent<Transform>(entity, {});

@@ -17,6 +17,7 @@
 #include "component/ButtonComponent.h"
 #include "component/PanelComponent.h"
 #include "component/ScrollbarComponent.h"
+#include "component/ProgressbarComponent.h"
 #include "component/PolygonComponent.h"
 #include "component/TextEditComponent.h"
 #include "component/Transform.h"
@@ -64,6 +65,9 @@ namespace doriax{
 
         //Scrollbar
         void updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout);
+
+        //Progressbar
+        void updateProgressbar(Entity entity, ProgressbarComponent& progressbar, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout);
 
         //TextEdit
         void updateTextEdit(Entity entity, TextEditComponent& textedit, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout);
@@ -121,6 +125,7 @@ namespace doriax{
         void createButtonObjects(Entity entity, ButtonComponent& button);
         void createPanelObjects(Entity entity, PanelComponent& panel);
         void createScrollbarObjects(Entity entity, ScrollbarComponent& scrollbar);
+        void createProgressbarObjects(Entity entity, ProgressbarComponent& progressbar);
         void createTextEditObjects(Entity entity, TextEditComponent& textedit);
 
         void load() override;

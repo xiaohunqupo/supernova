@@ -25,6 +25,7 @@ namespace doriax::editor{
         TEXT,
         BUTTON,
         SCROLLBAR,
+        PROGRESSBAR,
         CONTAINER,
         POINT_LIGHT,
         DIRECTIONAL_LIGHT,

@@ -103,6 +103,12 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
+        .beginNamespace("ProgressbarType")
+        .addVariable("VERTICAL", ProgressbarType::VERTICAL)
+        .addVariable("HORIZONTAL", ProgressbarType::HORIZONTAL)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
         .beginNamespace("FogType")
         .addVariable("LINEAR", FogType::LINEAR)
         .addVariable("EXPONENTIAL", FogType::EXPONENTIAL)
@@ -399,6 +405,14 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("barPointerDown", &ScrollbarComponent::barPointerDown)
         .addProperty("barPointerPos", &ScrollbarComponent::barPointerPos)
         .addProperty("needUpdateScrollbar", &ScrollbarComponent::needUpdateScrollbar)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<ProgressbarComponent>("ProgressbarComponent")
+        .addProperty("fill", &ProgressbarComponent::fill)
+        .addProperty("type", &ProgressbarComponent::type)
+        .addProperty("value", &ProgressbarComponent::value)
+        .addProperty("needUpdateProgressbar", &ProgressbarComponent::needUpdateProgressbar)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

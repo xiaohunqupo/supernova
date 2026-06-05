@@ -84,6 +84,9 @@ namespace doriax::editor {
         static std::string scrollbarTypeToString(ScrollbarType type);
         static ScrollbarType stringToScrollbarType(const std::string& str);
 
+        static std::string progressbarTypeToString(ProgressbarType type);
+        static ProgressbarType stringToProgressbarType(const std::string& str);
+
         static std::string scalingModeToString(Scaling mode);
         static Scaling stringToScalingMode(const std::string& str);
 
@@ -202,6 +205,9 @@ namespace doriax::editor {
 
         static YAML::Node encodeScrollbarComponent(const ScrollbarComponent& scrollbar);
         static ScrollbarComponent decodeScrollbarComponent(const YAML::Node& node, const ScrollbarComponent* oldScrollbar = nullptr);
+
+        static YAML::Node encodeProgressbarComponent(const ProgressbarComponent& progressbar);
+        static ProgressbarComponent decodeProgressbarComponent(const YAML::Node& node, const ProgressbarComponent* oldProgressbar = nullptr);
 
         static YAML::Node encodeUILayoutComponent(const UILayoutComponent& layout);
         static UILayoutComponent decodeUILayoutComponent(const YAML::Node& node, const UILayoutComponent* oldLayout = nullptr);

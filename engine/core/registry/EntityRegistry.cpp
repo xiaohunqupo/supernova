@@ -31,6 +31,7 @@ EntityRegistry::EntityRegistry() {
     registerComponent<ButtonComponent>();
     registerComponent<PanelComponent>();
     registerComponent<ScrollbarComponent>();
+    registerComponent<ProgressbarComponent>();
     registerComponent<TextEditComponent>();
     registerComponent<MeshPolygonComponent>();
     registerComponent<PolygonComponent>();

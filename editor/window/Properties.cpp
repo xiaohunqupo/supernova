@@ -5037,6 +5037,37 @@ void editor::Properties::drawScrollbarComponent(ComponentType cpType, SceneProje
     endTable();
 }
 
+void editor::Properties::drawProgressbarComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    static std::vector<editor::EnumEntry> entriesProgressbarType = {
+        { (int)ProgressbarType::VERTICAL, "Vertical" },
+        { (int)ProgressbarType::HORIZONTAL, "Horizontal" }
+    };
+
+    RowSettings settings;
+    settings.onValueChanged = [sceneProject, entities](){
+        for (const Entity& entity : entities){
+            if (ProgressbarComponent* progressbar = sceneProject->scene->findComponent<ProgressbarComponent>(entity)){
+                progressbar->needUpdateProgressbar = true;
+            }
+        }
+    };
+
+    RowSettings settingsEnum;
+    settingsEnum.enumEntries = &entriesProgressbarType;
+    settingsEnum.onValueChanged = settings.onValueChanged;
+
+    RowSettings settingsFloat;
+    settingsFloat.stepSize = 0.01f;
+    settingsFloat.secondColSize = 6 * ImGui::GetFontSize();
+    settingsFloat.onValueChanged = settings.onValueChanged;
+
+    beginTable(cpType, getLabelSize("Value"));
+    propertyRow(RowPropertyType::LocalEntity, cpType, "fill", "Fill", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Enum, cpType, "type", "Type", sceneProject, entities, settingsEnum);
+    propertyRow(RowPropertyType::Float_0_1, cpType, "value", "Value", sceneProject, entities, settingsFloat);
+    endTable();
+}
+
 void editor::Properties::drawTextComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     RowSettings settingsInt;
     settingsInt.stepSize = 1.0f;
@@ -10682,6 +10713,8 @@ void editor::Properties::show(){
                     drawButtonComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::ScrollbarComponent){
                     drawScrollbarComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::ProgressbarComponent){
+                    drawProgressbarComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::TextComponent){
                     drawTextComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::UILayoutComponent){

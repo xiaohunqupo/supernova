@@ -34,6 +34,7 @@ void ComponentAddDialog::initializeCategories() {
             {ComponentType::ButtonComponent, ICON_FA_SQUARE_CHECK, "Button", "Interactive button", ImVec4(0.5f, 0.7f, 0.5f, 1.0f)},
             {ComponentType::PanelComponent, ICON_FA_WINDOW_MAXIMIZE, "Panel", "UI panel", ImVec4(0.4f, 0.5f, 0.7f, 1.0f)},
             {ComponentType::ScrollbarComponent, ICON_FA_ARROWS_UP_DOWN, "Scrollbar", "Scroll control", ImVec4(0.6f, 0.6f, 0.7f, 1.0f)},
+            {ComponentType::ProgressbarComponent, ICON_FA_BARS_PROGRESS, "Progressbar", "Progress indicator", ImVec4(0.4f, 0.7f, 0.5f, 1.0f)},
             {ComponentType::TextEditComponent, ICON_FA_KEYBOARD, "Text Edit", "Text input field", ImVec4(0.7f, 0.7f, 0.8f, 1.0f)}
         }},
         {"2D Graphics", ICON_FA_LAYER_GROUP, ImVec4(0.3f, 0.8f, 0.5f, 1.0f), {
