@@ -3827,7 +3827,8 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         std::string buttonLabel = ICON_FA_CIRCLE_DOT " " + entityName + "##local_entity_" + id;
         float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
         float clearButtonWidth = ImGui::CalcTextSize(ICON_FA_XMARK).x;
-        ImVec2 inputSize = ImVec2(ImGui::GetContentRegionAvail().x - clearButtonWidth - ImGui::GetStyle().ItemSpacing.x - clearButtonFramePadding * 2, 0);
+        float availableWidth = settings.secondColSize > 0 ? settings.secondColSize : ImGui::GetContentRegionAvail().x;
+        ImVec2 inputSize = ImVec2(std::max(0.0f, availableWidth - clearButtonWidth - ImGui::GetStyle().ItemSpacing.x - clearButtonFramePadding * 2), 0);
 
         std::string pickerPopupId = "##ep_" + id;
 
@@ -4874,24 +4875,103 @@ void editor::Properties::drawModelComponent(ComponentType cpType, SceneProject* 
 
     endTable();
 
-    if (entities.size() == 1) {
-        Entity entity = entities[0];
-        ModelComponent* model = sceneProject->scene->findComponent<ModelComponent>(entity);
-
-        if (model && !model->animations.empty()) {
-            ImGui::SeparatorText("Animations");
-
-            beginTable(cpType, getLabelSize("Animation 00"), "model_animations");
-
-            for (size_t i = 0; i < model->animations.size(); i++) {
-                std::string propId = "animations[" + std::to_string(i) + "]";
-                std::string label = "Animation " + std::to_string(i);
-                propertyRow(RowPropertyType::LocalEntity, cpType, propId, label, sceneProject, entities);
-            }
-
-            endTable();
-        }
+    if (entities.size() != 1) {
+        ImGui::SeparatorText("Animations");
+        ImGui::TextDisabled("Select a single entity to edit animations");
+        return;
     }
+
+    ModelComponent& model = sceneProject->scene->getComponent<ModelComponent>(entities[0]);
+
+    ImGui::SeparatorText("Animations");
+
+    beginTable(cpType, getLabelSize("Animation 00"), "model_animations_header");
+    propertyHeader("Animations", -1, false, false);
+    ImGui::Text("%zu", model.animations.size());
+    if (drawSummaryAddButton("Add Animation##model_animations_add")) {
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (Entity entity : entities) {
+            if (ModelComponent* modelComp = sceneProject->scene->findComponent<ModelComponent>(entity)) {
+                std::vector<Entity> newAnimations = modelComp->animations;
+                newAnimations.push_back(NULL_ENTITY);
+                multiCmd->addPropertyCmd<std::vector<Entity>>(project, sceneProject->id, entity, cpType, "animations", newAnimations, nullptr);
+            }
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+    endTable();
+
+    if (model.animations.empty()) {
+        return;
+    }
+
+    const float animationFirstColSize = getLabelSize("Animation 00");
+    const float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
+    const float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + clearButtonFramePadding * 2.0f;
+    const float rowSpacing = ImGui::GetStyle().ItemSpacing.x;
+    const float valueColWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x - animationFirstColSize - ImGui::GetStyle().CellPadding.x * 2.0f);
+
+    beginTable(cpType, animationFirstColSize, "model_animations");
+
+    for (size_t i = 0; i < model.animations.size(); i++) {
+        ImGui::PushID((int)i);
+
+        std::string propId = "animations[" + std::to_string(i) + "]";
+        Entity animEntity = model.animations[i];
+        std::string animationLabel = "Animation " + std::to_string(i);
+        if (animEntity != NULL_ENTITY && sceneProject->scene->isEntityCreated(animEntity)) {
+            if (AnimationComponent* animComp = sceneProject->scene->findComponent<AnimationComponent>(animEntity)) {
+                if (!animComp->name.empty()) {
+                    animationLabel = animComp->name;
+                } else {
+                    std::string entityName = sceneProject->scene->getEntityName(animEntity);
+                    if (!entityName.empty()) {
+                        animationLabel = entityName;
+                    }
+                }
+            }
+        }
+
+        RowSettings settingsAnimation;
+        settingsAnimation.entityFilter.set(sceneProject->scene->getComponentId<AnimationComponent>());
+        settingsAnimation.secondColSize = std::max(0.0f, valueColWidth - deleteButtonWidth - rowSpacing);
+
+        propertyRow(RowPropertyType::LocalEntity, cpType, propId, animationLabel, sceneProject, entities, settingsAnimation);
+
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(clearButtonFramePadding, ImGui::GetStyle().FramePadding.y));
+        const size_t animationIndex = i;
+        if (ImGui::Button((std::string(ICON_FA_TRASH_CAN) + "##remove_animation").c_str(), ImVec2(deleteButtonWidth, 0))) {
+            MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+            for (Entity entity : entities) {
+                if (ModelComponent* modelComp = sceneProject->scene->findComponent<ModelComponent>(entity)) {
+                    if (animationIndex < modelComp->animations.size()) {
+                        std::vector<Entity> newAnimations = modelComp->animations;
+                        newAnimations.erase(newAnimations.begin() + (long int)animationIndex);
+                        multiCmd->addPropertyCmd<std::vector<Entity>>(project, sceneProject->id, entity, cpType, "animations", newAnimations, nullptr);
+                    }
+                }
+            }
+            multiCmd->setNoMerge();
+            CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Remove animation");
+        }
+
+        ImGui::PopID();
+    }
+
+    endTable();
 }
 
 void editor::Properties::drawUIComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){

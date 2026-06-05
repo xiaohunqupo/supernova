@@ -102,6 +102,8 @@ Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
     if (entity == NULL_ENTITY)
         return NULL_ENTITY;
 
+    Signature signature = scene->getSignature(entity);
+
     auto models = scene->getComponentArray<ModelComponent>();
     for (size_t i = 0; i < models->size(); ++i) {
         Entity modelEntity = models->getEntity(i);
@@ -134,6 +136,25 @@ Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
                 }
                 return modelEntity;
             }
+        }
+    }
+
+    if (!signature.test(scene->getComponentId<Transform>())){
+        return NULL_ENTITY;
+    }
+
+    Transform& transform = scene->getComponent<Transform>(entity);
+    if (transform.parent == NULL_ENTITY){
+        return NULL_ENTITY;
+    }
+
+    Entity parent = transform.parent;
+    Signature parentSignature = scene->getSignature(parent);
+
+    if (parentSignature.test(scene->getComponentId<ButtonComponent>())){
+        ButtonComponent& button = scene->getComponent<ButtonComponent>(parent);
+        if (button.label == entity){
+            return parent;
         }
     }
 
