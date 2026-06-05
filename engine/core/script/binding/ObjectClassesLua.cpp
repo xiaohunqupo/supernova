@@ -803,6 +803,9 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("setBarPatchMargin", 
             luabridge::overload<int>(&Scrollbar::setBarPatchMargin),
             luabridge::overload<int, int, int, int>(&Scrollbar::setBarPatchMargin))
+        .addFunction("setBarMargin",
+            luabridge::overload<int>(&Scrollbar::setBarMargin),
+            luabridge::overload<int, int, int, int>(&Scrollbar::setBarMargin))
         .addFunction("getScrollbarComponent", &Scrollbar::getComponent<ScrollbarComponent>)
         .endClass();
 
@@ -823,6 +826,9 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("setFillPatchMargin", 
             luabridge::overload<int>(&Progressbar::setFillPatchMargin),
             luabridge::overload<int, int, int, int>(&Progressbar::setFillPatchMargin))
+        .addFunction("setFillMargin",
+            luabridge::overload<int>(&Progressbar::setFillMargin),
+            luabridge::overload<int, int, int, int>(&Progressbar::setFillMargin))
         .addFunction("getProgressbarComponent", &Progressbar::getComponent<ProgressbarComponent>)
         .endClass();
 

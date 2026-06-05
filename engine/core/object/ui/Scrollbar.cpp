@@ -102,3 +102,17 @@ void Scrollbar::setBarPatchMargin(int margin){
 void Scrollbar::setBarPatchMargin(int marginLeft, int marginRight, int marginTop, int marginBottom){
     getBarObject().setPatchMargin(marginLeft, marginRight, marginTop, marginBottom);
 }
+
+void Scrollbar::setBarMargin(int margin){
+    setBarMargin(margin, margin, margin, margin);
+}
+
+void Scrollbar::setBarMargin(int marginLeft, int marginRight, int marginTop, int marginBottom){
+    ScrollbarComponent& scrollcomp = getComponent<ScrollbarComponent>();
+
+    scrollcomp.barMarginLeft = marginLeft;
+    scrollcomp.barMarginRight = marginRight;
+    scrollcomp.barMarginTop = marginTop;
+    scrollcomp.barMarginBottom = marginBottom;
+    scrollcomp.needUpdateScrollbar = true;
+}

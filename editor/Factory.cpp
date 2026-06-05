@@ -846,6 +846,10 @@ std::string editor::Factory::createScrollbarComponent(int indentSpaces, EntityRe
     code << ind << "scrollbar.type = " << formatScrollbarType(scrollbar.type) << ";\n";
     code << ind << "scrollbar.barSize = " << formatFloat(scrollbar.barSize) << ";\n";
     code << ind << "scrollbar.step = " << formatFloat(scrollbar.step) << ";\n";
+    code << ind << "scrollbar.barMarginLeft = " << formatInt(scrollbar.barMarginLeft) << ";\n";
+    code << ind << "scrollbar.barMarginRight = " << formatInt(scrollbar.barMarginRight) << ";\n";
+    code << ind << "scrollbar.barMarginTop = " << formatInt(scrollbar.barMarginTop) << ";\n";
+    code << ind << "scrollbar.barMarginBottom = " << formatInt(scrollbar.barMarginBottom) << ";\n";
     addComponentCode(code, ind, sceneName, entityName, entity, "ScrollbarComponent", "scrollbar", assignExisting);
     return code.str();
 }
@@ -859,6 +863,10 @@ std::string editor::Factory::createProgressbarComponent(int indentSpaces, Entity
     code << ind << "progressbar.fill = " << formatUInt(progressbar.fill) << ";\n";
     code << ind << "progressbar.type = " << formatProgressbarType(progressbar.type) << ";\n";
     code << ind << "progressbar.value = " << formatFloat(progressbar.value) << ";\n";
+    code << ind << "progressbar.fillMarginLeft = " << formatInt(progressbar.fillMarginLeft) << ";\n";
+    code << ind << "progressbar.fillMarginRight = " << formatInt(progressbar.fillMarginRight) << ";\n";
+    code << ind << "progressbar.fillMarginTop = " << formatInt(progressbar.fillMarginTop) << ";\n";
+    code << ind << "progressbar.fillMarginBottom = " << formatInt(progressbar.fillMarginBottom) << ";\n";
     addComponentCode(code, ind, sceneName, entityName, entity, "ProgressbarComponent", "progressbar", assignExisting);
     return code.str();
 }

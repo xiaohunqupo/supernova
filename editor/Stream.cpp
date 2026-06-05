@@ -3493,6 +3493,10 @@ YAML::Node editor::Stream::encodeScrollbarComponent(const ScrollbarComponent& sc
     node["type"] = scrollbarTypeToString(scrollbar.type);
     node["barSize"] = scrollbar.barSize;
     node["step"] = scrollbar.step;
+    node["barMarginLeft"] = scrollbar.barMarginLeft;
+    node["barMarginRight"] = scrollbar.barMarginRight;
+    node["barMarginTop"] = scrollbar.barMarginTop;
+    node["barMarginBottom"] = scrollbar.barMarginBottom;
     return node;
 }
 
@@ -3507,6 +3511,10 @@ ScrollbarComponent editor::Stream::decodeScrollbarComponent(const YAML::Node& no
     if (node["type"]) scrollbar.type = stringToScrollbarType(node["type"].as<std::string>());
     if (node["barSize"]) scrollbar.barSize = node["barSize"].as<float>();
     if (node["step"]) scrollbar.step = node["step"].as<float>();
+    if (node["barMarginLeft"]) scrollbar.barMarginLeft = node["barMarginLeft"].as<int>();
+    if (node["barMarginRight"]) scrollbar.barMarginRight = node["barMarginRight"].as<int>();
+    if (node["barMarginTop"]) scrollbar.barMarginTop = node["barMarginTop"].as<int>();
+    if (node["barMarginBottom"]) scrollbar.barMarginBottom = node["barMarginBottom"].as<int>();
 
     scrollbar.needUpdateScrollbar = true;
 
@@ -3518,6 +3526,10 @@ YAML::Node editor::Stream::encodeProgressbarComponent(const ProgressbarComponent
     node["fill"] = progressbar.fill;
     node["type"] = progressbarTypeToString(progressbar.type);
     node["value"] = progressbar.value;
+    node["fillMarginLeft"] = progressbar.fillMarginLeft;
+    node["fillMarginRight"] = progressbar.fillMarginRight;
+    node["fillMarginTop"] = progressbar.fillMarginTop;
+    node["fillMarginBottom"] = progressbar.fillMarginBottom;
     return node;
 }
 
@@ -3531,6 +3543,10 @@ ProgressbarComponent editor::Stream::decodeProgressbarComponent(const YAML::Node
     if (node["fill"]) progressbar.fill = node["fill"].as<Entity>();
     if (node["type"]) progressbar.type = stringToProgressbarType(node["type"].as<std::string>());
     if (node["value"]) progressbar.value = node["value"].as<float>();
+    if (node["fillMarginLeft"]) progressbar.fillMarginLeft = node["fillMarginLeft"].as<int>();
+    if (node["fillMarginRight"]) progressbar.fillMarginRight = node["fillMarginRight"].as<int>();
+    if (node["fillMarginTop"]) progressbar.fillMarginTop = node["fillMarginTop"].as<int>();
+    if (node["fillMarginBottom"]) progressbar.fillMarginBottom = node["fillMarginBottom"].as<int>();
 
     progressbar.needUpdateProgressbar = true;
 

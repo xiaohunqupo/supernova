@@ -20,6 +20,11 @@ namespace doriax{
 
         float value = 0; // from 0 to 1
 
+        int fillMarginLeft = 0;
+        int fillMarginRight = 0;
+        int fillMarginTop = 0;
+        int fillMarginBottom = 0;
+
         bool needUpdateProgressbar = true;
     };
 

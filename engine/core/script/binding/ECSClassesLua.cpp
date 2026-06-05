@@ -402,6 +402,10 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("onChange", [] (ScrollbarComponent* self, lua_State* L) { return &self->onChange; }, [] (ScrollbarComponent* self, lua_State* L) { self->onChange = L; })
         .addProperty("barSize", &ScrollbarComponent::barSize)
         .addProperty("step", &ScrollbarComponent::step)
+        .addProperty("barMarginLeft", &ScrollbarComponent::barMarginLeft)
+        .addProperty("barMarginRight", &ScrollbarComponent::barMarginRight)
+        .addProperty("barMarginTop", &ScrollbarComponent::barMarginTop)
+        .addProperty("barMarginBottom", &ScrollbarComponent::barMarginBottom)
         .addProperty("barPointerDown", &ScrollbarComponent::barPointerDown)
         .addProperty("barPointerPos", &ScrollbarComponent::barPointerPos)
         .addProperty("needUpdateScrollbar", &ScrollbarComponent::needUpdateScrollbar)
@@ -412,6 +416,10 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("fill", &ProgressbarComponent::fill)
         .addProperty("type", &ProgressbarComponent::type)
         .addProperty("value", &ProgressbarComponent::value)
+        .addProperty("fillMarginLeft", &ProgressbarComponent::fillMarginLeft)
+        .addProperty("fillMarginRight", &ProgressbarComponent::fillMarginRight)
+        .addProperty("fillMarginTop", &ProgressbarComponent::fillMarginTop)
+        .addProperty("fillMarginBottom", &ProgressbarComponent::fillMarginBottom)
         .addProperty("needUpdateProgressbar", &ProgressbarComponent::needUpdateProgressbar)
         .endClass();
 

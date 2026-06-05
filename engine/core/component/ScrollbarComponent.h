@@ -24,6 +24,11 @@ namespace doriax{
         float barSize = 0.5;  // from 0 to 1
         float step = 0; // from 0 to 1
 
+        int barMarginLeft = 0;
+        int barMarginRight = 0;
+        int barMarginTop = 0;
+        int barMarginBottom = 0;
+
         bool barPointerDown = false;
         float barPointerPos = -1;
 

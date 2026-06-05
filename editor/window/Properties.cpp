@@ -5029,11 +5029,24 @@ void editor::Properties::drawScrollbarComponent(ComponentType cpType, SceneProje
     settingsFloat.secondColSize = 6 * ImGui::GetFontSize();
     settingsFloat.onValueChanged = settings.onValueChanged;
 
+    RowSettings settingsInt;
+    settingsInt.stepSize = 1.0f;
+    settingsInt.secondColSize = 6 * ImGui::GetFontSize();
+    settingsInt.onValueChanged = settings.onValueChanged;
+
     beginTable(cpType, getLabelSize("Bar Size"));
     propertyRow(RowPropertyType::LocalEntity, cpType, "bar", "Bar", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Enum, cpType, "type", "Type", sceneProject, entities, settingsEnum);
     propertyRow(RowPropertyType::Float_0_1, cpType, "barSize", "Bar Size", sceneProject, entities, settingsFloat);
     propertyRow(RowPropertyType::Float_0_1, cpType, "step", "Step", sceneProject, entities, settingsFloat);
+    endTable();
+
+    ImGui::SeparatorText("Bar margin");
+    beginTable(cpType, getLabelSize("Margin Bottom"), "scrollbar_bar_margin");
+    propertyRow(RowPropertyType::Int, cpType, "barMarginLeft", "Margin Left", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "barMarginRight", "Margin Right", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "barMarginTop", "Margin Top", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "barMarginBottom", "Margin Bottom", sceneProject, entities, settingsInt);
     endTable();
 }
 
@@ -5061,10 +5074,23 @@ void editor::Properties::drawProgressbarComponent(ComponentType cpType, ScenePro
     settingsFloat.secondColSize = 6 * ImGui::GetFontSize();
     settingsFloat.onValueChanged = settings.onValueChanged;
 
+    RowSettings settingsInt;
+    settingsInt.stepSize = 1.0f;
+    settingsInt.secondColSize = 6 * ImGui::GetFontSize();
+    settingsInt.onValueChanged = settings.onValueChanged;
+
     beginTable(cpType, getLabelSize("Value"));
     propertyRow(RowPropertyType::LocalEntity, cpType, "fill", "Fill", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Enum, cpType, "type", "Type", sceneProject, entities, settingsEnum);
     propertyRow(RowPropertyType::Float_0_1, cpType, "value", "Value", sceneProject, entities, settingsFloat);
+    endTable();
+
+    ImGui::SeparatorText("Fill margin");
+    beginTable(cpType, getLabelSize("Margin Bottom"), "progressbar_fill_margin");
+    propertyRow(RowPropertyType::Int, cpType, "fillMarginLeft", "Margin Left", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "fillMarginRight", "Margin Right", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "fillMarginTop", "Margin Top", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "fillMarginBottom", "Margin Bottom", sceneProject, entities, settingsInt);
     endTable();
 }
 

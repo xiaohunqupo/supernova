@@ -186,12 +186,20 @@ namespace {
         makeFastProperty<ScrollbarComponent, ScrollbarType, &ScrollbarComponent::type>("type", PropertyType::Enum, UpdateFlags_None),
         makeFastProperty<ScrollbarComponent, float, &ScrollbarComponent::barSize>("barSize", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<ScrollbarComponent, float, &ScrollbarComponent::step>("step", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<ScrollbarComponent, int, &ScrollbarComponent::barMarginLeft>("barMarginLeft", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<ScrollbarComponent, int, &ScrollbarComponent::barMarginRight>("barMarginRight", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<ScrollbarComponent, int, &ScrollbarComponent::barMarginTop>("barMarginTop", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<ScrollbarComponent, int, &ScrollbarComponent::barMarginBottom>("barMarginBottom", PropertyType::Int, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kProgressbarProperties[] = {
         makeFastProperty<ProgressbarComponent, Entity, &ProgressbarComponent::fill>("fill", PropertyType::Entity, UpdateFlags_None),
         makeFastProperty<ProgressbarComponent, ProgressbarType, &ProgressbarComponent::type>("type", PropertyType::Enum, UpdateFlags_None),
         makeFastProperty<ProgressbarComponent, float, &ProgressbarComponent::value>("value", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<ProgressbarComponent, int, &ProgressbarComponent::fillMarginLeft>("fillMarginLeft", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<ProgressbarComponent, int, &ProgressbarComponent::fillMarginRight>("fillMarginRight", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<ProgressbarComponent, int, &ProgressbarComponent::fillMarginTop>("fillMarginTop", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<ProgressbarComponent, int, &ProgressbarComponent::fillMarginBottom>("fillMarginBottom", PropertyType::Int, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kSpriteTopProperties[] = {

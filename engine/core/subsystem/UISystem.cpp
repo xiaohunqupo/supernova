@@ -554,31 +554,45 @@ void UISystem::updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, Ima
         scrollbar.onChange.call(scrollbar.step);
     }
 
+    float innerHeight = std::max(0.0f, (float)layout.height - scrollbar.barMarginTop - scrollbar.barMarginBottom);
+    float innerWidth = std::max(0.0f, (float)layout.width - scrollbar.barMarginLeft - scrollbar.barMarginRight);
+
     float barSizePixel = 0;
-    float halfBar = 0;
+    float trackStartNorm = 0;
+    float trackEndNorm = 1;
+    float halfBarParent = 0;
+
     if (scrollbar.type == ScrollbarType::VERTICAL){
-        barSizePixel = layout.height * scrollbar.barSize;
-        halfBar = (barSizePixel / 2.0) / layout.height;
-    }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
-        barSizePixel = layout.width * scrollbar.barSize;
-        halfBar = (barSizePixel / 2.0) / layout.width;
-    }
-
-    if (barlayout.height != barSizePixel || barlayout.width != barSizePixel){
+        barSizePixel = innerHeight * scrollbar.barSize;
+        barlayout.width = innerWidth;
         barlayout.height = barSizePixel;
+        trackStartNorm = layout.height > 0 ? scrollbar.barMarginTop / (float)layout.height : 0;
+        trackEndNorm = layout.height > 0 ? 1.0f - scrollbar.barMarginBottom / (float)layout.height : 1;
+        halfBarParent = layout.height > 0 ? (barSizePixel / 2.0f) / layout.height : 0;
+    }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
+        barSizePixel = innerWidth * scrollbar.barSize;
         barlayout.width = barSizePixel;
+        barlayout.height = innerHeight;
+        trackStartNorm = layout.width > 0 ? scrollbar.barMarginLeft / (float)layout.width : 0;
+        trackEndNorm = layout.width > 0 ? 1.0f - scrollbar.barMarginRight / (float)layout.width : 1;
+        halfBarParent = layout.width > 0 ? (barSizePixel / 2.0f) / layout.width : 0;
     }
 
-    float pos = (scrollbar.step * ((1.0 - halfBar) - halfBar)) + halfBar;
+    float movableStart = trackStartNorm + halfBarParent;
+    float movableEnd = trackEndNorm - halfBarParent;
+    float pos = movableStart;
+    if (movableEnd > movableStart){
+        pos = movableStart + scrollbar.step * (movableEnd - movableStart);
+    }
 
     if (scrollbar.type == ScrollbarType::VERTICAL){
         barlayout.anchorPointLeft = 0;
         barlayout.anchorPointTop = pos;
         barlayout.anchorPointRight = 1;
         barlayout.anchorPointBottom = pos;
-        barlayout.anchorOffsetLeft = 0;
+        barlayout.anchorOffsetLeft = scrollbar.barMarginLeft;
         barlayout.anchorOffsetTop = -floor(barlayout.height / 2.0);
-        barlayout.anchorOffsetRight = 0;
+        barlayout.anchorOffsetRight = -scrollbar.barMarginRight;
         barlayout.anchorOffsetBottom = ceil(barlayout.height / 2.0);
     }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
         barlayout.anchorPointLeft = pos;
@@ -586,9 +600,9 @@ void UISystem::updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, Ima
         barlayout.anchorPointRight = pos;
         barlayout.anchorPointBottom = 1;
         barlayout.anchorOffsetLeft = -floor(barlayout.width / 2.0);
-        barlayout.anchorOffsetTop = 0;
+        barlayout.anchorOffsetTop = scrollbar.barMarginTop;
         barlayout.anchorOffsetRight = ceil(barlayout.width / 2.0);
-        barlayout.anchorOffsetBottom = 0;
+        barlayout.anchorOffsetBottom = -scrollbar.barMarginBottom;
     }
     barlayout.anchorPreset = AnchorPreset::NONE;
     barlayout.usingAnchors = true;
@@ -610,19 +624,19 @@ void UISystem::updateProgressbar(Entity entity, ProgressbarComponent& progressba
         filllayout.anchorPointTop = 0;
         filllayout.anchorPointRight = progressbar.value;
         filllayout.anchorPointBottom = 1;
-        filllayout.anchorOffsetLeft = 0;
-        filllayout.anchorOffsetTop = 0;
-        filllayout.anchorOffsetRight = 0;
-        filllayout.anchorOffsetBottom = 0;
+        filllayout.anchorOffsetLeft = progressbar.fillMarginLeft;
+        filllayout.anchorOffsetTop = progressbar.fillMarginTop;
+        filllayout.anchorOffsetRight = progressbar.value >= 1.0f ? -progressbar.fillMarginRight : 0;
+        filllayout.anchorOffsetBottom = -progressbar.fillMarginBottom;
     }else if (progressbar.type == ProgressbarType::VERTICAL){
         filllayout.anchorPointLeft = 0;
         filllayout.anchorPointTop = 1 - progressbar.value;
         filllayout.anchorPointRight = 1;
         filllayout.anchorPointBottom = 1;
-        filllayout.anchorOffsetLeft = 0;
-        filllayout.anchorOffsetTop = 0;
-        filllayout.anchorOffsetRight = 0;
-        filllayout.anchorOffsetBottom = 0;
+        filllayout.anchorOffsetLeft = progressbar.fillMarginLeft;
+        filllayout.anchorOffsetTop = progressbar.value >= 1.0f ? progressbar.fillMarginTop : 0;
+        filllayout.anchorOffsetRight = -progressbar.fillMarginRight;
+        filllayout.anchorOffsetBottom = -progressbar.fillMarginBottom;
     }
     filllayout.anchorPreset = AnchorPreset::NONE;
     filllayout.usingAnchors = true;
@@ -2343,27 +2357,41 @@ bool UISystem::eventOnPointerMove(float x, float y){
             UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
 
             if (scrollbar.barPointerDown && scrollbar.barSize < 1.0){
+                float innerHeight = std::max(0.0f, (float)layout.height - scrollbar.barMarginTop - scrollbar.barMarginBottom);
+                float innerWidth = std::max(0.0f, (float)layout.width - scrollbar.barMarginLeft - scrollbar.barMarginRight);
 
+                float trackStartNorm = 0;
+                float trackEndNorm = 1;
+                float halfBarParent = 0;
                 float pos = 0;
-                float halfBar = 0;
 
                 if (scrollbar.type == ScrollbarType::VERTICAL){
-                    float barSizePixel = (layout.height * scrollbar.barSize) * transform.worldScale.y;
-                    pos = (y - transform.worldPosition.y + ((barSizePixel / 2.0) - scrollbar.barPointerPos)) / (layout.height * transform.worldScale.y);
-                    halfBar = (barSizePixel / 2.0) / (layout.height * transform.worldScale.y);
+                    float barSizePixel = innerHeight * scrollbar.barSize;
+                    float localY = (y - transform.worldPosition.y) / transform.worldScale.y;
+                    float posAlongInner = innerHeight > 0 ? (localY - scrollbar.barMarginTop + (barSizePixel / 2.0) - scrollbar.barPointerPos) / innerHeight : 0;
+                    trackStartNorm = layout.height > 0 ? scrollbar.barMarginTop / (float)layout.height : 0;
+                    trackEndNorm = layout.height > 0 ? 1.0f - scrollbar.barMarginBottom / (float)layout.height : 1;
+                    halfBarParent = layout.height > 0 ? (barSizePixel / 2.0f) / layout.height : 0;
+                    pos = trackStartNorm + posAlongInner * (trackEndNorm - trackStartNorm);
                 }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
-                    float barSizePixel = (layout.width * scrollbar.barSize) * transform.worldScale.x;
-                    pos = (x - transform.worldPosition.x + ((barSizePixel / 2.0) - scrollbar.barPointerPos)) / (layout.width * transform.worldScale.x);
-                    halfBar = (barSizePixel / 2.0) / (layout.width * transform.worldScale.x);
+                    float barSizePixel = innerWidth * scrollbar.barSize;
+                    float localX = (x - transform.worldPosition.x) / transform.worldScale.x;
+                    float posAlongInner = innerWidth > 0 ? (localX - scrollbar.barMarginLeft + (barSizePixel / 2.0) - scrollbar.barPointerPos) / innerWidth : 0;
+                    trackStartNorm = layout.width > 0 ? scrollbar.barMarginLeft / (float)layout.width : 0;
+                    trackEndNorm = layout.width > 0 ? 1.0f - scrollbar.barMarginRight / (float)layout.width : 1;
+                    halfBarParent = layout.width > 0 ? (barSizePixel / 2.0f) / layout.width : 0;
+                    pos = trackStartNorm + posAlongInner * (trackEndNorm - trackStartNorm);
                 }
 
-                if (pos < halfBar){
-                    pos = halfBar;
-                }else if (pos > (1.0 - halfBar)){
-                    pos = (1.0 - halfBar);
+                float movableStart = trackStartNorm + halfBarParent;
+                float movableEnd = trackEndNorm - halfBarParent;
+                if (pos < movableStart){
+                    pos = movableStart;
+                }else if (pos > movableEnd){
+                    pos = movableEnd;
                 }
 
-                float newStep = (pos - halfBar) / ((1.0 - halfBar) - halfBar);
+                float newStep = movableEnd > movableStart ? (pos - movableStart) / (movableEnd - movableStart) : 0;
 
                 if (newStep != scrollbar.step){
                     scrollbar.step = newStep;

@@ -35,6 +35,9 @@ namespace doriax{
 
         void setFillPatchMargin(int margin);
         void setFillPatchMargin(int marginLeft, int marginRight, int marginTop, int marginBottom);
+
+        void setFillMargin(int margin);
+        void setFillMargin(int marginLeft, int marginRight, int marginTop, int marginBottom);
     };
 }
 

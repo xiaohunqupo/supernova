@@ -40,6 +40,9 @@ namespace doriax{
 
         void setBarPatchMargin(int margin);
         void setBarPatchMargin(int marginLeft, int marginRight, int marginTop, int marginBottom);
+
+        void setBarMargin(int margin);
+        void setBarMargin(int marginLeft, int marginRight, int marginTop, int marginBottom);
     };
 }
 

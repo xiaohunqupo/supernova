@@ -89,3 +89,17 @@ void Progressbar::setFillPatchMargin(int margin){
 void Progressbar::setFillPatchMargin(int marginLeft, int marginRight, int marginTop, int marginBottom){
     getFillObject().setPatchMargin(marginLeft, marginRight, marginTop, marginBottom);
 }
+
+void Progressbar::setFillMargin(int margin){
+    setFillMargin(margin, margin, margin, margin);
+}
+
+void Progressbar::setFillMargin(int marginLeft, int marginRight, int marginTop, int marginBottom){
+    ProgressbarComponent& progresscomp = getComponent<ProgressbarComponent>();
+
+    progresscomp.fillMarginLeft = marginLeft;
+    progresscomp.fillMarginRight = marginRight;
+    progresscomp.fillMarginTop = marginTop;
+    progresscomp.fillMarginBottom = marginBottom;
+    progresscomp.needUpdateProgressbar = true;
+}
