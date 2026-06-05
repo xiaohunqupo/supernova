@@ -11,6 +11,10 @@
 		1721303C2FB012BD00390DC2 /* SoundPool.h in Headers */ = {isa = PBXBuildFile; fileRef = 172130392FB012BD00390DC2 /* SoundPool.h */; };
 		1721303D2FB012BD00390DC2 /* SoundPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1721303A2FB012BD00390DC2 /* SoundPool.cpp */; };
 		17235AD82FCF546A00AF8D04 /* ObjModelData.h in Headers */ = {isa = PBXBuildFile; fileRef = 17235AD72FCF546A00AF8D04 /* ObjModelData.h */; };
+		17235ADA2FD2F65000AF8D04 /* ProgressbarComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 17235AD92FD2F65000AF8D04 /* ProgressbarComponent.h */; };
+		17235ADD2FD2F66D00AF8D04 /* Progressbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */; };
+		17235ADE2FD2F66D00AF8D04 /* Progressbar.h in Headers */ = {isa = PBXBuildFile; fileRef = 17235ADB2FD2F66D00AF8D04 /* Progressbar.h */; };
+		17235ADF2FD2F66D00AF8D04 /* Progressbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */; };
 		172A59A52FC4CF36002FDFCA /* ShaderBuildTypes.h in Headers */ = {isa = PBXBuildFile; fileRef = 172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */; };
 		1787AD8E2F673CE000DB1D75 /* BundleComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 1787AD8D2F673CE000DB1D75 /* BundleComponent.h */; };
 		1787AD942F6C333300DB1D75 /* SceneManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD922F6C333300DB1D75 /* SceneManager.cpp */; };
@@ -1288,6 +1292,9 @@
 		172130392FB012BD00390DC2 /* SoundPool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SoundPool.h; sourceTree = "<group>"; };
 		1721303A2FB012BD00390DC2 /* SoundPool.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SoundPool.cpp; sourceTree = "<group>"; };
 		17235AD72FCF546A00AF8D04 /* ObjModelData.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjModelData.h; sourceTree = "<group>"; };
+		17235AD92FD2F65000AF8D04 /* ProgressbarComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ProgressbarComponent.h; sourceTree = "<group>"; };
+		17235ADB2FD2F66D00AF8D04 /* Progressbar.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Progressbar.h; sourceTree = "<group>"; };
+		17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Progressbar.cpp; sourceTree = "<group>"; };
 		172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderBuildTypes.h; sourceTree = "<group>"; };
 		1787AD8D2F673CE000DB1D75 /* BundleComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleComponent.h; sourceTree = "<group>"; };
 		1787AD8F2F6C333300DB1D75 /* BundleManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleManager.h; sourceTree = "<group>"; };
@@ -3408,7 +3415,6 @@
 				71451BB4270C9D0F00712643 /* ActionComponent.h */,
 				71ABBD12277A3166001CE3AF /* AlphaActionComponent.h */,
 				71E5450F284D5BDF00C68FAB /* AnimationComponent.h */,
-				717AD963290B65E6007D7DB5 /* SoundComponent.h */,
 				71E824832A9C238800C8E6F2 /* Body2DComponent.h */,
 				7105CAAA2AD61C7A007C91BA /* Body3DComponent.h */,
 				7170A3C92818A87E0003E965 /* BoneComponent.h */,
@@ -3433,6 +3439,7 @@
 				714BBF7127148B69004A15EE /* PointsComponent.h */,
 				713E581327BA9D1300376680 /* PolygonComponent.h */,
 				71451BB5270C9D0F00712643 /* PositionActionComponent.h */,
+				17235AD92FD2F65000AF8D04 /* ProgressbarComponent.h */,
 				71E54510284D5BE000C68FAB /* RotateTracksComponent.h */,
 				71451BBB270C9D1000712643 /* RotationActionComponent.h */,
 				71451BB8270C9D0F00712643 /* ScaleActionComponent.h */,
@@ -3440,6 +3447,7 @@
 				711BFE392E6E5AE500677D11 /* ScriptComponent.h */,
 				71033D652BD1A7D200D81FB5 /* ScrollbarComponent.h */,
 				71CC839126B8C49B00EEBB93 /* SkyComponent.h */,
+				717AD963290B65E6007D7DB5 /* SoundComponent.h */,
 				71451BB7270C9D0F00712643 /* SpriteAnimationComponent.h */,
 				71451BB2270C9D0F00712643 /* SpriteComponent.h */,
 				715CB113288CD3F60049344B /* TerrainComponent.h */,
@@ -3892,24 +3900,26 @@
 		71ABBD16277A31BA001CE3AF /* ui */ = {
 			isa = PBXGroup;
 			children = (
-				71ABBD4227A879D4001CE3AF /* Button.cpp */,
 				71ABBD4327A879D4001CE3AF /* Button.h */,
-				717AD98C29211976007D7DB5 /* Container.cpp */,
+				71ABBD4227A879D4001CE3AF /* Button.cpp */,
 				717AD98B29211976007D7DB5 /* Container.h */,
-				71ABBD332783C8BB001CE3AF /* Image.cpp */,
+				717AD98C29211976007D7DB5 /* Container.cpp */,
 				71ABBD322783C8BA001CE3AF /* Image.h */,
-				7181A0AE2BC8B6CB00AC230B /* Panel.cpp */,
+				71ABBD332783C8BB001CE3AF /* Image.cpp */,
 				7181A0AF2BC8B6CB00AC230B /* Panel.h */,
-				713E580A27BA9CE400376680 /* Polygon.cpp */,
+				7181A0AE2BC8B6CB00AC230B /* Panel.cpp */,
 				713E580C27BA9CE400376680 /* Polygon.h */,
-				71033D672BD1A7F000D81FB5 /* Scrollbar.cpp */,
+				713E580A27BA9CE400376680 /* Polygon.cpp */,
+				17235ADB2FD2F66D00AF8D04 /* Progressbar.h */,
+				17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */,
 				71033D682BD1A7F000D81FB5 /* Scrollbar.h */,
-				71ABBD18277A31BA001CE3AF /* Text.cpp */,
+				71033D672BD1A7F000D81FB5 /* Scrollbar.cpp */,
 				71ABBD19277A31BA001CE3AF /* Text.h */,
-				713E580927BA9CE400376680 /* TextEdit.cpp */,
+				71ABBD18277A31BA001CE3AF /* Text.cpp */,
 				713E580B27BA9CE400376680 /* TextEdit.h */,
-				717AD9822919E1CB007D7DB5 /* UILayout.cpp */,
+				713E580927BA9CE400376680 /* TextEdit.cpp */,
 				717AD9832919E1CB007D7DB5 /* UILayout.h */,
+				717AD9822919E1CB007D7DB5 /* UILayout.cpp */,
 			);
 			path = ui;
 			sourceTree = "<group>";
@@ -4386,6 +4396,7 @@
 				71E54513284D5BE000C68FAB /* MorphTracksComponent.h in Headers */,
 				711BFE3A2E6E5AE500677D11 /* ScriptComponent.h in Headers */,
 				71FCE4BE28E0FA01003C5217 /* LuaFunction.h in Headers */,
+				17235ADA2FD2F65000AF8D04 /* ProgressbarComponent.h in Headers */,
 				71AD5E712E9F2B86004951AB /* ScriptProperty.h in Headers */,
 				71AD5E722E9F2B86004951AB /* ScriptBase.h in Headers */,
 				717AD9882919E1E9007D7DB5 /* ImageComponent.h in Headers */,
@@ -4424,6 +4435,7 @@
 				71BE623F25B1DB9E006D6E02 /* LuaBinding.h in Headers */,
 				71FCE4C128E0FA01003C5217 /* LuaFunctionBase.h in Headers */,
 				713E581127BA9CE400376680 /* TextEdit.h in Headers */,
+				17235ADE2FD2F66D00AF8D04 /* Progressbar.h in Headers */,
 				71E5450B284D5BB700C68FAB /* RotateTracks.h in Headers */,
 				71CC83A426B8C54A00EEBB93 /* ShaderData.h in Headers */,
 				715CB11B288CD57A0049344B /* Material.h in Headers */,
@@ -5561,6 +5573,7 @@
 				717AD969290B6602007D7DB5 /* Sound.cpp in Sources */,
 				713D82A2259D307F00567F9F /* Rect.cpp in Sources */,
 				713D82A3259D307F00567F9F /* Quaternion.cpp in Sources */,
+				17235ADD2FD2F66D00AF8D04 /* Progressbar.cpp in Sources */,
 				7185BF9128BAFC2000B82865 /* ActionClassesLua.cpp in Sources */,
 				712675832B65F45D0031089C /* Lines.cpp in Sources */,
 				713D82A4259D307F00567F9F /* AABB.cpp in Sources */,
@@ -5736,6 +5749,7 @@
 				717AD968290B6602007D7DB5 /* Sound.cpp in Sources */,
 				7162FD2D25963AE00075B97D /* Vector2.cpp in Sources */,
 				7162FD2E25963AE00075B97D /* Matrix4.cpp in Sources */,
+				17235ADF2FD2F66D00AF8D04 /* Progressbar.cpp in Sources */,
 				7185BF9028BAFC2000B82865 /* ActionClassesLua.cpp in Sources */,
 				712675822B65F45D0031089C /* Lines.cpp in Sources */,
 				7162FD3125963AE00075B97D /* Ray.cpp in Sources */,
