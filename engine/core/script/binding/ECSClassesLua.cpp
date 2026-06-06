@@ -387,7 +387,6 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("titleAnchorPreset", &PanelComponent::titleAnchorPreset)
         .addProperty("minWidth", &PanelComponent::minWidth)
         .addProperty("minHeight", &PanelComponent::minHeight)
-        .addProperty("headerHeight", &PanelComponent::headerHeight)
         .addProperty("resizeMargin", &PanelComponent::resizeMargin)
         .addProperty("canMove", &PanelComponent::canMove)
         .addProperty("canResize", &PanelComponent::canResize)

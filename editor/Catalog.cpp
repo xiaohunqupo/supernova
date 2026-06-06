@@ -209,7 +209,6 @@ namespace {
         makeFastProperty<PanelComponent, AnchorPreset, &PanelComponent::titleAnchorPreset>("titleAnchorPreset", PropertyType::Enum, UpdateFlags_None),
         makeFastProperty<PanelComponent, unsigned int, &PanelComponent::minWidth>("minWidth", PropertyType::UInt, UpdateFlags_None),
         makeFastProperty<PanelComponent, unsigned int, &PanelComponent::minHeight>("minHeight", PropertyType::UInt, UpdateFlags_None),
-        makeFastProperty<PanelComponent, unsigned int, &PanelComponent::headerHeight>("headerHeight", PropertyType::UInt, UpdateFlags_None),
         makeFastProperty<PanelComponent, int, &PanelComponent::headerMarginLeft>("headerMarginLeft", PropertyType::Int, UpdateFlags_None),
         makeFastProperty<PanelComponent, int, &PanelComponent::headerMarginTop>("headerMarginTop", PropertyType::Int, UpdateFlags_None),
         makeFastProperty<PanelComponent, int, &PanelComponent::headerMarginRight>("headerMarginRight", PropertyType::Int, UpdateFlags_None),

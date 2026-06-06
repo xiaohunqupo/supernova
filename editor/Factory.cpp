@@ -913,7 +913,6 @@ std::string editor::Factory::createPanelComponent(int indentSpaces, EntityRegist
     code << ind << "panel.titleAnchorPreset = " << formatAnchorPreset(panel.titleAnchorPreset) << ";\n";
     code << ind << "panel.minWidth = " << formatUInt(panel.minWidth) << ";\n";
     code << ind << "panel.minHeight = " << formatUInt(panel.minHeight) << ";\n";
-    code << ind << "panel.headerHeight = " << formatUInt(panel.headerHeight) << ";\n";
     code << ind << "panel.headerMarginLeft = " << formatInt(panel.headerMarginLeft) << ";\n";
     code << ind << "panel.headerMarginTop = " << formatInt(panel.headerMarginTop) << ";\n";
     code << ind << "panel.headerMarginRight = " << formatInt(panel.headerMarginRight) << ";\n";

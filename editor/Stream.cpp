@@ -3678,7 +3678,6 @@ YAML::Node editor::Stream::encodePanelComponent(const PanelComponent& panel) {
     node["titleAnchorPreset"] = static_cast<int>(panel.titleAnchorPreset);
     node["minWidth"] = panel.minWidth;
     node["minHeight"] = panel.minHeight;
-    node["headerHeight"] = panel.headerHeight;
     node["headerMarginLeft"] = panel.headerMarginLeft;
     node["headerMarginTop"] = panel.headerMarginTop;
     node["headerMarginRight"] = panel.headerMarginRight;
@@ -3704,7 +3703,6 @@ PanelComponent editor::Stream::decodePanelComponent(const YAML::Node& node, cons
     if (node["titleAnchorPreset"]) panel.titleAnchorPreset = static_cast<AnchorPreset>(node["titleAnchorPreset"].as<int>());
     if (node["minWidth"]) panel.minWidth = node["minWidth"].as<unsigned int>();
     if (node["minHeight"]) panel.minHeight = node["minHeight"].as<unsigned int>();
-    if (node["headerHeight"]) panel.headerHeight = node["headerHeight"].as<unsigned int>();
     if (node["headerMarginLeft"]) panel.headerMarginLeft = node["headerMarginLeft"].as<int>();
     if (node["headerMarginTop"]) panel.headerMarginTop = node["headerMarginTop"].as<int>();
     if (node["headerMarginRight"]) panel.headerMarginRight = node["headerMarginRight"].as<int>();

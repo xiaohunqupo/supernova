@@ -277,6 +277,9 @@ bool editor::CreateEntityCmd::execute(){
         layout.width = 250;
         layout.height = 150;
 
+        ImageComponent& imgComp = scene->getComponent<ImageComponent>(entity);
+        imgComp.patchMarginTop = 32;
+
         PanelComponent& panelComp = scene->getComponent<PanelComponent>(entity);
         scene->getSystem<UISystem>()->createPanelObjects(entity, panelComp);
 
