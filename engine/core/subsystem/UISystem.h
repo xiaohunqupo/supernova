@@ -85,6 +85,7 @@ namespace doriax{
         std::string textEditMaskText(const std::string& text, char maskChar) const;
         void textEditDeleteSelection(TextEditComponent& textedit, TextComponent& text);
         void textEditResetBlink(TextEditComponent& textedit) const;
+        TextEditComponent* findTextEditForTextChild(Entity textEntity) const;
 
         //UI Polygon
         void createUIPolygon(PolygonComponent& polygon, UIComponent& ui, UILayoutComponent& layout);

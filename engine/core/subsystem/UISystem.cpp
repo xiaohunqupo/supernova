@@ -775,6 +775,20 @@ void UISystem::textEditResetBlink(TextEditComponent& textedit) const{
     }
 }
 
+TextEditComponent* UISystem::findTextEditForTextChild(Entity textEntity) const{
+    Transform* transform = scene->findComponent<Transform>(textEntity);
+    if (!transform || transform->parent == NULL_ENTITY){
+        return nullptr;
+    }
+
+    TextEditComponent* textedit = scene->findComponent<TextEditComponent>(transform->parent);
+    if (!textedit || textedit->text != textEntity){
+        return nullptr;
+    }
+
+    return textedit;
+}
+
 void UISystem::updateTextEdit(Entity entity, TextEditComponent& textedit, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
     if (textedit.text == NULL_ENTITY || !scene->findComponent<TextComponent>(textedit.text)){
         return;
@@ -1542,7 +1556,13 @@ void UISystem::createOrUpdateUiComponent(double dt, UILayoutComponent& layout, E
         if (signature.test(scene->getComponentId<TextComponent>())){
             TextComponent& text = scene->getComponent<TextComponent>(entity);
 
-            createOrUpdateText(text, ui, layout);
+            if (TextEditComponent* ownerEdit = findTextEditForTextChild(entity)){
+                if (text.needUpdateText || text.needReloadAtlas){
+                    ownerEdit->needUpdateTextEdit = true;
+                }
+            }else{
+                createOrUpdateText(text, ui, layout);
+            }
         }
 
         // UI Polygons
@@ -2195,7 +2215,11 @@ void UISystem::update(double dt){
                 if (layout.width < minSize.x) layout.width = minSize.x;
                 if (layout.height < minSize.y) layout.height = minSize.y;
 
-                text.needUpdateText = true;
+                if (TextEditComponent* ownerEdit = findTextEditForTextChild(entity)){
+                    ownerEdit->needUpdateTextEdit = true;
+                }else{
+                    text.needUpdateText = true;
+                }
             }
 
             if (signature.test(scene->getComponentId<ScrollbarComponent>())){
@@ -2335,6 +2359,10 @@ bool UISystem::eventOnPointerDown(float x, float y){
                     if (ui.focused){
                         ui.focused = false;
                         ui.onLostFocus.call();
+                        if (signature.test(scene->getComponentId<TextEditComponent>())){
+                            TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
+                            textedit.needUpdateTextEdit = true;
+                        }
                     }
                 }
             }
