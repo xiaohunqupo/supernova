@@ -26,13 +26,15 @@ Text TextEdit::getTextObject() const{
     return Text(scene, tecomp.text);
 }
 
-Polygon TextEdit::getCursorObject() const{
+// Fully qualify Polygon: UISystem.h pulls in wingdi.h on Windows, whose GDI Polygon()
+// function clashes with doriax::Polygon when used as an unqualified return type here.
+doriax::Polygon TextEdit::getCursorObject() const{
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
 
     return Polygon(scene, tecomp.cursor);
 }
 
-Polygon TextEdit::getSelectionObject() const{
+doriax::Polygon TextEdit::getSelectionObject() const{
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
 
     return Polygon(scene, tecomp.selection);
