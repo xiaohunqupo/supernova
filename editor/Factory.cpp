@@ -922,6 +922,29 @@ std::string editor::Factory::createPolygonComponent(int indentSpaces, EntityRegi
     return code.str();
 }
 
+std::string editor::Factory::createMeshPolygonComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<MeshPolygonComponent>(entity)) return "";
+    MeshPolygonComponent& polygon = scene->getComponent<MeshPolygonComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "MeshPolygonComponent meshpolygon;\n";
+    code << ind << "meshpolygon.automaticFlipY = " << formatBool(polygon.automaticFlipY) << ";\n";
+    code << ind << "meshpolygon.flipY = " << formatBool(polygon.flipY) << ";\n";
+
+    for (size_t i = 0; i < polygon.points.size(); i++) {
+        const PolygonPoint& point = polygon.points[i];
+        code << ind << "{\n";
+        code << ind << "    PolygonPoint pt;\n";
+        code << ind << "    pt.position = " << formatVector3(point.position) << ";\n";
+        code << ind << "    pt.color = " << formatVector4(point.color) << ";\n";
+        code << ind << "    meshpolygon.points.push_back(pt);\n";
+        code << ind << "}\n";
+    }
+
+    addComponentCode(code, ind, sceneName, entityName, entity, "MeshPolygonComponent", "meshpolygon", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::createUILayoutComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
     if (!scene->findComponent<UILayoutComponent>(entity)) return "";
     UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
@@ -1835,6 +1858,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::ProgressbarComponent: return createProgressbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TextEditComponent: return createTextEditComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::PolygonComponent: return createPolygonComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::MeshPolygonComponent: return createMeshPolygonComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UILayoutComponent: return createUILayoutComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UIContainerComponent: return createUIContainerComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TextComponent: return createTextComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);

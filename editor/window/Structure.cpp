@@ -242,6 +242,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
+    if (ImGui::MenuItem(ICON_FA_VECTOR_SQUARE"  Mesh Polygon")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "MeshPolygon", EntityCreationType::MESH_POLYGON, parent, addToBundle));
+        openParent = parent;
+    }
+
     if (ImGui::MenuItem(ICON_FA_FIRE"  Particles")){
         CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Particles", EntityCreationType::PARTICLES, parent, addToBundle));
         openParent = parent;
@@ -347,6 +352,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_BORDER_ALL;
     }else if (signature.test(scene->getComponentId<TerrainComponent>())){
         return ICON_FA_MOUNTAIN;
+    }else if (signature.test(scene->getComponentId<MeshPolygonComponent>())){
+        return ICON_FA_VECTOR_SQUARE;
     }else if (signature.test(scene->getComponentId<MeshComponent>())){
         return ICON_FA_DICE_D20;
     }else if (signature.test(scene->getComponentId<SkyComponent>())){

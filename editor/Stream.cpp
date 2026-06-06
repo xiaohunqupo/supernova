@@ -2602,6 +2602,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::PolygonComponent, true)] = encodePolygonComponent(polygon);
     }
 
+    if (signature.test(registry->getComponentId<MeshPolygonComponent>())) {
+        MeshPolygonComponent polygon = registry->getComponent<MeshPolygonComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::MeshPolygonComponent, true)] = encodeMeshPolygonComponent(polygon);
+    }
+
     if (signature.test(registry->getComponentId<InstancedMeshComponent>())) {
         InstancedMeshComponent instmesh = registry->getComponent<InstancedMeshComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::InstancedMeshComponent, true)] = encodeInstancedMeshComponent(instmesh);
@@ -3173,6 +3178,17 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
             registry->addComponent<PolygonComponent>(entity, polygon);
         } else {
             registry->getComponent<PolygonComponent>(entity) = polygon;
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::MeshPolygonComponent, true);
+    if (compNode[compName]) {
+        MeshPolygonComponent* existing = registry->findComponent<MeshPolygonComponent>(entity);
+        MeshPolygonComponent polygon = decodeMeshPolygonComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<MeshPolygonComponent>())) {
+            registry->addComponent<MeshPolygonComponent>(entity, polygon);
+        } else {
+            registry->getComponent<MeshPolygonComponent>(entity) = polygon;
         }
     }
 
@@ -5974,6 +5990,50 @@ YAML::Node editor::Stream::encodePolygonComponent(const PolygonComponent& polygo
 PolygonComponent editor::Stream::decodePolygonComponent(const YAML::Node& node, const PolygonComponent* oldPolygon) {
     PolygonComponent polygon;
     if (oldPolygon) { polygon = *oldPolygon; }
+
+    if (node["points"]) {
+        polygon.points.clear();
+        for (const YAML::Node& pointNode : node["points"]) {
+            PolygonPoint point;
+            if (pointNode["position"]) point.position = decodeVector3(pointNode["position"]);
+            if (pointNode["color"]) point.color = decodeVector4(pointNode["color"]);
+            polygon.points.push_back(point);
+        }
+    }
+
+    polygon.needUpdatePolygon = true;
+
+    return polygon;
+}
+
+YAML::Node editor::Stream::encodeMeshPolygonComponent(const MeshPolygonComponent& polygon) {
+    YAML::Node node;
+
+    node["width"] = polygon.width;
+    node["height"] = polygon.height;
+    node["automaticFlipY"] = polygon.automaticFlipY;
+    node["flipY"] = polygon.flipY;
+
+    YAML::Node pointsNode;
+    for (const PolygonPoint& point : polygon.points) {
+        YAML::Node pointNode;
+        pointNode["position"] = encodeVector3(point.position);
+        pointNode["color"] = encodeVector4(point.color);
+        pointsNode.push_back(pointNode);
+    }
+    node["points"] = pointsNode;
+
+    return node;
+}
+
+MeshPolygonComponent editor::Stream::decodeMeshPolygonComponent(const YAML::Node& node, const MeshPolygonComponent* oldPolygon) {
+    MeshPolygonComponent polygon;
+    if (oldPolygon) { polygon = *oldPolygon; }
+
+    if (node["width"]) polygon.width = node["width"].as<unsigned int>();
+    if (node["height"]) polygon.height = node["height"].as<unsigned int>();
+    if (node["automaticFlipY"]) polygon.automaticFlipY = node["automaticFlipY"].as<bool>();
+    if (node["flipY"]) polygon.flipY = node["flipY"].as<bool>();
 
     if (node["points"]) {
         polygon.points.clear();

@@ -52,6 +52,7 @@ namespace doriax::editor{
         PARTICLES,
         POINTS,
         LINES,
+        MESH_POLYGON,
         TERRAIN
     };
 

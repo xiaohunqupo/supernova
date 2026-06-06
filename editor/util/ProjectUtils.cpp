@@ -29,6 +29,7 @@
 #include "component/ScrollbarComponent.h"
 #include "component/ProgressbarComponent.h"
 #include "component/PolygonComponent.h"
+#include "component/MeshPolygonComponent.h"
 #include "component/Body2DComponent.h"
 #include "subsystem/UISystem.h"
 #include "component/Body3DComponent.h"
@@ -549,8 +550,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<MeshPolygonComponent>(entity, {});
             }else{
-                registry->addComponent<MeshPolygonComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<MeshPolygonComponent>(entity, Stream::decodeMeshPolygonComponent(componentNode));
             }
             break;
         case ComponentType::ModelComponent:
@@ -932,7 +932,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::MeshPolygonComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodeMeshPolygonComponent(registry->getComponent<MeshPolygonComponent>(entity));
             }
             registry->removeComponent<MeshPolygonComponent>(entity);
             break;
@@ -1420,6 +1420,7 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<PointsComponent>()))      return "Points";
     if (signature.test(scene->getComponentId<LinesComponent>()))       return "Lines";
     if (signature.test(scene->getComponentId<PolygonComponent>()))     return "Polygon";
+    if (signature.test(scene->getComponentId<MeshPolygonComponent>())) return "MeshPolygon";
     if (signature.test(scene->getComponentId<MeshComponent>()))        return "Mesh";
     if (signature.test(scene->getComponentId<SkyComponent>()))         return "SkyBox";
     if (signature.test(scene->getComponentId<FogComponent>()))         return "Fog";

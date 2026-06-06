@@ -112,6 +112,8 @@ namespace doriax::editor{
         std::map<std::string, bool> linesButtonGroups;
         bool polygonExpanded = false;
         std::map<std::string, bool> polygonButtonGroups;
+        bool meshPolygonExpanded = false;
+        std::map<std::string, bool> meshPolygonButtonGroups;
 
         std::map<std::string, bool> textureCubeSingleMode;
 
@@ -283,6 +285,7 @@ namespace doriax::editor{
         void drawParticlesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawLinesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawPolygonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
+        void drawMeshPolygonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawPointsComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawInstancedMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawScriptComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

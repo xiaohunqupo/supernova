@@ -236,6 +236,11 @@ namespace {
         makeFastProperty<TilemapComponent, unsigned int, &TilemapComponent::reserveTiles>("reserveTiles", PropertyType::UInt, UpdateFlags_Tilemap),
     };
 
+    static const FastPropertyDescriptor kMeshPolygonTopProperties[] = {
+        makeFastProperty<MeshPolygonComponent, bool, &MeshPolygonComponent::automaticFlipY>("automaticFlipY", PropertyType::Bool, UpdateFlags_Mesh_Reload),
+        makeFastProperty<MeshPolygonComponent, bool, &MeshPolygonComponent::flipY>("flipY", PropertyType::Bool, UpdateFlags_Mesh_Reload),
+    };
+
     static const FastPropertyDescriptor kTerrainProperties[] = {
         makeFastProperty<TerrainComponent, Texture, &TerrainComponent::heightMap>("heightMap", PropertyType::Texture, UpdateFlags_Terrain | UpdateFlags_Terrain_Texture),
         makeFastProperty<TerrainComponent, Texture, &TerrainComponent::blendMap>("blendMap", PropertyType::Texture, UpdateFlags_Terrain_Texture),
@@ -2541,6 +2546,61 @@ namespace {
         }
     }
 
+    PropertyData getMeshPolygonPropertyFast(MeshPolygonComponent* comp, const std::string& propertyName) {
+        if (!comp) return PropertyData();
+
+        PropertyData result = resolveDirectProperties(comp, propertyName, kMeshPolygonTopProperties);
+        if (result.ref) return result;
+
+        if (propertyName == "points") {
+            static std::vector<PolygonPoint> defPoints;
+            return {PropertyType::Custom, UpdateFlags_Mesh_Reload, (void*)&defPoints, (void*)&comp->points};
+        }
+
+        if (propertyName.compare(0, 7, "points[") == 0) {
+            size_t pos = 7;
+            size_t index = 0;
+            if (!parseIndex(propertyName, pos, index) || pos >= propertyName.size() || propertyName[pos] != ']') return PropertyData();
+            if (index >= comp->points.size()) return PropertyData();
+            if (pos + 1 >= propertyName.size()) return PropertyData();
+
+            std::string fieldName = propertyName.substr(pos + 1);
+            if (fieldName == ".position") {
+                static Vector3 defPosition = Vector3(0.0f, 0.0f, 0.0f);
+                return {PropertyType::Vector3, UpdateFlags_Mesh_Reload, (void*)&defPosition, (void*)&comp->points[index].position};
+            }
+            if (fieldName == ".color") {
+                static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+                return {PropertyType::Vector4, UpdateFlags_Mesh_Reload, (void*)&defColor, (void*)&comp->points[index].color};
+            }
+        }
+
+        return PropertyData();
+    }
+
+    PropertyData resolveMeshPolygonPropertyFast(void* comp, const std::string& propertyName) {
+        return getMeshPolygonPropertyFast(static_cast<MeshPolygonComponent*>(comp), propertyName);
+    }
+
+    void enumerateMeshPolygonProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
+        MeshPolygonComponent* comp = static_cast<MeshPolygonComponent*>(compRef);
+
+        enumerateFromDescriptors(compRef, ps, kMeshPolygonTopProperties);
+
+        static std::vector<PolygonPoint> defPoints;
+        ps["points"] = {PropertyType::Custom, UpdateFlags_Mesh_Reload, (void*)&defPoints, comp ? (void*)&comp->points : nullptr};
+
+        if (comp) {
+            static Vector3 defPosition = Vector3(0.0f, 0.0f, 0.0f);
+            static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            for (size_t i = 0; i < comp->points.size(); i++) {
+                std::string idx = std::to_string(i);
+                ps["points[" + idx + "].position"] = {PropertyType::Vector3, UpdateFlags_Mesh_Reload, (void*)&defPosition, (void*)&comp->points[i].position};
+                ps["points[" + idx + "].color"] = {PropertyType::Vector4, UpdateFlags_Mesh_Reload, (void*)&defColor, (void*)&comp->points[i].color};
+            }
+        }
+    }
+
     // ── Resolver dispatch table ──
 
     static const FastComponentResolver kFastComponentResolvers[] = {
@@ -2555,6 +2615,7 @@ namespace {
         {ComponentType::ProgressbarComponent, &findComponentPtr<ProgressbarComponent>, &resolveProgressbarPropertyFast, &enumerateProgressbarProperties},
         {ComponentType::TextEditComponent, &findComponentPtr<TextEditComponent>, &resolveTextEditPropertyFast, &enumerateTextEditProperties},
         {ComponentType::PolygonComponent, &findComponentPtr<PolygonComponent>, &resolvePolygonPropertyFast, &enumeratePolygonProperties},
+        {ComponentType::MeshPolygonComponent, &findComponentPtr<MeshPolygonComponent>, &resolveMeshPolygonPropertyFast, &enumerateMeshPolygonProperties},
         {ComponentType::SpriteComponent, &findComponentPtr<SpriteComponent>, &resolveSpritePropertyFast, &enumerateSpriteProperties},
         {ComponentType::TilemapComponent, &findComponentPtr<TilemapComponent>, &resolveTilemapPropertyFast, &enumerateTilemapProperties},
         {ComponentType::TerrainComponent, &findComponentPtr<TerrainComponent>, &resolveTerrainPropertyFast, &enumerateTerrainProperties},
@@ -3287,6 +3348,11 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int 
                     mesh->submeshes[i].needUpdateTexture = true;
             }
         }
+        if (updateFlags & UpdateFlags_Mesh_Reload){
+            if (MeshPolygonComponent* meshPolygon = registry->findComponent<MeshPolygonComponent>(entity)){
+                meshPolygon->needUpdatePolygon = true;
+            }
+        }
     }
     if (updateFlags & (UpdateFlags_LightShadowMap | UpdateFlags_LightShadowCamera)){
         if (LightComponent* light = registry->findComponent<LightComponent>(entity)){
@@ -3536,6 +3602,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::PolygonComponent: {
             YAML::Node encoded = Stream::encodePolygonComponent(sourceRegistry->getComponent<PolygonComponent>(sourceEntity));
             targetRegistry->getComponent<PolygonComponent>(targetEntity) = Stream::decodePolygonComponent(encoded);
+            break;
+        }
+
+        case ComponentType::MeshPolygonComponent: {
+            YAML::Node encoded = Stream::encodeMeshPolygonComponent(sourceRegistry->getComponent<MeshPolygonComponent>(sourceEntity));
+            targetRegistry->getComponent<MeshPolygonComponent>(targetEntity) = Stream::decodeMeshPolygonComponent(encoded);
             break;
         }
 

@@ -511,6 +511,22 @@ bool editor::CreateEntityCmd::execute(){
         scene->addComponent<Transform>(entity, {});
         scene->addComponent<LinesComponent>(entity, {});
 
+    }else if (type == EntityCreationType::MESH_POLYGON){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<MeshComponent>(entity, {});
+        scene->addComponent<MeshPolygonComponent>(entity, {});
+
+        MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
+        mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLE_STRIP;
+
+        MeshPolygonComponent& polygonComp = scene->getComponent<MeshPolygonComponent>(entity);
+        polygonComp.points.push_back({Vector3(0, 0, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.points.push_back({Vector3(100, 0, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.points.push_back({Vector3(0, 100, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.points.push_back({Vector3(100, 100, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.needUpdatePolygon = true;
+
     }else if (type == EntityCreationType::TERRAIN){
 
         scene->addComponent<Transform>(entity, {});

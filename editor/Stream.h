@@ -349,5 +349,8 @@ namespace doriax::editor {
 
         static YAML::Node encodePolygonComponent(const PolygonComponent& polygon);
         static PolygonComponent decodePolygonComponent(const YAML::Node& node, const PolygonComponent* oldPolygon = nullptr);
+
+        static YAML::Node encodeMeshPolygonComponent(const MeshPolygonComponent& polygon);
+        static MeshPolygonComponent decodeMeshPolygonComponent(const YAML::Node& node, const MeshPolygonComponent* oldPolygon = nullptr);
     };
 }

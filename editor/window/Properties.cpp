@@ -42,6 +42,7 @@
 #include "component/LinesComponent.h"
 #include "component/PointsComponent.h"
 #include "component/PolygonComponent.h"
+#include "component/MeshPolygonComponent.h"
 #include "util/SHA1.h"
 #include "util/ProjectUtils.h"
 #include "Stream.h"
@@ -7994,6 +7995,130 @@ void editor::Properties::drawPolygonComponent(ComponentType cpType, SceneProject
     }
 }
 
+void editor::Properties::drawMeshPolygonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    beginTable(cpType, getLabelSize("Flip Y"));
+    propertyRowWithAutoButton(RowPropertyType::Bool, cpType, "flipY", "Flip Y", "automaticFlipY", "Automatic Flip Y", sceneProject, entities);
+    endTable();
+
+    if (entities.size() == 1) {
+        MeshPolygonComponent& polygon = sceneProject->scene->getComponent<MeshPolygonComponent>(entities[0]);
+        ImGui::SeparatorText("Size");
+        beginTable(cpType, getLabelSize("Height"));
+        propertyHeader("Width", -1, false, false);
+        ImGui::Text("%u", polygon.width);
+        propertyHeader("Height", -1, false, false);
+        ImGui::Text("%u", polygon.height);
+        endTable();
+    }
+
+    if (entities.size() != 1) {
+        ImGui::SeparatorText("Vertices");
+        ImGui::TextDisabled("Select a single entity to edit mesh polygon vertices");
+        return;
+    }
+
+    Entity entity = entities[0];
+    MeshPolygonComponent& polygon = sceneProject->scene->getComponent<MeshPolygonComponent>(entity);
+
+    ImGui::SeparatorText("Vertices");
+
+    beginTable(cpType, getLabelSize("Vertices"), "mesh_polygon_points_header");
+    propertyHeader("Vertices", -1, false, false);
+    ImGui::Text("%zu", polygon.points.size());
+    float polygonArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    if (drawSummaryAddButton(ICON_FA_PLUS " Add Vertex##mesh_polygon_add", polygonArrowWidth)) {
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (const Entity& selectedEntity : entities) {
+            if (MeshPolygonComponent* polygonComp = sceneProject->scene->findComponent<MeshPolygonComponent>(selectedEntity)) {
+                std::vector<PolygonPoint> newPoints = polygonComp->points;
+                PolygonPoint newPoint;
+                if (!newPoints.empty()) {
+                    newPoint = newPoints.back();
+                }
+                newPoints.push_back(newPoint);
+                multiCmd->addPropertyCmd<std::vector<PolygonPoint>>(project, sceneProject->id, selectedEntity, cpType, "points", newPoints);
+            }
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##toggle_mesh_polygon", meshPolygonExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
+        meshPolygonExpanded = !meshPolygonExpanded;
+    }
+    endTable();
+
+    if (!meshPolygonExpanded || polygon.points.empty()) {
+        return;
+    }
+
+    bool removedPoint = false;
+
+    for (size_t i = 0; i < polygon.points.size(); i++) {
+        ImGui::PushID((int)i);
+
+        std::string pointGroupStr = "mesh_polygon_point_" + std::to_string(i);
+        std::string pointLabel = "[" + std::to_string(i) + "] Vertex " + std::to_string(i);
+
+        ImGui::SeparatorText(pointLabel.c_str());
+
+        beginTable(cpType, getLabelSize("Position"), pointGroupStr);
+        propertyHeader("Vertex", -1, false, false);
+
+        float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
+        float clearButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x;
+        ImVec2 deleteButtonSize = ImVec2(clearButtonWidth + clearButtonFramePadding * 2, 0);
+        float arrowButtonWidth = ImGui::GetFrameHeight();
+        float trailingWidth = deleteButtonSize.x + ImGui::GetStyle().ItemSpacing.x + arrowButtonWidth;
+        float targetX = ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - trailingWidth);
+        ImGui::SetCursorPosX(targetX);
+
+        if (ImGui::ArrowButton("##toggle_mesh_polygon_point", meshPolygonButtonGroups[pointGroupStr] ? ImGuiDir_Up : ImGuiDir_Down)) {
+            meshPolygonButtonGroups[pointGroupStr] = !meshPolygonButtonGroups[pointGroupStr];
+        }
+        ImGui::SameLine();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(clearButtonFramePadding, ImGui::GetStyle().FramePadding.y));
+        if (ImGui::Button(ICON_FA_TRASH_CAN "##delete_mesh_polygon_point", deleteButtonSize)) {
+            MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+            for (const Entity& selectedEntity : entities) {
+                if (MeshPolygonComponent* polygonComp = sceneProject->scene->findComponent<MeshPolygonComponent>(selectedEntity)) {
+                    if (i < polygonComp->points.size()) {
+                        std::vector<PolygonPoint> newPoints = polygonComp->points;
+                        newPoints.erase(newPoints.begin() + (long int)i);
+                        multiCmd->addPropertyCmd<std::vector<PolygonPoint>>(project, sceneProject->id, selectedEntity, cpType, "points", newPoints);
+                    }
+                }
+            }
+            multiCmd->setNoMerge();
+            CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+            removedPoint = true;
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            endTable();
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+
+        if (meshPolygonButtonGroups[pointGroupStr]) {
+            std::string propPrefix = "points[" + std::to_string(i) + "]";
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".position", "Position", sceneProject, entities);
+            propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".color", "Color", sceneProject, entities);
+        }
+
+        endTable();
+        ImGui::PopID();
+    }
+
+    if (removedPoint) {
+        return;
+    }
+}
+
 void editor::Properties::drawBody2DComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     Body2DComponent& body = sceneProject->scene->getComponent<Body2DComponent>(entities[0]);
 
@@ -10921,6 +11046,8 @@ void editor::Properties::show(){
                     drawTextEditComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::PolygonComponent){
                     drawPolygonComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::MeshPolygonComponent){
+                    drawMeshPolygonComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::TextComponent){
                     drawTextComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::UILayoutComponent){
