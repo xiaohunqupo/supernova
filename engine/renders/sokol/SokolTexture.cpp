@@ -116,6 +116,12 @@ sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
         if (w < 1 && h < 1)
             break;
 
+        if (w < 1)
+            w = 1;
+
+        if (h < 1)
+            h = 1;
+
         total_size += (w * h * pixel_size);
     }
 
@@ -125,7 +131,7 @@ sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
             break;
     }
 
-    total_size *= (cube_faces+1);
+    total_size *= cube_faces;
     unsigned char *big_target = (unsigned char *)malloc(total_size);
     unsigned char *target = big_target;
 
@@ -133,7 +139,6 @@ sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
     {
         int target_width = desc.width;
         int target_height = desc.height;
-        int dst_height = target_height * desc.num_slices;
 
         for (int level = 1; level < SG_MAX_MIPMAPS; ++level) {
             unsigned char* source = (unsigned char*)desc.data.subimage[cube_face][level - 1].ptr;
@@ -153,8 +158,7 @@ sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
             if (target_height < 1)
                 target_height = 1;
 
-            dst_height /= 2;
-            unsigned img_size = target_width * dst_height * pixel_size;
+            unsigned img_size = target_width * target_height * desc.num_slices * pixel_size;
             unsigned char *miptarget = target;
 
             for (int slice = 0; slice < desc.num_slices; ++slice) {
@@ -162,18 +166,20 @@ sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
                 {
                     for (int y = 0; y < target_height; ++y)
                     {
-                        //uint16_t colors[8] = { 0 };
                         for (int chanell = 0; chanell < pixel_size; ++chanell)
                         {
                             int color = 0;
                             int sx = x * 2;
                             int sy = y * 2;
-                            color += source[source_width * pixel_size * sx + sy * pixel_size + chanell];
-                            color += source[source_width * pixel_size * (sx + 1) + sy * pixel_size + chanell];
-                            color += source[source_width * pixel_size * (sx + 1) + (sy + 1) * pixel_size + chanell];
-                            color += source[source_width * pixel_size * sx + (sy + 1) * pixel_size + chanell];
+                            const int sx1 = (sx + 1 < source_width) ? (sx + 1) : (source_width - 1);
+                            const int sy1 = (sy + 1 < source_height) ? (sy + 1) : (source_height - 1);
+
+                            color += source[(sy * source_width + sx) * pixel_size + chanell];
+                            color += source[(sy * source_width + sx1) * pixel_size + chanell];
+                            color += source[(sy1 * source_width + sx1) * pixel_size + chanell];
+                            color += source[(sy1 * source_width + sx) * pixel_size + chanell];
                             color /= 4;
-                            miptarget[target_width * pixel_size * (x) + (y) * pixel_size + chanell] = (uint8_t)color;
+                            miptarget[(y * target_width + x) * pixel_size + chanell] = (uint8_t)color;
                         }
                     }
                 }

@@ -949,10 +949,12 @@ std::string MeshSystem::getBufferName(int bufferViewIndex, ModelComponent& model
 
     const tinygltf::BufferView &bufferView = model.gltfModel->bufferViews[bufferViewIndex];
 
+    // glTF buffer view names are not required to be unique, so keep the view index
+    // in the key with a delimiter to avoid accidental name+index collisions.
     if (!bufferView.name.empty())
-        return bufferView.name;
+        return bufferView.name + "#" + std::to_string(bufferViewIndex);
     else
-        return "buffer"+std::to_string(bufferViewIndex);
+        return "buffer" + std::to_string(bufferViewIndex);
 
 }
 
