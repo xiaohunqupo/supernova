@@ -55,6 +55,11 @@ bool editor::CreateEntityCmd::execute(){
     }
 
     Scene* scene = sceneProject->scene;
+    childEntities.clear();
+
+    auto registerChildEntity = [this](Entity childEntity, Entity childParent){
+        childEntities.push_back({childEntity, childParent});
+    };
 
     if (entity == NULL_ENTITY){
         entity = scene->createUserEntity();
@@ -174,7 +179,7 @@ bool editor::CreateEntityCmd::execute(){
         ButtonComponent& buttonComp = scene->getComponent<ButtonComponent>(entity);
         scene->getSystem<UISystem>()->createButtonObjects(entity, buttonComp);
 
-        childEntities.push_back(buttonComp.label);
+        registerChildEntity(buttonComp.label, entity);
 
         scene->setEntityName(buttonComp.label, "Label");
 
@@ -197,7 +202,7 @@ bool editor::CreateEntityCmd::execute(){
         ScrollbarComponent& scrollbarComp = scene->getComponent<ScrollbarComponent>(entity);
         scene->getSystem<UISystem>()->createScrollbarObjects(entity, scrollbarComp);
 
-        childEntities.push_back(scrollbarComp.bar);
+        registerChildEntity(scrollbarComp.bar, entity);
 
         scene->setEntityName(scrollbarComp.bar, "Bar");
 
@@ -219,7 +224,7 @@ bool editor::CreateEntityCmd::execute(){
         ProgressbarComponent& progressbarComp = scene->getComponent<ProgressbarComponent>(entity);
         scene->getSystem<UISystem>()->createProgressbarObjects(entity, progressbarComp);
 
-        childEntities.push_back(progressbarComp.fill);
+        registerChildEntity(progressbarComp.fill, entity);
 
         scene->setEntityName(progressbarComp.fill, "Fill");
 
@@ -248,9 +253,9 @@ bool editor::CreateEntityCmd::execute(){
         scene->setEntityName(textEditComp.selection, "Selection");
         scene->setEntityName(textEditComp.cursor, "Cursor");
 
-        childEntities.push_back(textEditComp.text);
-        childEntities.push_back(textEditComp.selection);
-        childEntities.push_back(textEditComp.cursor);
+        registerChildEntity(textEditComp.text, entity);
+        registerChildEntity(textEditComp.selection, entity);
+        registerChildEntity(textEditComp.cursor, entity);
 
         TextComponent& textComp = scene->getComponent<TextComponent>(textEditComp.text);
         textComp.text = "";
@@ -259,6 +264,35 @@ bool editor::CreateEntityCmd::execute(){
 
         textEditComp.placeholder = "Enter text...";
         textEditComp.needUpdateTextEdit = true;
+
+    }else if (type == EntityCreationType::PANEL){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<UILayoutComponent>(entity, {});
+        scene->addComponent<UIComponent>(entity, {});
+        scene->addComponent<PanelComponent>(entity, {});
+        scene->addComponent<ImageComponent>(entity, {});
+
+        UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
+        layout.width = 250;
+        layout.height = 150;
+
+        PanelComponent& panelComp = scene->getComponent<PanelComponent>(entity);
+        scene->getSystem<UISystem>()->createPanelObjects(entity, panelComp);
+
+        scene->setEntityName(panelComp.headerimage, "HeaderImage");
+        scene->setEntityName(panelComp.headercontainer, "HeaderContainer");
+        scene->setEntityName(panelComp.headertext, "HeaderText");
+
+        registerChildEntity(panelComp.headerimage, entity);
+        registerChildEntity(panelComp.headercontainer, panelComp.headerimage);
+        registerChildEntity(panelComp.headertext, panelComp.headercontainer);
+
+        TextComponent& titleComp = scene->getComponent<TextComponent>(panelComp.headertext);
+        titleComp.text = "Panel";
+        titleComp.needUpdateText = true;
+
+        panelComp.needUpdatePanel = true;
 
     }else if (type == EntityCreationType::POLYGON){
 
@@ -551,9 +585,9 @@ bool editor::CreateEntityCmd::execute(){
     Catalog::updateEntity(scene, entity, updateFlags);
 
     sceneProject->entities.push_back(entity);
-    for (Entity child : childEntities){
-        Catalog::updateEntity(scene, child, updateFlags);
-        sceneProject->entities.push_back(child);
+    for (const auto& child : childEntities){
+        Catalog::updateEntity(scene, child.entity, updateFlags);
+        sceneProject->entities.push_back(child.entity);
     }
 
     lastSelected = project->getSelectedEntities(sceneId);
@@ -563,8 +597,8 @@ bool editor::CreateEntityCmd::execute(){
 
     if (addToBundle){
         project->addEntityToBundle(sceneId, entity, parent, false);
-        for (Entity child : childEntities){
-            project->addEntityToBundle(sceneId, child, entity, false);
+        for (const auto& child : childEntities){
+            project->addEntityToBundle(sceneId, child.entity, child.parent, false);
         }
     }
 
@@ -580,8 +614,8 @@ void editor::CreateEntityCmd::undo(){
 
     if (sceneProject){
         if (addToBundle){
-            for (Entity child : childEntities){
-                project->removeEntityFromBundle(sceneId, child, false);
+            for (const auto& child : childEntities){
+                project->removeEntityFromBundle(sceneId, child.entity, false);
             }
             project->removeEntityFromBundle(sceneId, entity, false);
         }
@@ -591,7 +625,7 @@ void editor::CreateEntityCmd::undo(){
         }
 
         for (auto it = childEntities.rbegin(); it != childEntities.rend(); ++it){
-            DeleteEntityCmd::destroyEntity(sceneProject->scene, *it, sceneProject->entities, project, sceneId);
+            DeleteEntityCmd::destroyEntity(sceneProject->scene, it->entity, sceneProject->entities, project, sceneId);
         }
         DeleteEntityCmd::destroyEntity(sceneProject->scene, entity, sceneProject->entities, project, sceneId);
 

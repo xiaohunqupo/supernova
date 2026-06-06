@@ -182,6 +182,15 @@ Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
         }
     }
 
+    auto panels = scene->getComponentArray<PanelComponent>();
+    for (size_t i = 0; i < panels->size(); ++i) {
+        Entity panelEntity = panels->getEntity(i);
+        PanelComponent& panel = panels->getComponentFromIndex(i);
+        if (panel.headerimage == entity || panel.headercontainer == entity || panel.headertext == entity) {
+            return panelEntity;
+        }
+    }
+
     return NULL_ENTITY;
 }
 
@@ -571,8 +580,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<PanelComponent>(entity, {});
             }else{
-                registry->addComponent<PanelComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<PanelComponent>(entity, Stream::decodePanelComponent(componentNode));
             }
             break;
         case ComponentType::ParticlesComponent:
@@ -950,7 +958,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::PanelComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodePanelComponent(registry->getComponent<PanelComponent>(entity));
             }
             registry->removeComponent<PanelComponent>(entity);
             break;

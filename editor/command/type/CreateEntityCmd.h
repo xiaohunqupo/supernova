@@ -27,6 +27,7 @@ namespace doriax::editor{
         SCROLLBAR,
         PROGRESSBAR,
         TEXTEDIT,
+        PANEL,
         POLYGON,
         CONTAINER,
         POINT_LIGHT,
@@ -59,12 +60,17 @@ namespace doriax::editor{
     class CreateEntityCmd: public Command{
 
     private:
+        struct ChildEntityData{
+            Entity entity = NULL_ENTITY;
+            Entity parent = NULL_ENTITY;
+        };
+
         Project* project;
         uint32_t sceneId;
         std::string entityName;
 
         Entity entity;
-        std::vector<Entity> childEntities;
+        std::vector<ChildEntityData> childEntities;
         Entity parent;
         EntityCreationType type;
         std::vector<Entity> lastSelected;

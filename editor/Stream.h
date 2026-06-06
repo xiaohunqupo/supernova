@@ -212,6 +212,9 @@ namespace doriax::editor {
         static YAML::Node encodeTextEditComponent(const TextEditComponent& textedit);
         static TextEditComponent decodeTextEditComponent(const YAML::Node& node, const TextEditComponent* oldTextEdit = nullptr);
 
+        static YAML::Node encodePanelComponent(const PanelComponent& panel);
+        static PanelComponent decodePanelComponent(const YAML::Node& node, const PanelComponent* oldPanel = nullptr);
+
         static YAML::Node encodeUILayoutComponent(const UILayoutComponent& layout);
         static UILayoutComponent decodeUILayoutComponent(const YAML::Node& node, const UILayoutComponent* oldLayout = nullptr);
 

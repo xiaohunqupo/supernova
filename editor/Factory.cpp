@@ -901,6 +901,32 @@ std::string editor::Factory::createTextEditComponent(int indentSpaces, EntityReg
     return code.str();
 }
 
+std::string editor::Factory::createPanelComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<PanelComponent>(entity)) return "";
+    PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "PanelComponent panel;\n";
+    code << ind << "panel.headerimage = " << formatUInt(panel.headerimage) << ";\n";
+    code << ind << "panel.headercontainer = " << formatUInt(panel.headercontainer) << ";\n";
+    code << ind << "panel.headertext = " << formatUInt(panel.headertext) << ";\n";
+    code << ind << "panel.titleAnchorPreset = " << formatAnchorPreset(panel.titleAnchorPreset) << ";\n";
+    code << ind << "panel.minWidth = " << formatUInt(panel.minWidth) << ";\n";
+    code << ind << "panel.minHeight = " << formatUInt(panel.minHeight) << ";\n";
+    code << ind << "panel.headerHeight = " << formatUInt(panel.headerHeight) << ";\n";
+    code << ind << "panel.headerMarginLeft = " << formatInt(panel.headerMarginLeft) << ";\n";
+    code << ind << "panel.headerMarginTop = " << formatInt(panel.headerMarginTop) << ";\n";
+    code << ind << "panel.headerMarginRight = " << formatInt(panel.headerMarginRight) << ";\n";
+    code << ind << "panel.headerMarginBottom = " << formatInt(panel.headerMarginBottom) << ";\n";
+    code << ind << "panel.defaultHeaderMargin = " << formatBool(panel.defaultHeaderMargin) << ";\n";
+    code << ind << "panel.resizeMargin = " << formatInt(panel.resizeMargin) << ";\n";
+    code << ind << "panel.canMove = " << formatBool(panel.canMove) << ";\n";
+    code << ind << "panel.canResize = " << formatBool(panel.canResize) << ";\n";
+    code << ind << "panel.canBringToFront = " << formatBool(panel.canBringToFront) << ";\n";
+    addComponentCode(code, ind, sceneName, entityName, entity, "PanelComponent", "panel", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::createPolygonComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
     if (!scene->findComponent<PolygonComponent>(entity)) return "";
     PolygonComponent& polygon = scene->getComponent<PolygonComponent>(entity);
@@ -1857,6 +1883,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::ScrollbarComponent: return createScrollbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ProgressbarComponent: return createProgressbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TextEditComponent: return createTextEditComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::PanelComponent: return createPanelComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::PolygonComponent: return createPolygonComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::MeshPolygonComponent: return createMeshPolygonComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UILayoutComponent: return createUILayoutComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);

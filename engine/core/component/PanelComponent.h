@@ -27,6 +27,7 @@ namespace doriax{
 
         unsigned int minWidth = 0;
         unsigned int minHeight = 0;
+        unsigned int headerHeight = 0;
 
         int headerMarginLeft = 0;
         int headerMarginTop = 0;

@@ -202,6 +202,25 @@ namespace {
         makeFastProperty<ProgressbarComponent, int, &ProgressbarComponent::fillMarginBottom>("fillMarginBottom", PropertyType::Int, UpdateFlags_None),
     };
 
+    static const FastPropertyDescriptor kPanelProperties[] = {
+        makeFastProperty<PanelComponent, Entity, &PanelComponent::headerimage>("headerimage", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<PanelComponent, Entity, &PanelComponent::headercontainer>("headercontainer", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<PanelComponent, Entity, &PanelComponent::headertext>("headertext", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<PanelComponent, AnchorPreset, &PanelComponent::titleAnchorPreset>("titleAnchorPreset", PropertyType::Enum, UpdateFlags_None),
+        makeFastProperty<PanelComponent, unsigned int, &PanelComponent::minWidth>("minWidth", PropertyType::UInt, UpdateFlags_None),
+        makeFastProperty<PanelComponent, unsigned int, &PanelComponent::minHeight>("minHeight", PropertyType::UInt, UpdateFlags_None),
+        makeFastProperty<PanelComponent, unsigned int, &PanelComponent::headerHeight>("headerHeight", PropertyType::UInt, UpdateFlags_None),
+        makeFastProperty<PanelComponent, int, &PanelComponent::headerMarginLeft>("headerMarginLeft", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<PanelComponent, int, &PanelComponent::headerMarginTop>("headerMarginTop", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<PanelComponent, int, &PanelComponent::headerMarginRight>("headerMarginRight", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<PanelComponent, int, &PanelComponent::headerMarginBottom>("headerMarginBottom", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<PanelComponent, bool, &PanelComponent::defaultHeaderMargin>("defaultHeaderMargin", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<PanelComponent, int, &PanelComponent::resizeMargin>("resizeMargin", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<PanelComponent, bool, &PanelComponent::canMove>("canMove", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<PanelComponent, bool, &PanelComponent::canResize>("canResize", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<PanelComponent, bool, &PanelComponent::canBringToFront>("canBringToFront", PropertyType::Bool, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kTextEditProperties[] = {
         makeFastProperty<TextEditComponent, Entity, &TextEditComponent::text>("text", PropertyType::Entity, UpdateFlags_None),
         makeFastProperty<TextEditComponent, Entity, &TextEditComponent::selection>("selection", PropertyType::Entity, UpdateFlags_None),
@@ -973,6 +992,10 @@ namespace {
 
     PropertyData resolveTextEditPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<TextEditComponent*>(comp), propertyName, kTextEditProperties);
+    }
+
+    PropertyData resolvePanelPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<PanelComponent*>(comp), propertyName, kPanelProperties);
     }
 
     PropertyData getSpritePropertyFast(SpriteComponent* comp, const std::string& propertyName) {
@@ -1900,6 +1923,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kTextEditProperties);
     }
 
+    void enumeratePanelProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kPanelProperties);
+    }
+
     void enumerateSpriteProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
         SpriteComponent* comp = static_cast<SpriteComponent*>(compRef);
         SpriteComponent& def = getDefaultComponent<SpriteComponent>();
@@ -2614,6 +2641,7 @@ namespace {
         {ComponentType::ScrollbarComponent, &findComponentPtr<ScrollbarComponent>, &resolveScrollbarPropertyFast, &enumerateScrollbarProperties},
         {ComponentType::ProgressbarComponent, &findComponentPtr<ProgressbarComponent>, &resolveProgressbarPropertyFast, &enumerateProgressbarProperties},
         {ComponentType::TextEditComponent, &findComponentPtr<TextEditComponent>, &resolveTextEditPropertyFast, &enumerateTextEditProperties},
+        {ComponentType::PanelComponent, &findComponentPtr<PanelComponent>, &resolvePanelPropertyFast, &enumeratePanelProperties},
         {ComponentType::PolygonComponent, &findComponentPtr<PolygonComponent>, &resolvePolygonPropertyFast, &enumeratePolygonProperties},
         {ComponentType::MeshPolygonComponent, &findComponentPtr<MeshPolygonComponent>, &resolveMeshPolygonPropertyFast, &enumerateMeshPolygonProperties},
         {ComponentType::SpriteComponent, &findComponentPtr<SpriteComponent>, &resolveSpritePropertyFast, &enumerateSpriteProperties},
@@ -3536,6 +3564,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::TextEditComponent: {
             YAML::Node encoded = Stream::encodeTextEditComponent(sourceRegistry->getComponent<TextEditComponent>(sourceEntity));
             targetRegistry->getComponent<TextEditComponent>(targetEntity) = Stream::decodeTextEditComponent(encoded);
+            break;
+        }
+
+        case ComponentType::PanelComponent: {
+            YAML::Node encoded = Stream::encodePanelComponent(sourceRegistry->getComponent<PanelComponent>(sourceEntity));
+            targetRegistry->getComponent<PanelComponent>(targetEntity) = Stream::decodePanelComponent(encoded);
             break;
         }
 

@@ -44,6 +44,7 @@ void Panel::setTitle(const std::string& text){
     if (textcomp.text != text){
         textcomp.text = text;
         textcomp.needUpdateText = true;
+        panelcomp.needUpdatePanel = true;
     }
 }
 

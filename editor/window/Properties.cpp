@@ -43,6 +43,7 @@
 #include "component/PointsComponent.h"
 #include "component/PolygonComponent.h"
 #include "component/MeshPolygonComponent.h"
+#include "component/PanelComponent.h"
 #include "util/SHA1.h"
 #include "util/ProjectUtils.h"
 #include "Stream.h"
@@ -5160,6 +5161,54 @@ void editor::Properties::drawTextEditComponent(ComponentType cpType, SceneProjec
             endTable();
         }
     }
+}
+
+void editor::Properties::drawPanelComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    RowSettings settings;
+    settings.onValueChanged = [sceneProject, entities](){
+        for (const Entity& entity : entities){
+            if (PanelComponent* panel = sceneProject->scene->findComponent<PanelComponent>(entity)){
+                panel->needUpdatePanel = true;
+            }
+        }
+    };
+
+    RowSettings settingsEnum;
+    settingsEnum.enumEntries = &entriesAnchorPreset;
+    settingsEnum.onValueChanged = settings.onValueChanged;
+
+    RowSettings settingsUInt;
+    settingsUInt.stepSize = 1.0f;
+    settingsUInt.secondColSize = 6 * ImGui::GetFontSize();
+    settingsUInt.onValueChanged = settings.onValueChanged;
+
+    RowSettings settingsInt;
+    settingsInt.stepSize = 1.0f;
+    settingsInt.secondColSize = 6 * ImGui::GetFontSize();
+    settingsInt.onValueChanged = settings.onValueChanged;
+
+    beginTable(cpType, getLabelSize("Can Bring To Front"));
+    propertyRow(RowPropertyType::LocalEntity, cpType, "headerimage", "Header Image", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::LocalEntity, cpType, "headercontainer", "Header Container", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::LocalEntity, cpType, "headertext", "Header Text", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Enum, cpType, "titleAnchorPreset", "Title Anchor", sceneProject, entities, settingsEnum);
+    propertyRow(RowPropertyType::UInt, cpType, "minWidth", "Min Width", sceneProject, entities, settingsUInt);
+    propertyRow(RowPropertyType::UInt, cpType, "minHeight", "Min Height", sceneProject, entities, settingsUInt);
+    propertyRow(RowPropertyType::UInt, cpType, "headerHeight", "Header Height", sceneProject, entities, settingsUInt);
+    propertyRow(RowPropertyType::Int, cpType, "resizeMargin", "Resize Margin", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Bool, cpType, "canMove", "Can Move", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Bool, cpType, "canResize", "Can Resize", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Bool, cpType, "canBringToFront", "Can Bring To Front", sceneProject, entities, settings);
+    endTable();
+
+    ImGui::SeparatorText("Header margin");
+    beginTable(cpType, getLabelSize("Margin Bottom"), "panel_header_margin");
+    propertyRow(RowPropertyType::Bool, cpType, "defaultHeaderMargin", "Default Margin", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Int, cpType, "headerMarginLeft", "Margin Left", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "headerMarginRight", "Margin Right", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "headerMarginTop", "Margin Top", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "headerMarginBottom", "Margin Bottom", sceneProject, entities, settingsInt);
+    endTable();
 }
 
 void editor::Properties::drawTextComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
@@ -11044,6 +11093,8 @@ void editor::Properties::show(){
                     drawProgressbarComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::TextEditComponent){
                     drawTextEditComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::PanelComponent){
+                    drawPanelComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::PolygonComponent){
                     drawPolygonComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::MeshPolygonComponent){

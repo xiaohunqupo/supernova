@@ -2417,6 +2417,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::TextEditComponent, true)] = encodeTextEditComponent(textedit);
     }
 
+    if (signature.test(registry->getComponentId<PanelComponent>())) {
+        PanelComponent panel = registry->getComponent<PanelComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::PanelComponent, true)] = encodePanelComponent(panel);
+    }
+
     if (signature.test(registry->getComponentId<UILayoutComponent>())) {
         UILayoutComponent layout = registry->getComponent<UILayoutComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::UILayoutComponent, true)] = encodeUILayoutComponent(layout);
@@ -2714,6 +2719,19 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             int flags = Catalog::getChangedUpdateFlags(ComponentType::TextEditComponent, existing, &textedit);
             registry->getComponent<TextEditComponent>(entity) = textedit;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::PanelComponent, true);
+    if (compNode[compName]) {
+        PanelComponent* existing = registry->findComponent<PanelComponent>(entity);
+        PanelComponent panel = decodePanelComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<PanelComponent>())){
+            registry->addComponent<PanelComponent>(entity, panel);
+        }else{
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::PanelComponent, existing, &panel);
+            registry->getComponent<PanelComponent>(entity) = panel;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -3650,6 +3668,56 @@ TextEditComponent editor::Stream::decodeTextEditComponent(const YAML::Node& node
     textedit.needUpdateTextEdit = true;
 
     return textedit;
+}
+
+YAML::Node editor::Stream::encodePanelComponent(const PanelComponent& panel) {
+    YAML::Node node;
+    node["headerimage"] = panel.headerimage;
+    node["headercontainer"] = panel.headercontainer;
+    node["headertext"] = panel.headertext;
+    node["titleAnchorPreset"] = static_cast<int>(panel.titleAnchorPreset);
+    node["minWidth"] = panel.minWidth;
+    node["minHeight"] = panel.minHeight;
+    node["headerHeight"] = panel.headerHeight;
+    node["headerMarginLeft"] = panel.headerMarginLeft;
+    node["headerMarginTop"] = panel.headerMarginTop;
+    node["headerMarginRight"] = panel.headerMarginRight;
+    node["headerMarginBottom"] = panel.headerMarginBottom;
+    node["defaultHeaderMargin"] = panel.defaultHeaderMargin;
+    node["resizeMargin"] = panel.resizeMargin;
+    node["canMove"] = panel.canMove;
+    node["canResize"] = panel.canResize;
+    node["canBringToFront"] = panel.canBringToFront;
+    return node;
+}
+
+PanelComponent editor::Stream::decodePanelComponent(const YAML::Node& node, const PanelComponent* oldPanel) {
+    PanelComponent panel;
+
+    if (oldPanel) {
+        panel = *oldPanel;
+    }
+
+    if (node["headerimage"]) panel.headerimage = node["headerimage"].as<Entity>();
+    if (node["headercontainer"]) panel.headercontainer = node["headercontainer"].as<Entity>();
+    if (node["headertext"]) panel.headertext = node["headertext"].as<Entity>();
+    if (node["titleAnchorPreset"]) panel.titleAnchorPreset = static_cast<AnchorPreset>(node["titleAnchorPreset"].as<int>());
+    if (node["minWidth"]) panel.minWidth = node["minWidth"].as<unsigned int>();
+    if (node["minHeight"]) panel.minHeight = node["minHeight"].as<unsigned int>();
+    if (node["headerHeight"]) panel.headerHeight = node["headerHeight"].as<unsigned int>();
+    if (node["headerMarginLeft"]) panel.headerMarginLeft = node["headerMarginLeft"].as<int>();
+    if (node["headerMarginTop"]) panel.headerMarginTop = node["headerMarginTop"].as<int>();
+    if (node["headerMarginRight"]) panel.headerMarginRight = node["headerMarginRight"].as<int>();
+    if (node["headerMarginBottom"]) panel.headerMarginBottom = node["headerMarginBottom"].as<int>();
+    if (node["defaultHeaderMargin"]) panel.defaultHeaderMargin = node["defaultHeaderMargin"].as<bool>();
+    if (node["resizeMargin"]) panel.resizeMargin = node["resizeMargin"].as<int>();
+    if (node["canMove"]) panel.canMove = node["canMove"].as<bool>();
+    if (node["canResize"]) panel.canResize = node["canResize"].as<bool>();
+    if (node["canBringToFront"]) panel.canBringToFront = node["canBringToFront"].as<bool>();
+
+    panel.needUpdatePanel = true;
+
+    return panel;
 }
 
 YAML::Node editor::Stream::encodeUILayoutComponent(const UILayoutComponent& layout) {

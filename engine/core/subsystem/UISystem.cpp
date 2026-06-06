@@ -520,10 +520,28 @@ void UISystem::updatePanel(Entity entity, PanelComponent& panel, ImageComponent&
         panel.headerMarginBottom = img.patchMarginBottom;
     }
 
+    UILayoutComponent& titlelayout = scene->getComponent<UILayoutComponent>(panel.headertext);
+    UIComponent& titleui = scene->getComponent<UIComponent>(panel.headertext);
+    TextComponent& headertext = scene->getComponent<TextComponent>(panel.headertext);
+
+    titlelayout.anchorPreset = panel.titleAnchorPreset;
+    headertext.needUpdateText = true;
+    createOrUpdateText(headertext, titleui, titlelayout);
+
+    int headerHeight;
+    if (panel.headerHeight > 0){
+        headerHeight = static_cast<int>(panel.headerHeight);
+    }else{
+        headerHeight = static_cast<int>(getTextMinSize(headertext).y) + panel.headerMarginTop + panel.headerMarginBottom;
+        if (headerHeight < static_cast<int>(img.patchMarginTop)){
+            headerHeight = static_cast<int>(img.patchMarginTop);
+        }
+    }
+
     headerimagelayout.anchorOffsetLeft = panel.headerMarginLeft;
     headerimagelayout.anchorOffsetTop = panel.headerMarginTop;
     headerimagelayout.anchorOffsetRight = -panel.headerMarginRight;
-    headerimagelayout.anchorOffsetBottom = img.patchMarginTop - panel.headerMarginBottom;
+    headerimagelayout.anchorOffsetBottom = headerHeight - panel.headerMarginBottom;
 
     if (panel.minWidth > layout.width){
         panel.minWidth = layout.width;
@@ -537,14 +555,6 @@ void UISystem::updatePanel(Entity entity, PanelComponent& panel, ImageComponent&
     if (panel.minHeight < (img.patchMarginTop + img.patchMarginBottom + 1)){
         panel.minHeight = static_cast<unsigned int>(img.patchMarginTop + img.patchMarginBottom + 1);
     }
-
-    UILayoutComponent& titlelayout = scene->getComponent<UILayoutComponent>(panel.headertext);
-    UIComponent& titleui = scene->getComponent<UIComponent>(panel.headertext);
-    TextComponent& headertext = scene->getComponent<TextComponent>(panel.headertext);
-
-    titlelayout.anchorPreset = panel.titleAnchorPreset;
-    headertext.needUpdateText = true;
-    createOrUpdateText(headertext, titleui, titlelayout);
 }
 
 void UISystem::updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){

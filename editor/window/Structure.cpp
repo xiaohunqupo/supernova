@@ -189,6 +189,10 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "TextEdit", EntityCreationType::TEXTEDIT, parent, addToBundle));
             openParent = parent;
         }
+        if (ImGui::MenuItem(ICON_FA_WINDOW_MAXIMIZE"  Panel")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Panel", EntityCreationType::PANEL, parent, addToBundle));
+            openParent = parent;
+        }
         if (ImGui::MenuItem(ICON_FA_DRAW_POLYGON"  Polygon")){
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Polygon", EntityCreationType::POLYGON, parent, addToBundle));
             openParent = parent;
@@ -232,7 +236,7 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         ImGui::EndMenu();
     }
 
-    if (ImGui::MenuItem(ICON_FA_CIRCLE_DOT"  Point Sprites")){
+    if (ImGui::MenuItem(ICON_FA_CIRCLE"  Point Sprites")){
         CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "PointSprites", EntityCreationType::POINTS, parent, addToBundle));
         openParent = parent;
     }
@@ -374,10 +378,10 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_I_CURSOR;
     }else if (signature.test(scene->getComponentId<PolygonComponent>())){
         return ICON_FA_DRAW_POLYGON;
+    }else if (signature.test(scene->getComponentId<PanelComponent>())){
+        return ICON_FA_WINDOW_MAXIMIZE;
     }else if (signature.test(scene->getComponentId<ImageComponent>())){
         return ICON_FA_IMAGE;
-    }else if (signature.test(scene->getComponentId<PanelComponent>())){
-        return ICON_FA_SQUARE;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         return ICON_FA_IMAGE;
     }else if (signature.test(scene->getComponentId<LightComponent>())){
