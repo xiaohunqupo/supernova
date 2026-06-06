@@ -11,12 +11,15 @@
 
 namespace doriax{
     class DORIAX_API Scrollbar: public Image{
+    private:
+        void ensureBar();
 
     public:
         Scrollbar(Scene* scene);
         Scrollbar(Scene* scene, Entity entity);
         virtual ~Scrollbar();
 
+        bool hasBar() const;
         Image getBarObject() const;
 
         void setType(ScrollbarType type);

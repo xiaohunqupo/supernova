@@ -4,7 +4,9 @@
 
 #include "TextEdit.h"
 
+#include "component/PolygonComponent.h"
 #include "component/TextComponent.h"
+#include "component/UIComponent.h"
 #include "subsystem/UISystem.h"
 #include "util/StringUtils.h"
 
@@ -20,8 +22,48 @@ TextEdit::TextEdit(Scene* scene, Entity entity): Image(scene, entity){
 TextEdit::~TextEdit(){
 }
 
-Text TextEdit::getTextObject() const{
+bool TextEdit::hasText() const{
+    const TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (tecomp.text == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(tecomp.text);
+    return signature.test(scene->getComponentId<TextComponent>());
+}
+
+bool TextEdit::hasCursor() const{
+    const TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (tecomp.cursor == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(tecomp.cursor);
+    return signature.test(scene->getComponentId<PolygonComponent>());
+}
+
+bool TextEdit::hasSelection() const{
+    const TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (tecomp.selection == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(tecomp.selection);
+    return signature.test(scene->getComponentId<PolygonComponent>());
+}
+
+void TextEdit::ensureText(){
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (!hasText() || !hasCursor() || !hasSelection()){
+        scene->getSystem<UISystem>()->createTextEditObjects(getEntity(), tecomp);
+    }
+}
+
+Text TextEdit::getTextObject() const{
+    const TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (!hasText()){
+        return Text(scene, NULL_ENTITY);
+    }
 
     return Text(scene, tecomp.text);
 }
@@ -29,13 +71,19 @@ Text TextEdit::getTextObject() const{
 // Fully qualify Polygon: UISystem.h pulls in wingdi.h on Windows, whose GDI Polygon()
 // function clashes with doriax::Polygon when used as an unqualified return type here.
 doriax::Polygon TextEdit::getCursorObject() const{
-    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    const TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (!hasCursor()){
+        return Polygon(scene, NULL_ENTITY);
+    }
 
     return Polygon(scene, tecomp.cursor);
 }
 
 doriax::Polygon TextEdit::getSelectionObject() const{
-    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    const TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (!hasSelection()){
+        return Polygon(scene, NULL_ENTITY);
+    }
 
     return Polygon(scene, tecomp.selection);
 }
@@ -55,6 +103,7 @@ bool TextEdit::getDisabled() const{
 }
 
 void TextEdit::setText(const std::string& text){
+    ensureText();
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(tecomp.text);
 
@@ -69,6 +118,10 @@ void TextEdit::setText(const std::string& text){
 }
 
 std::string TextEdit::getText() const{
+    if (!hasText()){
+        return "";
+    }
+
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(tecomp.text);
 
@@ -76,6 +129,7 @@ std::string TextEdit::getText() const{
 }
 
 void TextEdit::setTextColor(Vector4 color){
+    ensureText();
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
     UIComponent& uitext = scene->getComponent<UIComponent>(tecomp.text);
 
@@ -91,6 +145,10 @@ void TextEdit::setTextColor(const float red, const float green, const float blue
 }
 
 Vector4 TextEdit::getTextColor() const{
+    if (!hasText()){
+        return Vector4(0.0, 0.0, 0.0, 1.0);
+    }
+
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
     UIComponent& uitext = scene->getComponent<UIComponent>(tecomp.text);
 
@@ -98,6 +156,7 @@ Vector4 TextEdit::getTextColor() const{
 }
 
 void TextEdit::setTextFont(const std::string& font){
+    ensureText();
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
 
     getTextObject().setFont(font);
@@ -106,6 +165,10 @@ void TextEdit::setTextFont(const std::string& font){
 }
 
 std::string TextEdit::getTextFont() const{
+    if (!hasText()){
+        return "";
+    }
+
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(tecomp.text);
 
@@ -113,6 +176,7 @@ std::string TextEdit::getTextFont() const{
 }
 
 void TextEdit::setFontSize(unsigned int fontSize){
+    ensureText();
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
 
     getTextObject().setFontSize(fontSize);
@@ -121,16 +185,23 @@ void TextEdit::setFontSize(unsigned int fontSize){
 }
 
 unsigned int TextEdit::getFontSize() const{
-    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (!hasText()){
+        return 0;
+    }
 
     return getTextObject().getFontSize();
 }
 
 void TextEdit::setMaxTextSize(unsigned int maxTextSize){
+    ensureText();
     getTextObject().setMaxTextSize(maxTextSize);
 }
 
 unsigned int TextEdit::getMaxTextSize() const{
+    if (!hasText()){
+        return 0;
+    }
+
     return getTextObject().getMaxTextSize();
 }
 

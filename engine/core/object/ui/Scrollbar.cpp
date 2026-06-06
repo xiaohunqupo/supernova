@@ -4,6 +4,7 @@
 
 #include "Scrollbar.h"
 
+#include "component/ImageComponent.h"
 #include "subsystem/UISystem.h"
 
 using namespace doriax;
@@ -18,8 +19,28 @@ Scrollbar::Scrollbar(Scene* scene, Entity entity): Image(scene, entity){
 Scrollbar::~Scrollbar(){
 }
 
-Image Scrollbar::getBarObject() const{
+bool Scrollbar::hasBar() const{
+    const ScrollbarComponent& scrollcomp = getComponent<ScrollbarComponent>();
+    if (scrollcomp.bar == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(scrollcomp.bar);
+    return signature.test(scene->getComponentId<ImageComponent>());
+}
+
+void Scrollbar::ensureBar(){
     ScrollbarComponent& scrollcomp = getComponent<ScrollbarComponent>();
+    if (!hasBar()){
+        scene->getSystem<UISystem>()->createScrollbarObjects(getEntity(), scrollcomp);
+    }
+}
+
+Image Scrollbar::getBarObject() const{
+    const ScrollbarComponent& scrollcomp = getComponent<ScrollbarComponent>();
+    if (!hasBar()){
+        return Image(scene, NULL_ENTITY);
+    }
 
     return Image(scene, scrollcomp.bar);
 }
@@ -64,42 +85,54 @@ float Scrollbar::getStep() const{
 }
 
 void Scrollbar::setBarTexture(const std::string& path){
+    ensureBar();
     getBarObject().setTexture(path);
 }
 
 void Scrollbar::setBarTexture(Framebuffer* framebuffer){
+    ensureBar();
     getBarObject().setTexture(framebuffer);
 }
 
 void Scrollbar::setBarColor(Vector4 color){
+    ensureBar();
     getBarObject().setColor(color);
 }
 
 void Scrollbar::setBarColor(const float red, const float green, const float blue, const float alpha){
-    getBarObject().setColor(red, green, blue, alpha);
+    setBarColor(Vector4(red, green, blue, alpha));
 }
 
 void Scrollbar::setBarColor(const float red, const float green, const float blue){
-    getBarObject().setColor(red, green, blue);
+    setBarColor(Vector4(red, green, blue, getBarColor().w));
 }
 
 void Scrollbar::setBarAlpha(const float alpha){
+    ensureBar();
     getBarObject().setAlpha(alpha);
 }
 
 Vector4 Scrollbar::getBarColor() const{
+    if (!hasBar()){
+        return Vector4(1.0, 1.0, 1.0, 1.0);
+    }
     return getBarObject().getColor();
 }
 
 float Scrollbar::getBarAlpha() const{
+    if (!hasBar()){
+        return 1.0f;
+    }
     return getBarObject().getAlpha();
 }
 
 void Scrollbar::setBarPatchMargin(int margin){
+    ensureBar();
     getBarObject().setPatchMargin(margin);
 }
 
 void Scrollbar::setBarPatchMargin(int marginLeft, int marginRight, int marginTop, int marginBottom){
+    ensureBar();
     getBarObject().setPatchMargin(marginLeft, marginRight, marginTop, marginBottom);
 }
 

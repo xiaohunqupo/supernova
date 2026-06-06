@@ -11,12 +11,17 @@
 
 namespace doriax{
     class DORIAX_API TextEdit: public Image{
+    private:
+        void ensureText();
+        bool hasCursor() const;
+        bool hasSelection() const;
 
     public:
         TextEdit(Scene* scene);
         TextEdit(Scene* scene, Entity entity);
         virtual ~TextEdit();
 
+        bool hasText() const;
         Text getTextObject() const;
         Polygon getCursorObject() const;
         Polygon getSelectionObject() const;

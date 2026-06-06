@@ -9,12 +9,15 @@
 
 namespace doriax{
     class DORIAX_API Progressbar: public Image{
+    private:
+        void ensureFill();
 
     public:
         Progressbar(Scene* scene);
         Progressbar(Scene* scene, Entity entity);
         virtual ~Progressbar();
 
+        bool hasFill() const;
         Image getFillObject() const;
 
         void setType(ProgressbarType type);

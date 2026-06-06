@@ -284,6 +284,10 @@ void UISystem::createText(TextComponent& text, UIComponent& ui, UILayoutComponen
 }
 
 void UISystem::createButtonObjects(Entity entity, ButtonComponent& button){
+    if (button.label != NULL_ENTITY && !scene->findComponent<TextComponent>(button.label)){
+        button.label = NULL_ENTITY;
+    }
+
     if (button.label == NULL_ENTITY){
         button.label = scene->createEntity();
 
@@ -305,6 +309,22 @@ void UISystem::createButtonObjects(Entity entity, ButtonComponent& button){
 }
 
 void UISystem::createPanelObjects(Entity entity, PanelComponent& panel){
+    if (panel.headerimage != NULL_ENTITY && !scene->findComponent<ImageComponent>(panel.headerimage)){
+        panel.headerimage = NULL_ENTITY;
+    }
+    if (panel.headercontainer != NULL_ENTITY && !scene->findComponent<UIContainerComponent>(panel.headercontainer)){
+        panel.headercontainer = NULL_ENTITY;
+    }
+    if (panel.headertext != NULL_ENTITY && !scene->findComponent<TextComponent>(panel.headertext)){
+        panel.headertext = NULL_ENTITY;
+    }
+    if (panel.headerimage == NULL_ENTITY){
+        panel.headercontainer = NULL_ENTITY;
+        panel.headertext = NULL_ENTITY;
+    }else if (panel.headercontainer == NULL_ENTITY){
+        panel.headertext = NULL_ENTITY;
+    }
+
     if (panel.headerimage == NULL_ENTITY){
         panel.headerimage = scene->createEntity();
 
@@ -368,6 +388,10 @@ void UISystem::createPanelObjects(Entity entity, PanelComponent& panel){
 }
 
 void UISystem::createScrollbarObjects(Entity entity, ScrollbarComponent& scrollbar){
+    if (scrollbar.bar != NULL_ENTITY && !scene->findComponent<ImageComponent>(scrollbar.bar)){
+        scrollbar.bar = NULL_ENTITY;
+    }
+
     if (scrollbar.bar == NULL_ENTITY){
         scrollbar.bar = scene->createEntity();
 
@@ -385,6 +409,10 @@ void UISystem::createScrollbarObjects(Entity entity, ScrollbarComponent& scrollb
 }
 
 void UISystem::createProgressbarObjects(Entity entity, ProgressbarComponent& progressbar){
+    if (progressbar.fill != NULL_ENTITY && !scene->findComponent<ImageComponent>(progressbar.fill)){
+        progressbar.fill = NULL_ENTITY;
+    }
+
     if (progressbar.fill == NULL_ENTITY){
         progressbar.fill = scene->createEntity();
 
@@ -402,6 +430,16 @@ void UISystem::createProgressbarObjects(Entity entity, ProgressbarComponent& pro
 }
 
 void UISystem::createTextEditObjects(Entity entity, TextEditComponent& textedit){
+    if (textedit.text != NULL_ENTITY && !scene->findComponent<TextComponent>(textedit.text)){
+        textedit.text = NULL_ENTITY;
+    }
+    if (textedit.selection != NULL_ENTITY && !scene->findComponent<PolygonComponent>(textedit.selection)){
+        textedit.selection = NULL_ENTITY;
+    }
+    if (textedit.cursor != NULL_ENTITY && !scene->findComponent<PolygonComponent>(textedit.cursor)){
+        textedit.cursor = NULL_ENTITY;
+    }
+
     if (textedit.text == NULL_ENTITY){
         textedit.text = scene->createEntity();
 
@@ -509,22 +547,6 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
 }
 
 void UISystem::updatePanel(Entity entity, PanelComponent& panel, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
-    createPanelObjects(entity, panel);
-
-    UILayoutComponent& headerimagelayout = scene->getComponent<UILayoutComponent>(panel.headerimage);
-
-    if (panel.defaultHeaderMargin){
-        panel.headerMarginLeft = img.patchMarginLeft;
-        panel.headerMarginRight = img.patchMarginRight;
-        panel.headerMarginTop = img.patchMarginBottom;
-        panel.headerMarginBottom = img.patchMarginBottom;
-    }
-
-    headerimagelayout.anchorOffsetLeft = panel.headerMarginLeft;
-    headerimagelayout.anchorOffsetTop = panel.headerMarginTop;
-    headerimagelayout.anchorOffsetRight = -panel.headerMarginRight;
-    headerimagelayout.anchorOffsetBottom = img.patchMarginTop - panel.headerMarginBottom;
-
     if (panel.minWidth > layout.width){
         panel.minWidth = layout.width;
     }
@@ -538,20 +560,34 @@ void UISystem::updatePanel(Entity entity, PanelComponent& panel, ImageComponent&
         panel.minHeight = static_cast<unsigned int>(img.patchMarginTop + img.patchMarginBottom + 1);
     }
 
-    UILayoutComponent& titlelayout = scene->getComponent<UILayoutComponent>(panel.headertext);
-    UIComponent& titleui = scene->getComponent<UIComponent>(panel.headertext);
-    TextComponent& headertext = scene->getComponent<TextComponent>(panel.headertext);
+    if (panel.headerimage != NULL_ENTITY && scene->findComponent<UILayoutComponent>(panel.headerimage)){
+        UILayoutComponent& headerimagelayout = scene->getComponent<UILayoutComponent>(panel.headerimage);
 
-    titlelayout.anchorPreset = panel.titleAnchorPreset;
-    headertext.needUpdateText = true;
-    createOrUpdateText(headertext, titleui, titlelayout);
+        if (panel.defaultHeaderMargin){
+            panel.headerMarginLeft = img.patchMarginLeft;
+            panel.headerMarginRight = img.patchMarginRight;
+            panel.headerMarginTop = img.patchMarginBottom;
+            panel.headerMarginBottom = img.patchMarginBottom;
+        }
+
+        headerimagelayout.anchorOffsetLeft = panel.headerMarginLeft;
+        headerimagelayout.anchorOffsetTop = panel.headerMarginTop;
+        headerimagelayout.anchorOffsetRight = -panel.headerMarginRight;
+        headerimagelayout.anchorOffsetBottom = img.patchMarginTop - panel.headerMarginBottom;
+    }
+
+    if (panel.headertext != NULL_ENTITY && scene->findComponent<TextComponent>(panel.headertext)){
+        UILayoutComponent& titlelayout = scene->getComponent<UILayoutComponent>(panel.headertext);
+        UIComponent& titleui = scene->getComponent<UIComponent>(panel.headertext);
+        TextComponent& headertext = scene->getComponent<TextComponent>(panel.headertext);
+
+        titlelayout.anchorPreset = panel.titleAnchorPreset;
+        headertext.needUpdateText = true;
+        createOrUpdateText(headertext, titleui, titlelayout);
+    }
 }
 
 void UISystem::updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
-    createScrollbarObjects(entity, scrollbar);
-
-    UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
-
     if (scrollbar.barSize > 1){
         scrollbar.barSize = 1;
         if (scrollbar.step != 0){
@@ -569,6 +605,12 @@ void UISystem::updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, Ima
         scrollbar.step = 0;
         scrollbar.onChange.call(scrollbar.step);
     }
+
+    if (scrollbar.bar == NULL_ENTITY || !scene->findComponent<UILayoutComponent>(scrollbar.bar)){
+        return;
+    }
+
+    UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
 
     float innerHeight = std::max(0.0f, (float)layout.height - scrollbar.barMarginTop - scrollbar.barMarginBottom);
     float innerWidth = std::max(0.0f, (float)layout.width - scrollbar.barMarginLeft - scrollbar.barMarginRight);
@@ -625,15 +667,17 @@ void UISystem::updateScrollbar(Entity entity, ScrollbarComponent& scrollbar, Ima
 }
 
 void UISystem::updateProgressbar(Entity entity, ProgressbarComponent& progressbar, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
-    createProgressbarObjects(entity, progressbar);
-
-    UILayoutComponent& filllayout = scene->getComponent<UILayoutComponent>(progressbar.fill);
-
     if (progressbar.value > 1){
         progressbar.value = 1;
     }else if (progressbar.value < 0){
         progressbar.value = 0;
     }
+
+    if (progressbar.fill == NULL_ENTITY || !scene->findComponent<UILayoutComponent>(progressbar.fill)){
+        return;
+    }
+
+    UILayoutComponent& filllayout = scene->getComponent<UILayoutComponent>(progressbar.fill);
 
     if (progressbar.type == ProgressbarType::HORIZONTAL){
         filllayout.anchorPointLeft = 0;
@@ -724,13 +768,17 @@ void UISystem::textEditDeleteSelection(TextEditComponent& textedit, TextComponen
     textedit.selectionAnchor = textedit.cursorIndex;
 }
 
-void UISystem::textEditResetBlink(TextEditComponent& textedit, Transform& cursortransform) const{
+void UISystem::textEditResetBlink(TextEditComponent& textedit) const{
     textedit.cursorBlinkTimer = 0;
-    cursortransform.visible = true;
+    if (Transform* cursortransform = scene->findComponent<Transform>(textedit.cursor)){
+        cursortransform->visible = true;
+    }
 }
 
 void UISystem::updateTextEdit(Entity entity, TextEditComponent& textedit, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
-    createTextEditObjects(entity, textedit);
+    if (textedit.text == NULL_ENTITY || !scene->findComponent<TextComponent>(textedit.text)){
+        return;
+    }
 
     Transform& texttransform = scene->getComponent<Transform>(textedit.text);
     UILayoutComponent& textlayout = scene->getComponent<UILayoutComponent>(textedit.text);
@@ -789,63 +837,71 @@ void UISystem::updateTextEdit(Entity entity, TextEditComponent& textedit, ImageC
         texttransform.needUpdate = true;
     }
 
-    Transform& selectiontransform = scene->getComponent<Transform>(textedit.selection);
-    UILayoutComponent& selectionlayout = scene->getComponent<UILayoutComponent>(textedit.selection);
-    UIComponent& selectionui = scene->getComponent<UIComponent>(textedit.selection);
-    PolygonComponent& selection = scene->getComponent<PolygonComponent>(textedit.selection);
+    if (textedit.selection != NULL_ENTITY && scene->findComponent<PolygonComponent>(textedit.selection)){
+        Transform& selectiontransform = scene->getComponent<Transform>(textedit.selection);
+        UILayoutComponent& selectionlayout = scene->getComponent<UILayoutComponent>(textedit.selection);
+        UIComponent& selectionui = scene->getComponent<UIComponent>(textedit.selection);
+        PolygonComponent& selection = scene->getComponent<PolygonComponent>(textedit.selection);
 
-    bool hasSelection = ui.focused && !textedit.disabled && textEditHasSelection(textedit) && !showingPlaceholder;
-    selectiontransform.visible = hasSelection;
+        bool hasSelection = ui.focused && !textedit.disabled && textEditHasSelection(textedit) && !showingPlaceholder;
+        selectiontransform.visible = hasSelection;
 
-    if (hasSelection){
-        createOrUpdatePolygon(selection, selectionui, selectionlayout);
+        if (hasSelection){
+            createOrUpdatePolygon(selection, selectionui, selectionlayout);
 
-        float selectionLeft = textEditCursorPixelX(text, textEditSelectionStart(textedit), static_cast<float>(textlayout.width));
-        float selectionRight = textEditCursorPixelX(text, textEditSelectionEnd(textedit), static_cast<float>(textlayout.width));
-        float selectionHeight = static_cast<float>(textlayout.height);
+            float selectionLeft = textEditCursorPixelX(text, textEditSelectionStart(textedit), static_cast<float>(textlayout.width));
+            float selectionRight = textEditCursorPixelX(text, textEditSelectionEnd(textedit), static_cast<float>(textlayout.width));
+            float selectionHeight = static_cast<float>(textlayout.height);
 
-        selection.points.clear();
-        selection.points.push_back({Vector3(0, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
-        selection.points.push_back({Vector3(selectionRight - selectionLeft, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
-        selection.points.push_back({Vector3(0, selectionHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
-        selection.points.push_back({Vector3(selectionRight - selectionLeft, selectionHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            selection.points.clear();
+            selection.points.push_back({Vector3(0, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            selection.points.push_back({Vector3(selectionRight - selectionLeft, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            selection.points.push_back({Vector3(0, selectionHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            selection.points.push_back({Vector3(selectionRight - selectionLeft, selectionHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
 
-        selectionui.color = textedit.selectionColor;
-        selectiontransform.position = Vector3(textX + selectionLeft, textY, 0.0);
-        selectiontransform.needUpdate = true;
-        selection.needUpdatePolygon = true;
+            selectionui.color = textedit.selectionColor;
+            selectiontransform.position = Vector3(textX + selectionLeft, textY, 0.0);
+            selectiontransform.needUpdate = true;
+            selection.needUpdatePolygon = true;
+        }
     }
 
-    Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
-    UILayoutComponent& cursorlayout = scene->getComponent<UILayoutComponent>(textedit.cursor);
-    UIComponent& cursorui = scene->getComponent<UIComponent>(textedit.cursor);
-    PolygonComponent& cursor = scene->getComponent<PolygonComponent>(textedit.cursor);
+    if (textedit.cursor != NULL_ENTITY && scene->findComponent<PolygonComponent>(textedit.cursor)){
+        Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
+        UILayoutComponent& cursorlayout = scene->getComponent<UILayoutComponent>(textedit.cursor);
+        UIComponent& cursorui = scene->getComponent<UIComponent>(textedit.cursor);
+        PolygonComponent& cursor = scene->getComponent<PolygonComponent>(textedit.cursor);
 
-    bool showCursor = ui.focused && !textedit.disabled && !showingPlaceholder;
-    cursortransform.visible = showCursor;
+        bool showCursor = ui.focused && !textedit.disabled && !showingPlaceholder;
+        cursortransform.visible = showCursor;
 
-    if (showCursor){
-        createOrUpdatePolygon(cursor, cursorui, cursorlayout);
+        if (showCursor){
+            createOrUpdatePolygon(cursor, cursorui, cursorlayout);
 
-        float cursorHeight = static_cast<float>(textlayout.height);
+            float cursorHeight = static_cast<float>(textlayout.height);
 
-        cursor.points.clear();
-        cursor.points.push_back({Vector3(0, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
-        cursor.points.push_back({Vector3(textedit.cursorWidth, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
-        cursor.points.push_back({Vector3(0, cursorHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
-        cursor.points.push_back({Vector3(textedit.cursorWidth, cursorHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            cursor.points.clear();
+            cursor.points.push_back({Vector3(0, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            cursor.points.push_back({Vector3(textedit.cursorWidth, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            cursor.points.push_back({Vector3(0, cursorHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+            cursor.points.push_back({Vector3(textedit.cursorWidth, cursorHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
 
-        float cursorX = textX + cursorPixelX;
-        float cursorY = static_cast<float>(img.patchMarginTop) + (heightArea / 2.0f) - (cursorHeight / 2.0f);
+            float cursorX = textX + cursorPixelX;
+            float cursorY = static_cast<float>(img.patchMarginTop) + (heightArea / 2.0f) - (cursorHeight / 2.0f);
 
-        cursorui.color = textedit.cursorColor;
-        cursortransform.position = Vector3(cursorX, cursorY, 0.0);
-        cursortransform.needUpdate = true;
-        cursor.needUpdatePolygon = true;
+            cursorui.color = textedit.cursorColor;
+            cursortransform.position = Vector3(cursorX, cursorY, 0.0);
+            cursortransform.needUpdate = true;
+            cursor.needUpdatePolygon = true;
+        }
     }
 }
 
 void UISystem::blinkCursorTextEdit(double dt, TextEditComponent& textedit, UIComponent& ui){
+    if (textedit.cursor == NULL_ENTITY || !scene->findComponent<Transform>(textedit.cursor)){
+        return;
+    }
+
     textedit.cursorBlinkTimer += dt;
 
     Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
@@ -866,7 +922,7 @@ void UISystem::setTextEditCursorFromLocalX(TextEditComponent& textedit, TextComp
     if (!extendSelection){
         textedit.selectionAnchor = textedit.cursorIndex;
     }
-    textEditResetBlink(textedit, scene->getComponent<Transform>(textedit.cursor));
+    textEditResetBlink(textedit);
     textedit.needUpdateTextEdit = true;
 }
 
@@ -874,8 +930,6 @@ bool UISystem::handleTextEditCharInput(TextEditComponent& textedit, TextComponen
     if (textedit.disabled){
         return false;
     }
-
-    Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
 
     if (codepoint == '\e'){
         ui.focused = false;
@@ -923,7 +977,7 @@ bool UISystem::handleTextEditCharInput(TextEditComponent& textedit, TextComponen
     }
 
     text.needUpdateText = true;
-    textEditResetBlink(textedit, cursortransform);
+    textEditResetBlink(textedit);
     textedit.needUpdateTextEdit = true;
     textedit.onChange.call();
     return true;
@@ -934,7 +988,6 @@ bool UISystem::handleTextEditKeyDown(TextEditComponent& textedit, TextComponent&
         return false;
     }
 
-    Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
     bool shift = (mods & S_MODIFIER_SHIFT) != 0;
     bool control = (mods & S_MODIFIER_CONTROL) != 0;
     size_t numCodepoints = StringUtils::countCodepoints(text.text);
@@ -943,7 +996,7 @@ bool UISystem::handleTextEditKeyDown(TextEditComponent& textedit, TextComponent&
     if (control && key == S_KEY_A){
         textedit.selectionAnchor = 0;
         textedit.cursorIndex = static_cast<int>(numCodepoints);
-        textEditResetBlink(textedit, cursortransform);
+        textEditResetBlink(textedit);
         textedit.needUpdateTextEdit = true;
         return true;
     }
@@ -953,7 +1006,7 @@ bool UISystem::handleTextEditKeyDown(TextEditComponent& textedit, TextComponent&
         if (!shift){
             textedit.selectionAnchor = textedit.cursorIndex;
         }
-        textEditResetBlink(textedit, cursortransform);
+        textEditResetBlink(textedit);
         textedit.needUpdateTextEdit = true;
         changed = true;
     };
@@ -2207,8 +2260,8 @@ bool UISystem::eventOnCharInput(wchar_t codepoint){
             UIComponent& ui = scene->getComponent<UIComponent>(entity);
 
             if (ui.focused){
-                TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
-                if (handleTextEditCharInput(textedit, text, ui, codepoint)){
+                TextComponent* text = scene->findComponent<TextComponent>(textedit.text);
+                if (text && handleTextEditCharInput(textedit, *text, ui, codepoint)){
                     return true;
                 }
             }
@@ -2228,8 +2281,8 @@ bool UISystem::eventOnKeyDown(int key, bool repeat, int mods){
             UIComponent& ui = scene->getComponent<UIComponent>(entity);
 
             if (ui.focused){
-                TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
-                if (handleTextEditKeyDown(textedit, text, ui, key, repeat, mods)){
+                TextComponent* text = scene->findComponent<TextComponent>(textedit.text);
+                if (text && handleTextEditKeyDown(textedit, *text, ui, key, repeat, mods)){
                     return true;
                 }
             }
@@ -2309,25 +2362,27 @@ bool UISystem::eventOnPointerDown(float x, float y){
             if (signature.test(scene->getComponentId<TextEditComponent>())){
                 TextEditComponent& textedit = scene->getComponent<TextEditComponent>(lastUIFromPointer);
                 if (!textedit.disabled){
-                    TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
-                    ImageComponent& img = scene->getComponent<ImageComponent>(lastUIFromPointer);
-                    float localX = x - transform.worldPosition.x;
-                    bool extendSelection = (Input::getModifiers() & S_MODIFIER_SHIFT) != 0;
-                    if (text.text.empty()){
-                        textedit.cursorIndex = 0;
-                        if (!extendSelection){
-                            textedit.selectionAnchor = 0;
+                    TextComponent* text = scene->findComponent<TextComponent>(textedit.text);
+                    if (text){
+                        ImageComponent& img = scene->getComponent<ImageComponent>(lastUIFromPointer);
+                        float localX = x - transform.worldPosition.x;
+                        bool extendSelection = (Input::getModifiers() & S_MODIFIER_SHIFT) != 0;
+                        if (text->text.empty()){
+                            textedit.cursorIndex = 0;
+                            if (!extendSelection){
+                                textedit.selectionAnchor = 0;
+                            }
+                            textEditResetBlink(textedit);
+                            textedit.needUpdateTextEdit = true;
+                        }else{
+                            setTextEditCursorFromLocalX(textedit, *text, img, localX, extendSelection);
                         }
-                        textEditResetBlink(textedit, scene->getComponent<Transform>(textedit.cursor));
-                        textedit.needUpdateTextEdit = true;
-                    }else{
-                        setTextEditCursorFromLocalX(textedit, text, img, localX, extendSelection);
-                    }
-                    textEditSelecting = lastUIFromPointer;
+                        textEditSelecting = lastUIFromPointer;
 
-                    bool hadInvalid = false;
-                    std::wstring wideText = StringUtils::utf8ToWString(text.text, hadInvalid);
-                    System::instance().showVirtualKeyboard(wideText);
+                        bool hadInvalid = false;
+                        std::wstring wideText = StringUtils::utf8ToWString(text->text, hadInvalid);
+                        System::instance().showVirtualKeyboard(wideText);
+                    }
                 }
             }else{
                 System::instance().hideVirtualKeyboard();
@@ -2335,24 +2390,30 @@ bool UISystem::eventOnPointerDown(float x, float y){
 
             if (signature.test(scene->getComponentId<ScrollbarComponent>())){
                 ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(lastUIFromPointer);
-                Transform& bartransform = scene->getComponent<Transform>(scrollbar.bar);
-                UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
+                if (scrollbar.bar != NULL_ENTITY &&
+                    scene->findComponent<Transform>(scrollbar.bar) &&
+                    scene->findComponent<UILayoutComponent>(scrollbar.bar)){
+                    Transform& bartransform = scene->getComponent<Transform>(scrollbar.bar);
+                    UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
 
-                if (isCoordInside(x, y, bartransform, barlayout)){
-                    scrollbar.barPointerDown = true;
-                    pointerInternalGesture = true;
-                    if (scrollbar.type == ScrollbarType::VERTICAL){
-                        scrollbar.barPointerPos = y - transform.worldPosition.y - (bartransform.position.y * bartransform.worldScale.y);
-                    }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
-                        scrollbar.barPointerPos = x - transform.worldPosition.x - (bartransform.position.x * bartransform.worldScale.x);
+                    if (isCoordInside(x, y, bartransform, barlayout)){
+                        scrollbar.barPointerDown = true;
+                        pointerInternalGesture = true;
+                        if (scrollbar.type == ScrollbarType::VERTICAL){
+                            scrollbar.barPointerPos = y - transform.worldPosition.y - (bartransform.position.y * bartransform.worldScale.y);
+                        }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
+                            scrollbar.barPointerPos = x - transform.worldPosition.x - (bartransform.position.x * bartransform.worldScale.x);
+                        }
                     }
                 }
             }
 
             if (signature.test(scene->getComponentId<PanelComponent>())){
                 PanelComponent& panel = scene->getComponent<PanelComponent>(lastUIFromPointer);
-                Transform& headertransform = scene->getComponent<Transform>(panel.headercontainer);
-                UILayoutComponent& headerlayout = scene->getComponent<UILayoutComponent>(panel.headercontainer);
+                UILayoutComponent defaultHeaderLayout;
+                const UILayoutComponent& headerlayout = panel.headercontainer != NULL_ENTITY && scene->findComponent<UILayoutComponent>(panel.headercontainer)
+                    ? scene->getComponent<UILayoutComponent>(panel.headercontainer)
+                    : defaultHeaderLayout;
 
                 Rect edgeRight;
                 Rect edgeRightBottom;
@@ -2382,8 +2443,10 @@ bool UISystem::eventOnPointerDown(float x, float y){
                     }
                 }
 
-                if (panel.canMove){
-                    if (isCoordInside(x, y, headertransform, headerlayout)){
+                if (panel.canMove && panel.headercontainer != NULL_ENTITY){
+                    Transform* headertransform = scene->findComponent<Transform>(panel.headercontainer);
+                    UILayoutComponent* headerlayoutPtr = scene->findComponent<UILayoutComponent>(panel.headercontainer);
+                    if (headertransform && headerlayoutPtr && isCoordInside(x, y, *headertransform, *headerlayoutPtr)){
                         panel.headerPointerDown = true;
                         pointerInternalGesture = true;
                     }
@@ -2458,11 +2521,15 @@ bool UISystem::eventOnPointerUp(float x, float y){
 
             if (signature.test(scene->getComponentId<ScrollbarComponent>())){
                 ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
-                Transform& bartransform = scene->getComponent<Transform>(scrollbar.bar);
-                UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
+                if (scrollbar.bar != NULL_ENTITY &&
+                    scene->findComponent<Transform>(scrollbar.bar) &&
+                    scene->findComponent<UILayoutComponent>(scrollbar.bar)){
+                    Transform& bartransform = scene->getComponent<Transform>(scrollbar.bar);
+                    UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
 
-                if (isCoordInside(x, y, bartransform, barlayout)){
-                    scrollbar.barPointerDown = false;
+                    if (isCoordInside(x, y, bartransform, barlayout)){
+                        scrollbar.barPointerDown = false;
+                    }
                 }
             }
 
@@ -2558,7 +2625,10 @@ bool UISystem::eventOnPointerMove(float x, float y){
 
                             UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
                             Transform& transform = scene->getComponent<Transform>(entity);
-                            UILayoutComponent& headerlayout = scene->getComponent<UILayoutComponent>(panel.headercontainer);
+                            UILayoutComponent defaultHeaderLayout;
+                            const UILayoutComponent& headerlayout = panel.headercontainer != NULL_ENTITY && scene->findComponent<UILayoutComponent>(panel.headercontainer)
+                                ? scene->getComponent<UILayoutComponent>(panel.headercontainer)
+                                : defaultHeaderLayout;
 
                             Rect edgeRight;
                             Rect edgeRightBottom;
@@ -2644,75 +2714,81 @@ bool UISystem::eventOnPointerMove(float x, float y){
                     ui.onDragStart.call(localX, localY);
                 }
 
-            if (pointerDragging){
-                ui.onDrag.call(localX, localY);
-            }
+                if (pointerDragging){
+                    ui.onDrag.call(localX, localY);
+                }
 
-            if (textEditSelecting == lastUIFromPointer && signature.test(scene->getComponentId<TextEditComponent>())){
-                TextEditComponent& textedit = scene->getComponent<TextEditComponent>(lastUIFromPointer);
-                if (!textedit.disabled){
-                    TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
-                    ImageComponent& img = scene->getComponent<ImageComponent>(lastUIFromPointer);
-                    setTextEditCursorFromLocalX(textedit, text, img, localX, true);
+                if (textEditSelecting == lastUIFromPointer && signature.test(scene->getComponentId<TextEditComponent>())){
+                    TextEditComponent& textedit = scene->getComponent<TextEditComponent>(lastUIFromPointer);
+                    if (!textedit.disabled){
+                        TextComponent* text = scene->findComponent<TextComponent>(textedit.text);
+                        if (text){
+                            ImageComponent& img = scene->getComponent<ImageComponent>(lastUIFromPointer);
+                            setTextEditCursorFromLocalX(textedit, *text, img, localX, true);
+                        }
+                    }
                 }
             }
-        }
         }
 
         if (signature.test(scene->getComponentId<ScrollbarComponent>())){
             ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(lastUIFromPointer);
             Transform& transform = scene->getComponent<Transform>(lastUIFromPointer);
-            Transform& bartransform = scene->getComponent<Transform>(scrollbar.bar);
-            UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
+            if (scrollbar.bar != NULL_ENTITY &&
+                scene->findComponent<Transform>(scrollbar.bar) &&
+                scene->findComponent<UILayoutComponent>(scrollbar.bar)){
+                Transform& bartransform = scene->getComponent<Transform>(scrollbar.bar);
+                UILayoutComponent& barlayout = scene->getComponent<UILayoutComponent>(scrollbar.bar);
 
-            if (scrollbar.barPointerDown && scrollbar.barSize < 1.0){
-                float innerHeight = std::max(0.0f, (float)layout.height - scrollbar.barMarginTop - scrollbar.barMarginBottom);
-                float innerWidth = std::max(0.0f, (float)layout.width - scrollbar.barMarginLeft - scrollbar.barMarginRight);
+                if (scrollbar.barPointerDown && scrollbar.barSize < 1.0){
+                    float innerHeight = std::max(0.0f, (float)layout.height - scrollbar.barMarginTop - scrollbar.barMarginBottom);
+                    float innerWidth = std::max(0.0f, (float)layout.width - scrollbar.barMarginLeft - scrollbar.barMarginRight);
 
-                float trackStartNorm = 0;
-                float trackEndNorm = 1;
-                float halfBarParent = 0;
-                float pos = 0;
+                    float trackStartNorm = 0;
+                    float trackEndNorm = 1;
+                    float halfBarParent = 0;
+                    float pos = 0;
 
-                if (scrollbar.type == ScrollbarType::VERTICAL){
-                    float barSizePixel = innerHeight * scrollbar.barSize;
-                    float localY = (y - transform.worldPosition.y) / transform.worldScale.y;
-                    float posAlongInner = innerHeight > 0 ? (localY - scrollbar.barMarginTop + (barSizePixel / 2.0) - scrollbar.barPointerPos) / innerHeight : 0;
-                    trackStartNorm = layout.height > 0 ? scrollbar.barMarginTop / (float)layout.height : 0;
-                    trackEndNorm = layout.height > 0 ? 1.0f - scrollbar.barMarginBottom / (float)layout.height : 1;
-                    halfBarParent = layout.height > 0 ? (barSizePixel / 2.0f) / layout.height : 0;
-                    pos = trackStartNorm + posAlongInner * (trackEndNorm - trackStartNorm);
-                }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
-                    float barSizePixel = innerWidth * scrollbar.barSize;
-                    float localX = (x - transform.worldPosition.x) / transform.worldScale.x;
-                    float posAlongInner = innerWidth > 0 ? (localX - scrollbar.barMarginLeft + (barSizePixel / 2.0) - scrollbar.barPointerPos) / innerWidth : 0;
-                    trackStartNorm = layout.width > 0 ? scrollbar.barMarginLeft / (float)layout.width : 0;
-                    trackEndNorm = layout.width > 0 ? 1.0f - scrollbar.barMarginRight / (float)layout.width : 1;
-                    halfBarParent = layout.width > 0 ? (barSizePixel / 2.0f) / layout.width : 0;
-                    pos = trackStartNorm + posAlongInner * (trackEndNorm - trackStartNorm);
-                }
+                    if (scrollbar.type == ScrollbarType::VERTICAL){
+                        float barSizePixel = innerHeight * scrollbar.barSize;
+                        float localY = (y - transform.worldPosition.y) / transform.worldScale.y;
+                        float posAlongInner = innerHeight > 0 ? (localY - scrollbar.barMarginTop + (barSizePixel / 2.0) - scrollbar.barPointerPos) / innerHeight : 0;
+                        trackStartNorm = layout.height > 0 ? scrollbar.barMarginTop / (float)layout.height : 0;
+                        trackEndNorm = layout.height > 0 ? 1.0f - scrollbar.barMarginBottom / (float)layout.height : 1;
+                        halfBarParent = layout.height > 0 ? (barSizePixel / 2.0f) / layout.height : 0;
+                        pos = trackStartNorm + posAlongInner * (trackEndNorm - trackStartNorm);
+                    }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
+                        float barSizePixel = innerWidth * scrollbar.barSize;
+                        float localX = (x - transform.worldPosition.x) / transform.worldScale.x;
+                        float posAlongInner = innerWidth > 0 ? (localX - scrollbar.barMarginLeft + (barSizePixel / 2.0) - scrollbar.barPointerPos) / innerWidth : 0;
+                        trackStartNorm = layout.width > 0 ? scrollbar.barMarginLeft / (float)layout.width : 0;
+                        trackEndNorm = layout.width > 0 ? 1.0f - scrollbar.barMarginRight / (float)layout.width : 1;
+                        halfBarParent = layout.width > 0 ? (barSizePixel / 2.0f) / layout.width : 0;
+                        pos = trackStartNorm + posAlongInner * (trackEndNorm - trackStartNorm);
+                    }
 
-                float movableStart = trackStartNorm + halfBarParent;
-                float movableEnd = trackEndNorm - halfBarParent;
-                if (pos < movableStart){
-                    pos = movableStart;
-                }else if (pos > movableEnd){
-                    pos = movableEnd;
-                }
+                    float movableStart = trackStartNorm + halfBarParent;
+                    float movableEnd = trackEndNorm - halfBarParent;
+                    if (pos < movableStart){
+                        pos = movableStart;
+                    }else if (pos > movableEnd){
+                        pos = movableEnd;
+                    }
 
-                float newStep = movableEnd > movableStart ? (pos - movableStart) / (movableEnd - movableStart) : 0;
+                    float newStep = movableEnd > movableStart ? (pos - movableStart) / (movableEnd - movableStart) : 0;
 
-                if (newStep != scrollbar.step){
-                    scrollbar.step = newStep;
-                    scrollbar.onChange.call(scrollbar.step);
-                }
+                    if (newStep != scrollbar.step){
+                        scrollbar.step = newStep;
+                        scrollbar.onChange.call(scrollbar.step);
+                    }
 
-                if (scrollbar.type == ScrollbarType::VERTICAL){
-                    barlayout.anchorPointTop = pos;
-                    barlayout.anchorPointBottom = pos;
-                }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
-                    barlayout.anchorPointLeft = pos;
-                    barlayout.anchorPointRight = pos;
+                    if (scrollbar.type == ScrollbarType::VERTICAL){
+                        barlayout.anchorPointTop = pos;
+                        barlayout.anchorPointBottom = pos;
+                    }else if (scrollbar.type == ScrollbarType::HORIZONTAL){
+                        barlayout.anchorPointLeft = pos;
+                        barlayout.anchorPointRight = pos;
+                    }
                 }
             }
         }
@@ -2803,22 +2879,6 @@ bool UISystem::isCoordInside(float x, float y, Transform& transform, UILayoutCom
     return false;
 }
 
-
-void UISystem::onComponentAdded(Entity entity, ComponentId componentId) {
-    if (componentId == scene->getComponentId<PanelComponent>()) {
-        PanelComponent& panel = scene->getComponent<PanelComponent>(entity);
-        createPanelObjects(entity, panel);
-    } else if (componentId == scene->getComponentId<ScrollbarComponent>()) {
-        ScrollbarComponent& scrollbar = scene->getComponent<ScrollbarComponent>(entity);
-        createScrollbarObjects(entity, scrollbar);
-    } else if (componentId == scene->getComponentId<ProgressbarComponent>()) {
-        ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(entity);
-        createProgressbarObjects(entity, progressbar);
-    } else if (componentId == scene->getComponentId<TextEditComponent>()) {
-        TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
-        createTextEditObjects(entity, textedit);
-    }
-}
 
 void UISystem::onComponentRemoved(Entity entity, ComponentId componentId) {
     if (componentId == scene->getComponentId<UIComponent>() ||

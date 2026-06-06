@@ -4,7 +4,10 @@
 
 #include "Panel.h"
 
+#include "component/UIContainerComponent.h"
 #include "component/TextComponent.h"
+#include "component/ImageComponent.h"
+#include "component/UIComponent.h"
 #include "subsystem/UISystem.h"
 
 using namespace doriax;
@@ -19,25 +22,76 @@ Panel::Panel(Scene* scene, Entity entity): Image(scene, entity){
 Panel::~Panel(){
 }
 
-Image Panel::getHeaderImageObject() const{
+bool Panel::hasHeaderImage() const{
+    const PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (panelcomp.headerimage == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(panelcomp.headerimage);
+    return signature.test(scene->getComponentId<ImageComponent>());
+}
+
+bool Panel::hasHeaderText() const{
+    const PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (panelcomp.headertext == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(panelcomp.headertext);
+    return signature.test(scene->getComponentId<TextComponent>());
+}
+
+bool Panel::hasHeaderContainer() const{
+    const PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (panelcomp.headercontainer == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(panelcomp.headercontainer);
+    return signature.test(scene->getComponentId<UIContainerComponent>());
+}
+
+bool Panel::hasHeader() const{
+    return hasHeaderImage() && hasHeaderContainer() && hasHeaderText();
+}
+
+void Panel::ensureHeader(){
     PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (!hasHeaderImage() || !hasHeaderContainer() || !hasHeaderText()){
+        scene->getSystem<UISystem>()->createPanelObjects(getEntity(), panelcomp);
+    }
+}
+
+Image Panel::getHeaderImageObject() const{
+    const PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (!hasHeaderImage()){
+        return Image(scene, NULL_ENTITY);
+    }
 
     return Image(scene, panelcomp.headerimage);
 }
 
 Container Panel::getHeaderContainerObject() const{
-    PanelComponent& panelcomp = getComponent<PanelComponent>();
+    const PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (!hasHeaderContainer()){
+        return Container(scene, NULL_ENTITY);
+    }
 
     return Container(scene, panelcomp.headercontainer);
 }
 
 Text Panel::getHeaderTextObject() const{
-    PanelComponent& panelcomp = getComponent<PanelComponent>();
+    const PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (!hasHeaderText()){
+        return Text(scene, NULL_ENTITY);
+    }
 
     return Text(scene, panelcomp.headertext);
 }
 
 void Panel::setTitle(const std::string& text){
+    ensureHeader();
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(panelcomp.headertext);
 
@@ -48,6 +102,10 @@ void Panel::setTitle(const std::string& text){
 }
 
 std::string Panel::getTitle() const{
+    if (!hasHeaderText()){
+        return "";
+    }
+
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(panelcomp.headertext);
 
@@ -55,6 +113,7 @@ std::string Panel::getTitle() const{
 }
 
 void Panel::setTitleAnchorPreset(AnchorPreset titleAnchorPreset){
+    ensureHeader();
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     UILayoutComponent& titlelayout = scene->getComponent<UILayoutComponent>(panelcomp.headertext);
 
@@ -64,12 +123,18 @@ void Panel::setTitleAnchorPreset(AnchorPreset titleAnchorPreset){
 
 AnchorPreset Panel::getTitleAnchorPreset() const{
     PanelComponent& panelcomp = getComponent<PanelComponent>();
+
+    if (!hasHeaderText()){
+        return panelcomp.titleAnchorPreset;
+    }
+
     UILayoutComponent& titlelayout = scene->getComponent<UILayoutComponent>(panelcomp.headertext);
 
     return titlelayout.anchorPreset;
 }
 
 void Panel::setTitleColor(Vector4 color){
+    ensureHeader();
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     UIComponent& uititle = scene->getComponent<UIComponent>(panelcomp.headertext);
 
@@ -81,13 +146,18 @@ void Panel::setTitleColor(const float red, const float green, const float blue, 
 }
 
 Vector4 Panel::getTitleColor() const{
+    if (!hasHeaderText()){
+        return Vector4(0.0, 0.0, 0.0, 1.0);
+    }
+
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     UIComponent& uititle = scene->getComponent<UIComponent>(panelcomp.headertext);
 
-    return uititle.color;
+    return Color::linearTosRGB(uititle.color);
 }
 
 void Panel::setTitleFont(const std::string& font){
+    ensureHeader();
     PanelComponent& panelcomp = getComponent<PanelComponent>();
 
     getHeaderTextObject().setFont(font);
@@ -96,6 +166,10 @@ void Panel::setTitleFont(const std::string& font){
 }
 
 std::string Panel::getTitleFont() const{
+    if (!hasHeaderText()){
+        return "";
+    }
+
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     TextComponent& textcomp = scene->getComponent<TextComponent>(panelcomp.headertext);
 
@@ -103,6 +177,7 @@ std::string Panel::getTitleFont() const{
 }
 
 void Panel::setTitleFontSize(unsigned int fontSize){
+    ensureHeader();
     PanelComponent& panelcomp = getComponent<PanelComponent>();
 
     getHeaderTextObject().setFontSize(fontSize);
@@ -111,12 +186,15 @@ void Panel::setTitleFontSize(unsigned int fontSize){
 }
 
 unsigned int Panel::getTitleFontSize() const{
-    PanelComponent& panelcomp = getComponent<PanelComponent>();
+    if (!hasHeaderText()){
+        return 0;
+    }
 
     return getHeaderTextObject().getFontSize();
 }
 
 void Panel::setHeaderColor(Vector4 color){
+    ensureHeader();
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     UIComponent& uiheaderimage = scene->getComponent<UIComponent>(panelcomp.headerimage);
 
@@ -128,17 +206,23 @@ void Panel::setHeaderColor(const float red, const float green, const float blue,
 }
 
 Vector4 Panel::getHeaderColor() const{
+    if (!hasHeaderImage()){
+        return Vector4(0.0, 0.0, 0.0, 0.0);
+    }
+
     PanelComponent& panelcomp = getComponent<PanelComponent>();
     UIComponent& uiheaderimage = scene->getComponent<UIComponent>(panelcomp.headerimage);
 
-    return uiheaderimage.color;
+    return Color::linearTosRGB(uiheaderimage.color);
 }
 
 void Panel::setHeaderPatchMargin(int margin){
+    ensureHeader();
     getHeaderImageObject().setPatchMargin(margin);
 }
 
 void Panel::setHeaderTexture(const std::string& path){
+    ensureHeader();
     getHeaderImageObject().setTexture(path);
 }
 

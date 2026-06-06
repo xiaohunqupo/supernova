@@ -22,7 +22,12 @@ Button::~Button(){
 
 bool Button::hasLabel() const{
     const ButtonComponent& btcomp = getComponent<ButtonComponent>();
-    return btcomp.label != NULL_ENTITY && scene->findComponent<TextComponent>(btcomp.label) != nullptr;
+    if (btcomp.label == NULL_ENTITY){
+        return false;
+    }
+
+    Signature signature = scene->getSignature(btcomp.label);
+    return signature.test(scene->getComponentId<TextComponent>());
 }
 
 void Button::ensureLabel(){

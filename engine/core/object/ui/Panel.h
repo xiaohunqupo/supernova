@@ -11,11 +11,18 @@
 
 namespace doriax{
     class DORIAX_API Panel: public Image{
+    private:
+        void ensureHeader();
+        bool hasHeaderImage() const;
+        bool hasHeaderContainer() const;
+        bool hasHeaderText() const;
 
     public:
         Panel(Scene* scene);
         Panel(Scene* scene, Entity entity);
         virtual ~Panel();
+
+        bool hasHeader() const;
 
         Image getHeaderImageObject() const;
         Container getHeaderContainerObject() const;

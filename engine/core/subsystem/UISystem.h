@@ -84,7 +84,7 @@ namespace doriax{
         int textEditFindCursorIndexFromX(const TextComponent& text, float x) const;
         std::string textEditMaskText(const std::string& text, char maskChar) const;
         void textEditDeleteSelection(TextEditComponent& textedit, TextComponent& text);
-        void textEditResetBlink(TextEditComponent& textedit, Transform& cursortransform) const;
+        void textEditResetBlink(TextEditComponent& textedit) const;
 
         //UI Polygon
         void createUIPolygon(PolygonComponent& polygon, UIComponent& ui, UILayoutComponent& layout);
@@ -147,7 +147,6 @@ namespace doriax{
         void destroy() override;
         void update(double dt) override;
 
-        void onComponentAdded(Entity entity, ComponentId componentId) override;
         void onComponentRemoved(Entity entity, ComponentId componentId) override;
     };
 
