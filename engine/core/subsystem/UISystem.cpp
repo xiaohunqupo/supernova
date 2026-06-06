@@ -19,6 +19,7 @@ using namespace doriax;
 
 static constexpr float UI_DRAG_START_DISTANCE = 4.0f;
 static constexpr double UI_DOUBLE_CLICK_TIME = 0.3;
+
 UISystem::UISystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<UILayoutComponent>());
 
@@ -27,6 +28,7 @@ UISystem::UISystem(Scene* scene): SubSystem(scene){
     lastUIFromPointerHover = NULL_ENTITY;
     lastUIFromClick = NULL_ENTITY;
     lastPanelFromPointer = NULL_ENTITY;
+    textEditSelecting = NULL_ENTITY;
     lastPointerDownPos = Vector2(-1, -1);
     lastPointerPos = Vector2(-1, -1);
     pointerDragging = false;
@@ -416,6 +418,20 @@ void UISystem::createTextEditObjects(Entity entity, TextEditComponent& textedit)
         textlayout.ignoreEvents = true;
     }
 
+    if (textedit.selection == NULL_ENTITY){
+        textedit.selection = scene->createEntity();
+
+        scene->addComponent<Transform>(textedit.selection);
+        scene->addComponent<UILayoutComponent>(textedit.selection);
+        scene->addComponent<UIComponent>(textedit.selection);
+        scene->addComponent<PolygonComponent>(textedit.selection);
+
+        scene->addEntityChild(entity, textedit.selection, false);
+
+        UILayoutComponent& selectionlayout = scene->getComponent<UILayoutComponent>(textedit.selection);
+        selectionlayout.ignoreEvents = true;
+    }
+
     if (textedit.cursor == NULL_ENTITY){
         textedit.cursor = scene->createEntity();
 
@@ -642,17 +658,105 @@ void UISystem::updateProgressbar(Entity entity, ProgressbarComponent& progressba
     filllayout.usingAnchors = true;
 }
 
+bool UISystem::textEditHasSelection(const TextEditComponent& textedit) const{
+    return textedit.selectionAnchor != textedit.cursorIndex;
+}
+
+int UISystem::textEditSelectionStart(const TextEditComponent& textedit) const{
+    return std::min(textedit.selectionAnchor, textedit.cursorIndex);
+}
+
+int UISystem::textEditSelectionEnd(const TextEditComponent& textedit) const{
+    return std::max(textedit.selectionAnchor, textedit.cursorIndex);
+}
+
+void UISystem::textEditClampCursor(TextEditComponent& textedit, size_t numCodepoints) const{
+    int maxIndex = static_cast<int>(numCodepoints);
+    textedit.cursorIndex = std::clamp(textedit.cursorIndex, 0, maxIndex);
+    if (!textEditHasSelection(textedit)){
+        textedit.selectionAnchor = textedit.cursorIndex;
+    }else{
+        textedit.selectionAnchor = std::clamp(textedit.selectionAnchor, 0, maxIndex);
+    }
+}
+
+float UISystem::textEditCursorPixelX(const TextComponent& text, int cursorIndex, float textWidth) const{
+    size_t numChars = text.charPositions.size();
+    if (cursorIndex <= 0){
+        return 0;
+    }
+    if (cursorIndex >= static_cast<int>(numChars)){
+        return textWidth;
+    }
+    return text.charPositions[static_cast<size_t>(cursorIndex - 1)].x;
+}
+
+int UISystem::textEditFindCursorIndexFromX(const TextComponent& text, float x) const{
+    size_t numChars = text.charPositions.size();
+    if (numChars == 0 || x <= 0){
+        return 0;
+    }
+
+    for (size_t i = 0; i < numChars; i++){
+        float charStart = (i == 0) ? 0.0f : text.charPositions[i - 1].x;
+        float charEnd = text.charPositions[i].x;
+        if (x < (charStart + charEnd) * 0.5f){
+            return static_cast<int>(i);
+        }
+    }
+
+    return static_cast<int>(numChars);
+}
+
+std::string UISystem::textEditMaskText(const std::string& text, char maskChar) const{
+    return std::string(StringUtils::countCodepoints(text), maskChar);
+}
+
+void UISystem::textEditDeleteSelection(TextEditComponent& textedit, TextComponent& text){
+    if (!textEditHasSelection(textedit)){
+        return;
+    }
+
+    StringUtils::eraseCodepointsUtf8(text.text,
+        static_cast<size_t>(textEditSelectionStart(textedit)),
+        static_cast<size_t>(textEditSelectionEnd(textedit)));
+    textedit.cursorIndex = textEditSelectionStart(textedit);
+    textedit.selectionAnchor = textedit.cursorIndex;
+}
+
+void UISystem::textEditResetBlink(TextEditComponent& textedit, Transform& cursortransform) const{
+    textedit.cursorBlinkTimer = 0;
+    cursortransform.visible = true;
+}
+
 void UISystem::updateTextEdit(Entity entity, TextEditComponent& textedit, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
     createTextEditObjects(entity, textedit);
 
-    // Text
     Transform& texttransform = scene->getComponent<Transform>(textedit.text);
     UILayoutComponent& textlayout = scene->getComponent<UILayoutComponent>(textedit.text);
     UIComponent& textui = scene->getComponent<UIComponent>(textedit.text);
     TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
 
+    textEditClampCursor(textedit, StringUtils::countCodepoints(text.text));
+
+    std::string storedText = text.text;
+    Vector4 storedColor = textui.color;
+    bool showingPlaceholder = storedText.empty() && !textedit.placeholder.empty() && !ui.focused;
+    bool showingPassword = textedit.password && !storedText.empty();
+
+    if (showingPlaceholder){
+        text.text = textedit.placeholder;
+        textui.color = textedit.placeholderColor;
+    }else if (showingPassword){
+        text.text = textEditMaskText(storedText, textedit.passwordChar);
+    }
+
+    text.multiline = false;
     text.needUpdateText = true;
     createOrUpdateText(text, textui, textlayout);
+
+    text.text = storedText;
+    textui.color = storedColor;
 
     if (layout.height == 0){
         layout.height = textlayout.height + img.patchMarginTop + img.patchMarginBottom;
@@ -662,48 +766,83 @@ void UISystem::updateTextEdit(Entity entity, TextEditComponent& textedit, ImageC
     int heightArea = layout.height - img.patchMarginTop - img.patchMarginBottom;
     int widthArea = layout.width - img.patchMarginRight - img.patchMarginLeft - textedit.cursorWidth;
 
-    text.multiline = false;
-
-    int textXOffset = 0;
-    if (textlayout.width > widthArea){
-        textXOffset = textlayout.width - widthArea;
+    float cursorPixelX = textEditCursorPixelX(text, textedit.cursorIndex, static_cast<float>(textlayout.width));
+    if (cursorPixelX - textedit.scrollOffset > widthArea){
+        textedit.scrollOffset = cursorPixelX - widthArea;
+    }
+    if (cursorPixelX - textedit.scrollOffset < 0){
+        textedit.scrollOffset = cursorPixelX;
+    }
+    if (textlayout.width - textedit.scrollOffset < widthArea && textlayout.width > widthArea){
+        textedit.scrollOffset = textlayout.width - widthArea;
+    }
+    if (textedit.scrollOffset < 0){
+        textedit.scrollOffset = 0;
     }
 
-    float textX = static_cast<float>(img.patchMarginLeft) - textXOffset;
-    // descend is negative
-    float textY = static_cast<float>(img.patchMarginTop) + (heightArea / 2) - (textlayout.height / 2);
+    float textX = static_cast<float>(img.patchMarginLeft) - textedit.scrollOffset;
+    float textY = static_cast<float>(img.patchMarginTop) + (heightArea / 2.0f) - (textlayout.height / 2.0f);
 
     Vector3 textPosition = Vector3(textX, textY, 0);
-
     if (texttransform.position != textPosition){
         texttransform.position = textPosition;
         texttransform.needUpdate = true;
     }
 
-    // Cursor
+    Transform& selectiontransform = scene->getComponent<Transform>(textedit.selection);
+    UILayoutComponent& selectionlayout = scene->getComponent<UILayoutComponent>(textedit.selection);
+    UIComponent& selectionui = scene->getComponent<UIComponent>(textedit.selection);
+    PolygonComponent& selection = scene->getComponent<PolygonComponent>(textedit.selection);
+
+    bool hasSelection = ui.focused && !textedit.disabled && textEditHasSelection(textedit) && !showingPlaceholder;
+    selectiontransform.visible = hasSelection;
+
+    if (hasSelection){
+        createOrUpdatePolygon(selection, selectionui, selectionlayout);
+
+        float selectionLeft = textEditCursorPixelX(text, textEditSelectionStart(textedit), static_cast<float>(textlayout.width));
+        float selectionRight = textEditCursorPixelX(text, textEditSelectionEnd(textedit), static_cast<float>(textlayout.width));
+        float selectionHeight = static_cast<float>(textlayout.height);
+
+        selection.points.clear();
+        selection.points.push_back({Vector3(0, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+        selection.points.push_back({Vector3(selectionRight - selectionLeft, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+        selection.points.push_back({Vector3(0, selectionHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+        selection.points.push_back({Vector3(selectionRight - selectionLeft, selectionHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+
+        selectionui.color = textedit.selectionColor;
+        selectiontransform.position = Vector3(textX + selectionLeft, textY, 0.0);
+        selectiontransform.needUpdate = true;
+        selection.needUpdatePolygon = true;
+    }
+
     Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
     UILayoutComponent& cursorlayout = scene->getComponent<UILayoutComponent>(textedit.cursor);
     UIComponent& cursorui = scene->getComponent<UIComponent>(textedit.cursor);
     PolygonComponent& cursor = scene->getComponent<PolygonComponent>(textedit.cursor);
 
-    createOrUpdatePolygon(cursor, cursorui, cursorlayout);
+    bool showCursor = ui.focused && !textedit.disabled && !showingPlaceholder;
+    cursortransform.visible = showCursor;
 
-    float cursorHeight = textlayout.height;
+    if (showCursor){
+        createOrUpdatePolygon(cursor, cursorui, cursorlayout);
 
-    cursor.points.clear();
-    cursor.points.push_back({Vector3(0,  0, 0),                                 Vector4(1.0, 1.0, 1.0, 1.0)});
-    cursor.points.push_back({Vector3(textedit.cursorWidth, 0, 0),               Vector4(1.0, 1.0, 1.0, 1.0)});
-    cursor.points.push_back({Vector3(0,  cursorHeight, 0),                      Vector4(1.0, 1.0, 1.0, 1.0)});
-    cursor.points.push_back({Vector3(textedit.cursorWidth, cursorHeight, 0),    Vector4(1.0, 1.0, 1.0, 1.0)});
+        float cursorHeight = static_cast<float>(textlayout.height);
 
-    float cursorX = textX + textlayout.width;
-    float cursorY = img.patchMarginTop + ((float)heightArea / 2) - ((float)cursorHeight / 2);
+        cursor.points.clear();
+        cursor.points.push_back({Vector3(0, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+        cursor.points.push_back({Vector3(textedit.cursorWidth, 0, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+        cursor.points.push_back({Vector3(0, cursorHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
+        cursor.points.push_back({Vector3(textedit.cursorWidth, cursorHeight, 0), Vector4(1.0, 1.0, 1.0, 1.0)});
 
-    cursorui.color = textedit.cursorColor;
-    cursortransform.position = Vector3(cursorX, cursorY, 0.0);
-    cursortransform.needUpdate = true;
+        float cursorX = textX + cursorPixelX;
+        float cursorY = static_cast<float>(img.patchMarginTop) + (heightArea / 2.0f) - (cursorHeight / 2.0f);
 
-    cursor.needUpdatePolygon = true;
+        cursorui.color = textedit.cursorColor;
+        cursortransform.position = Vector3(cursorX, cursorY, 0.0);
+        cursortransform.needUpdate = true;
+        cursor.needUpdatePolygon = true;
+    }
 }
 
 void UISystem::blinkCursorTextEdit(double dt, TextEditComponent& textedit, UIComponent& ui){
@@ -711,7 +850,7 @@ void UISystem::blinkCursorTextEdit(double dt, TextEditComponent& textedit, UICom
 
     Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
 
-    if (ui.focused){
+    if (ui.focused && !textedit.disabled){
         if (textedit.cursorBlinkTimer > textedit.cursorBlink) {
             cursortransform.visible = !cursortransform.visible;
             textedit.cursorBlinkTimer = 0;
@@ -719,6 +858,135 @@ void UISystem::blinkCursorTextEdit(double dt, TextEditComponent& textedit, UICom
     }else{
         cursortransform.visible = false;
     }
+}
+
+void UISystem::setTextEditCursorFromLocalX(TextEditComponent& textedit, TextComponent& text, ImageComponent& img, float localX, bool extendSelection){
+    float clickTextX = localX - img.patchMarginLeft + textedit.scrollOffset;
+    textedit.cursorIndex = textEditFindCursorIndexFromX(text, clickTextX);
+    if (!extendSelection){
+        textedit.selectionAnchor = textedit.cursorIndex;
+    }
+    textEditResetBlink(textedit, scene->getComponent<Transform>(textedit.cursor));
+    textedit.needUpdateTextEdit = true;
+}
+
+bool UISystem::handleTextEditCharInput(TextEditComponent& textedit, TextComponent& text, UIComponent& ui, wchar_t codepoint){
+    if (textedit.disabled){
+        return false;
+    }
+
+    Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
+
+    if (codepoint == '\e'){
+        ui.focused = false;
+        ui.onLostFocus.call();
+        textedit.needUpdateTextEdit = true;
+        return true;
+    }
+
+    if (codepoint == '\r' || codepoint == '\n'){
+        textedit.onSubmit.call();
+        return true;
+    }
+
+    if (codepoint == '\b'){
+        if (textEditHasSelection(textedit)){
+            textEditDeleteSelection(textedit, text);
+        }else if (textedit.cursorIndex > 0){
+            StringUtils::eraseCodepointsUtf8(text.text,
+                static_cast<size_t>(textedit.cursorIndex - 1),
+                static_cast<size_t>(textedit.cursorIndex));
+            textedit.cursorIndex--;
+            textedit.selectionAnchor = textedit.cursorIndex;
+        }
+    }else if (codepoint >= 32 || codepoint == '\t'){
+        std::string insertText = StringUtils::toUTF8(codepoint);
+        size_t insertCount = StringUtils::countCodepoints(insertText);
+        size_t currentCount = StringUtils::countCodepoints(text.text);
+        size_t selectionSize = textEditHasSelection(textedit)
+            ? static_cast<size_t>(textEditSelectionEnd(textedit) - textEditSelectionStart(textedit))
+            : 0;
+
+        if (text.maxTextSize > 0 && currentCount - selectionSize + insertCount > text.maxTextSize){
+            return true;
+        }
+
+        if (textEditHasSelection(textedit)){
+            textEditDeleteSelection(textedit, text);
+        }
+
+        StringUtils::insertUtf8AtCodepoint(text.text, static_cast<size_t>(textedit.cursorIndex), insertText);
+        textedit.cursorIndex += static_cast<int>(insertCount);
+        textedit.selectionAnchor = textedit.cursorIndex;
+    }else{
+        return false;
+    }
+
+    text.needUpdateText = true;
+    textEditResetBlink(textedit, cursortransform);
+    textedit.needUpdateTextEdit = true;
+    textedit.onChange.call();
+    return true;
+}
+
+bool UISystem::handleTextEditKeyDown(TextEditComponent& textedit, TextComponent& text, UIComponent& ui, int key, bool repeat, int mods){
+    if (textedit.disabled || repeat){
+        return false;
+    }
+
+    Transform& cursortransform = scene->getComponent<Transform>(textedit.cursor);
+    bool shift = (mods & S_MODIFIER_SHIFT) != 0;
+    bool control = (mods & S_MODIFIER_CONTROL) != 0;
+    size_t numCodepoints = StringUtils::countCodepoints(text.text);
+    bool changed = false;
+
+    if (control && key == S_KEY_A){
+        textedit.selectionAnchor = 0;
+        textedit.cursorIndex = static_cast<int>(numCodepoints);
+        textEditResetBlink(textedit, cursortransform);
+        textedit.needUpdateTextEdit = true;
+        return true;
+    }
+
+    auto moveCursor = [&](int newIndex){
+        textedit.cursorIndex = std::clamp(newIndex, 0, static_cast<int>(numCodepoints));
+        if (!shift){
+            textedit.selectionAnchor = textedit.cursorIndex;
+        }
+        textEditResetBlink(textedit, cursortransform);
+        textedit.needUpdateTextEdit = true;
+        changed = true;
+    };
+
+    if (key == S_KEY_LEFT){
+        moveCursor(textedit.cursorIndex - 1);
+    }else if (key == S_KEY_RIGHT){
+        moveCursor(textedit.cursorIndex + 1);
+    }else if (key == S_KEY_HOME){
+        moveCursor(0);
+    }else if (key == S_KEY_END){
+        moveCursor(static_cast<int>(numCodepoints));
+    }else if (key == S_KEY_DELETE){
+        if (textEditHasSelection(textedit)){
+            textEditDeleteSelection(textedit, text);
+            changed = true;
+        }else if (textedit.cursorIndex < static_cast<int>(numCodepoints)){
+            StringUtils::eraseCodepointsUtf8(text.text,
+                static_cast<size_t>(textedit.cursorIndex),
+                static_cast<size_t>(textedit.cursorIndex + 1));
+            changed = true;
+        }
+    }else{
+        return false;
+    }
+
+    if (changed){
+        text.needUpdateText = true;
+        textedit.onChange.call();
+        return true;
+    }
+
+    return changed;
 }
 
 void UISystem::createUIPolygon(PolygonComponent& polygon, UIComponent& ui, UILayoutComponent& layout){
@@ -1932,8 +2200,6 @@ void UISystem::resetButtonStates() {
 bool UISystem::eventOnCharInput(wchar_t codepoint){
     auto layouts = scene->getComponentArray<UILayoutComponent>();
     for (int i = 0; i < layouts->size(); i++){
-        UILayoutComponent& layout = layouts->getComponentFromIndex(i);
-
         Entity entity = layouts->getEntity(i);
         Signature signature = scene->getSignature(entity);
         if (signature.test(scene->getComponentId<TextEditComponent>()) && signature.test(scene->getComponentId<UIComponent>())){
@@ -1942,18 +2208,30 @@ bool UISystem::eventOnCharInput(wchar_t codepoint){
 
             if (ui.focused){
                 TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
-                if (codepoint == '\b'){
-                    if (text.text.length() > 0){
-                        StringUtils::eraseLastCodepointUtf8(text.text);
-                    }
-                }else{
-                    text.text = text.text + StringUtils::toUTF8(codepoint);
+                if (handleTextEditCharInput(textedit, text, ui, codepoint)){
+                    return true;
                 }
-                text.needUpdateText = true;
+            }
+        }
+    }
 
-                textedit.needUpdateTextEdit = true;
+    return false;
+}
 
-                return true;
+bool UISystem::eventOnKeyDown(int key, bool repeat, int mods){
+    auto layouts = scene->getComponentArray<UILayoutComponent>();
+    for (int i = 0; i < layouts->size(); i++){
+        Entity entity = layouts->getEntity(i);
+        Signature signature = scene->getSignature(entity);
+        if (signature.test(scene->getComponentId<TextEditComponent>()) && signature.test(scene->getComponentId<UIComponent>())){
+            TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
+            UIComponent& ui = scene->getComponent<UIComponent>(entity);
+
+            if (ui.focused){
+                TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
+                if (handleTextEditKeyDown(textedit, text, ui, key, repeat, mods)){
+                    return true;
+                }
             }
         }
     }
@@ -2030,11 +2308,27 @@ bool UISystem::eventOnPointerDown(float x, float y){
 
             if (signature.test(scene->getComponentId<TextEditComponent>())){
                 TextEditComponent& textedit = scene->getComponent<TextEditComponent>(lastUIFromPointer);
-                TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
+                if (!textedit.disabled){
+                    TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
+                    ImageComponent& img = scene->getComponent<ImageComponent>(lastUIFromPointer);
+                    float localX = x - transform.worldPosition.x;
+                    bool extendSelection = (Input::getModifiers() & S_MODIFIER_SHIFT) != 0;
+                    if (text.text.empty()){
+                        textedit.cursorIndex = 0;
+                        if (!extendSelection){
+                            textedit.selectionAnchor = 0;
+                        }
+                        textEditResetBlink(textedit, scene->getComponent<Transform>(textedit.cursor));
+                        textedit.needUpdateTextEdit = true;
+                    }else{
+                        setTextEditCursorFromLocalX(textedit, text, img, localX, extendSelection);
+                    }
+                    textEditSelecting = lastUIFromPointer;
 
-                bool hadInvalid = false;
-                std::wstring wideText = StringUtils::utf8ToWString(text.text, hadInvalid);
-                System::instance().showVirtualKeyboard(wideText);
+                    bool hadInvalid = false;
+                    std::wstring wideText = StringUtils::utf8ToWString(text.text, hadInvalid);
+                    System::instance().showVirtualKeyboard(wideText);
+                }
             }else{
                 System::instance().hideVirtualKeyboard();
             }
@@ -2101,6 +2395,11 @@ bool UISystem::eventOnPointerDown(float x, float y){
             if (!ui.focused){
                 ui.focused = true;
                 ui.onGetFocus.call();
+            }
+
+            if (signature.test(scene->getComponentId<TextEditComponent>())){
+                TextEditComponent& focusedTextEdit = scene->getComponent<TextEditComponent>(lastUIFromPointer);
+                focusedTextEdit.needUpdateTextEdit = true;
             }
         }
     }else{
@@ -2213,6 +2512,7 @@ bool UISystem::eventOnPointerUp(float x, float y){
     lastPanelFromPointer = NULL_ENTITY;
     pointerDragging = false;
     pointerInternalGesture = false;
+    textEditSelecting = NULL_ENTITY;
 
     if (lastUIFromPointer != NULL_ENTITY){
         lastUIFromPointer = NULL_ENTITY;
@@ -2344,10 +2644,19 @@ bool UISystem::eventOnPointerMove(float x, float y){
                     ui.onDragStart.call(localX, localY);
                 }
 
-                if (pointerDragging){
-                    ui.onDrag.call(localX, localY);
+            if (pointerDragging){
+                ui.onDrag.call(localX, localY);
+            }
+
+            if (textEditSelecting == lastUIFromPointer && signature.test(scene->getComponentId<TextEditComponent>())){
+                TextEditComponent& textedit = scene->getComponent<TextEditComponent>(lastUIFromPointer);
+                if (!textedit.disabled){
+                    TextComponent& text = scene->getComponent<TextComponent>(textedit.text);
+                    ImageComponent& img = scene->getComponent<ImageComponent>(lastUIFromPointer);
+                    setTextEditCursorFromLocalX(textedit, text, img, localX, true);
                 }
             }
+        }
         }
 
         if (signature.test(scene->getComponentId<ScrollbarComponent>())){
@@ -2582,6 +2891,12 @@ void UISystem::onComponentRemoved(Entity entity, ComponentId componentId) {
                 scene->destroyEntity(textedit.text);
             }
             textedit.text = NULL_ENTITY;
+        }
+        if (textedit.selection != NULL_ENTITY){
+            if (isEntityChild(textedit.selection, entity)){
+                scene->destroyEntity(textedit.selection);
+            }
+            textedit.selection = NULL_ENTITY;
         }
         if (textedit.cursor != NULL_ENTITY){
             if (isEntityChild(textedit.cursor, entity)){

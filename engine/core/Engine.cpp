@@ -1107,6 +1107,11 @@ void Engine::systemKeyDown(int key, bool repeat, int mods){
     if (mods != 0)
         Input::setModifiers(mods);
     Engine::onKeyDown.call(key, repeat, mods);
+
+    for (int i = 0; i < scenes.size(); i++){
+        if (scenes[i]->canReceiveUIEvents())
+            scenes[i]->getSystem<UISystem>()->eventOnKeyDown(key, repeat, mods);
+    }
     //-----------------
 }
 

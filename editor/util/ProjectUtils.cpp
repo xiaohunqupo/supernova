@@ -30,6 +30,7 @@
 #include "component/ProgressbarComponent.h"
 #include "component/PolygonComponent.h"
 #include "component/Body2DComponent.h"
+#include "subsystem/UISystem.h"
 #include "component/Body3DComponent.h"
 #include "component/Joint2DComponent.h"
 #include "component/Joint3DComponent.h"
@@ -169,6 +170,13 @@ Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
     if (parentSignature.test(scene->getComponentId<ProgressbarComponent>())){
         ProgressbarComponent& progressbar = scene->getComponent<ProgressbarComponent>(parent);
         if (progressbar.fill == entity){
+            return parent;
+        }
+    }
+
+    if (parentSignature.test(scene->getComponentId<TextEditComponent>())){
+        TextEditComponent& textedit = scene->getComponent<TextEditComponent>(parent);
+        if (textedit.text == entity || textedit.selection == entity || textedit.cursor == entity){
             return parent;
         }
     }
@@ -585,8 +593,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<PolygonComponent>(entity, {});
             }else{
-                registry->addComponent<PolygonComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<PolygonComponent>(entity, Stream::decodePolygonComponent(componentNode));
             }
             break;
         case ComponentType::PositionActionComponent:
@@ -684,8 +691,7 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<TextEditComponent>(entity, {});
             }else{
-                registry->addComponent<TextEditComponent>(entity, {});
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                registry->addComponent<TextEditComponent>(entity, Stream::decodeTextEditComponent(componentNode));
             }
             break;
         case ComponentType::TilemapComponent:
@@ -962,7 +968,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::PolygonComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodePolygonComponent(registry->getComponent<PolygonComponent>(entity));
             }
             registry->removeComponent<PolygonComponent>(entity);
             break;
@@ -1046,7 +1052,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             break;
         case ComponentType::TextEditComponent:
             if (encodeComponent){
-                Out::error("Missing component serialization of %s", Catalog::getComponentName(componentType).c_str());
+                oldComponent = Stream::encodeTextEditComponent(registry->getComponent<TextEditComponent>(entity));
             }
             registry->removeComponent<TextEditComponent>(entity);
             break;

@@ -202,6 +202,22 @@ namespace {
         makeFastProperty<ProgressbarComponent, int, &ProgressbarComponent::fillMarginBottom>("fillMarginBottom", PropertyType::Int, UpdateFlags_None),
     };
 
+    static const FastPropertyDescriptor kTextEditProperties[] = {
+        makeFastProperty<TextEditComponent, Entity, &TextEditComponent::text>("text", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, Entity, &TextEditComponent::selection>("selection", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, Entity, &TextEditComponent::cursor>("cursor", PropertyType::Entity, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, float, &TextEditComponent::cursorBlink>("cursorBlink", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, float, &TextEditComponent::cursorWidth>("cursorWidth", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, Vector4, &TextEditComponent::cursorColor>("cursorColor", PropertyType::Vector4, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, Vector4, &TextEditComponent::selectionColor>("selectionColor", PropertyType::Vector4, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, Vector4, &TextEditComponent::placeholderColor>("placeholderColor", PropertyType::Vector4, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, std::string, &TextEditComponent::placeholder>("placeholder", PropertyType::String, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, int, &TextEditComponent::cursorIndex>("cursorIndex", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, int, &TextEditComponent::selectionAnchor>("selectionAnchor", PropertyType::Int, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, bool, &TextEditComponent::disabled>("disabled", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<TextEditComponent, bool, &TextEditComponent::password>("password", PropertyType::Bool, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kSpriteTopProperties[] = {
         makeFastPropertyNoDefault<SpriteComponent, unsigned int, &SpriteComponent::width>("width", PropertyType::UInt, UpdateFlags_Sprite),
         makeFastPropertyNoDefault<SpriteComponent, unsigned int, &SpriteComponent::height>("height", PropertyType::UInt, UpdateFlags_Sprite),
@@ -948,6 +964,10 @@ namespace {
 
     PropertyData resolveProgressbarPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<ProgressbarComponent*>(comp), propertyName, kProgressbarProperties);
+    }
+
+    PropertyData resolveTextEditPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<TextEditComponent*>(comp), propertyName, kTextEditProperties);
     }
 
     PropertyData getSpritePropertyFast(SpriteComponent* comp, const std::string& propertyName) {
@@ -1871,6 +1891,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kProgressbarProperties);
     }
 
+    void enumerateTextEditProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kTextEditProperties);
+    }
+
     void enumerateSpriteProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
         SpriteComponent* comp = static_cast<SpriteComponent*>(compRef);
         SpriteComponent& def = getDefaultComponent<SpriteComponent>();
@@ -2465,6 +2489,58 @@ namespace {
         }
     }
 
+    PropertyData getPolygonPropertyFast(PolygonComponent* comp, const std::string& propertyName) {
+        PolygonComponent& def = getDefaultComponent<PolygonComponent>();
+        if (!comp) return PropertyData();
+
+        if (propertyName == "points") {
+            static std::vector<PolygonPoint> defPoints;
+            return {PropertyType::Custom, UpdateFlags_UI_Reload, (void*)&defPoints, (void*)&comp->points};
+        }
+
+        if (propertyName.compare(0, 7, "points[") == 0) {
+            size_t pos = 7;
+            size_t index = 0;
+            if (!parseIndex(propertyName, pos, index) || pos >= propertyName.size() || propertyName[pos] != ']') return PropertyData();
+            if (index >= comp->points.size()) return PropertyData();
+            if (pos + 1 >= propertyName.size()) return PropertyData();
+
+            std::string fieldName = propertyName.substr(pos + 1);
+            if (fieldName == ".position") {
+                static Vector3 defPosition = Vector3(0.0f, 0.0f, 0.0f);
+                return {PropertyType::Vector3, UpdateFlags_UI_Reload, (void*)&defPosition, (void*)&comp->points[index].position};
+            }
+            if (fieldName == ".color") {
+                static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+                return {PropertyType::Vector4, UpdateFlags_UI_Reload, (void*)&defColor, (void*)&comp->points[index].color};
+            }
+        }
+
+        return PropertyData();
+    }
+
+    PropertyData resolvePolygonPropertyFast(void* comp, const std::string& propertyName) {
+        return getPolygonPropertyFast(static_cast<PolygonComponent*>(comp), propertyName);
+    }
+
+    void enumeratePolygonProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
+        PolygonComponent* comp = static_cast<PolygonComponent*>(compRef);
+        PolygonComponent& def = getDefaultComponent<PolygonComponent>();
+
+        static std::vector<PolygonPoint> defPoints;
+        ps["points"] = {PropertyType::Custom, UpdateFlags_UI_Reload, (void*)&defPoints, comp ? (void*)&comp->points : nullptr};
+
+        if (comp) {
+            static Vector3 defPosition = Vector3(0.0f, 0.0f, 0.0f);
+            static Vector4 defColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            for (size_t i = 0; i < comp->points.size(); i++) {
+                std::string idx = std::to_string(i);
+                ps["points[" + idx + "].position"] = {PropertyType::Vector3, UpdateFlags_UI_Reload, (void*)&defPosition, (void*)&comp->points[i].position};
+                ps["points[" + idx + "].color"] = {PropertyType::Vector4, UpdateFlags_UI_Reload, (void*)&defColor, (void*)&comp->points[i].color};
+            }
+        }
+    }
+
     // ── Resolver dispatch table ──
 
     static const FastComponentResolver kFastComponentResolvers[] = {
@@ -2477,6 +2553,8 @@ namespace {
         {ComponentType::ButtonComponent, &findComponentPtr<ButtonComponent>, &resolveButtonPropertyFast, &enumerateButtonProperties},
         {ComponentType::ScrollbarComponent, &findComponentPtr<ScrollbarComponent>, &resolveScrollbarPropertyFast, &enumerateScrollbarProperties},
         {ComponentType::ProgressbarComponent, &findComponentPtr<ProgressbarComponent>, &resolveProgressbarPropertyFast, &enumerateProgressbarProperties},
+        {ComponentType::TextEditComponent, &findComponentPtr<TextEditComponent>, &resolveTextEditPropertyFast, &enumerateTextEditProperties},
+        {ComponentType::PolygonComponent, &findComponentPtr<PolygonComponent>, &resolvePolygonPropertyFast, &enumeratePolygonProperties},
         {ComponentType::SpriteComponent, &findComponentPtr<SpriteComponent>, &resolveSpritePropertyFast, &enumerateSpriteProperties},
         {ComponentType::TilemapComponent, &findComponentPtr<TilemapComponent>, &resolveTilemapPropertyFast, &enumerateTilemapProperties},
         {ComponentType::TerrainComponent, &findComponentPtr<TerrainComponent>, &resolveTerrainPropertyFast, &enumerateTerrainProperties},
@@ -3225,6 +3303,10 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int 
             if (updateFlags & UpdateFlags_UI_Texture)
                 ui->needUpdateTexture = true;
         }
+        if (PolygonComponent* polygon = registry->findComponent<PolygonComponent>(entity)){
+            if (updateFlags & UpdateFlags_UI_Reload)
+                polygon->needUpdatePolygon = true;
+        }
     }
     if (updateFlags & UpdateFlags_Image_Patches){
         if (ImageComponent* image = registry->findComponent<ImageComponent>(entity)){
@@ -3385,6 +3467,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
             break;
         }
 
+        case ComponentType::TextEditComponent: {
+            YAML::Node encoded = Stream::encodeTextEditComponent(sourceRegistry->getComponent<TextEditComponent>(sourceEntity));
+            targetRegistry->getComponent<TextEditComponent>(targetEntity) = Stream::decodeTextEditComponent(encoded);
+            break;
+        }
+
         case ComponentType::BundleComponent: {
             YAML::Node encoded = Stream::encodeBundleComponent(sourceRegistry->getComponent<BundleComponent>(sourceEntity));
             targetRegistry->getComponent<BundleComponent>(targetEntity) = Stream::decodeBundleComponent(encoded);
@@ -3442,6 +3530,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::LinesComponent: {
             YAML::Node encoded = Stream::encodeLinesComponent(sourceRegistry->getComponent<LinesComponent>(sourceEntity));
             targetRegistry->getComponent<LinesComponent>(targetEntity) = Stream::decodeLinesComponent(encoded);
+            break;
+        }
+
+        case ComponentType::PolygonComponent: {
+            YAML::Node encoded = Stream::encodePolygonComponent(sourceRegistry->getComponent<PolygonComponent>(sourceEntity));
+            targetRegistry->getComponent<PolygonComponent>(targetEntity) = Stream::decodePolygonComponent(encoded);
             break;
         }
 

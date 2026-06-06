@@ -110,6 +110,8 @@ namespace doriax::editor{
         std::map<std::string, bool> pointsButtonGroups;
         bool linesExpanded = false;
         std::map<std::string, bool> linesButtonGroups;
+        bool polygonExpanded = false;
+        std::map<std::string, bool> polygonButtonGroups;
 
         std::map<std::string, bool> textureCubeSingleMode;
 
@@ -265,6 +267,7 @@ namespace doriax::editor{
         void drawButtonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawScrollbarComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawProgressbarComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
+        void drawTextEditComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawTextComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawUILayoutComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawUIContainerComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
@@ -279,6 +282,7 @@ namespace doriax::editor{
         void drawSkyComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawParticlesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawLinesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
+        void drawPolygonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawPointsComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawInstancedMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawScriptComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

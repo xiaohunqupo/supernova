@@ -1,5 +1,6 @@
 #include "SceneWindow.h"
 
+#include "Engine.h"
 #include "Input.h"
 #include "external/IconsFontAwesome6.h"
 #include "Backend.h"
@@ -21,7 +22,6 @@
 
 #include "math/Vector2.h"
 #include "util/Angle.h"
-#include "yaml-cpp/yaml.h"
 #include <algorithm>
 #include <cmath>
 
@@ -527,6 +527,39 @@ void editor::SceneWindow::handleTileRectDragDrop(SceneProject* sceneProject) {
     }
 }
 
+void editor::SceneWindow::forwardPlayKeyboardInput(ImGuiIO& io, int mods){
+    for (int i = 0; i < io.InputQueueCharacters.Size; i++){
+        Engine::systemCharInput(static_cast<wchar_t>(io.InputQueueCharacters[i]));
+    }
+    io.InputQueueCharacters.resize(0);
+
+    auto forwardKeyPress = [&](ImGuiKey imguiKey, int engineKey, wchar_t charInput = 0, bool allowRepeat = true){
+        if (ImGui::IsKeyPressed(imguiKey, false)){
+            if (charInput != 0){
+                Engine::systemCharInput(charInput);
+            }
+            Engine::systemKeyDown(engineKey, false, mods);
+        }else if (allowRepeat && ImGui::IsKeyPressed(imguiKey, true)){
+            Engine::systemKeyDown(engineKey, true, mods);
+        }
+    };
+
+    forwardKeyPress(ImGuiKey_Tab, S_KEY_TAB, L'\t', false);
+    forwardKeyPress(ImGuiKey_Backspace, S_KEY_BACKSPACE, L'\b');
+    forwardKeyPress(ImGuiKey_Enter, S_KEY_ENTER, L'\r', false);
+    forwardKeyPress(ImGuiKey_KeypadEnter, S_KEY_ENTER, L'\r', false);
+    forwardKeyPress(ImGuiKey_Escape, S_KEY_ESCAPE, L'\e', false);
+    forwardKeyPress(ImGuiKey_LeftArrow, S_KEY_LEFT);
+    forwardKeyPress(ImGuiKey_RightArrow, S_KEY_RIGHT);
+    forwardKeyPress(ImGuiKey_Home, S_KEY_HOME, 0, false);
+    forwardKeyPress(ImGuiKey_End, S_KEY_END, 0, false);
+    forwardKeyPress(ImGuiKey_Delete, S_KEY_DELETE);
+
+    if ((mods & S_MODIFIER_CONTROL) != 0){
+        forwardKeyPress(ImGuiKey_A, S_KEY_A, 0, false);
+    }
+}
+
 void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
     if (sceneProject->playState == ScenePlayState::SAVING || sceneProject->playState == ScenePlayState::LOADING || sceneProject->playState == ScenePlayState::CANCELLING) {
         return;
@@ -569,6 +602,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 Engine::systemMouseUp(i, x, y, mods);
             }
         }
+
+        forwardPlayKeyboardInput(io, mods);
         return;
     }
 

@@ -836,6 +836,7 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .deriveClass<TextEdit, Image>("TextEdit")
         .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
         .addFunction("getTextObject", &TextEdit::getTextObject)
+        .addFunction("getSelectionObject", &TextEdit::getSelectionObject)
         .addProperty("disabled", &TextEdit::getDisabled, &TextEdit::setDisabled)
         .addProperty("text", &TextEdit::getText, &TextEdit::setText)
         .addProperty("textColor", &TextEdit::getTextColor, (void(TextEdit::*)(Vector4))&TextEdit::setTextColor)
@@ -845,12 +846,28 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("textFont", &TextEdit::getTextFont, &TextEdit::setTextFont)
         .addProperty("fontSize", &TextEdit::getFontSize, &TextEdit::setFontSize)
         .addProperty("maxTextSize", &TextEdit::getMaxTextSize, &TextEdit::setMaxTextSize)
+        .addProperty("placeholder", &TextEdit::getPlaceholder, &TextEdit::setPlaceholder)
+        .addProperty("placeholderColor", &TextEdit::getPlaceholderColor, (void(TextEdit::*)(Vector4))&TextEdit::setPlaceholderColor)
+        .addFunction("setPlaceholderColor",
+            luabridge::overload<const float, const float, const float>(&TextEdit::setPlaceholderColor),
+            luabridge::overload<const float, const float, const float, const float>(&TextEdit::setPlaceholderColor))
+        .addProperty("password", &TextEdit::getPassword, &TextEdit::setPassword)
+        .addProperty("passwordChar", &TextEdit::getPasswordChar, &TextEdit::setPasswordChar)
+        .addProperty("cursorIndex", &TextEdit::getCursorIndex, &TextEdit::setCursorIndex)
+        .addFunction("getSelectionAnchor", &TextEdit::getSelectionAnchor)
+        .addFunction("getSelectionFocus", &TextEdit::getSelectionFocus)
+        .addFunction("setSelection", &TextEdit::setSelection)
         .addProperty("cursorColor", &TextEdit::getCursorColor, (void(TextEdit::*)(Vector4))&TextEdit::setCursorColor)
         .addFunction("setCursorColor", 
             luabridge::overload<const float, const float, const float>(&TextEdit::setCursorColor),
             luabridge::overload<const float, const float, const float, const float>(&TextEdit::setCursorColor))
+        .addProperty("selectionColor", &TextEdit::getSelectionColor, (void(TextEdit::*)(Vector4))&TextEdit::setSelectionColor)
+        .addFunction("setSelectionColor",
+            luabridge::overload<const float, const float, const float>(&TextEdit::setSelectionColor),
+            luabridge::overload<const float, const float, const float, const float>(&TextEdit::setSelectionColor))
         .addProperty("cursorBlink", &TextEdit::getCursorBlink, &TextEdit::setCursorBlink)
         .addProperty("cursorWidth", &TextEdit::getCursorWidth, &TextEdit::setCursorWidth)
+        .addFunction("getTextEditComponent", &TextEdit::getComponent<TextEditComponent>)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

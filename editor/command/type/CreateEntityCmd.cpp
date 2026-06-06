@@ -2,6 +2,7 @@
 
 #include "editor/Out.h"
 #include "util/ShapeParameters.h"
+#include "util/ProjectUtils.h"
 #include "Stream.h"
 #include "command/type/DeleteEntityCmd.h"
 
@@ -12,7 +13,6 @@ editor::CreateEntityCmd::CreateEntityCmd(Project* project, uint32_t sceneId, std
     this->sceneId = sceneId;
     this->entityName = entityName;
     this->entity = NULL_ENTITY;
-    this->childEntity = NULL_ENTITY;
     this->parent = NULL_ENTITY;
     this->type = EntityCreationType::EMPTY;
     this->addToBundle = addToBundle;
@@ -26,7 +26,6 @@ editor::CreateEntityCmd::CreateEntityCmd(Project* project, uint32_t sceneId, std
     this->sceneId = sceneId;
     this->entityName = entityName;
     this->entity = NULL_ENTITY;
-    this->childEntity = NULL_ENTITY;
     this->parent = NULL_ENTITY;
     this->type = type;
     this->addToBundle = addToBundle;
@@ -40,7 +39,6 @@ editor::CreateEntityCmd::CreateEntityCmd(Project* project, uint32_t sceneId, std
     this->sceneId = sceneId;
     this->entityName = entityName;
     this->entity = NULL_ENTITY;
-    this->childEntity = NULL_ENTITY;
     this->parent = parent;
     this->type = type;
     this->addToBundle = addToBundle;
@@ -176,11 +174,11 @@ bool editor::CreateEntityCmd::execute(){
         ButtonComponent& buttonComp = scene->getComponent<ButtonComponent>(entity);
         scene->getSystem<UISystem>()->createButtonObjects(entity, buttonComp);
 
-        childEntity = buttonComp.label;
+        childEntities.push_back(buttonComp.label);
 
-        scene->setEntityName(childEntity, "Label");
+        scene->setEntityName(buttonComp.label, "Label");
 
-        TextComponent& textComp = scene->getComponent<TextComponent>(childEntity);
+        TextComponent& textComp = scene->getComponent<TextComponent>(buttonComp.label);
         textComp.text = "Button";
         textComp.needUpdateText = true;
 
@@ -199,11 +197,11 @@ bool editor::CreateEntityCmd::execute(){
         ScrollbarComponent& scrollbarComp = scene->getComponent<ScrollbarComponent>(entity);
         scene->getSystem<UISystem>()->createScrollbarObjects(entity, scrollbarComp);
 
-        childEntity = scrollbarComp.bar;
+        childEntities.push_back(scrollbarComp.bar);
 
-        scene->setEntityName(childEntity, "Bar");
+        scene->setEntityName(scrollbarComp.bar, "Bar");
 
-        UIComponent& barUi = scene->getComponent<UIComponent>(childEntity);
+        UIComponent& barUi = scene->getComponent<UIComponent>(scrollbarComp.bar);
         barUi.color = Vector4(0.45f, 0.45f, 0.5f, 1.0f);
 
     }else if (type == EntityCreationType::PROGRESSBAR){
@@ -221,15 +219,64 @@ bool editor::CreateEntityCmd::execute(){
         ProgressbarComponent& progressbarComp = scene->getComponent<ProgressbarComponent>(entity);
         scene->getSystem<UISystem>()->createProgressbarObjects(entity, progressbarComp);
 
-        childEntity = progressbarComp.fill;
+        childEntities.push_back(progressbarComp.fill);
 
-        scene->setEntityName(childEntity, "Fill");
+        scene->setEntityName(progressbarComp.fill, "Fill");
 
-        UIComponent& fillUi = scene->getComponent<UIComponent>(childEntity);
+        UIComponent& fillUi = scene->getComponent<UIComponent>(progressbarComp.fill);
         fillUi.color = Vector4(0.3f, 0.7f, 0.4f, 1.0f);
 
         progressbarComp.value = 0.5f;
         progressbarComp.needUpdateProgressbar = true;
+
+    }else if (type == EntityCreationType::TEXTEDIT){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<UILayoutComponent>(entity, {});
+        scene->addComponent<UIComponent>(entity, {});
+        scene->addComponent<TextEditComponent>(entity, {});
+        scene->addComponent<ImageComponent>(entity, {});
+
+        UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
+        layout.width = 200;
+        layout.height = 32;
+
+        TextEditComponent& textEditComp = scene->getComponent<TextEditComponent>(entity);
+        scene->getSystem<UISystem>()->createTextEditObjects(entity, textEditComp);
+
+        scene->setEntityName(textEditComp.text, "Text");
+        scene->setEntityName(textEditComp.selection, "Selection");
+        scene->setEntityName(textEditComp.cursor, "Cursor");
+
+        childEntities.push_back(textEditComp.text);
+        childEntities.push_back(textEditComp.selection);
+        childEntities.push_back(textEditComp.cursor);
+
+        TextComponent& textComp = scene->getComponent<TextComponent>(textEditComp.text);
+        textComp.text = "";
+        textComp.multiline = false;
+        textComp.needUpdateText = true;
+
+        textEditComp.placeholder = "Enter text...";
+        textEditComp.needUpdateTextEdit = true;
+
+    }else if (type == EntityCreationType::POLYGON){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<UILayoutComponent>(entity, {});
+        scene->addComponent<UIComponent>(entity, {});
+        scene->addComponent<PolygonComponent>(entity, {});
+
+        UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
+        layout.width = 100;
+        layout.height = 100;
+
+        PolygonComponent& polygonComp = scene->getComponent<PolygonComponent>(entity);
+        polygonComp.points.push_back({Vector3(0, 0, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.points.push_back({Vector3(100, 0, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.points.push_back({Vector3(0, 100, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.points.push_back({Vector3(100, 100, 0), Vector4(1.0f, 1.0f, 1.0f, 1.0f)});
+        polygonComp.needUpdatePolygon = true;
 
     }else if (type == EntityCreationType::CONTAINER){
 
@@ -488,9 +535,9 @@ bool editor::CreateEntityCmd::execute(){
     Catalog::updateEntity(scene, entity, updateFlags);
 
     sceneProject->entities.push_back(entity);
-    if (childEntity != NULL_ENTITY){
-        Catalog::updateEntity(scene, childEntity, updateFlags);
-        sceneProject->entities.push_back(childEntity);
+    for (Entity child : childEntities){
+        Catalog::updateEntity(scene, child, updateFlags);
+        sceneProject->entities.push_back(child);
     }
 
     lastSelected = project->getSelectedEntities(sceneId);
@@ -500,8 +547,8 @@ bool editor::CreateEntityCmd::execute(){
 
     if (addToBundle){
         project->addEntityToBundle(sceneId, entity, parent, false);
-        if (childEntity != NULL_ENTITY){
-            project->addEntityToBundle(sceneId, childEntity, entity, false);
+        for (Entity child : childEntities){
+            project->addEntityToBundle(sceneId, child, entity, false);
         }
     }
 
@@ -517,8 +564,8 @@ void editor::CreateEntityCmd::undo(){
 
     if (sceneProject){
         if (addToBundle){
-            if (childEntity != NULL_ENTITY){
-                project->removeEntityFromBundle(sceneId, childEntity, false);
+            for (Entity child : childEntities){
+                project->removeEntityFromBundle(sceneId, child, false);
             }
             project->removeEntityFromBundle(sceneId, entity, false);
         }
@@ -527,8 +574,8 @@ void editor::CreateEntityCmd::undo(){
             sceneProject->mainCamera = NULL_ENTITY;
         }
 
-        if (childEntity != NULL_ENTITY){
-            DeleteEntityCmd::destroyEntity(sceneProject->scene, childEntity, sceneProject->entities, project, sceneId);
+        for (auto it = childEntities.rbegin(); it != childEntities.rend(); ++it){
+            DeleteEntityCmd::destroyEntity(sceneProject->scene, *it, sceneProject->entities, project, sceneId);
         }
         DeleteEntityCmd::destroyEntity(sceneProject->scene, entity, sceneProject->entities, project, sceneId);
 

@@ -41,6 +41,7 @@
 #include "component/ParticlesComponent.h"
 #include "component/LinesComponent.h"
 #include "component/PointsComponent.h"
+#include "component/PolygonComponent.h"
 #include "util/SHA1.h"
 #include "util/ProjectUtils.h"
 #include "Stream.h"
@@ -5094,6 +5095,72 @@ void editor::Properties::drawProgressbarComponent(ComponentType cpType, ScenePro
     endTable();
 }
 
+void editor::Properties::drawTextEditComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    RowSettings settings;
+    settings.onValueChanged = [sceneProject, entities](){
+        for (const Entity& entity : entities){
+            if (TextEditComponent* textedit = sceneProject->scene->findComponent<TextEditComponent>(entity)){
+                textedit->needUpdateTextEdit = true;
+            }
+        }
+    };
+
+    RowSettings settingsFloat;
+    settingsFloat.onValueChanged = settings.onValueChanged;
+
+    RowSettings settingsInt;
+    settingsInt.stepSize = 1.0f;
+    settingsInt.secondColSize = 6 * ImGui::GetFontSize();
+    settingsInt.onValueChanged = settings.onValueChanged;
+
+    beginTable(cpType, getLabelSize("Selection"));
+    propertyRow(RowPropertyType::LocalEntity, cpType, "text", "Text", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::LocalEntity, cpType, "selection", "Selection", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::LocalEntity, cpType, "cursor", "Cursor", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Bool, cpType, "disabled", "Disabled", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Bool, cpType, "password", "Password", sceneProject, entities, settings);
+    endTable();
+
+    ImGui::SeparatorText("Content");
+    beginTable(cpType, getLabelSize("Placeholder"), "textedit_content");
+    propertyRow(RowPropertyType::String, cpType, "placeholder", "Placeholder", sceneProject, entities, settings);
+    endTable();
+
+    ImGui::SeparatorText("Cursor");
+    beginTable(cpType, getLabelSize("Cursor Width"), "textedit_cursor");
+    propertyRow(RowPropertyType::Float, cpType, "cursorBlink", "Blink", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "cursorWidth", "Width", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Color4L, cpType, "cursorColor", "Color", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Color4L, cpType, "selectionColor", "Selection Color", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Color4L, cpType, "placeholderColor", "Placeholder Color", sceneProject, entities, settings);
+    endTable();
+
+    ImGui::SeparatorText("Selection");
+    beginTable(cpType, getLabelSize("Selection Anchor"), "textedit_selection");
+    propertyRow(RowPropertyType::Int, cpType, "cursorIndex", "Cursor Index", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "selectionAnchor", "Selection Anchor", sceneProject, entities, settingsInt);
+    endTable();
+
+    if (entities.size() == 1){
+        TextEditComponent* textedit = sceneProject->scene->findComponent<TextEditComponent>(entities[0]);
+        if (textedit){
+            beginTable(cpType, getLabelSize("Password Char"), "textedit_password_char");
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Password Char");
+            ImGui::TableSetColumnIndex(1);
+            char passwordCharBuffer[2] = { textedit->passwordChar ? textedit->passwordChar : '*', '\0' };
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::InputText("##textedit_password_char", passwordCharBuffer, sizeof(passwordCharBuffer))){
+                textedit->passwordChar = passwordCharBuffer[0] ? passwordCharBuffer[0] : '*';
+                settings.onValueChanged();
+            }
+            endTable();
+        }
+    }
+}
+
 void editor::Properties::drawTextComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     RowSettings settingsInt;
     settingsInt.stepSize = 1.0f;
@@ -7814,6 +7881,115 @@ void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* 
     }
 
     if (removedLine) {
+        return;
+    }
+}
+
+void editor::Properties::drawPolygonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    if (entities.size() != 1) {
+        ImGui::SeparatorText("Vertices");
+        ImGui::TextDisabled("Select a single entity to edit polygon vertices");
+        return;
+    }
+
+    Entity entity = entities[0];
+    PolygonComponent& polygon = sceneProject->scene->getComponent<PolygonComponent>(entity);
+
+    ImGui::SeparatorText("Vertices");
+
+    beginTable(cpType, getLabelSize("Vertices"), "polygon_points_header");
+    propertyHeader("Vertices", -1, false, false);
+    ImGui::Text("%zu", polygon.points.size());
+    float polygonArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    if (drawSummaryAddButton(ICON_FA_PLUS " Add Vertex##polygon_add", polygonArrowWidth)) {
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (const Entity& selectedEntity : entities) {
+            if (PolygonComponent* polygonComp = sceneProject->scene->findComponent<PolygonComponent>(selectedEntity)) {
+                std::vector<PolygonPoint> newPoints = polygonComp->points;
+                PolygonPoint newPoint;
+                if (!newPoints.empty()) {
+                    newPoint = newPoints.back();
+                }
+                newPoints.push_back(newPoint);
+                multiCmd->addPropertyCmd<std::vector<PolygonPoint>>(project, sceneProject->id, selectedEntity, cpType, "points", newPoints);
+            }
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##toggle_polygon", polygonExpanded ? ImGuiDir_Up : ImGuiDir_Down)) {
+        polygonExpanded = !polygonExpanded;
+    }
+    endTable();
+
+    if (!polygonExpanded || polygon.points.empty()) {
+        return;
+    }
+
+    bool removedPoint = false;
+
+    for (size_t i = 0; i < polygon.points.size(); i++) {
+        ImGui::PushID((int)i);
+
+        std::string pointGroupStr = "polygon_point_" + std::to_string(i);
+        std::string pointLabel = "[" + std::to_string(i) + "] Vertex " + std::to_string(i);
+
+        ImGui::SeparatorText(pointLabel.c_str());
+
+        beginTable(cpType, getLabelSize("Position"), pointGroupStr);
+        propertyHeader("Vertex", -1, false, false);
+
+        float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
+        float clearButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x;
+        ImVec2 deleteButtonSize = ImVec2(clearButtonWidth + clearButtonFramePadding * 2, 0);
+        float arrowButtonWidth = ImGui::GetFrameHeight();
+        float trailingWidth = deleteButtonSize.x + ImGui::GetStyle().ItemSpacing.x + arrowButtonWidth;
+        float targetX = ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - trailingWidth);
+        ImGui::SetCursorPosX(targetX);
+
+        if (ImGui::ArrowButton("##toggle_polygon_point", polygonButtonGroups[pointGroupStr] ? ImGuiDir_Up : ImGuiDir_Down)) {
+            polygonButtonGroups[pointGroupStr] = !polygonButtonGroups[pointGroupStr];
+        }
+        ImGui::SameLine();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(clearButtonFramePadding, ImGui::GetStyle().FramePadding.y));
+        if (ImGui::Button(ICON_FA_TRASH_CAN "##delete_polygon_point", deleteButtonSize)) {
+            MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+            for (const Entity& selectedEntity : entities) {
+                if (PolygonComponent* polygonComp = sceneProject->scene->findComponent<PolygonComponent>(selectedEntity)) {
+                    if (i < polygonComp->points.size()) {
+                        std::vector<PolygonPoint> newPoints = polygonComp->points;
+                        newPoints.erase(newPoints.begin() + (long int)i);
+                        multiCmd->addPropertyCmd<std::vector<PolygonPoint>>(project, sceneProject->id, selectedEntity, cpType, "points", newPoints);
+                    }
+                }
+            }
+            multiCmd->setNoMerge();
+            CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+            removedPoint = true;
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            endTable();
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+
+        if (polygonButtonGroups[pointGroupStr]) {
+            std::string propPrefix = "points[" + std::to_string(i) + "]";
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".position", "Position", sceneProject, entities);
+            propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".color", "Color", sceneProject, entities);
+        }
+
+        endTable();
+        ImGui::PopID();
+    }
+
+    if (removedPoint) {
         return;
     }
 }
@@ -10741,6 +10917,10 @@ void editor::Properties::show(){
                     drawScrollbarComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::ProgressbarComponent){
                     drawProgressbarComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::TextEditComponent){
+                    drawTextEditComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::PolygonComponent){
+                    drawPolygonComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::TextComponent){
                     drawTextComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::UILayoutComponent){

@@ -871,6 +871,57 @@ std::string editor::Factory::createProgressbarComponent(int indentSpaces, Entity
     return code.str();
 }
 
+std::string editor::Factory::createTextEditComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<TextEditComponent>(entity)) return "";
+    TextEditComponent& textedit = scene->getComponent<TextEditComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "TextEditComponent textedit;\n";
+    code << ind << "textedit.text = " << formatUInt(textedit.text) << ";\n";
+    code << ind << "textedit.selection = " << formatUInt(textedit.selection) << ";\n";
+    code << ind << "textedit.cursor = " << formatUInt(textedit.cursor) << ";\n";
+    code << ind << "textedit.cursorBlink = " << formatFloat(textedit.cursorBlink) << ";\n";
+    code << ind << "textedit.cursorWidth = " << formatFloat(textedit.cursorWidth) << ";\n";
+    code << ind << "textedit.cursorColor = " << formatVector4(textedit.cursorColor) << ";\n";
+    code << ind << "textedit.selectionColor = " << formatVector4(textedit.selectionColor) << ";\n";
+    code << ind << "textedit.placeholderColor = " << formatVector4(textedit.placeholderColor) << ";\n";
+    code << ind << "textedit.placeholder = " << formatString(textedit.placeholder) << ";\n";
+    if (textedit.passwordChar == '\''){
+        code << ind << "textedit.passwordChar = '\\'';\n";
+    }else if (textedit.passwordChar == '\\'){
+        code << ind << "textedit.passwordChar = '\\\\';\n";
+    }else{
+        code << ind << "textedit.passwordChar = '" << textedit.passwordChar << "';\n";
+    }
+    code << ind << "textedit.cursorIndex = " << formatInt(textedit.cursorIndex) << ";\n";
+    code << ind << "textedit.selectionAnchor = " << formatInt(textedit.selectionAnchor) << ";\n";
+    code << ind << "textedit.disabled = " << formatBool(textedit.disabled) << ";\n";
+    code << ind << "textedit.password = " << formatBool(textedit.password) << ";\n";
+    addComponentCode(code, ind, sceneName, entityName, entity, "TextEditComponent", "textedit", assignExisting);
+    return code.str();
+}
+
+std::string editor::Factory::createPolygonComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<PolygonComponent>(entity)) return "";
+    PolygonComponent& polygon = scene->getComponent<PolygonComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "PolygonComponent polygoncomp;\n";
+
+    for (size_t i = 0; i < polygon.points.size(); i++) {
+        const PolygonPoint& point = polygon.points[i];
+        code << ind << "{\n";
+        code << ind << "    PolygonPoint pt;\n";
+        code << ind << "    pt.position = " << formatVector3(point.position) << ";\n";
+        code << ind << "    pt.color = " << formatVector4(point.color) << ";\n";
+        code << ind << "    polygoncomp.points.push_back(pt);\n";
+        code << ind << "}\n";
+    }
+
+    addComponentCode(code, ind, sceneName, entityName, entity, "PolygonComponent", "polygoncomp", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::createUILayoutComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
     if (!scene->findComponent<UILayoutComponent>(entity)) return "";
     UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
@@ -1782,6 +1833,8 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::ButtonComponent: return createButtonComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ScrollbarComponent: return createScrollbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ProgressbarComponent: return createProgressbarComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::TextEditComponent: return createTextEditComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::PolygonComponent: return createPolygonComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UILayoutComponent: return createUILayoutComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::UIContainerComponent: return createUIContainerComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TextComponent: return createTextComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);

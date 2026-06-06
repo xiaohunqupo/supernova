@@ -185,6 +185,14 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Progressbar", EntityCreationType::PROGRESSBAR, parent, addToBundle));
             openParent = parent;
         }
+        if (ImGui::MenuItem(ICON_FA_I_CURSOR"  Text Edit")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "TextEdit", EntityCreationType::TEXTEDIT, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_DRAW_POLYGON"  Polygon")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Polygon", EntityCreationType::POLYGON, parent, addToBundle));
+            openParent = parent;
+        }
         ImGui::EndMenu();
     }
 
@@ -357,6 +365,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_FONT;
     }else if (signature.test(scene->getComponentId<TextEditComponent>())){
         return ICON_FA_I_CURSOR;
+    }else if (signature.test(scene->getComponentId<PolygonComponent>())){
+        return ICON_FA_DRAW_POLYGON;
     }else if (signature.test(scene->getComponentId<ImageComponent>())){
         return ICON_FA_IMAGE;
     }else if (signature.test(scene->getComponentId<PanelComponent>())){

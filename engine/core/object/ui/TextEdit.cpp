@@ -6,6 +6,7 @@
 
 #include "component/TextComponent.h"
 #include "subsystem/UISystem.h"
+#include "util/StringUtils.h"
 
 using namespace doriax;
 
@@ -25,10 +26,16 @@ Text TextEdit::getTextObject() const{
     return Text(scene, tecomp.text);
 }
 
-doriax::Polygon TextEdit::getCursorObject() const{
+Polygon TextEdit::getCursorObject() const{
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
 
     return Polygon(scene, tecomp.cursor);
+}
+
+Polygon TextEdit::getSelectionObject() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+
+    return Polygon(scene, tecomp.selection);
 }
 
 void TextEdit::setDisabled(bool disabled){
@@ -52,6 +59,10 @@ void TextEdit::setText(const std::string& text){
     if (textcomp.text != text){
         textcomp.text = text;
         textcomp.needUpdateText = true;
+        tecomp.cursorIndex = static_cast<int>(StringUtils::countCodepoints(text));
+        tecomp.selectionAnchor = tecomp.cursorIndex;
+        tecomp.scrollOffset = 0;
+        tecomp.needUpdateTextEdit = true;
     }
 }
 
@@ -121,6 +132,93 @@ unsigned int TextEdit::getMaxTextSize() const{
     return getTextObject().getMaxTextSize();
 }
 
+void TextEdit::setPlaceholder(const std::string& placeholder){
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (tecomp.placeholder != placeholder){
+        tecomp.placeholder = placeholder;
+        tecomp.needUpdateTextEdit = true;
+    }
+}
+
+std::string TextEdit::getPlaceholder() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return tecomp.placeholder;
+}
+
+void TextEdit::setPlaceholderColor(Vector4 color){
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    tecomp.placeholderColor = Color::sRGBToLinear(color);
+    tecomp.needUpdateTextEdit = true;
+}
+
+void TextEdit::setPlaceholderColor(const float red, const float green, const float blue, const float alpha){
+    setPlaceholderColor(Vector4(red, green, blue, alpha));
+}
+
+void TextEdit::setPlaceholderColor(const float red, const float green, const float blue){
+    setPlaceholderColor(Vector4(red, green, blue, getPlaceholderColor().w));
+}
+
+Vector4 TextEdit::getPlaceholderColor() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return Color::linearTosRGB(tecomp.placeholderColor);
+}
+
+void TextEdit::setPassword(bool password){
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (tecomp.password != password){
+        tecomp.password = password;
+        tecomp.needUpdateTextEdit = true;
+    }
+}
+
+bool TextEdit::getPassword() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return tecomp.password;
+}
+
+void TextEdit::setPasswordChar(char passwordChar){
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    if (tecomp.passwordChar != passwordChar){
+        tecomp.passwordChar = passwordChar;
+        tecomp.needUpdateTextEdit = true;
+    }
+}
+
+char TextEdit::getPasswordChar() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return tecomp.passwordChar;
+}
+
+void TextEdit::setCursorIndex(int cursorIndex){
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    tecomp.cursorIndex = cursorIndex;
+    tecomp.selectionAnchor = cursorIndex;
+    tecomp.needUpdateTextEdit = true;
+}
+
+int TextEdit::getCursorIndex() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return tecomp.cursorIndex;
+}
+
+void TextEdit::setSelection(int anchor, int focus){
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    tecomp.selectionAnchor = anchor;
+    tecomp.cursorIndex = focus;
+    tecomp.needUpdateTextEdit = true;
+}
+
+int TextEdit::getSelectionAnchor() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return tecomp.selectionAnchor;
+}
+
+int TextEdit::getSelectionFocus() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return tecomp.cursorIndex;
+}
+
 void TextEdit::setCursorBlink(float cursorBlink){
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
 
@@ -164,4 +262,23 @@ void TextEdit::setCursorColor(const float red, const float green, const float bl
 Vector4 TextEdit::getCursorColor() const{
     TextEditComponent& tecomp = getComponent<TextEditComponent>();
     return Color::linearTosRGB(tecomp.cursorColor);
+}
+
+void TextEdit::setSelectionColor(Vector4 color){
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    tecomp.selectionColor = Color::sRGBToLinear(color);
+    tecomp.needUpdateTextEdit = true;
+}
+
+void TextEdit::setSelectionColor(const float red, const float green, const float blue, const float alpha){
+    setSelectionColor(Vector4(red, green, blue, alpha));
+}
+
+void TextEdit::setSelectionColor(const float red, const float green, const float blue){
+    setSelectionColor(Vector4(red, green, blue, getSelectionColor().w));
+}
+
+Vector4 TextEdit::getSelectionColor() const{
+    TextEditComponent& tecomp = getComponent<TextEditComponent>();
+    return Color::linearTosRGB(tecomp.selectionColor);
 }

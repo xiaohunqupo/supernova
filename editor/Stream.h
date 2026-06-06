@@ -209,6 +209,9 @@ namespace doriax::editor {
         static YAML::Node encodeProgressbarComponent(const ProgressbarComponent& progressbar);
         static ProgressbarComponent decodeProgressbarComponent(const YAML::Node& node, const ProgressbarComponent* oldProgressbar = nullptr);
 
+        static YAML::Node encodeTextEditComponent(const TextEditComponent& textedit);
+        static TextEditComponent decodeTextEditComponent(const YAML::Node& node, const TextEditComponent* oldTextEdit = nullptr);
+
         static YAML::Node encodeUILayoutComponent(const UILayoutComponent& layout);
         static UILayoutComponent decodeUILayoutComponent(const YAML::Node& node, const UILayoutComponent* oldLayout = nullptr);
 
@@ -343,5 +346,8 @@ namespace doriax::editor {
 
         static YAML::Node encodeLinesComponent(const LinesComponent& lines);
         static LinesComponent decodeLinesComponent(const YAML::Node& node, const LinesComponent* oldLines = nullptr);
+
+        static YAML::Node encodePolygonComponent(const PolygonComponent& polygon);
+        static PolygonComponent decodePolygonComponent(const YAML::Node& node, const PolygonComponent* oldPolygon = nullptr);
     };
 }

@@ -23,6 +23,14 @@ namespace doriax{
 
         // Removes the last UTF-8 encoded Unicode scalar (safe for multi-byte characters).
         static void eraseLastCodepointUtf8(std::string& text);
+
+        static size_t countCodepoints(const std::string& text);
+
+        // Removes codepoints in [startIndex, endIndex). Indices are codepoint offsets.
+        static void eraseCodepointsUtf8(std::string& text, size_t startIndex, size_t endIndex);
+
+        // Inserts UTF-8 text before the codepoint at cpIndex.
+        static void insertUtf8AtCodepoint(std::string& text, size_t cpIndex, const std::string& utf8);
     };
 }
 

@@ -4,6 +4,7 @@
 
 #include "StringUtils.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 
@@ -148,6 +149,47 @@ std::wstring StringUtils::utf8ToWString(const std::string& text, bool& hadInvali
     }
 
     return out;
+}
+
+size_t StringUtils::countCodepoints(const std::string& text) {
+    bool hadInvalid = false;
+    return decodeUtf8ToCodepoints(text, hadInvalid).size();
+}
+
+void StringUtils::eraseCodepointsUtf8(std::string& text, size_t startIndex, size_t endIndex) {
+    if (startIndex >= endIndex) {
+        return;
+    }
+
+    bool hadInvalid = false;
+    std::vector<uint32_t> codepoints = decodeUtf8ToCodepoints(text, hadInvalid);
+    if (startIndex >= codepoints.size()) {
+        return;
+    }
+
+    endIndex = std::min(endIndex, codepoints.size());
+    codepoints.erase(codepoints.begin() + static_cast<std::ptrdiff_t>(startIndex),
+                     codepoints.begin() + static_cast<std::ptrdiff_t>(endIndex));
+
+    text.clear();
+    for (uint32_t cp : codepoints) {
+        text += toUTF8(static_cast<wchar_t>(cp));
+    }
+}
+
+void StringUtils::insertUtf8AtCodepoint(std::string& text, size_t cpIndex, const std::string& utf8) {
+    bool hadInvalid = false;
+    std::vector<uint32_t> codepoints = decodeUtf8ToCodepoints(text, hadInvalid);
+    std::vector<uint32_t> insertCodepoints = decodeUtf8ToCodepoints(utf8, hadInvalid);
+
+    cpIndex = std::min(cpIndex, codepoints.size());
+    codepoints.insert(codepoints.begin() + static_cast<std::ptrdiff_t>(cpIndex),
+                      insertCodepoints.begin(), insertCodepoints.end());
+
+    text.clear();
+    for (uint32_t cp : codepoints) {
+        text += toUTF8(static_cast<wchar_t>(cp));
+    }
 }
 
 void StringUtils::eraseLastCodepointUtf8(std::string& text) {

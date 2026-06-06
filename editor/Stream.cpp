@@ -2412,6 +2412,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::ProgressbarComponent, true)] = encodeProgressbarComponent(progressbar);
     }
 
+    if (signature.test(registry->getComponentId<TextEditComponent>())) {
+        TextEditComponent textedit = registry->getComponent<TextEditComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::TextEditComponent, true)] = encodeTextEditComponent(textedit);
+    }
+
     if (signature.test(registry->getComponentId<UILayoutComponent>())) {
         UILayoutComponent layout = registry->getComponent<UILayoutComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::UILayoutComponent, true)] = encodeUILayoutComponent(layout);
@@ -2592,6 +2597,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::LinesComponent, true)] = encodeLinesComponent(lines);
     }
 
+    if (signature.test(registry->getComponentId<PolygonComponent>())) {
+        PolygonComponent polygon = registry->getComponent<PolygonComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::PolygonComponent, true)] = encodePolygonComponent(polygon);
+    }
+
     if (signature.test(registry->getComponentId<InstancedMeshComponent>())) {
         InstancedMeshComponent instmesh = registry->getComponent<InstancedMeshComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::InstancedMeshComponent, true)] = encodeInstancedMeshComponent(instmesh);
@@ -2686,6 +2696,19 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             int flags = Catalog::getChangedUpdateFlags(ComponentType::ProgressbarComponent, existing, &progressbar);
             registry->getComponent<ProgressbarComponent>(entity) = progressbar;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::TextEditComponent, true);
+    if (compNode[compName]) {
+        TextEditComponent* existing = registry->findComponent<TextEditComponent>(entity);
+        TextEditComponent textedit = decodeTextEditComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<TextEditComponent>())){
+            registry->addComponent<TextEditComponent>(entity, textedit);
+        }else{
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::TextEditComponent, existing, &textedit);
+            registry->getComponent<TextEditComponent>(entity) = textedit;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -3142,6 +3165,17 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }
     }
 
+    compName = Catalog::getComponentName(ComponentType::PolygonComponent, true);
+    if (compNode[compName]) {
+        PolygonComponent* existing = registry->findComponent<PolygonComponent>(entity);
+        PolygonComponent polygon = decodePolygonComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<PolygonComponent>())) {
+            registry->addComponent<PolygonComponent>(entity, polygon);
+        } else {
+            registry->getComponent<PolygonComponent>(entity) = polygon;
+        }
+    }
+
     compName = Catalog::getComponentName(ComponentType::InstancedMeshComponent, true);
     if (compNode[compName]) {
         InstancedMeshComponent* existing = registry->findComponent<InstancedMeshComponent>(entity);
@@ -3551,6 +3585,55 @@ ProgressbarComponent editor::Stream::decodeProgressbarComponent(const YAML::Node
     progressbar.needUpdateProgressbar = true;
 
     return progressbar;
+}
+
+YAML::Node editor::Stream::encodeTextEditComponent(const TextEditComponent& textedit) {
+    YAML::Node node;
+    node["text"] = textedit.text;
+    node["selection"] = textedit.selection;
+    node["cursor"] = textedit.cursor;
+    node["cursorBlink"] = textedit.cursorBlink;
+    node["cursorWidth"] = textedit.cursorWidth;
+    node["cursorColor"] = encodeVector4(textedit.cursorColor);
+    node["selectionColor"] = encodeVector4(textedit.selectionColor);
+    node["placeholderColor"] = encodeVector4(textedit.placeholderColor);
+    node["placeholder"] = textedit.placeholder;
+    node["passwordChar"] = std::string(1, textedit.passwordChar);
+    node["cursorIndex"] = textedit.cursorIndex;
+    node["selectionAnchor"] = textedit.selectionAnchor;
+    node["disabled"] = textedit.disabled;
+    node["password"] = textedit.password;
+    return node;
+}
+
+TextEditComponent editor::Stream::decodeTextEditComponent(const YAML::Node& node, const TextEditComponent* oldTextEdit) {
+    TextEditComponent textedit;
+
+    if (oldTextEdit) {
+        textedit = *oldTextEdit;
+    }
+
+    if (node["text"]) textedit.text = node["text"].as<Entity>();
+    if (node["selection"]) textedit.selection = node["selection"].as<Entity>();
+    if (node["cursor"]) textedit.cursor = node["cursor"].as<Entity>();
+    if (node["cursorBlink"]) textedit.cursorBlink = node["cursorBlink"].as<float>();
+    if (node["cursorWidth"]) textedit.cursorWidth = node["cursorWidth"].as<float>();
+    if (node["cursorColor"]) textedit.cursorColor = decodeVector4(node["cursorColor"]);
+    if (node["selectionColor"]) textedit.selectionColor = decodeVector4(node["selectionColor"]);
+    if (node["placeholderColor"]) textedit.placeholderColor = decodeVector4(node["placeholderColor"]);
+    if (node["placeholder"]) textedit.placeholder = node["placeholder"].as<std::string>();
+    if (node["passwordChar"]) {
+        std::string passwordChar = node["passwordChar"].as<std::string>();
+        textedit.passwordChar = passwordChar.empty() ? '*' : passwordChar[0];
+    }
+    if (node["cursorIndex"]) textedit.cursorIndex = node["cursorIndex"].as<int>();
+    if (node["selectionAnchor"]) textedit.selectionAnchor = node["selectionAnchor"].as<int>();
+    if (node["disabled"]) textedit.disabled = node["disabled"].as<bool>();
+    if (node["password"]) textedit.password = node["password"].as<bool>();
+
+    textedit.needUpdateTextEdit = true;
+
+    return textedit;
 }
 
 YAML::Node editor::Stream::encodeUILayoutComponent(const UILayoutComponent& layout) {
@@ -5871,4 +5954,38 @@ LinesComponent editor::Stream::decodeLinesComponent(const YAML::Node& node, cons
     lines.needReload = false;
 
     return lines;
+}
+
+YAML::Node editor::Stream::encodePolygonComponent(const PolygonComponent& polygon) {
+    YAML::Node node;
+
+    YAML::Node pointsNode;
+    for (const PolygonPoint& point : polygon.points) {
+        YAML::Node pointNode;
+        pointNode["position"] = encodeVector3(point.position);
+        pointNode["color"] = encodeVector4(point.color);
+        pointsNode.push_back(pointNode);
+    }
+    node["points"] = pointsNode;
+
+    return node;
+}
+
+PolygonComponent editor::Stream::decodePolygonComponent(const YAML::Node& node, const PolygonComponent* oldPolygon) {
+    PolygonComponent polygon;
+    if (oldPolygon) { polygon = *oldPolygon; }
+
+    if (node["points"]) {
+        polygon.points.clear();
+        for (const YAML::Node& pointNode : node["points"]) {
+            PolygonPoint point;
+            if (pointNode["position"]) point.position = decodeVector3(pointNode["position"]);
+            if (pointNode["color"]) point.color = decodeVector4(pointNode["color"]);
+            polygon.points.push_back(point);
+        }
+    }
+
+    polygon.needUpdatePolygon = true;
+
+    return polygon;
 }

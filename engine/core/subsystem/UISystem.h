@@ -34,6 +34,7 @@ namespace doriax{
         Entity lastUIFromPointerHover;
         Entity lastUIFromClick;
         Entity lastPanelFromPointer;
+        Entity textEditSelecting;
         Vector2 lastPointerDownPos;
         Vector2 lastPointerPos;
         Vector2 panelSizeAcc; // to add accumulation from float to int
@@ -72,6 +73,18 @@ namespace doriax{
         //TextEdit
         void updateTextEdit(Entity entity, TextEditComponent& textedit, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout);
         void blinkCursorTextEdit(double dt, TextEditComponent& textedit, UIComponent& ui);
+        bool handleTextEditCharInput(TextEditComponent& textedit, TextComponent& text, UIComponent& ui, wchar_t codepoint);
+        bool handleTextEditKeyDown(TextEditComponent& textedit, TextComponent& text, UIComponent& ui, int key, bool repeat, int mods);
+        void setTextEditCursorFromLocalX(TextEditComponent& textedit, TextComponent& text, ImageComponent& img, float localX, bool extendSelection);
+        bool textEditHasSelection(const TextEditComponent& textedit) const;
+        int textEditSelectionStart(const TextEditComponent& textedit) const;
+        int textEditSelectionEnd(const TextEditComponent& textedit) const;
+        void textEditClampCursor(TextEditComponent& textedit, size_t numCodepoints) const;
+        float textEditCursorPixelX(const TextComponent& text, int cursorIndex, float textWidth) const;
+        int textEditFindCursorIndexFromX(const TextComponent& text, float x) const;
+        std::string textEditMaskText(const std::string& text, char maskChar) const;
+        void textEditDeleteSelection(TextEditComponent& textedit, TextComponent& text);
+        void textEditResetBlink(TextEditComponent& textedit, Transform& cursortransform) const;
 
         //UI Polygon
         void createUIPolygon(PolygonComponent& polygon, UIComponent& ui, UILayoutComponent& layout);
@@ -112,6 +125,7 @@ namespace doriax{
         void resetButtonStates();
 
         bool eventOnCharInput(wchar_t codepoint);
+        bool eventOnKeyDown(int key, bool repeat, int mods);
         bool eventOnPointerDown(float x, float y);
         bool eventOnPointerUp(float x, float y);
         bool eventOnPointerMove(float x, float y);

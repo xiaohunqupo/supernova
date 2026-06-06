@@ -26,6 +26,8 @@ namespace doriax::editor{
         BUTTON,
         SCROLLBAR,
         PROGRESSBAR,
+        TEXTEDIT,
+        POLYGON,
         CONTAINER,
         POINT_LIGHT,
         DIRECTIONAL_LIGHT,
@@ -61,7 +63,7 @@ namespace doriax::editor{
         std::string entityName;
 
         Entity entity;
-        Entity childEntity;
+        std::vector<Entity> childEntities;
         Entity parent;
         EntityCreationType type;
         std::vector<Entity> lastSelected;

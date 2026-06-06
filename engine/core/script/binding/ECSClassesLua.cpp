@@ -28,6 +28,7 @@
 #include "component/UILayoutComponent.h"
 #include "component/UIContainerComponent.h"
 #include "component/ButtonComponent.h"
+#include "component/TextEditComponent.h"
 #include "component/ParticlesComponent.h"
 #include "component/SoundComponent.h"
 #include "component/SpriteComponent.h"
@@ -237,6 +238,7 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addFunction("getAnchorReferenceHeight", &UISystem::getAnchorReferenceHeight)
         .addFunction("isTextEditFocused", &UISystem::isTextEditFocused)
         .addFunction("eventOnCharInput", &UISystem::eventOnCharInput)
+        .addFunction("eventOnKeyDown", &UISystem::eventOnKeyDown)
         .addFunction("eventOnPointerDown", &UISystem::eventOnPointerDown)
         .addFunction("eventOnPointerUp", &UISystem::eventOnPointerUp)
         .addFunction("eventOnPointerMove", &UISystem::eventOnPointerMove)
@@ -421,6 +423,28 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("fillMarginTop", &ProgressbarComponent::fillMarginTop)
         .addProperty("fillMarginBottom", &ProgressbarComponent::fillMarginBottom)
         .addProperty("needUpdateProgressbar", &ProgressbarComponent::needUpdateProgressbar)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<TextEditComponent>("TextEditComponent")
+        .addProperty("text", &TextEditComponent::text)
+        .addProperty("selection", &TextEditComponent::selection)
+        .addProperty("cursor", &TextEditComponent::cursor)
+        .addProperty("cursorBlink", &TextEditComponent::cursorBlink)
+        .addProperty("cursorWidth", &TextEditComponent::cursorWidth)
+        .addProperty("cursorColor", &TextEditComponent::cursorColor)
+        .addProperty("selectionColor", &TextEditComponent::selectionColor)
+        .addProperty("placeholderColor", &TextEditComponent::placeholderColor)
+        .addProperty("placeholder", &TextEditComponent::placeholder)
+        .addProperty("passwordChar", &TextEditComponent::passwordChar)
+        .addProperty("cursorIndex", &TextEditComponent::cursorIndex)
+        .addProperty("selectionAnchor", &TextEditComponent::selectionAnchor)
+        .addProperty("scrollOffset", &TextEditComponent::scrollOffset)
+        .addProperty("disabled", &TextEditComponent::disabled)
+        .addProperty("password", &TextEditComponent::password)
+        .addProperty("onChange", [] (TextEditComponent* self, lua_State* L) { return &self->onChange; }, [] (TextEditComponent* self, lua_State* L) { self->onChange = L; })
+        .addProperty("onSubmit", [] (TextEditComponent* self, lua_State* L) { return &self->onSubmit; }, [] (TextEditComponent* self, lua_State* L) { self->onSubmit = L; })
+        .addProperty("needUpdateTextEdit", &TextEditComponent::needUpdateTextEdit)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

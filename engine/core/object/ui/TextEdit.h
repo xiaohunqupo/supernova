@@ -19,6 +19,7 @@ namespace doriax{
 
         Text getTextObject() const;
         Polygon getCursorObject() const;
+        Polygon getSelectionObject() const;
 
         void setDisabled(bool disabled);
         bool getDisabled() const;
@@ -40,6 +41,27 @@ namespace doriax{
         void setMaxTextSize(unsigned int maxTextSize);
         unsigned int getMaxTextSize() const;
 
+        void setPlaceholder(const std::string& placeholder);
+        std::string getPlaceholder() const;
+
+        void setPlaceholderColor(Vector4 color);
+        void setPlaceholderColor(const float red, const float green, const float blue, const float alpha);
+        void setPlaceholderColor(const float red, const float green, const float blue);
+        Vector4 getPlaceholderColor() const;
+
+        void setPassword(bool password);
+        bool getPassword() const;
+
+        void setPasswordChar(char passwordChar);
+        char getPasswordChar() const;
+
+        void setCursorIndex(int cursorIndex);
+        int getCursorIndex() const;
+
+        void setSelection(int anchor, int focus);
+        int getSelectionAnchor() const;
+        int getSelectionFocus() const;
+
         void setCursorBlink(float cursorBlink);
         float getCursorBlink() const;
 
@@ -50,6 +72,11 @@ namespace doriax{
         void setCursorColor(const float red, const float green, const float blue, const float alpha);
         void setCursorColor(const float red, const float green, const float blue);
         Vector4 getCursorColor() const;
+
+        void setSelectionColor(Vector4 color);
+        void setSelectionColor(const float red, const float green, const float blue, const float alpha);
+        void setSelectionColor(const float red, const float green, const float blue);
+        Vector4 getSelectionColor() const;
     };
 }
 
