@@ -3217,7 +3217,7 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
     Attribute* attNormal = mesh.buffer.getAttribute(AttributeType::NORMAL);
     Attribute* attColor = mesh.buffer.getAttribute(AttributeType::COLOR);
 
-    std::vector<std::vector<uint16_t>> indexMap;
+    std::vector<std::vector<uint32_t>> indexMap;
     if (materials.size() > 0) {
         indexMap.resize(materials.size());
     }else{
@@ -3282,13 +3282,26 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
         ResourceProgress::updateProgress(buildId, 0.9f); // Geometry processed
     }
 
+    const bool useUint32Indices = mesh.buffer.getCount() > (static_cast<unsigned int>(std::numeric_limits<uint16_t>::max()) + 1u);
+
     mesh.indices.clear();
+    mesh.indices.setStride(useUint32Indices ? sizeof(uint32_t) : sizeof(uint16_t));
+
+    const AttributeDataType indexDataType = useUint32Indices ? AttributeDataType::UNSIGNED_INT : AttributeDataType::UNSIGNED_SHORT;
+    const size_t indexTypeSize = useUint32Indices ? sizeof(uint32_t) : sizeof(uint16_t);
 
     for (size_t i = 0; i < mesh.numSubmeshes; i++) {
-        addSubmeshAttribute(mesh.submeshes[i], "indices", AttributeType::INDEX, 1, AttributeDataType::UNSIGNED_SHORT, indexMap[i].size(), mesh.indices.getCount() * sizeof(uint16_t), false);
+        addSubmeshAttribute(mesh.submeshes[i], "indices", AttributeType::INDEX, 1, indexDataType, indexMap[i].size(), mesh.indices.getCount() * indexTypeSize, false);
 
         if (indexMap[i].size() > 0){
-            mesh.indices.setValues(mesh.indices.getCount(),  mesh.indices.getAttribute(AttributeType::INDEX), indexMap[i].size(), (char*)&indexMap[i].front(), sizeof(uint16_t));
+            if (useUint32Indices) {
+                mesh.indices.setValues(mesh.indices.getCount(), mesh.indices.getAttribute(AttributeType::INDEX), indexMap[i].size(), (char*)&indexMap[i].front(), sizeof(uint32_t));
+            } else {
+                std::vector<uint16_t> u16indices(indexMap[i].size());
+                for (size_t j = 0; j < indexMap[i].size(); j++)
+                    u16indices[j] = static_cast<uint16_t>(indexMap[i][j]);
+                mesh.indices.setValues(mesh.indices.getCount(), mesh.indices.getAttribute(AttributeType::INDEX), u16indices.size(), (char*)&u16indices.front(), sizeof(uint16_t));
+            }
             mesh.indices.setRenderAttributes(false);
         }
     }
