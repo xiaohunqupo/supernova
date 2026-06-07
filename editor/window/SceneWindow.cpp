@@ -1426,6 +1426,64 @@ void editor::SceneWindow::show() {
                         ImGui::DragFloat("##RotationSnapDegrees", &sceneProject.displaySettings.rotationSnapDegrees, 1.0f, 0.1f, 180.0f, "%.1f");
                         if (!sceneProject.displaySettings.snapRotation) ImGui::EndDisabled();
 
+                        if (sceneProject.sceneType == SceneType::SCENE_3D && sceneProject.sceneRender) {
+                            Camera* editorCamera = sceneProject.sceneRender->getCamera();
+
+                            auto drawFloatSettingRow = [&](const char* name, const char* id, float value, float defaultValue, float dragSpeed, float minValue, float maxValue, const char* format, auto validate, auto apply) {
+                                ImGui::TableNextRow();
+                                ImGui::TableSetColumnIndex(0);
+                                ImGui::Text("%s", name);
+
+                                bool defChanged = std::fabs(value - defaultValue) > 1e-4f;
+                                if (defChanged) {
+                                    ImGui::SameLine();
+                                    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, ImGui::GetStyle().ItemSpacing.y));
+                                    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+                                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, ImGui::GetStyle().FramePadding.y));
+                                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+                                    if (ImGui::Button((std::string(ICON_FA_ROTATE_LEFT) + "##" + id).c_str())) {
+                                        apply(defaultValue);
+                                        sceneProject.needUpdateRender = true;
+                                    }
+                                    ImGui::PopStyleColor(2);
+                                    ImGui::PopStyleVar(3);
+                                }
+
+                                ImGui::TableSetColumnIndex(1);
+                                ImGui::SetNextItemWidth(-1);
+                                float editedValue = value;
+                                if (ImGui::DragFloat((std::string("##") + id).c_str(), &editedValue, dragSpeed, minValue, maxValue, format)) {
+                                    apply(editedValue);
+                                    validate();
+                                    sceneProject.needUpdateRender = true;
+                                }
+                            };
+
+                            auto validateNearClip = [&]() {
+                                if (editorCamera->getNearClip() >= editorCamera->getFarClip()) {
+                                    editorCamera->setNearClip(editorCamera->getFarClip() - 0.01f);
+                                }
+                            };
+                            auto validateFarClip = [&]() {
+                                if (editorCamera->getFarClip() <= editorCamera->getNearClip()) {
+                                    editorCamera->setFarClip(editorCamera->getNearClip() + 1.0f);
+                                }
+                            };
+
+                            drawFloatSettingRow(
+                                ICON_FA_CAMERA " Editor camera near", "EditorCameraNear",
+                                editorCamera->getNearClip(), DEFAULT_EDITOR_CAMERA_NEAR,
+                                0.01f, 0.01f, 100.0f, "%.2f", validateNearClip,
+                                [&](float v) { editorCamera->setNearClip(v); });
+
+                            drawFloatSettingRow(
+                                ICON_FA_CAMERA " Editor camera far", "EditorCameraFar",
+                                editorCamera->getFarClip(), DEFAULT_EDITOR_CAMERA_FAR,
+                                1.0f, 1.0f, 100000.0f, "%.0f", validateFarClip,
+                                [&](float v) { editorCamera->setFarClip(v); });
+                        }
+
                         ImGui::EndTable();
                     }
 

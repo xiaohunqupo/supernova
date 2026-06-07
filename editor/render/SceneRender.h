@@ -9,6 +9,9 @@
 
 namespace doriax::editor{
 
+    constexpr float DEFAULT_EDITOR_CAMERA_NEAR = 0.3f;
+    constexpr float DEFAULT_EDITOR_CAMERA_FAR = 4000.0f;
+
     struct SceneDisplaySettings {
         bool showAllJoints       = false;
         bool showAllBones        = false;

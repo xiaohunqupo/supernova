@@ -248,11 +248,18 @@ editor::SceneRender3D::SceneRender3D(Scene* scene): SceneRender(scene, false, tr
     bodyObjects.clear();
     jointLines.clear();
 
-    createLines();
-
-    //camera->setType(CameraType::CAMERA_UI);
+    camera->setNearClip(DEFAULT_EDITOR_CAMERA_NEAR);
+    camera->setFarClip(DEFAULT_EDITOR_CAMERA_FAR);
     camera->setPosition(10, 4, 10);
     camera->setTarget(0, 0, 0);
+
+    int linesStepChange = std::max(1, (int)(camera->getFarClip() / 2));
+    linesOffset = Vector2(
+        (int)(camera->getWorldPosition().x / linesStepChange) * linesStepChange,
+        (int)(camera->getWorldPosition().z / linesStepChange) * linesStepChange
+    );
+    lastGridFarClip = camera->getFarClip();
+    createLines();
 
     //camera->setRenderToTexture(true);
     //camera->setUseFramebufferSizes(false);
@@ -1591,13 +1598,15 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
     float spacing = displaySettings.gridSpacing3D;
     if (spacing <= 0.0f) spacing = 1.0f;
 
-    int linesStepChange = (int)(camera->getFarClip() / 2);
+    int linesStepChange = std::max(1, (int)(camera->getFarClip() / 2));
     int cameraLineStepX = (int)(camera->getWorldPosition().x / linesStepChange) * linesStepChange;
     int cameraLineStepZ = (int)(camera->getWorldPosition().z / linesStepChange) * linesStepChange;
     bool spacingChanged = (lastGridSpacing != spacing);
-    if (cameraLineStepX != linesOffset.x || cameraLineStepZ != linesOffset.y || spacingChanged){
+    bool farClipChanged = (lastGridFarClip != camera->getFarClip());
+    if (cameraLineStepX != linesOffset.x || cameraLineStepZ != linesOffset.y || spacingChanged || farClipChanged){
         linesOffset = Vector2(cameraLineStepX, cameraLineStepZ);
         lastGridSpacing = spacing;
+        lastGridFarClip = camera->getFarClip();
 
         createLines();
     }

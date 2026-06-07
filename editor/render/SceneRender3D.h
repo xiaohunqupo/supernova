@@ -60,6 +60,7 @@ namespace doriax::editor{
 
         Vector2 linesOffset;
         float lastGridSpacing;
+        float lastGridFarClip = 0.0f;
 
         void createLines();
         bool instanciateLightObject(Entity entity);
