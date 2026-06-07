@@ -540,6 +540,9 @@ void editor::SceneWindow::forwardPlayKeyboardInput(ImGuiIO& io, int mods){
             }
             Engine::systemKeyDown(engineKey, false, mods);
         }else if (allowRepeat && ImGui::IsKeyPressed(imguiKey, true)){
+            if (charInput != 0){
+                Engine::systemCharInput(charInput);
+            }
             Engine::systemKeyDown(engineKey, true, mods);
         }
     };

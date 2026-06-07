@@ -79,6 +79,14 @@ int DoriaxGLFW::init(int argc, char **argv){
                 doriax::Engine::systemCharInput('\e');
             doriax::Engine::systemKeyDown(key, false, mods);
         }else if (action==GLFW_REPEAT){
+            if (key == GLFW_KEY_TAB)
+                doriax::Engine::systemCharInput('\t');
+            if (key == GLFW_KEY_BACKSPACE)
+                doriax::Engine::systemCharInput('\b');
+            if (key == GLFW_KEY_ENTER)
+                doriax::Engine::systemCharInput('\r');
+            if (key == GLFW_KEY_ESCAPE)
+                doriax::Engine::systemCharInput('\e');
             doriax::Engine::systemKeyDown(key, true, mods);
         }else if (action==GLFW_RELEASE){
             doriax::Engine::systemKeyUp(key, false, mods);

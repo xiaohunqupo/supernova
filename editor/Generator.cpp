@@ -1283,6 +1283,14 @@ std::string editor::Generator::getPlatformEditorSource(const fs::path& projectPa
     content += "                doriax::Engine::systemCharInput('\\e');\n";
     content += "            doriax::Engine::systemKeyDown(key, false, mods);\n";
     content += "        }else if (action==GLFW_REPEAT){\n";
+    content += "            if (key == GLFW_KEY_TAB)\n";
+    content += "                doriax::Engine::systemCharInput('\\t');\n";
+    content += "            if (key == GLFW_KEY_BACKSPACE)\n";
+    content += "                doriax::Engine::systemCharInput('\\b');\n";
+    content += "            if (key == GLFW_KEY_ENTER)\n";
+    content += "                doriax::Engine::systemCharInput('\\r');\n";
+    content += "            if (key == GLFW_KEY_ESCAPE)\n";
+    content += "                doriax::Engine::systemCharInput('\\e');\n";
     content += "            doriax::Engine::systemKeyDown(key, true, mods);\n";
     content += "        }else if (action==GLFW_RELEASE){\n";
     content += "            doriax::Engine::systemKeyUp(key, false, mods);\n";

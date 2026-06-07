@@ -998,7 +998,7 @@ bool UISystem::handleTextEditCharInput(TextEditComponent& textedit, TextComponen
 }
 
 bool UISystem::handleTextEditKeyDown(TextEditComponent& textedit, TextComponent& text, UIComponent& ui, int key, bool repeat, int mods){
-    if (textedit.disabled || repeat){
+    if (textedit.disabled){
         return false;
     }
 

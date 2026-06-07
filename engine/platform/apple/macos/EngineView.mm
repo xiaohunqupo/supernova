@@ -183,6 +183,10 @@ static const NSRange _emptyRange = { NSNotFound, 0 };
     return YES;
 }
 
+- (void)deleteBackward{
+    doriax::Engine::systemCharInput('\b');
+}
+
 - (void)insertText:(id)string replacementRange:(NSRange)replacementRange{
     NSString* characters;
 

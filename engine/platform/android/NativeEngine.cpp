@@ -704,13 +704,20 @@ void NativeEngine::handleGameActivityInput(){
             bool repeat = (keyEvent->repeatCount > 0)?true:false;
 
             if (keyEvent->action == AKEY_EVENT_ACTION_DOWN) {
+                if (keyEvent->keyCode == AKEYCODE_TAB)
+                    doriax::Engine::systemCharInput('\t');
+                if (keyEvent->keyCode == AKEYCODE_DEL)
+                    doriax::Engine::systemCharInput('\b');
+                if (keyEvent->keyCode == AKEYCODE_ENTER)
+                    doriax::Engine::systemCharInput('\r');
+                if (keyEvent->keyCode == AKEYCODE_ESCAPE)
+                    doriax::Engine::systemCharInput('\e');
+                if (keyEvent->keyCode == AKEYCODE_BACK)
+                    doriax::Engine::systemCharInput('\b');
+
                 doriax::Engine::systemKeyDown(keyCode, repeat, modifiers);
             } else if (keyEvent->action == AKEY_EVENT_ACTION_UP) {
                 doriax::Engine::systemKeyUp(keyCode, repeat, modifiers);
-            }
-
-            if (keyEvent->keyCode == AKEYCODE_BACK && 0 == keyEvent->action) {
-                doriax::Engine::systemCharInput('\b');
             }
 
         }
