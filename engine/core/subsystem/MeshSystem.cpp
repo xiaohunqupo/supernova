@@ -1093,6 +1093,9 @@ Entity MeshSystem::generateSketetalStructure(Entity entity, ModelComponent& mode
     Entity bone;
 
     bone = scene->createEntity();
+    if (bone == NULL_ENTITY) {
+        return NULL_ENTITY;
+    }
     scene->addComponent<Transform>(bone);
     scene->addComponent<BoneComponent>(bone);
 
@@ -1181,6 +1184,8 @@ void MeshSystem::calculateMeshAABB(MeshComponent& mesh){
         }
     }
 
+    mesh.verticesAABB = AABB::ZERO;
+
     for (size_t i = 0; i < mesh.numSubmeshes; i++) {
         for (auto const& attr : mesh.submeshes[i].attributes){
             if (attr.first == AttributeType::POSITION){
@@ -1189,17 +1194,14 @@ void MeshSystem::calculateMeshAABB(MeshComponent& mesh){
             }
         }
 
-        if (vertexAttr.getDataType() != AttributeDataType::FLOAT){
+        if (!vertexBuffer || vertexAttr.getDataType() != AttributeDataType::FLOAT){
             // cannot create AABB of non float position vertex
-            return;
+            continue;
         }
 
-        mesh.verticesAABB = AABB::ZERO;
         int verticesize = int(vertexAttr.getCount());
-        for (int i = 0; i < verticesize; i++){
-            Vector3 vertice = vertexBuffer->getVector3(&vertexAttr, i);
-
-            mesh.verticesAABB.merge(vertice);
+        for (int v = 0; v < verticesize; v++){
+            mesh.verticesAABB.merge(vertexBuffer->getVector3(&vertexAttr, v));
         }
     }
 
@@ -2245,13 +2247,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
     uint64_t buildId = asyncLoad ? std::hash<std::string>{}(getAsyncModelLoadKey(filename)) : 0;
 
-    mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
-    mesh.numSubmeshes = 1;
-
     std::string err;
     std::string warn;
 
-    int meshIndex = 0;
     std::vector<std::string> loadedBuffers;
 
     mesh.numExternalBuffers = 0;
@@ -2306,474 +2304,436 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
     }
 
-    int meshNode = -1;
+    // Build parent map and collect all nodes that own a mesh primitive.
+    int meshNode    = -1; // first skinned mesh node — used for skeleton lookup
+    int transformNode = -1; // scene root — used for initial entity transform
+    std::vector<int> meshNodes;
     std::map<int, int> nodesParent;
 
     for (size_t i = 0; i < model.gltfModel->nodes.size(); i++) {
-        nodesParent[i] = -1;
+        nodesParent[static_cast<int>(i)] = -1;
     }
 
     for (size_t i = 0; i < model.gltfModel->nodes.size(); i++) {
-        tinygltf::Node node = model.gltfModel->nodes[i];
+        const tinygltf::Node& node = model.gltfModel->nodes[i];
 
-        if (node.mesh == meshIndex){
-            meshNode = i;
+        if (node.mesh >= 0) {
+            meshNodes.push_back(static_cast<int>(i));
+            if (meshNode < 0 && node.skin >= 0) {
+                meshNode = static_cast<int>(i);
+            }
         }
 
-        for (int c = 0; c < node.children.size(); c++){
-            nodesParent[node.children[c]] = i;
+        for (int child : node.children) {
+            nodesParent[child] = static_cast<int>(i);
         }
     }
 
-    Matrix4 matrix = getGLTFMeshGlobalMatrix(meshNode, model, nodesParent);
-
-    if (changeRootTransform) {
-        bool hasDefaultPosition = (transform.position == Vector3::ZERO);
-        bool hasDefaultRotation = (transform.rotation == Quaternion::IDENTITY);
-        bool hasDefaultScale = (transform.scale == Vector3::UNIT_SCALE);
-
-        Vector3 newPosition;
-        Vector3 newScale;
-        Quaternion newRotation;
-        matrix.decompose(newPosition, newScale, newRotation);
-
-        if (hasDefaultPosition) {
-            transform.position = newPosition;
-        }
-        if (hasDefaultRotation) {
-            transform.rotation = newRotation;
-        }
-        if (hasDefaultScale) {
-            transform.scale = newScale;
-        }
-        transform.needUpdate = true;
-    }
-
-    mesh.cullingMode = CullingMode::BACK;
-    if (matrix.determinant() < 0.0){
-        mesh.windingOrder = WindingOrder::CW;
-    }else{
-        mesh.windingOrder = WindingOrder::CCW;
-    }
-
-    if (asyncLoad) {
-        ResourceProgress::updateProgress(buildId, 0.4f); // Transform processing done
-    }
-
-    if (!isValidGLTFIndex(meshIndex, model.gltfModel->meshes)) {
-        Log::error("GLTF model has no mesh index %i: %s", meshIndex, filename.c_str());
+    if (meshNodes.empty()) {
+        Log::error("GLTF model has no mesh nodes: %s", filename.c_str());
         if (asyncLoad) {
             ResourceProgress::failBuild(buildId);
         }
         return false;
     }
 
-    tinygltf::Mesh gltfmesh = model.gltfModel->meshes[meshIndex];
-
-    if (gltfmesh.primitives.size() > 0){
-        mesh.numSubmeshes = gltfmesh.primitives.size();
-
+    if (meshNodes.size() > 1) {
+        Log::warn("GLTF model (%s) has %zu mesh nodes. Loading them as submeshes on one entity model. Per-node transforms are ignored",
+                  filename.c_str(), meshNodes.size());
     }
 
-    if (mesh.numSubmeshes > mesh.submeshes.size()){
-        Log::error("Model %s has more submeshes than the maximum allowed (%i)", filename.c_str(), mesh.submeshes.size());
-        mesh.numSubmeshes = mesh.submeshes.size();
+    if (meshNode < 0) {
+        meshNode = meshNodes[0];
     }
 
-    for (size_t i = 0; i < mesh.numSubmeshes; i++) {
-        // Update progress based on submesh processing
+    // Prefer the GLTF scene root for the entity transform; fall back to the first mesh node.
+    if (!model.gltfModel->scenes.empty()) {
+        int sceneIdx = model.gltfModel->defaultScene >= 0 ? model.gltfModel->defaultScene : 0;
+        if (isValidGLTFIndex(sceneIdx, model.gltfModel->scenes) && !model.gltfModel->scenes[sceneIdx].nodes.empty()) {
+            transformNode = model.gltfModel->scenes[sceneIdx].nodes[0];
+        }
+    }
+    if (transformNode < 0) {
+        transformNode = meshNodes[0];
+    }
+
+    Matrix4 matrix = getGLTFMeshGlobalMatrix(transformNode, model, nodesParent);
+
+    if (changeRootTransform) {
+        bool hasDefaultPosition = (transform.position == Vector3::ZERO);
+        bool hasDefaultRotation = (transform.rotation == Quaternion::IDENTITY);
+        bool hasDefaultScale    = (transform.scale    == Vector3::UNIT_SCALE);
+
+        Vector3    newPosition;
+        Vector3    newScale;
+        Quaternion newRotation;
+        matrix.decompose(newPosition, newScale, newRotation);
+
+        if (hasDefaultPosition) transform.position = newPosition;
+        if (hasDefaultRotation) transform.rotation = newRotation;
+        if (hasDefaultScale)    transform.scale    = newScale;
+        transform.needUpdate = true;
+    }
+
+    mesh.cullingMode = CullingMode::BACK;
+    mesh.windingOrder = (matrix.determinant() < 0.0) ? WindingOrder::CW : WindingOrder::CCW;
+
+    if (asyncLoad) {
+        ResourceProgress::updateProgress(buildId, 0.4f); // Transform processing done
+    }
+
+    // Count total primitives across all mesh nodes to size the submesh array.
+    unsigned int totalSubmeshes = 0;
+    for (int nodeIdx : meshNodes) {
+        int gltfMeshIndex = model.gltfModel->nodes[nodeIdx].mesh;
+        if (isValidGLTFIndex(gltfMeshIndex, model.gltfModel->meshes)) {
+            totalSubmeshes += static_cast<unsigned int>(model.gltfModel->meshes[gltfMeshIndex].primitives.size());
+        }
+    }
+
+    if (totalSubmeshes == 0) {
+        Log::error("GLTF model has no mesh primitives: %s", filename.c_str());
         if (asyncLoad) {
-            float submeshProgress = 0.4f + (0.4f * (float(i) / float(mesh.numSubmeshes)));
-            ResourceProgress::updateProgress(buildId, submeshProgress);
+            ResourceProgress::failBuild(buildId);
         }
+        return false;
+    }
 
-        mesh.submeshes[i].attributes.clear();
-        applyDefaultGLTFMaterial(mesh.submeshes[i].material);
+    mesh.numSubmeshes = totalSubmeshes;
+    if (mesh.numSubmeshes > static_cast<unsigned int>(mesh.submeshes.size())) {
+        Log::error("Model %s has more submeshes than the maximum allowed (%i)", filename.c_str(), mesh.submeshes.size());
+        mesh.numSubmeshes = static_cast<unsigned int>(mesh.submeshes.size());
+    }
 
-        tinygltf::Primitive primitive = gltfmesh.primitives[i];
-        if (!isValidGLTFIndex(primitive.indices, model.gltfModel->accessors)) {
-            Log::error("GLTF primitive %zu has no valid index accessor: %s", i, filename.c_str());
+    model.morphNameMapping.clear();
+
+    unsigned int submeshIndex = 0;
+    for (int nodeIdx : meshNodes) {
+        int gltfMeshIndex = model.gltfModel->nodes[nodeIdx].mesh;
+        if (!isValidGLTFIndex(gltfMeshIndex, model.gltfModel->meshes)) {
             continue;
         }
 
-        tinygltf::Accessor indexAccessor = model.gltfModel->accessors[primitive.indices];
-        if (!isValidGLTFIndex(indexAccessor.bufferView, model.gltfModel->bufferViews)) {
-            Log::error("GLTF primitive %zu has no valid index buffer view: %s", i, filename.c_str());
-            continue;
-        }
+        tinygltf::Mesh& gltfmesh = model.gltfModel->meshes[gltfMeshIndex];
 
-        const tinygltf::Material* mat = nullptr;
-        if (primitive.material >= 0) {
-            if (isValidGLTFIndex(primitive.material, model.gltfModel->materials)) {
-                mat = &model.gltfModel->materials[primitive.material];
-            } else {
-                Log::warn("GLTF primitive %zu has invalid material index %i. Using default material: %s", i, primitive.material, filename.c_str());
+        for (size_t p = 0; p < gltfmesh.primitives.size(); p++) {
+            if (submeshIndex >= mesh.numSubmeshes) {
+                break;
             }
-        }
 
-        AttributeDataType indexType;
+            // Claim this slot now so any early-continue still advances the index correctly.
+            const unsigned int i = submeshIndex++;
 
-        //Not supported TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE
-        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT){
-            indexType = AttributeDataType::UNSIGNED_SHORT;
-        }else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT){
-            indexType = AttributeDataType::UNSIGNED_INT;
-        }else{
-            Log::error("Unknown index type %i", indexAccessor.componentType);
-            continue;
-        }
+            if (asyncLoad) {
+                float submeshProgress = 0.4f + (0.4f * (float(i) / float(mesh.numSubmeshes)));
+                ResourceProgress::updateProgress(buildId, submeshProgress);
+            }
 
-        if (mat) {
-            if (!loadGLTFTexture(
-                mat->pbrMetallicRoughness.baseColorTexture.index,
-                model, 
-                mesh.submeshes[i].material.baseColorTexture, 
-                filename + "|" + "baseColorTexture"))
-                continue;
+            mesh.submeshes[i].attributes.clear();
+            mesh.submeshes[i].primitiveType = PrimitiveType::TRIANGLES;
+            applyDefaultGLTFMaterial(mesh.submeshes[i].material);
 
-            if (mat->pbrMetallicRoughness.baseColorTexture.texCoord != 0){
-                Log::error("Not supported texcoord for %s, only one per submesh: %s", "baseColorTexture", filename.c_str());
+            const tinygltf::Primitive& primitive = gltfmesh.primitives[p];
+
+            if (!isValidGLTFIndex(primitive.indices, model.gltfModel->accessors)) {
+                Log::error("GLTF primitive %u has no valid index accessor: %s", i, filename.c_str());
                 continue;
             }
 
-            if (!loadGLTFTexture(
-                mat->pbrMetallicRoughness.metallicRoughnessTexture.index, 
-                model,
-                mesh.submeshes[i].material.metallicRoughnessTexture, 
-                filename + "|" + "metallicRoughnessTexture"))
-                continue;
-
-            if (mat->pbrMetallicRoughness.metallicRoughnessTexture.texCoord != 0){
-                Log::error("Not supported texcoord for %s, only one per submesh: %s", "metallicRoughnessTexture", filename.c_str());
+            const tinygltf::Accessor& indexAccessor = model.gltfModel->accessors[primitive.indices];
+            if (!isValidGLTFIndex(indexAccessor.bufferView, model.gltfModel->bufferViews)) {
+                Log::error("GLTF primitive %u has no valid index buffer view: %s", i, filename.c_str());
                 continue;
             }
 
-            if (!loadGLTFTexture(
-                mat->occlusionTexture.index, 
-                model,
-                mesh.submeshes[i].material.occlusionTexture, 
-                filename + "|" + "occlusionTexture"))
-                continue;
-
-            if (mat->occlusionTexture.texCoord != 0){
-                Log::error("Not supported texcoord for %s, only one per submesh: %s", "occlusionTexture", filename.c_str());
-                continue;
-            }
-
-            if (!loadGLTFTexture(
-                mat->emissiveTexture.index, 
-                model,
-                mesh.submeshes[i].material.emissiveTexture, 
-                filename + "|" + "emissiveTexture"))
-                continue;
-
-            if (mat->emissiveTexture.texCoord != 0){
-                Log::error("Not supported texcoord for %s, only one per submesh: %s", "emissiveTexture", filename.c_str());
-                continue;
-            }
-
-            if (!loadGLTFTexture(
-                mat->normalTexture.index, 
-                model,
-                mesh.submeshes[i].material.normalTexture, 
-                filename + "|" + "normalTexture"))
-                continue;
-
-            if (mat->normalTexture.texCoord != 0){
-                Log::error("Not supported texcoord for %s, only one per submesh: %s", "normalTexture", filename.c_str());
-                continue;
-            }
-
-            mesh.submeshes[i].material.baseColorFactor = Vector4(
-                mat->pbrMetallicRoughness.baseColorFactor[0],
-                mat->pbrMetallicRoughness.baseColorFactor[1],
-                mat->pbrMetallicRoughness.baseColorFactor[2],
-                mat->pbrMetallicRoughness.baseColorFactor[3]);
-
-            mesh.submeshes[i].material.metallicFactor = mat->pbrMetallicRoughness.metallicFactor;
-
-            mesh.submeshes[i].material.roughnessFactor = mat->pbrMetallicRoughness.roughnessFactor;
-
-            mesh.submeshes[i].material.emissiveFactor = Vector3(
-                mat->emissiveFactor[0],
-                mat->emissiveFactor[1],
-                mat->emissiveFactor[2]);
-        }
-
-        int indexStride = 0;
-        if (indexType == AttributeDataType::UNSIGNED_SHORT){
-            indexStride = sizeof(uint16_t);
-        }else if (indexType == AttributeDataType::UNSIGNED_INT){
-            indexStride = sizeof(uint32_t);
-        }
-
-        mesh.submeshes[i].faceCulling = mat ? !mat->doubleSided : true;
-
-        loadGLTFBuffer(indexAccessor.bufferView, mesh, model, indexStride, loadedBuffers);
-
-        addSubmeshAttribute(mesh.submeshes[i], getBufferName(indexAccessor.bufferView, model), AttributeType::INDEX, 1, indexType, indexAccessor.count, indexAccessor.byteOffset, false);
-
-        for (auto &attrib : primitive.attributes) {
-            if (!isValidGLTFIndex(attrib.second, model.gltfModel->accessors)) {
-                Log::warn("Invalid GLTF accessor index %i for attribute %s", attrib.second, attrib.first.c_str());
-                continue;
-            }
-
-            tinygltf::Accessor accessor = model.gltfModel->accessors[attrib.second];
-            if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
-                Log::warn("Invalid GLTF buffer view index %i for attribute %s", accessor.bufferView, attrib.first.c_str());
-                continue;
-            }
-
-            int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
-            std::string bufferName = getBufferName(accessor.bufferView, model);
-
-            loadGLTFBuffer(accessor.bufferView, mesh, model, byteStride, loadedBuffers);
-
-            int elements = 1;
-            if (accessor.type != TINYGLTF_TYPE_SCALAR) {
-                elements = accessor.type;
-            }
-
-            AttributeDataType dataType;
-
-            if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_BYTE){
-                dataType = AttributeDataType::BYTE;
-            }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE){
-                dataType = AttributeDataType::UNSIGNED_BYTE;
-            }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_SHORT){
-                dataType = AttributeDataType::SHORT;
-            }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT){
-                dataType = AttributeDataType::UNSIGNED_SHORT;
-            }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT){
-                //dataType = AttributeDataType::UNSIGNED_INT;
-            }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT){
-                dataType = AttributeDataType::FLOAT;
-            }else{
-                Log::error("Unknown data type %i of %s", accessor.componentType, attrib.first.c_str());
-                continue;
-            }
-
-            AttributeType attType;
-            bool foundAttrs = false;
-            if (attrib.first.compare("POSITION") == 0){
-                mesh.vertexCount = accessor.count;
-                attType = AttributeType::POSITION;
-                foundAttrs = true;
-            }
-            if (attrib.first.compare("NORMAL") == 0){
-                attType = AttributeType::NORMAL;
-                foundAttrs = true;
-            }
-            if (attrib.first.compare("TANGENT") == 0){
-                attType = AttributeType::TANGENT;
-                foundAttrs = true;
-            }
-            if (attrib.first.compare("TEXCOORD_0") == 0){
-                attType = AttributeType::TEXCOORD1;
-                foundAttrs = true;
-            }
-            if (attrib.first.compare("TEXCOORD_1") == 0){
-                //attType = AttributeType::TEXTURECOORDS;
-                //foundAttrs = true;
-            }
-            if (attrib.first.compare("COLOR_0") == 0){
-                if (elements == 4){
-                    attType = AttributeType::COLOR;
-                    foundAttrs = true;
-                    mesh.submeshes[i].hasVertexColor4 = true;
+            const tinygltf::Material* mat = nullptr;
+            if (primitive.material >= 0) {
+                if (isValidGLTFIndex(primitive.material, model.gltfModel->materials)) {
+                    mat = &model.gltfModel->materials[primitive.material];
                 } else {
-                    Log::warn("Not supported vector(3) of: %s", attrib.first.c_str());
-                }
-            }
-            if (attrib.first.compare("JOINTS_0") == 0){
-                attType = AttributeType::BONEIDS;
-                foundAttrs = true;
-
-                // Sokol always normalize unsigned short
-                if (dataType == AttributeDataType::UNSIGNED_SHORT){
-                    mesh.normAdjustJoint = 65535.0;
-                }
-            }
-            if (attrib.first.compare("WEIGHTS_0") == 0){
-                attType = AttributeType::BONEWEIGHTS;
-                foundAttrs = true;
-
-                if (accessor.normalized){
-                    if (dataType == AttributeDataType::BYTE){
-                        mesh.normAdjustWeight = 127.0;
-                    }else if (dataType == AttributeDataType::UNSIGNED_BYTE){
-                        mesh.normAdjustWeight = 255.0;
-                    }else if (dataType == AttributeDataType::SHORT){
-                        mesh.normAdjustWeight = 32767.0;
-                    }
-                }
-                // Sokol always normalize unsigned short
-                if (dataType == AttributeDataType::UNSIGNED_SHORT){
-                    mesh.normAdjustWeight = 65535.0;
+                    Log::warn("GLTF primitive %u has invalid material index %i. Using default material: %s", i, primitive.material, filename.c_str());
                 }
             }
 
-            if (foundAttrs) {
-                for (int i = 0; i < mesh.numExternalBuffers; i++){
-                    if (mesh.eBuffers[i].getName() == bufferName)
-                        mesh.eBuffers[i].setRenderAttributes(false);
-                }
-                addSubmeshAttribute(mesh.submeshes[i], bufferName, attType, elements, dataType, accessor.count, accessor.byteOffset, accessor.normalized);
-            } else
-                Log::warn("Model attribute unused: %s", attrib.first.c_str());
+            //Not supported TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE
+            AttributeDataType indexType;
+            if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                indexType = AttributeDataType::UNSIGNED_SHORT;
+            } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+                indexType = AttributeDataType::UNSIGNED_INT;
+            } else {
+                Log::error("Unknown index type %i", indexAccessor.componentType);
+                continue;
+            }
 
-        }
-
-        bool morphTargets = false;
-        bool morphNormals = false;
-        bool morphTangents = false;
-
-        int morphIndex = 0;
-        for (auto &morphs : primitive.targets) {
-            for (auto &attribMorph : morphs) {
-
-                morphTargets = true;
-
-                if (!isValidGLTFIndex(attribMorph.second, model.gltfModel->accessors)) {
-                    Log::warn("Invalid GLTF accessor index %i for morph target %s", attribMorph.second, attribMorph.first.c_str());
+            if (mat) {
+                if (!loadGLTFTexture(mat->pbrMetallicRoughness.baseColorTexture.index, model,
+                        mesh.submeshes[i].material.baseColorTexture, filename + "|baseColorTexture"))
+                    continue;
+                if (mat->pbrMetallicRoughness.baseColorTexture.texCoord != 0) {
+                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "baseColorTexture", filename.c_str());
                     continue;
                 }
 
-                tinygltf::Accessor accessor = model.gltfModel->accessors[attribMorph.second];
+                if (!loadGLTFTexture(mat->pbrMetallicRoughness.metallicRoughnessTexture.index, model,
+                        mesh.submeshes[i].material.metallicRoughnessTexture, filename + "|metallicRoughnessTexture"))
+                    continue;
+                if (mat->pbrMetallicRoughness.metallicRoughnessTexture.texCoord != 0) {
+                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "metallicRoughnessTexture", filename.c_str());
+                    continue;
+                }
+
+                if (!loadGLTFTexture(mat->occlusionTexture.index, model,
+                        mesh.submeshes[i].material.occlusionTexture, filename + "|occlusionTexture"))
+                    continue;
+                if (mat->occlusionTexture.texCoord != 0) {
+                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "occlusionTexture", filename.c_str());
+                    continue;
+                }
+
+                if (!loadGLTFTexture(mat->emissiveTexture.index, model,
+                        mesh.submeshes[i].material.emissiveTexture, filename + "|emissiveTexture"))
+                    continue;
+                if (mat->emissiveTexture.texCoord != 0) {
+                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "emissiveTexture", filename.c_str());
+                    continue;
+                }
+
+                if (!loadGLTFTexture(mat->normalTexture.index, model,
+                        mesh.submeshes[i].material.normalTexture, filename + "|normalTexture"))
+                    continue;
+                if (mat->normalTexture.texCoord != 0) {
+                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "normalTexture", filename.c_str());
+                    continue;
+                }
+
+                mesh.submeshes[i].material.baseColorFactor = Vector4(
+                    mat->pbrMetallicRoughness.baseColorFactor[0],
+                    mat->pbrMetallicRoughness.baseColorFactor[1],
+                    mat->pbrMetallicRoughness.baseColorFactor[2],
+                    mat->pbrMetallicRoughness.baseColorFactor[3]);
+
+                mesh.submeshes[i].material.metallicFactor  = mat->pbrMetallicRoughness.metallicFactor;
+                mesh.submeshes[i].material.roughnessFactor = mat->pbrMetallicRoughness.roughnessFactor;
+
+                mesh.submeshes[i].material.emissiveFactor = Vector3(
+                    mat->emissiveFactor[0],
+                    mat->emissiveFactor[1],
+                    mat->emissiveFactor[2]);
+            }
+
+            int indexStride = (indexType == AttributeDataType::UNSIGNED_SHORT) ? sizeof(uint16_t) : sizeof(uint32_t);
+
+            mesh.submeshes[i].faceCulling = mat ? !mat->doubleSided : true;
+
+            loadGLTFBuffer(indexAccessor.bufferView, mesh, model, indexStride, loadedBuffers);
+            addSubmeshAttribute(mesh.submeshes[i], getBufferName(indexAccessor.bufferView, model),
+                AttributeType::INDEX, 1, indexType, indexAccessor.count, indexAccessor.byteOffset, false);
+
+            for (auto& attrib : primitive.attributes) {
+                if (!isValidGLTFIndex(attrib.second, model.gltfModel->accessors)) {
+                    Log::warn("Invalid GLTF accessor index %i for attribute %s", attrib.second, attrib.first.c_str());
+                    continue;
+                }
+
+                const tinygltf::Accessor& accessor = model.gltfModel->accessors[attrib.second];
                 if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
-                    Log::warn("Invalid GLTF buffer view index %i for morph target %s", accessor.bufferView, attribMorph.first.c_str());
+                    Log::warn("Invalid GLTF buffer view index %i for attribute %s", accessor.bufferView, attrib.first.c_str());
                     continue;
                 }
 
                 int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
-                std::string bufferName = getBufferName(accessor.bufferView, model);
+                const std::string bufferName = getBufferName(accessor.bufferView, model);
 
                 loadGLTFBuffer(accessor.bufferView, mesh, model, byteStride, loadedBuffers);
 
-                int elements = 1;
-                if (accessor.type != TINYGLTF_TYPE_SCALAR) {
-                    elements = accessor.type;
-                }
+                int elements = (accessor.type != TINYGLTF_TYPE_SCALAR) ? accessor.type : 1;
 
                 AttributeDataType dataType;
-
-                if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_BYTE){
+                if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_BYTE) {
                     dataType = AttributeDataType::BYTE;
-                }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE){
+                } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
                     dataType = AttributeDataType::UNSIGNED_BYTE;
-                }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_SHORT){
+                } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_SHORT) {
                     dataType = AttributeDataType::SHORT;
-                }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT){
+                } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
                     dataType = AttributeDataType::UNSIGNED_SHORT;
-                }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT){
-                    dataType = AttributeDataType::UNSIGNED_INT;
-                }else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT){
+                } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+                    //dataType = AttributeDataType::UNSIGNED_INT;
+                } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
                     dataType = AttributeDataType::FLOAT;
-                }else{
-                    Log::error("Unknown data type %i of morph target %s", accessor.componentType, attribMorph.first.c_str());
+                } else {
+                    Log::error("Unknown data type %i of %s", accessor.componentType, attrib.first.c_str());
                     continue;
                 }
 
                 AttributeType attType;
-                bool foundMorph = false;
-
-                if (attribMorph.first.compare("POSITION") == 0){
-                    if (morphIndex == 0){
-                        attType = AttributeType::MORPHTARGET0;
-                        foundMorph = true;
-                    } else if (morphIndex == 1){
-                        attType = AttributeType::MORPHTARGET1;
-                        foundMorph = true;
+                bool foundAttrs = false;
+                if (attrib.first == "POSITION") {
+                    mesh.vertexCount = accessor.count;
+                    attType = AttributeType::POSITION;
+                    foundAttrs = true;
+                }
+                if (attrib.first == "NORMAL") {
+                    attType = AttributeType::NORMAL;
+                    foundAttrs = true;
+                }
+                if (attrib.first == "TANGENT") {
+                    attType = AttributeType::TANGENT;
+                    foundAttrs = true;
+                }
+                if (attrib.first == "TEXCOORD_0") {
+                    attType = AttributeType::TEXCOORD1;
+                    foundAttrs = true;
+                }
+                if (attrib.first == "COLOR_0") {
+                    if (elements == 4) {
+                        attType = AttributeType::COLOR;
+                        foundAttrs = true;
+                        mesh.submeshes[i].hasVertexColor4 = true;
+                    } else {
+                        Log::warn("Not supported vector(3) of: %s", attrib.first.c_str());
                     }
-                    if ((!morphNormals && morphTangents) || (morphNormals && !morphTangents)){
-                        if (morphIndex == 2){
-                            attType = AttributeType::MORPHTARGET2;
-                            foundMorph = true;
-                        } else if (morphIndex == 3){
-                            attType = AttributeType::MORPHTARGET3;
-                            foundMorph = true;
-                        }
-                        if (!morphNormals && !morphTangents){
-                            if (morphIndex == 4){
-                                attType = AttributeType::MORPHTARGET4;
-                                foundMorph = true;
-                            } else if (morphIndex == 5){
-                                attType = AttributeType::MORPHTARGET5;
-                                foundMorph = true;
-                            } else if (morphIndex == 6){
-                                attType = AttributeType::MORPHTARGET6;
-                                foundMorph = true;
-                            } else if (morphIndex == 7){
-                                attType = AttributeType::MORPHTARGET7;
-                                foundMorph = true;
+                }
+                if (attrib.first == "JOINTS_0") {
+                    attType = AttributeType::BONEIDS;
+                    foundAttrs = true;
+                    // Sokol always normalizes unsigned short
+                    if (dataType == AttributeDataType::UNSIGNED_SHORT) {
+                        mesh.normAdjustJoint = 65535.0;
+                    }
+                }
+                if (attrib.first == "WEIGHTS_0") {
+                    attType = AttributeType::BONEWEIGHTS;
+                    foundAttrs = true;
+                    if (accessor.normalized) {
+                        if (dataType == AttributeDataType::BYTE)               mesh.normAdjustWeight = 127.0;
+                        else if (dataType == AttributeDataType::UNSIGNED_BYTE) mesh.normAdjustWeight = 255.0;
+                        else if (dataType == AttributeDataType::SHORT)         mesh.normAdjustWeight = 32767.0;
+                    }
+                    // Sokol always normalizes unsigned short
+                    if (dataType == AttributeDataType::UNSIGNED_SHORT) {
+                        mesh.normAdjustWeight = 65535.0;
+                    }
+                }
+
+                if (foundAttrs) {
+                    for (int b = 0; b < mesh.numExternalBuffers; b++) {
+                        if (mesh.eBuffers[b].getName() == bufferName)
+                            mesh.eBuffers[b].setRenderAttributes(false);
+                    }
+                    addSubmeshAttribute(mesh.submeshes[i], bufferName, attType, elements, dataType,
+                        accessor.count, accessor.byteOffset, accessor.normalized);
+                } else if (attrib.first != "TEXCOORD_1") {
+                    Log::warn("Model attribute unused: %s", attrib.first.c_str());
+                }
+            }
+
+            bool morphTargets = false;
+            bool morphNormals  = false;
+            bool morphTangents = false;
+            int  morphIndex    = 0;
+
+            for (auto& morphs : primitive.targets) {
+                for (auto& attribMorph : morphs) {
+                    morphTargets = true;
+
+                    if (!isValidGLTFIndex(attribMorph.second, model.gltfModel->accessors)) {
+                        Log::warn("Invalid GLTF accessor index %i for morph target %s", attribMorph.second, attribMorph.first.c_str());
+                        continue;
+                    }
+
+                    const tinygltf::Accessor& accessor = model.gltfModel->accessors[attribMorph.second];
+                    if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
+                        Log::warn("Invalid GLTF buffer view index %i for morph target %s", accessor.bufferView, attribMorph.first.c_str());
+                        continue;
+                    }
+
+                    int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
+                    const std::string bufferName = getBufferName(accessor.bufferView, model);
+
+                    loadGLTFBuffer(accessor.bufferView, mesh, model, byteStride, loadedBuffers);
+
+                    int elements = (accessor.type != TINYGLTF_TYPE_SCALAR) ? accessor.type : 1;
+
+                    AttributeDataType dataType;
+                    if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_BYTE) {
+                        dataType = AttributeDataType::BYTE;
+                    } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+                        dataType = AttributeDataType::UNSIGNED_BYTE;
+                    } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_SHORT) {
+                        dataType = AttributeDataType::SHORT;
+                    } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                        dataType = AttributeDataType::UNSIGNED_SHORT;
+                    } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+                        dataType = AttributeDataType::UNSIGNED_INT;
+                    } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
+                        dataType = AttributeDataType::FLOAT;
+                    } else {
+                        Log::error("Unknown data type %i of morph target %s", accessor.componentType, attribMorph.first.c_str());
+                        continue;
+                    }
+
+                    AttributeType attType;
+                    bool foundMorph = false;
+
+                    if (attribMorph.first == "POSITION") {
+                        if      (morphIndex == 0) { attType = AttributeType::MORPHTARGET0; foundMorph = true; }
+                        else if (morphIndex == 1) { attType = AttributeType::MORPHTARGET1; foundMorph = true; }
+                        if ((!morphNormals && morphTangents) || (morphNormals && !morphTangents)) {
+                            if      (morphIndex == 2) { attType = AttributeType::MORPHTARGET2; foundMorph = true; }
+                            else if (morphIndex == 3) { attType = AttributeType::MORPHTARGET3; foundMorph = true; }
+                            if (!morphNormals && !morphTangents) {
+                                if      (morphIndex == 4) { attType = AttributeType::MORPHTARGET4; foundMorph = true; }
+                                else if (morphIndex == 5) { attType = AttributeType::MORPHTARGET5; foundMorph = true; }
+                                else if (morphIndex == 6) { attType = AttributeType::MORPHTARGET6; foundMorph = true; }
+                                else if (morphIndex == 7) { attType = AttributeType::MORPHTARGET7; foundMorph = true; }
                             }
                         }
                     }
-                }
-                if (attribMorph.first.compare("NORMAL") == 0){
-                    morphNormals = true;
-                    if (morphIndex == 0){
-                        attType = AttributeType::MORPHNORMAL0;
-                        foundMorph = true;
-                    } else if (morphIndex == 1){
-                        attType = AttributeType::MORPHNORMAL1;
-                        foundMorph = true;
-                    }
-                    if (!morphTangents){
-                        if (morphIndex == 2){
-                            attType = AttributeType::MORPHNORMAL2;
-                            foundMorph = true;
-                        } else if (morphIndex == 3){
-                            attType = AttributeType::MORPHNORMAL3;
-                            foundMorph = true;
+                    if (attribMorph.first == "NORMAL") {
+                        morphNormals = true;
+                        if      (morphIndex == 0) { attType = AttributeType::MORPHNORMAL0; foundMorph = true; }
+                        else if (morphIndex == 1) { attType = AttributeType::MORPHNORMAL1; foundMorph = true; }
+                        if (!morphTangents) {
+                            if      (morphIndex == 2) { attType = AttributeType::MORPHNORMAL2; foundMorph = true; }
+                            else if (morphIndex == 3) { attType = AttributeType::MORPHNORMAL3; foundMorph = true; }
                         }
                     }
-                }
-                if (attribMorph.first.compare("TANGENT") == 0){
-                    morphTangents = true;
-                    if (morphIndex == 0){
-                        attType = AttributeType::MORPHTANGENT0;
-                        foundMorph = true;
-                    } else if (morphIndex == 1){
-                        attType = AttributeType::MORPHTANGENT1;
-                        foundMorph = true;
+                    if (attribMorph.first == "TANGENT") {
+                        morphTangents = true;
+                        if      (morphIndex == 0) { attType = AttributeType::MORPHTANGENT0; foundMorph = true; }
+                        else if (morphIndex == 1) { attType = AttributeType::MORPHTANGENT1; foundMorph = true; }
                     }
-                }
 
-                if (foundMorph) {
-                    for (int i = 0; i < mesh.numExternalBuffers; i++){
-                        if (mesh.eBuffers[i].getName() == bufferName)
-                            mesh.eBuffers[i].setRenderAttributes(false);
+                    if (foundMorph) {
+                        for (int b = 0; b < mesh.numExternalBuffers; b++) {
+                            if (mesh.eBuffers[b].getName() == bufferName)
+                                mesh.eBuffers[b].setRenderAttributes(false);
+                        }
+                        addSubmeshAttribute(mesh.submeshes[i], bufferName, attType, elements, dataType,
+                            accessor.count, accessor.byteOffset, accessor.normalized);
                     }
-                    addSubmeshAttribute(mesh.submeshes[i], bufferName, attType, elements, dataType, accessor.count, accessor.byteOffset, accessor.normalized);
                 }
+                morphIndex++;
             }
-            morphIndex++;
-        }
 
-        int morphWeightSize = 8;
-        if (morphNormals){
-            morphWeightSize = 4;
-        }
-
-        if (morphTargets){
-            for (int w = 0; w < gltfmesh.weights.size(); w++) {
-                if (w < MAX_MORPHTARGETS){
+            if (morphTargets) {
+                for (int w = 0; w < static_cast<int>(gltfmesh.weights.size()) && w < MAX_MORPHTARGETS; w++) {
                     mesh.morphWeights[w] = gltfmesh.weights[w];
                 }
-            }
-
-            //Getting morph target names from mesh extra property
-            model.morphNameMapping.clear();
-            if (gltfmesh.extras.Has("targetNames") && gltfmesh.extras.Get("targetNames").IsArray()){
-                for (int t = 0; t < gltfmesh.extras.Get("targetNames").Size(); t++){
-                    model.morphNameMapping[gltfmesh.extras.Get("targetNames").Get(t).Get<std::string>()] = t;
+                if (gltfmesh.extras.Has("targetNames") && gltfmesh.extras.Get("targetNames").IsArray()) {
+                    for (int t = 0; t < gltfmesh.extras.Get("targetNames").Size(); t++) {
+                        model.morphNameMapping[gltfmesh.extras.Get("targetNames").Get(t).Get<std::string>()] = t;
+                    }
                 }
             }
         }
-
     }
+
+    // Trim numSubmeshes to the slots that were actually written.
+    // Slots beyond submeshIndex were reserved but skipped due to invalid data.
+    mesh.numSubmeshes = submeshIndex;
 
     if (asyncLoad) {
         ResourceProgress::updateProgress(buildId, 0.8f); // Submeshes processed
@@ -2839,6 +2799,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             Entity anim;
 
             anim = scene->createEntity();
+            if (anim == NULL_ENTITY) {
+                continue;
+            }
             scene->addComponent<ActionComponent>(anim);
             scene->addComponent<AnimationComponent>(anim);
 
@@ -2913,6 +2876,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     Entity track;
 
                     track = scene->createEntity();
+                    if (track == NULL_ENTITY) {
+                        continue;
+                    }
 
                     std::string trackName = animName + " " + channel.target_path;
                     if (channel.target_node >= 0 && channel.target_node < model.gltfModel->nodes.size()) {

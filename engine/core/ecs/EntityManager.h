@@ -23,7 +23,7 @@ namespace doriax{
     class DORIAX_API EntityManager {
     private:
         static constexpr Entity FIRST_SYSTEM_ENTITY = 1;
-        static constexpr Entity LAST_SYSTEM_ENTITY  = 100;
+        static constexpr Entity LAST_SYSTEM_ENTITY  = 1000;
         static constexpr Entity FIRST_USER_ENTITY   = LAST_SYSTEM_ENTITY + 1;
 
         Entity lastUserEntity = LAST_SYSTEM_ENTITY; // next user entity starts at 101
