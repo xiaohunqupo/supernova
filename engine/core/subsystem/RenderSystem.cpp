@@ -635,7 +635,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
     if (terrain){
         for (int s = 0; s < 2; s++){
-            size_t bufferSize = pow(terrain->rootGridSize, 2) * pow(terrain->levels, 2) * terrain->nodesbuffer[s].getStride() / 2;
+            size_t bufferSize = terrain->nodes.size() * terrain->nodesbuffer[s].getStride();
             terrain->nodesbuffer[s].getRender()->createBuffer(bufferSize, terrain->nodesbuffer[s].getData(), terrain->nodesbuffer[s].getType(), terrain->nodesbuffer[s].getUsage());
         }
 

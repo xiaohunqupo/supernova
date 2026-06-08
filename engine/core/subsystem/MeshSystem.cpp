@@ -1574,22 +1574,14 @@ bool MeshSystem::createTerrain(TerrainComponent& terrain, MeshComponent& mesh){
     createPlaneNodeSubmesh(1, terrain, mesh, 1, 1, terrain.resolution/2, terrain.resolution/2);
     mesh.submeshes[1].generated = true;
 
+    updateTerrainAutoRanges(terrain);
+
     float rootNodeSize = terrain.terrainSize / terrain.rootGridSize;
 
-    if (terrain.autoSetRanges) {
-        CameraComponent& camera =  scene->getComponent<CameraComponent>(scene->getCamera());
-
-        float lastLevel = camera.farClip;
+    if (terrain.autoSetRanges){
+        CameraComponent& camera = scene->getComponent<CameraComponent>(scene->getCamera());
         if (camera.farClip < (rootNodeSize * 2)){
-            lastLevel = rootNodeSize * 2;
             Log::warn("Terrain quadtree root is not in camera field of view. Increase terrain root grid.");
-        }
-
-        terrain.ranges.clear();
-        terrain.ranges.resize(terrain.levels);
-        terrain.ranges[terrain.levels - 1] = lastLevel;
-        for (int i = terrain.levels - 2; i >= 0; i--) {
-            terrain.ranges[i] = terrain.ranges[i + 1] / 2;
         }
     }
 
@@ -1617,6 +1609,37 @@ bool MeshSystem::createTerrain(TerrainComponent& terrain, MeshComponent& mesh){
     terrain.heightMapLoaded = true;
 
     return true;
+}
+
+void MeshSystem::updateTerrainAutoRanges(TerrainComponent& terrain){
+    if (!terrain.autoSetRanges || !terrain.heightMapLoaded){
+        return;
+    }
+
+    if (scene->getCamera() == NULL_ENTITY){
+        return;
+    }
+
+    CameraComponent& camera = scene->getComponent<CameraComponent>(scene->getCamera());
+
+    bool rangesInitialized = terrain.ranges.size() == static_cast<size_t>(terrain.levels);
+    if (!camera.needUpdate && rangesInitialized){
+        return;
+    }
+
+    float rootNodeSize = terrain.terrainSize / terrain.rootGridSize;
+    float lastLevel = std::max(camera.farClip, rootNodeSize * 2);
+
+    if (rangesInitialized && terrain.ranges[terrain.levels - 1] == lastLevel){
+        return;
+    }
+
+    terrain.ranges.clear();
+    terrain.ranges.resize(terrain.levels);
+    terrain.ranges[terrain.levels - 1] = lastLevel;
+    for (int i = terrain.levels - 2; i >= 0; i--) {
+        terrain.ranges[i] = terrain.ranges[i + 1] / 2;
+    }
 }
 
 void MeshSystem::createPlane(MeshComponent& mesh, float width, float depth, unsigned int tiles){
@@ -3568,6 +3591,7 @@ void MeshSystem::update(double dt){
             Transform& transform = scene->getComponent<Transform>(entity);
 
             createOrUpdateTerrain(terrain, mesh, transform);
+            updateTerrainAutoRanges(terrain);
         }
     }
 

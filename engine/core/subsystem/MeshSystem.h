@@ -80,6 +80,7 @@ namespace doriax{
         void createPlaneNodeSubmesh(unsigned int submeshIndex, TerrainComponent& terrain, MeshComponent& mesh, int width, int height, int widthSegments, int heightSegments);
         bool createTerrain(TerrainComponent& terrain, MeshComponent& mesh);
         void createTerrainNode(TerrainComponent& terrain, float x, float y, float size, int lodDepth);
+        void updateTerrainAutoRanges(TerrainComponent& terrain);
 
     public:
         MeshSystem(Scene* scene);
