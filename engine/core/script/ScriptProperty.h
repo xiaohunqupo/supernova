@@ -10,15 +10,15 @@
 #include "math/Vector4.h"
 
 // Macro with optional type parameter
-#define SPROPERTY_1(DisplayName) \
+#define DPROPERTY_1(DisplayName) \
 public:
 
-#define SPROPERTY_2(DisplayName, Type) \
-public: /* @SPROPERTY_TYPE: Type */
+#define DPROPERTY_2(DisplayName, Type) \
+public: /* @DPROPERTY_TYPE: Type */
 
 // Macro overload selector
-#define GET_SPROPERTY_MACRO(_1, _2, NAME, ...) NAME
-#define SPROPERTY(...) GET_SPROPERTY_MACRO(__VA_ARGS__, SPROPERTY_2, SPROPERTY_1)(__VA_ARGS__)
+#define GET_DPROPERTY_MACRO(_1, _2, NAME, ...) NAME
+#define DPROPERTY(...) GET_DPROPERTY_MACRO(__VA_ARGS__, DPROPERTY_2, DPROPERTY_1)(__VA_ARGS__)
 
 namespace doriax {
 

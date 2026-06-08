@@ -154,15 +154,15 @@ void ScriptCreateDialog::writeFiles(const fs::path& headerPath,
                     h << "class " << classOrModuleName << " : public doriax::" << parentClass << " {\n";
                     h << "public:\n";
                     h << "    // Example properties\n";
-                    h << "    SPROPERTY(\"Is Active\")\n";
+                    h << "    DPROPERTY(\"Is Active\")\n";
                     h << "    bool isActive = true;\n\n";
                     if (hasTransform){
-                        h << "    SPROPERTY(\"Speed\")\n";
+                        h << "    DPROPERTY(\"Speed\")\n";
                         h << "    float speed = 5.0f;\n\n";
-                        h << "    SPROPERTY(\"Target Position\")\n";
+                        h << "    DPROPERTY(\"Target Position\")\n";
                         h << "    doriax::Vector3 targetPosition = doriax::Vector3(0, 0, 0);\n\n";
                         if (isMesh){
-                            h << "    SPROPERTY(\"Mesh Color\", Color4)\n";
+                            h << "    DPROPERTY(\"Mesh Color\", Color4)\n";
                             h << "    doriax::Vector4 meshColor = doriax::Vector4(1, 1, 1, 1);\n\n";
                         }
                     }
@@ -213,11 +213,11 @@ void ScriptCreateDialog::writeFiles(const fs::path& headerPath,
                     h << "class " << classOrModuleName << " : public doriax::ScriptBase {\n";
                     h << "public:\n";
                     h << "    // Example properties - you can add more!\n";
-                    h << "    SPROPERTY(\"Speed\")\n";
+                    h << "    DPROPERTY(\"Speed\")\n";
                     h << "    float speed = 5.0f;\n\n";
-                    h << "    SPROPERTY(\"Is Active\")\n";
+                    h << "    DPROPERTY(\"Is Active\")\n";
                     h << "    bool isActive = true;\n\n";
-                    h << "    SPROPERTY(\"Counter\")\n";
+                    h << "    DPROPERTY(\"Counter\")\n";
                     h << "    int counter = 0;\n\n";
                     h << "    " << classOrModuleName << "(doriax::Scene* scene, doriax::Entity entity);\n";
                     h << "    ~" << classOrModuleName << "();\n\n";

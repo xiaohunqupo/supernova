@@ -222,7 +222,7 @@ void editor::CodeEditor::updateAllProjectSymbols() {
                     if (line.find('(') == std::string::npos && line.find("public") == std::string::npos &&
                         line.find("private") == std::string::npos && line.find("protected") == std::string::npos &&
                         line.find("friend") == std::string::npos && line.find("#") == std::string::npos &&
-                        line.find("SPROPERTY") == std::string::npos && line.find("REGISTER") == std::string::npos) {
+                        line.find("DPROPERTY") == std::string::npos && line.find("REGISTER") == std::string::npos) {
                         // Try to match: [const] Type [*&] varName [= ...];
                         // Trim leading whitespace
                         size_t ls = 0;
@@ -774,11 +774,11 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
 
     std::string displayName = toDisplayName(varName);
 
-    // Build the SPROPERTY + member declaration
+    // Build the DPROPERTY + member declaration
     std::string typeDecl = isSubclassType ? entityType : ("doriax::" + entityType);
     std::string propCode =
         "\n"
-        "    SPROPERTY(\"" + displayName + "\")\n"
+        "    DPROPERTY(\"" + displayName + "\")\n"
         "    " + typeDecl + "* " + varName + " = nullptr;\n";
 
     // If using a subclass type, check if we need to add an #include
@@ -807,12 +807,12 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         }
     }
 
-    // Find where to insert SPROPERTY on the ORIGINAL headerText (before #include modification)
+    // Find where to insert DPROPERTY on the ORIGINAL headerText (before #include modification)
     // This way cursor positions match the editor content
     size_t insertPos = std::string::npos;
 
-    // Find last SPROPERTY declaration (the variable line after it ends with ";")
-    std::regex spropertyRegex(R"(SPROPERTY\s*\([^)]*\)\s*\n\s*[\w:*<>]+\s+\w+\s*=[^;]*;)");
+    // Find last DPROPERTY declaration (the variable line after it ends with ";")
+    std::regex spropertyRegex(R"(DPROPERTY\s*\([^)]*\)\s*\n\s*[\w:*<>]+\s+\w+\s*=[^;]*;)");
     std::sregex_iterator it(headerText.begin(), headerText.end(), spropertyRegex);
     std::sregex_iterator endIt;
     size_t lastSpropertyEnd = std::string::npos;
@@ -821,7 +821,7 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
     }
 
     if (lastSpropertyEnd != std::string::npos) {
-        // Insert after the last SPROPERTY block (skip to next line)
+        // Insert after the last DPROPERTY block (skip to next line)
         size_t nextLine = headerText.find('\n', lastSpropertyEnd);
         if (nextLine != std::string::npos) {
             insertPos = nextLine + 1;
@@ -847,8 +847,8 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
 
     // Apply changes via editor (preserves undo) or write to disk
     if (headerInstance) {
-        // Insert #include first (if needed), then SPROPERTY
-        // Must do #include first so it doesn't shift SPROPERTY position calculation
+        // Insert #include first (if needed), then DPROPERTY
+        // Must do #include first so it doesn't shift DPROPERTY position calculation
         int includeLineShift = 0;
         if (needsInclude && includeInsertPos != std::string::npos) {
             int incLine, incCol;
@@ -858,7 +858,7 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
             includeLineShift = 1; // One extra line added
         }
 
-        // Now insert SPROPERTY at the adjusted position
+        // Now insert DPROPERTY at the adjusted position
         int insertLine, insertCol;
         offsetToLineCol(headerText, insertPos, insertLine, insertCol);
         // Shift if #include was inserted before this position
@@ -873,7 +873,7 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
         headerInstance->propertyInsertUndoIndex = headerInstance->editor->GetUndoIndex();
     } else {
         // Header not open in editor — build full text and write to disk
-        // Apply #include first (modifies headerText), then insert SPROPERTY
+        // Apply #include first (modifies headerText), then insert DPROPERTY
         if (needsInclude && includeInsertPos != std::string::npos) {
             std::string incText = includeDirective + "\n";
             headerText.insert(includeInsertPos, incText);

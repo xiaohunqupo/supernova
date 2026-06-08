@@ -205,13 +205,13 @@ std::vector<ScriptProperty> editor::ScriptParser::parseScriptPropertiesFromStrin
     std::string content = removeComments(sourceContent);
 
     // Updated pattern to capture optional type parameter and type annotation comment
-    // Pattern: SPROPERTY("Display Name") or SPROPERTY("Display Name", Type) followed by Type varName = defaultValue;
+    // Pattern: DPROPERTY("Display Name") or DPROPERTY("Display Name", Type) followed by Type varName = defaultValue;
     std::regex propertyRegex(
-        "SPROPERTY\\s*\\(\\s*"                    // SPROPERTY(
+        "DPROPERTY\\s*\\(\\s*"                    // DPROPERTY(
         "\"([^\"]+)\"\\s*"                         // "Display Name"
         "(?:,\\s*([\\w]+))?\\s*"                   // optional , Type
         "\\)\\s*"                                  // )
-        "(?:/\\*[^*]*@SPROPERTY_TYPE:\\s*([\\w]+)[^*]*\\*/\\s*)?" // optional /* @SPROPERTY_TYPE: Type */
+        "(?:/\\*[^*]*@DPROPERTY_TYPE:\\s*([\\w]+)[^*]*\\*/\\s*)?" // optional /* @DPROPERTY_TYPE: Type */
         "([\\w:*]+(?:\\s*<[^>]+>)?)\\s+"          // C++ Type (with templates and pointers)
         "(\\w+)\\s*"                               // varName
         "(?:=\\s*([^;]+?))?\\s*;"                 // optional = defaultValue
@@ -225,8 +225,8 @@ std::vector<ScriptProperty> editor::ScriptParser::parseScriptPropertiesFromStrin
         size_t position = match.position();
 
         std::string displayName = match[1].str();
-        std::string explicitType = match[2].str();        // From SPROPERTY(..., Type)
-        std::string typeAnnotation = match[3].str();      // From /* @SPROPERTY_TYPE: Type */
+        std::string explicitType = match[2].str();        // From DPROPERTY(..., Type)
+        std::string typeAnnotation = match[3].str();      // From /* @DPROPERTY_TYPE: Type */
         std::string cppType = match[4].str();
         std::string varName = match[5].str();
         std::string defaultValueStr = match[6].str();     // May be empty
