@@ -1189,7 +1189,7 @@ void editor::TerrainEditWindow::show(){
 
     updateTargetFromSelection();
 
-    ImGui::SetNextWindowSize(ImVec2(340.0f, 480.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(360.0f, 480.0f), ImGuiCond_FirstUseEver);
     if (focusRequested){
         ImGui::SetNextWindowFocus();
         focusRequested = false;
