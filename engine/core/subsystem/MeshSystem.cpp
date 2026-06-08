@@ -2276,6 +2276,11 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     std::vector<std::string> loadedBuffers;
 
     mesh.numExternalBuffers = 0;
+    mesh.normAdjustJoint = 1.0f;
+    mesh.normAdjustWeight = 1.0f;
+    for (int b = 0; b < MAX_BONES; b++) {
+        mesh.bonesMatrix[b].identity();
+    }
 
     bool res = false;
 
@@ -2618,12 +2623,20 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                         Log::warn("Not supported vector(3) of: %s", attrib.first.c_str());
                     }
                 }
+                bool attributeNormalized = accessor.normalized;
+
                 if (attrib.first == "JOINTS_0") {
                     attType = AttributeType::BONEIDS;
                     foundAttrs = true;
-                    // Sokol always normalizes unsigned short
+                    // Sokol has no non-normalized USHORT4 format — USHORT4N is always used,
+                    // so the shader must expand the [0,1] value back to an integer index.
                     if (dataType == AttributeDataType::UNSIGNED_SHORT) {
                         mesh.normAdjustJoint = 65535.0;
+                    } else if (dataType == AttributeDataType::UNSIGNED_BYTE) {
+                        // `a_boneIds` is declared as vec4 in the shader, so use the normalized
+                        // float path for byte joints as well and expand back in the shader.
+                        mesh.normAdjustJoint = 255.0;
+                        attributeNormalized = true;
                     }
                 }
                 if (attrib.first == "WEIGHTS_0") {
@@ -2646,7 +2659,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                             mesh.eBuffers[b].setRenderAttributes(false);
                     }
                     addSubmeshAttribute(mesh.submeshes[i], bufferName, attType, elements, dataType,
-                        accessor.count, accessor.byteOffset, accessor.normalized);
+                        accessor.count, accessor.byteOffset, attributeNormalized);
                 } else if (attrib.first != "TEXCOORD_1") {
                     Log::warn("Model attribute unused: %s", attrib.first.c_str());
                 }
@@ -2809,6 +2822,15 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     return false;
                 }
                 scene->addEntityChild(entity, model.skeleton, false);
+
+                // Populate bonesMatrix for bind pose before the first render frame
+                transform.needUpdate = true;
+                for (const auto& boneEntry : model.bonesIdMapping) {
+                    Transform* boneTransform = scene->findComponent<Transform>(boneEntry.second);
+                    if (boneTransform) {
+                        boneTransform->needUpdate = true;
+                    }
+                }
             }
         }
     }
