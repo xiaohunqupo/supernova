@@ -57,7 +57,7 @@ namespace doriax{
         //-----u_vs_terrainParams
         Vector3 eyePos;
         float terrainSize = 200;
-        float maxHeight = 10;
+        float maxHeight = 5;
         float resolution = 32; //int
         float textureBaseTiles = 1; //int
         float textureDetailTiles = 20; //int

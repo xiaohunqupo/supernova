@@ -2966,12 +2966,15 @@ void RenderSystem::update(double dt){
                 instmesh->needUpdateInstances = false;
             }
 
-            if (terrain && mesh.numSubmeshes > 1 && mesh.submeshes[0].needUpdateTexture){
+            if (terrain && mesh.numSubmeshes > 1){
                 for (unsigned int s = 1; s < mesh.numSubmeshes; s++){
-                    if (mesh.submeshes[s].material != mesh.submeshes[0].material){
+                    const bool materialOutOfSync = mesh.submeshes[s].material != mesh.submeshes[0].material;
+                    if (materialOutOfSync){
                         mesh.submeshes[s].material = mesh.submeshes[0].material;
                     }
-                    mesh.submeshes[s].needUpdateTexture = true;
+                    if (mesh.submeshes[0].needUpdateTexture || materialOutOfSync){
+                        mesh.submeshes[s].needUpdateTexture = true;
+                    }
                 }
             }
 
