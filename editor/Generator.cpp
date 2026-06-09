@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <map>
 #include <unordered_set>
+#include <algorithm>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -207,23 +208,34 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
 
     const fs::path exePath = FileUtils::getExecutableDir();
 
+    // CMake stores path values (e.g. CMAKE_C_COMPILER) into generated .cmake
+    // files and re-parses them, treating backslashes as escape sequences. On
+    // Windows a path like "C:\clang...\bin\clang.exe" then fails with
+    // "Invalid character escape '\c'". CMake accepts forward slashes on every
+    // platform, so normalize backslashes before building the command.
+    auto toCMakePath = [](const std::string& p) {
+        std::string out = p;
+        std::replace(out.begin(), out.end(), '\\', '/');
+        return out;
+    };
+
     std::string cmakeCommand = "cmake ";
     if (!generator.empty()) {
         cmakeCommand += "-G \"" + generator + "\" ";
     }
     if (!cCompiler.empty()) {
-        cmakeCommand += "-DCMAKE_C_COMPILER=\"" + cCompiler + "\" ";
+        cmakeCommand += "-DCMAKE_C_COMPILER=\"" + toCMakePath(cCompiler) + "\" ";
     }
     if (!cxxCompiler.empty()) {
-        cmakeCommand += "-DCMAKE_CXX_COMPILER=\"" + cxxCompiler + "\" ";
+        cmakeCommand += "-DCMAKE_CXX_COMPILER=\"" + toCMakePath(cxxCompiler) + "\" ";
     }
     cmakeCommand += "-DCMAKE_BUILD_TYPE=" + configType + " ";
     // When configuring from inside the editor, ensure the generated project builds
     // in "plugin" mode (no Factory main.cpp/scene sources added).
     cmakeCommand += "-DDORIAX_EDITOR_PLUGIN=ON ";
-    cmakeCommand += "\"" + projectPath.string() + "\" ";
-    cmakeCommand += "-B \"" + buildPath.string() + "\" ";
-    cmakeCommand += "-DDORIAX_LIB_DIR=\"" + exePath.string() + "\"";
+    cmakeCommand += "\"" + toCMakePath(projectPath.string()) + "\" ";
+    cmakeCommand += "-B \"" + toCMakePath(buildPath.string()) + "\" ";
+    cmakeCommand += "-DDORIAX_LIB_DIR=\"" + toCMakePath(exePath.string()) + "\"";
 
     Out::info("Configuring CMake project with command: %s", cmakeCommand.c_str());
     bool result = runCommand(cmakeCommand, projectPath);
