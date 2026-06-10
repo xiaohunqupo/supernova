@@ -6726,6 +6726,25 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
         }
     }
 
+    beginTable(cpType, getLabelSize("Scripts"), "script_component_header");
+    propertyHeader("Scripts", -1, false, false);
+    ImGui::Text("%zu", firstScriptComp.scripts.size());
+    if (drawSummaryAddButton(ICON_FA_PLUS " Add Script##script_add")) {
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (const Entity& entity : entities) {
+            ScriptComponent& sc = sceneProject->scene->getComponent<ScriptComponent>(entity);
+            std::vector<ScriptEntry> newScripts = sc.scripts;
+            ScriptEntry entry;
+            entry.type = ScriptType::SCRIPT_CLASS;
+            entry.enabled = true;
+            newScripts.push_back(entry);
+            multiCmd->addPropertyCmd<std::vector<ScriptEntry>>(project, sceneProject->id, entity, ComponentType::ScriptComponent, "scripts", newScripts);
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+    endTable();
+
     if (commonIndices.empty()) {
         if (entities.size() > 1) {
             ImGui::TextDisabled("Select a single entity to view script details");
@@ -6873,7 +6892,7 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
                 ImGui::OpenPopup(("Edit Script##" + std::to_string(scriptIdx)).c_str());
             }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Edit class name");
+                ImGui::SetTooltip("Edit script details: class name, header and source files");
             }
 
             ImGui::PopStyleVar();
@@ -6915,50 +6934,20 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
                     changed = true;
                 }
 
-                // Source Path
-                propertyHeader("Source File", secondColSize);
-                //ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-                float buttonWidth = ImGui::CalcTextSize(ICON_FA_FOLDER_OPEN).x;
-                ImGui::SetNextItemWidth(secondColSize - buttonWidth - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().FramePadding.x * 2.0);
-
-                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-                ImGui::InputText("##new_source", sourceBuffer, sizeof(sourceBuffer), ImGuiInputTextFlags_ReadOnly);
-                ImGui::PopStyleColor();
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%s", script.path.c_str());
-                }
-
-                ImGui::SameLine();
-                if (ImGui::Button(ICON_FA_FOLDER_OPEN "##source_btn")) {
-                    fs::path fullSrcPath(script.path);
-                    if (fullSrcPath.is_relative()) fullSrcPath = projectPath / fullSrcPath;
-                    std::string selected = FileDialogs::openFileDialog(fullSrcPath.parent_path().string());
-                    if (!selected.empty()) {
-                        std::filesystem::path p(selected);
-                        std::error_code ec;
-                        std::filesystem::path rel = std::filesystem::relative(p, projectPath, ec);
-                        if (!ec && rel.string().find("..") == std::string::npos) {
-                            srcPath = rel;
-                            strncpy(sourceBuffer, rel.filename().string().c_str(), sizeof(sourceBuffer) - 1);
-                            changed = true;
-                        } else {
-                            Backend::getApp().registerAlert("Error", "File must be inside project directory.");
-                        }
-                    }
-                }
-                //ImGui::PopStyleVar();
+                float openBtnWidth = ImGui::CalcTextSize(ICON_FA_FOLDER_OPEN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                float clearBtnWidth = ImGui::CalcTextSize(ICON_FA_XMARK).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                float btnSpacing = ImGui::GetStyle().ItemSpacing.x;
 
                 // Header Path
                 if (script.type != ScriptType::SCRIPT_LUA) {
                     propertyHeader("Header File", secondColSize);
-                    //ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-                    ImGui::SetNextItemWidth(secondColSize - buttonWidth - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().FramePadding.x * 2.0);
+                    ImGui::SetNextItemWidth(secondColSize - openBtnWidth - clearBtnWidth - btnSpacing * 2.0f);
 
                     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
                     ImGui::InputText("##new_header", headerBuffer, sizeof(headerBuffer), ImGuiInputTextFlags_ReadOnly);
                     ImGui::PopStyleColor();
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("%s", script.headerPath.c_str());
+                    if (!hdrPath.empty() && ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("%s", hdrPath.string().c_str());
                     }
 
                     ImGui::SameLine();
@@ -6979,8 +6968,53 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
                             }
                         }
                     }
-                    //ImGui::PopStyleVar();
+                    ImGui::SameLine();
+                    ImGui::BeginDisabled(hdrPath.empty());
+                    if (ImGui::Button(ICON_FA_XMARK "##header_clear")) {
+                        hdrPath = "";
+                        headerBuffer[0] = '\0';
+                        changed = true;
+                    }
+                    ImGui::EndDisabled();
                 }
+
+                // Source Path
+                propertyHeader("Source File", secondColSize);
+                ImGui::SetNextItemWidth(secondColSize - openBtnWidth - clearBtnWidth - btnSpacing * 2.0f);
+
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+                ImGui::InputText("##new_source", sourceBuffer, sizeof(sourceBuffer), ImGuiInputTextFlags_ReadOnly);
+                ImGui::PopStyleColor();
+                if (!srcPath.empty() && ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s", srcPath.string().c_str());
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button(ICON_FA_FOLDER_OPEN "##source_btn")) {
+                    fs::path fullSrcPath(script.path);
+                    if (fullSrcPath.is_relative()) fullSrcPath = projectPath / fullSrcPath;
+                    std::string selected = FileDialogs::openFileDialog(fullSrcPath.parent_path().string());
+                    if (!selected.empty()) {
+                        std::filesystem::path p(selected);
+                        std::error_code ec;
+                        std::filesystem::path rel = std::filesystem::relative(p, projectPath, ec);
+                        if (!ec && rel.string().find("..") == std::string::npos) {
+                            srcPath = rel;
+                            strncpy(sourceBuffer, rel.filename().string().c_str(), sizeof(sourceBuffer) - 1);
+                            changed = true;
+                        } else {
+                            Backend::getApp().registerAlert("Error", "File must be inside project directory.");
+                        }
+                    }
+                }
+                ImGui::SameLine();
+                ImGui::BeginDisabled(srcPath.empty());
+                if (ImGui::Button(ICON_FA_XMARK "##source_clear")) {
+                    srcPath = "";
+                    sourceBuffer[0] = '\0';
+                    changed = true;
+                }
+                ImGui::EndDisabled();
 
                 endTable();
 
@@ -6997,9 +7031,20 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
                             newScripts[scriptIdx].path = newSource;
                             if (script.type != ScriptType::SCRIPT_LUA) {
                                 newScripts[scriptIdx].headerPath = newHeader;
+                                if (newHeader.empty()) {
+                                    newScripts[scriptIdx].properties.clear();
+                                }
+                            } else {
+                                if (newSource.empty()) {
+                                    newScripts[scriptIdx].properties.clear();
+                                }
                             }
- 
-                            project->updateScriptProperties(sceneProject, entity, newScripts);
+
+                            const ScriptEntry& updated = newScripts[scriptIdx];
+                            bool hasAnyPath = !updated.path.empty() || !updated.headerPath.empty();
+                            if (hasAnyPath) {
+                                project->updateScriptProperties(sceneProject, entity, newScripts);
+                            }
 
                             cmd = new PropertyCmd<std::vector<ScriptEntry>>(project, sceneProject->id, entity, ComponentType::ScriptComponent, "scripts", newScripts);
                             CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
@@ -7030,8 +7075,9 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
             if (ImGui::IsItemHovered()) {
                 if (hdrExists){
                     ImGui::SetTooltip("Header: %s", script.headerPath.c_str());
+                } else if (hasHeader) {
+                    ImGui::SetTooltip("Header file not found");
                 }
-                else ImGui::SetTooltip("Header file not found");
             }
             ImGui::EndDisabled();
 
@@ -7040,7 +7086,7 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
             // Resolve source path
             std::filesystem::path srcPath = script.path;
             if (srcPath.is_relative()) srcPath = projectPath / srcPath;
-            bool srcExists = std::filesystem::exists(srcPath);
+            bool srcExists = !script.path.empty() && std::filesystem::exists(srcPath);
             ImGui::BeginDisabled(!srcExists);
             if (ImGui::Button((ICON_FA_FILE_CODE "##open_src_" + std::to_string(scriptIdx)).c_str())) {
                 Backend::getApp().getCodeEditor()->openFile(srcPath.string());
@@ -7048,8 +7094,9 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
             if (ImGui::IsItemHovered()) {
                 if (srcExists){
                     ImGui::SetTooltip("Source: %s", script.path.c_str());
+                } else if (!script.path.empty()) {
+                    ImGui::SetTooltip("Source file not found");
                 }
-                else ImGui::SetTooltip("Source file not found");
             }
             ImGui::EndDisabled();
 

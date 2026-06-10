@@ -3636,6 +3636,8 @@ void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity 
         if (scriptEntry.type == ScriptType::SUBCLASS ||
             scriptEntry.type == ScriptType::SCRIPT_CLASS) {
 
+            if (scriptEntry.headerPath.empty()) continue;
+
             fs::path fullPath = scriptEntry.headerPath;
             if (fullPath.is_relative()) {
                 fullPath = getProjectPath() / fullPath;
@@ -3696,6 +3698,8 @@ void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity 
 
         // Lua scripts: load properties from Lua file
         if (scriptEntry.type == ScriptType::SCRIPT_LUA) {
+            if (scriptEntry.path.empty()) continue;
+
             fs::path fullPath = scriptEntry.path;
             if (fullPath.is_relative()) {
                 fullPath = getProjectPath() / fullPath;
