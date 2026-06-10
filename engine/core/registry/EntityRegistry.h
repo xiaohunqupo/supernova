@@ -104,6 +104,13 @@ namespace doriax {
         void setEntityName(Entity entity, const std::string& name);
         std::string getEntityName(Entity entity) const;
 
+        // Looks up an existing entity by its name (as shown in the editor Structure panel).
+        // Returns the first match, or NULL_ENTITY when no entity has that name.
+        Entity findEntity(const std::string& name) const;
+        // Same lookup, but restricted to descendants of 'parent'. Use this to resolve a
+        // named child without depending on globally unique names.
+        Entity findEntity(const std::string& name, Entity parent);
+
         Entity findOldestParent(Entity entity);
         bool isParentOf(Entity parent, Entity child);
         size_t findBranchLastIndex(Entity entity);

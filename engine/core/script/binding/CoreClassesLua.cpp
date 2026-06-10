@@ -174,6 +174,11 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addVariable("System", EntityPool::System)
         .endNamespace();
 
+    // The "no entity" sentinel, mirroring the C++ NULL_ENTITY macro. Scene:findEntity
+    // returns this when no match is found.
+    luabridge::getGlobalNamespace(L)
+        .addVariable("NULL_ENTITY", static_cast<Entity>(NULL_ENTITY));
+
     luabridge::getGlobalNamespace(L)
         .beginClass<Engine>("Engine")
 
@@ -533,6 +538,9 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addFunction("destroyEntity", &EntityRegistry::destroyEntity)
         .addFunction("setEntityName", &EntityRegistry::setEntityName)
         .addFunction("getEntityName", &EntityRegistry::getEntityName)
+        .addFunction("findEntity",
+            luabridge::constOverload<const std::string&>(&EntityRegistry::findEntity),
+            luabridge::overload<const std::string&, Entity>(&EntityRegistry::findEntity))
         .addFunction("getSignature", &EntityRegistry::getSignature)
         .addFunction("addEntityChild", &EntityRegistry::addEntityChild)
         .addFunction("moveChildToIndex", &EntityRegistry::moveChildToIndex)

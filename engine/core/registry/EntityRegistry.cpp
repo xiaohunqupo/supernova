@@ -229,6 +229,24 @@ std::string EntityRegistry::getEntityName(Entity entity) const {
     return entityManager.getName(entity);
 }
 
+Entity EntityRegistry::findEntity(const std::string& name) const {
+    for (Entity entity : entityManager.getEntityList()){
+        if (entityManager.getName(entity) == name){
+            return entity;
+        }
+    }
+    return NULL_ENTITY;
+}
+
+Entity EntityRegistry::findEntity(const std::string& name, Entity parent) {
+    for (Entity entity : entityManager.getEntityList()){
+        if (entityManager.getName(entity) == name && isParentOf(parent, entity)){
+            return entity;
+        }
+    }
+    return NULL_ENTITY;
+}
+
 Entity EntityRegistry::findOldestParent(Entity entity){
     auto transforms = componentManager.getComponentArray<Transform>();
 
