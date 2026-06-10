@@ -547,19 +547,39 @@ void editor::SceneWindow::forwardPlayKeyboardInput(ImGuiIO& io, int mods){
         }
     };
 
-    forwardKeyPress(ImGuiKey_Tab, D_KEY_TAB, L'\t', false);
-    forwardKeyPress(ImGuiKey_Backspace, D_KEY_BACKSPACE, L'\b');
-    forwardKeyPress(ImGuiKey_Enter, D_KEY_ENTER, L'\r', false);
-    forwardKeyPress(ImGuiKey_KeypadEnter, D_KEY_ENTER, L'\r', false);
-    forwardKeyPress(ImGuiKey_Escape, D_KEY_ESCAPE, L'\e', false);
-    forwardKeyPress(ImGuiKey_LeftArrow, D_KEY_LEFT);
-    forwardKeyPress(ImGuiKey_RightArrow, D_KEY_RIGHT);
-    forwardKeyPress(ImGuiKey_Home, D_KEY_HOME, 0, false);
-    forwardKeyPress(ImGuiKey_End, D_KEY_END, 0, false);
-    forwardKeyPress(ImGuiKey_Delete, D_KEY_DELETE);
+    auto forwardKeyRelease = [&](ImGuiKey imguiKey, int engineKey){
+        if (ImGui::IsKeyReleased(imguiKey)){
+            Engine::systemKeyUp(engineKey, false, mods);
+        }
+    };
 
-    if ((mods & D_MODIFIER_CONTROL) != 0){
-        forwardKeyPress(ImGuiKey_A, D_KEY_A, 0, false);
+    auto forwardKey = [&](ImGuiKey imguiKey, int engineKey, wchar_t charInput = 0, bool allowRepeat = true){
+        forwardKeyPress(imguiKey, engineKey, charInput, allowRepeat);
+        forwardKeyRelease(imguiKey, engineKey);
+    };
+
+    forwardKey(ImGuiKey_Tab, D_KEY_TAB, L'\t', false);
+    forwardKey(ImGuiKey_Backspace, D_KEY_BACKSPACE, L'\b');
+    forwardKey(ImGuiKey_Enter, D_KEY_ENTER, L'\r', false);
+    forwardKey(ImGuiKey_KeypadEnter, D_KEY_ENTER, L'\r', false);
+    forwardKey(ImGuiKey_Escape, D_KEY_ESCAPE, L'\e', false);
+    forwardKey(ImGuiKey_Space, D_KEY_SPACE);
+    forwardKey(ImGuiKey_LeftArrow, D_KEY_LEFT);
+    forwardKey(ImGuiKey_RightArrow, D_KEY_RIGHT);
+    forwardKey(ImGuiKey_UpArrow, D_KEY_UP);
+    forwardKey(ImGuiKey_DownArrow, D_KEY_DOWN);
+    forwardKey(ImGuiKey_Home, D_KEY_HOME, 0, false);
+    forwardKey(ImGuiKey_End, D_KEY_END, 0, false);
+    forwardKey(ImGuiKey_Delete, D_KEY_DELETE);
+
+    for (int i = 0; i < 10; i++){
+        ImGuiKey imguiKey = static_cast<ImGuiKey>(static_cast<int>(ImGuiKey_0) + i);
+        forwardKey(imguiKey, D_KEY_0 + i);
+    }
+
+    for (int i = 0; i < 26; i++){
+        ImGuiKey imguiKey = static_cast<ImGuiKey>(static_cast<int>(ImGuiKey_A) + i);
+        forwardKey(imguiKey, D_KEY_A + i);
     }
 }
 
