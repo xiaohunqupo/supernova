@@ -9,6 +9,7 @@
 #include "command/type/PropertyCmd.h"
 #include "render/gizmo/ViewportGizmo.h"
 #include <unordered_map>
+#include <set>
 
 namespace doriax::editor {
 
@@ -35,6 +36,12 @@ namespace doriax::editor {
         std::map<uint32_t, bool> suppressLeftMouseUntilRelease;
         std::map<uint32_t, float> walkSpeed;
 
+        // Engine keys sent down during play but not yet released, and the
+        // scene the play session belongs to. Engine Input state is static,
+        // so a missed key-up would stay pressed into the next play session.
+        std::set<int> playPressedKeys;
+        uint32_t playKeysSceneId = 0;
+
         std::map<uint32_t, int> width;
         std::map<uint32_t, int> height;
 
@@ -46,6 +53,7 @@ namespace doriax::editor {
         void closeSceneInternal(uint32_t sceneId);
         void sceneEventHandler(SceneProject* sceneProject);
         void forwardPlayKeyboardInput(ImGuiIO& io, int mods);
+        void releasePlayKeys(int mods);
         void handleResourceFileDragDrop(SceneProject* sceneProject);
         Vector3 getModelDropPosition(SceneProject* sceneProject, float x, float y, Entity hitEntity);
         void handleTileRectDragDrop(SceneProject* sceneProject);
