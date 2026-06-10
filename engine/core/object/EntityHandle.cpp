@@ -23,16 +23,41 @@ EntityHandle::~EntityHandle(){
         scene->destroyEntity(entity);
 }
 
+// Copies are non-owning observers: at most one handle may own an entity, otherwise the
+// owned entity would be destroyed (and its sub-resources cleared) more than once. Use a
+// move when you want to transfer ownership.
 EntityHandle::EntityHandle(const EntityHandle& rhs){
     scene = rhs.scene;
     entity = rhs.entity;
-    entityOwned = rhs.entityOwned;
+    entityOwned = false;
 }
 
 EntityHandle& EntityHandle::operator=(const EntityHandle& rhs){
+    if (this != &rhs){
+        scene = rhs.scene;
+        entity = rhs.entity;
+        entityOwned = false;
+    }
+
+    return *this;
+}
+
+// Moves transfer ownership: the source is left as a non-owning observer so only the
+// destination destroys the entity.
+EntityHandle::EntityHandle(EntityHandle&& rhs) noexcept{
     scene = rhs.scene;
     entity = rhs.entity;
     entityOwned = rhs.entityOwned;
+    rhs.entityOwned = false;
+}
+
+EntityHandle& EntityHandle::operator=(EntityHandle&& rhs) noexcept{
+    if (this != &rhs){
+        scene = rhs.scene;
+        entity = rhs.entity;
+        entityOwned = rhs.entityOwned;
+        rhs.entityOwned = false;
+    }
 
     return *this;
 }

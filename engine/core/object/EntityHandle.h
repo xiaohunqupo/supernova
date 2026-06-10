@@ -25,6 +25,9 @@ namespace doriax{
         EntityHandle(const EntityHandle& rhs);
         EntityHandle& operator=(const EntityHandle& rhs);
 
+        EntityHandle(EntityHandle&& rhs) noexcept;
+        EntityHandle& operator=(EntityHandle&& rhs) noexcept;
+
         Scene* getScene() const;
         Entity getEntity() const;
 
