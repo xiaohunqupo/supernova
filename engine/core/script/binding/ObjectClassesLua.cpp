@@ -891,7 +891,7 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("volume", &Sound::getVolume, &Sound::setVolume)
         .addProperty("speed", &Sound::getSpeed, &Sound::setSpeed)
         .addProperty("pan", &Sound::getPan, &Sound::setPan)
-        .addProperty("lopping", &Sound::isLopping, &Sound::setLopping)
+        .addProperty("looping", &Sound::isLooping, &Sound::setLooping)
         .addProperty("loopingPoint", &Sound::getLoopingPoint, &Sound::setLoopingPoint)
         .addProperty("protectVoice", &Sound::isProtectVoice, &Sound::setProtectVoice)
         .addFunction("setInaudibleBehavior", &Sound::setInaudibleBehavior)

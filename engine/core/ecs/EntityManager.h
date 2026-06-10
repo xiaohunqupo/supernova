@@ -26,7 +26,7 @@ namespace doriax{
         static constexpr Entity LAST_SYSTEM_ENTITY  = 1000;
         static constexpr Entity FIRST_USER_ENTITY   = LAST_SYSTEM_ENTITY + 1;
 
-        Entity lastUserEntity = LAST_SYSTEM_ENTITY; // next user entity starts at 101
+        Entity lastUserEntity = LAST_SYSTEM_ENTITY; // next user entity starts at 1001
         std::map<Entity, EntityMetadata> metadata;
 
     public:

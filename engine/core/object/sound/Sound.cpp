@@ -193,16 +193,16 @@ float Sound::getPan() const{
     return audio.pan;
 }
 
-void Sound::setLopping(bool lopping){
+void Sound::setLooping(bool looping){
     SoundComponent& audio = getComponent<SoundComponent>();
 
-    if (audio.looping != lopping){
-        audio.looping = lopping;
+    if (audio.looping != looping){
+        audio.looping = looping;
         audio.needUpdate = true;
     }
 }
 
-bool Sound::isLopping() const{
+bool Sound::isLooping() const{
     SoundComponent& audio = getComponent<SoundComponent>();
 
     return audio.looping;

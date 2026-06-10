@@ -82,8 +82,8 @@ namespace doriax {
         //Entity methods
 
         Entity createEntity();
-        Entity createUserEntity();   // 101..max
-        Entity createSystemEntity(); // 1..100
+        Entity createUserEntity();   // 1001..max
+        Entity createSystemEntity(); // 1..1000
         bool recreateEntity(Entity entity); // for internal editor use only
 
         bool isEntityCreated(Entity entity) const;

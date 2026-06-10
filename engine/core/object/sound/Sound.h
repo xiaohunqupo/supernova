@@ -50,8 +50,8 @@ namespace doriax {
         void setPan(float pan);
         float getPan() const;
 
-        void setLopping(bool lopping);
-        bool isLopping() const;
+        void setLooping(bool looping);
+        bool isLooping() const;
 
         void setLoopingPoint(double loopingPoint);
         double getLoopingPoint() const;
