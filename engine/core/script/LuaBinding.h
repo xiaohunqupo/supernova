@@ -74,6 +74,8 @@ namespace doriax {
         // For editor scripts use
         static void initializeLuaScripts(Scene* scene);
         static void cleanupLuaScripts(Scene* scene);
+
+        static std::string getLuaStackErrorString(lua_State* L, int index = -1);
         
     };
     

@@ -584,11 +584,11 @@ void LuaBinding::registerCoreClasses(lua_State *L){
 
     luabridge::getGlobalNamespace(L)
         .beginClass<Log>("Log")
-        .addStaticFunction("print", [] (const char* text) { Log::print(text); })
-        .addStaticFunction("verbose", [] (const char* text) { Log::verbose(text); })
-        .addStaticFunction("debug", [] (const char* text) { Log::debug(text); })
-        .addStaticFunction("warn", [] (const char* text) { Log::warn(text); })
-        .addStaticFunction("error", [] (const char* text) { Log::error(text); })
+        .addStaticFunction("print", [] (const char* text) { Log::print("%s", text ? text : "(nil)"); })
+        .addStaticFunction("verbose", [] (const char* text) { Log::verbose("%s", text ? text : "(nil)"); })
+        .addStaticFunction("debug", [] (const char* text) { Log::debug("%s", text ? text : "(nil)"); })
+        .addStaticFunction("warn", [] (const char* text) { Log::warn("%s", text ? text : "(nil)"); })
+        .addStaticFunction("error", [] (const char* text) { Log::error("%s", text ? text : "(nil)"); })
         .endClass();
 
     luabridge::getGlobalNamespace(L)

@@ -116,7 +116,7 @@ Animation Model::findAnimation(const std::string& name){
             }
         }
     }
-    Log::error("Retrieving non-existent bone: %s", name.c_str());
+    Log::error("Retrieving non-existent animation: %s", name.c_str());
     throw std::out_of_range("vector animations is out of range");
 }
 

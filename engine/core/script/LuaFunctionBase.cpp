@@ -75,7 +75,7 @@ void LuaFunctionBase::call(int args, int results) {
     int status = lua_pcall(m_vm, args, results, 0);
     if (status) {
         // call failed; throw an exception
-        std::string error = lua_tostring(m_vm, -1);
+        std::string error = LuaBinding::getLuaStackErrorString(m_vm, -1);
         lua_pop(m_vm, 1);
 
         #ifdef DORIAX_CRASH_GUARD

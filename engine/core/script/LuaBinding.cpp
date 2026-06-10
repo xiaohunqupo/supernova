@@ -93,10 +93,30 @@ lua_State* LuaBinding::getLuaState(){
     return luastate;
 }
 
+std::string LuaBinding::getLuaStackErrorString(lua_State* L, int index) {
+    if (lua_isstring(L, index)) {
+        size_t len = 0;
+        const char* str = lua_tolstring(L, index, &len);
+        return str ? std::string(str, len) : std::string();
+    }
+
+    if (luaL_callmeta(L, index, "__tostring")) {
+        if (lua_isstring(L, -1)) {
+            std::string result = lua_tostring(L, -1);
+            lua_pop(L, 1);
+            return result;
+        }
+        lua_pop(L, 1);
+    }
+
+    return std::string("(") + luaL_typename(L, index) + " error value)";
+}
+
 void LuaBinding::luaCallback(int nargs, int nresults, int msgh){
     int status = lua_pcall(luastate, nargs, nresults, msgh);
     if (status != 0){
-        Log::error("Lua Error: %s", lua_tostring(luastate, -1));
+        Log::error("Lua Error: %s", getLuaStackErrorString(luastate, -1).c_str());
+        lua_pop(luastate, 1);
     }
 }
 
@@ -207,7 +227,9 @@ int LuaBinding::luaRegisterEventImpl(lua_State* L, int eventIndex, int selfIndex
                 lua_pushvalue(Linner, i);
             }
 
-            lua_call(Linner, 1 + nargs, 0);
+            if (lua_pcall(Linner, 1 + nargs, 0, 0) != LUA_OK) {
+                return lua_error(Linner);
+            }
             return 0;
         },
         2);
@@ -375,11 +397,13 @@ void LuaBinding::init(){
     //int luaL_dofile (lua_State *L, const char *filename);
     if (luaL_loadbuffer(L,(const char*)filedata.getMemPtr(),filedata.length(), luafile.c_str()) == 0){
         if(lua_pcall(L, 0, LUA_MULTRET, msgh) != 0){
-            Log::error("Lua Error: %s", lua_tostring(L,-1));
+            Log::error("Lua Error: %s", getLuaStackErrorString(L, -1).c_str());
+            lua_pop(L, 1);
             lua_close(L);
         }
     }else{
-        Log::error("Lua Error: %s", lua_tostring(L,-1));
+        Log::error("Lua Error: %s", getLuaStackErrorString(L, -1).c_str());
+        lua_pop(L, 1);
         lua_close(L);
     }
 
@@ -557,14 +581,14 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
 
             int status = luaL_loadbuffer(L, (const char*)filedata.getMemPtr(), filedata.length(), scriptEntry.path.c_str());
             if (status != LUA_OK) {
-                Log::error("Failed to load Lua file '%s': %s", scriptEntry.path.c_str(), lua_tostring(L, -1));
+                Log::error("Failed to load Lua file '%s': %s", scriptEntry.path.c_str(), getLuaStackErrorString(L, -1).c_str());
                 lua_pop(L, 1);
                 continue;
             }
 
             status = lua_pcall(L, 0, 1, 0);
             if (status != LUA_OK) {
-                Log::error("Failed to execute Lua module '%s': %s", scriptEntry.className.c_str(), lua_tostring(L, -1));
+                Log::error("Failed to execute Lua module '%s': %s", scriptEntry.className.c_str(), getLuaStackErrorString(L, -1).c_str());
                 lua_pop(L, 1);
                 continue;
             }
@@ -715,7 +739,7 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
             if (lua_isfunction(L, -1)) {
                 lua_pushvalue(L, -2);
                 if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-                    Log::error("Lua init() failed for '%s': %s", scriptEntry.className.c_str(), lua_tostring(L, -1));
+                    Log::error("Lua init() failed for '%s': %s", scriptEntry.className.c_str(), getLuaStackErrorString(L, -1).c_str());
                     lua_pop(L, 1);
                 }
             } else {
