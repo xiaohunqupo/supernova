@@ -1,9 +1,11 @@
 #include "CodeEditor.h"
 
 #include "Backend.h"
+#include "AppSettings.h"
 #include "util/ProjectUtils.h"
 #include "command/type/PropertyCmd.h"
 #include "Out.h"
+#include "external/IconsFontAwesome6.h"
 #include "yaml-cpp/yaml.h"
 #include <filesystem>
 #include <fstream>
@@ -11,6 +13,7 @@
 #include <algorithm>
 #include <regex>
 #include <cctype>
+#include <cmath>
 #include <thread>
 #include <mutex>
 #include <atomic>
@@ -554,6 +557,64 @@ std::string editor::CodeEditor::toDisplayName(const std::string& camelCase) {
     return result;
 }
 
+void editor::CodeEditor::applyFontZoom(int delta) {
+    float fontSize = AppSettings::getCodeEditorFontSize();
+    if (delta == 0) {
+        fontSize = AppSettings::defaultCodeEditorFontSize;
+    } else {
+        fontSize += delta;
+    }
+    AppSettings::setCodeEditorFontSize(fontSize);
+    AppSettings::saveSettings();
+}
+
+void editor::CodeEditor::showSettingsButton() {
+    if (ImGui::Button(ICON_FA_GEAR)) {
+        ImGui::OpenPopup("CodeEditorSettingsPopup");
+    }
+    ImGui::SetItemTooltip("Editor settings");
+
+    if (ImGui::BeginPopup("CodeEditorSettingsPopup")) {
+        if (ImGui::BeginTable("code_editor_settings_table", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+
+            float fontSize = AppSettings::getCodeEditorFontSize();
+            bool defChanged = std::fabs(fontSize - AppSettings::defaultCodeEditorFontSize) > 1e-4f;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, ImGui::GetStyle().ItemSpacing.y));
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", ICON_FA_FONT " Font size");
+            ImGui::SameLine();
+
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, ImGui::GetStyle().FramePadding.y));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            if (defChanged) {
+                if (ImGui::Button(ICON_FA_ROTATE_LEFT "##ResetCodeFontSize")) {
+                    applyFontZoom(0);
+                }
+            }
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar(3);
+
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##CodeFontSize", &fontSize, 0.2f, AppSettings::minCodeEditorFontSize, AppSettings::maxCodeEditorFontSize, "%.0f", ImGuiSliderFlags_AlwaysClamp)) {
+                AppSettings::setCodeEditorFontSize(fontSize);
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                AppSettings::saveSettings();
+            }
+
+            ImGui::EndTable();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void editor::CodeEditor::offsetToLineCol(const std::string& text, size_t offset, int& line, int& col) {
     line = 0;
     col = 0;
@@ -1094,6 +1155,9 @@ void editor::CodeEditor::openFile(const std::string& filepath) {
     instance.editor->SetHighlightCurrentLine(true);
     instance.editor->SetMatchBrackets(true);
     instance.editor->SetAutoComplete(true);
+    instance.editor->SetFontZoomCallback([](int delta) { applyFontZoom(delta); });
+    // VSCode line height is 1.35x the em size; the pushed ImGui size is em * codeFontEmScale
+    instance.editor->SetLineHeightFactor(1.35f / App::codeFontEmScale);
 
     // Load the file content
     if (!loadFileContent(instance)) {
@@ -1247,14 +1311,25 @@ void editor::CodeEditor::show() {
             int line, column;
             instance.editor->GetCursorPosition(line, column);
 
-            ImGui::Text("%6d/%-6d %6d lines  | %s | %s", 
-                line + 1, 
+            float statusRowY = ImGui::GetCursorPosY();
+
+            ImGui::Text("%6d/%-6d %6d lines  | %s | %s",
+                line + 1,
                 column + 1,
                 instance.editor->GetLineCount(),
                 instance.editor->GetLanguageName(),
                 instance.isModified ? "*" : " ");
 
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // font needs to be monospace
+            // Full-height button vertically centered on the status row, overlapping the
+            // spacing above/below so the row keeps its text-only height
+            float settingsButtonWidth = ImGui::CalcTextSize(ICON_FA_GEAR).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            ImGui::SameLine(ImGui::GetContentRegionMax().x - settingsButtonWidth);
+            ImGui::SetCursorPosY(statusRowY - (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f);
+            showSettingsButton();
+            ImGui::SetCursorPosY(statusRowY + ImGui::GetTextLineHeightWithSpacing());
+
+            // Font size setting is em-based like VSCode; convert to ImGui's line-box-based size
+            ImGui::PushFont(App::getCodeFont(), AppSettings::getCodeEditorFontSize() * App::codeFontEmScale);
             instance.editor->Render("TextEditor");
             ImGui::PopFont();
 

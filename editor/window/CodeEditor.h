@@ -67,6 +67,9 @@ namespace doriax::editor {
         static std::string toDisplayName(const std::string& camelCase);
         static void offsetToLineCol(const std::string& text, size_t offset, int& line, int& col);
 
+        static void applyFontZoom(int delta);
+        void showSettingsButton();
+
     public:
         CodeEditor(Project* project);
         ~CodeEditor();

@@ -1323,6 +1323,11 @@ void editor::SceneWindow::show() {
             bool isLoading = (sceneProject.playState == ScenePlayState::LOADING);
             bool isCancelling = (sceneProject.playState == ScenePlayState::CANCELLING);
 
+            // Full-height toolbar vertically centered on a text-height row, overlapping the
+            // spacing above/below (same layout pattern as the code editor status row)
+            float toolbarRowY = ImGui::GetCursorPosY();
+            ImGui::SetCursorPosY(toolbarRowY - (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f);
+
             // Play button - disabled when already playing
             ImGui::BeginDisabled(isPlaying || isSaving || isLoading || isCancelling || (isStopped && project->isAnyScenePlaying()));
             if (ImGui::Button(ICON_FA_PLAY " Play")) {
@@ -1582,6 +1587,8 @@ void editor::SceneWindow::show() {
                 ImGui::SameLine(0, 10);
                 ImGui::Dummy(ImVec2(1, 20));
             }
+
+            ImGui::SetCursorPosY(toolbarRowY + ImGui::GetTextLineHeightWithSpacing());
 
             ImGui::BeginChild(("Canvas" + std::to_string(sceneProject.id)).c_str());
             {

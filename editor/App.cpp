@@ -15,6 +15,7 @@
 #include "Out.h"
 #include "AppSettings.h"
 #include "resources/fonts/fa-solid-900_ttf.h"
+#include "resources/fonts/jetbrains-mono-regular_ttf.h"
 //#include "recources/fonts/roboto-v20-latin-regular_ttf.h"
 #include "util/DefaultFont.h"
 
@@ -42,6 +43,8 @@ ImVec4 editor::App::ThemeColors::ExtEntityButtonActive;
 ImVec4 editor::App::ThemeColors::NestedHeader;
 ImVec4 editor::App::ThemeColors::NestedHeaderHovered;
 ImVec4 editor::App::ThemeColors::NestedHeaderActive;
+
+ImFont* editor::App::codeFont = nullptr;
 
 editor::App::App(){
     propertiesWindow = new Properties(&project);
@@ -723,6 +726,10 @@ void editor::App::showStyleEditor(){
     ImGui::End();
 }
 
+ImFont* editor::App::getCodeFont() {
+    return codeFont ? codeFont : ImGui::GetIO().Fonts->Fonts[0];
+}
+
 void editor::App::setup() {
     // Initialize application settings
     initializeSettings();
@@ -761,6 +768,13 @@ void editor::App::setup() {
     config2.FontDataOwnedByAtlas = false;
     static const ImWchar icon_ranges2[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
     io.Fonts->AddFontFromMemoryTTF(fa_solid_900_ttf, fa_solid_900_ttf_len, 16.0f, &config2, icon_ranges2);
+
+    ImFontConfig config3;
+    strcpy(config3.Name, "jetbrains-mono-regular");
+    config3.FontDataOwnedByAtlas = false;
+    config3.OversampleH = 2;
+    config3.OversampleV = 2;
+    codeFont = io.Fonts->AddFontFromMemoryTTF(jetbrains_mono_regular_ttf, jetbrains_mono_regular_ttf_len, 16.0f, &config3);
 
     io.FontDefault = font1;
 

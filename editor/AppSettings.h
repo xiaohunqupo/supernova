@@ -27,6 +27,9 @@ private:
     static int resourcesItemViewStyle; // 0=CARD, 1=CLASSIC
     static float resourcesLeftPanelWidth;
 
+    // Code editor settings
+    static float codeEditorFontSize;
+
     // Private methods
     static void ensureConfigDirectory();
 
@@ -61,7 +64,15 @@ public:
     static void setResourcesLayout(int layout);
     static void setResourcesItemViewStyle(int style);
     static void setResourcesLeftPanelWidth(float width);
-    
+
+    // Code editor settings
+    static constexpr float defaultCodeEditorFontSize = 14.0f; // VSCode default
+    static constexpr float minCodeEditorFontSize = 8.0f;
+    static constexpr float maxCodeEditorFontSize = 40.0f;
+
+    static float getCodeEditorFontSize();
+    static void setCodeEditorFontSize(float size);
+
     // Load and save settings
     static bool loadSettings();
     static bool saveSettings();

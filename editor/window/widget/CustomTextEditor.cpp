@@ -55,6 +55,9 @@ CustomTextEditor::CustomTextEditor()
     , findWholeWord(false)
     , charWidth(0)
     , lineHeight(0)
+    , lineHeightFactor(1.35f)
+    , textOffsetY(0)
+    , lineNumberDigits(1)
     , lineNumberWidth(0)
     , leftMargin(10)
     , textStartX(0)
@@ -2658,6 +2661,18 @@ void CustomTextEditor::handleKeyboardInput() {
         OpenFind();
     }
 
+    if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd))) {
+        if (onFontZoom) onFontZoom(1);
+    }
+
+    if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract))) {
+        if (onFontZoom) onFontZoom(-1);
+    }
+
+    if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_0) || ImGui::IsKeyPressed(ImGuiKey_Keypad0))) {
+        if (onFontZoom) onFontZoom(0);
+    }
+
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_D)) {
         // Select word at cursor or add cursor at next occurrence
         if (!cursors.empty()) {
@@ -3066,6 +3081,11 @@ void CustomTextEditor::handleMouseInput() {
     bool shift = io.KeyShift;
     bool alt = io.KeyAlt;
 
+    // Ctrl+mouse wheel zooms the font (ImGui skips scrolling while Ctrl is held)
+    if (ctrl && io.MouseWheel != 0.0f) {
+        if (onFontZoom) onFontZoom(io.MouseWheel > 0.0f ? 1 : -1);
+    }
+
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         showContextMenu = false;
         TextPosition clickPos = screenToText(mousePos, contentPos);
@@ -3355,9 +3375,9 @@ void CustomTextEditor::renderLineNumbers(ImDrawList* drawList, const ImVec2& ori
         float y = origin.y + i * lineHeight;
 
         char lineNum[16];
-        snprintf(lineNum, sizeof(lineNum), "%4d", i + 1);
+        snprintf(lineNum, sizeof(lineNum), "%*d", lineNumberDigits, i + 1);
 
-        drawList->AddText(ImVec2(origin.x + leftMargin, y), color, lineNum);
+        drawList->AddText(ImVec2(origin.x + leftMargin, y + textOffsetY), color, lineNum);
     }
 }
 
@@ -3411,7 +3431,7 @@ void CustomTextEditor::renderSearchHighlights(ImDrawList* drawList, const ImVec2
 
 void CustomTextEditor::renderText(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine) {
     for (int i = startLine; i <= endLine && i < static_cast<int>(lines.size()); ++i) {
-        float y = origin.y + i * lineHeight;
+        float y = origin.y + i * lineHeight + textOffsetY;
         float x = origin.x + textStartX;
 
         const std::string& line = lines[i];
@@ -3913,7 +3933,9 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
     if (ImGui::BeginChild(title, contentSize, border ? ImGuiChildFlags_Borders : ImGuiChildFlags_None, flags)) {
         // Auto-focus editor child when parent window is focused but child is not
         // (e.g., user clicked the window tab/title bar)
-        if (!ImGui::IsWindowFocused() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+        // Skip while a popup is open: stealing focus would close it (e.g. the settings popup)
+        if (!ImGui::IsWindowFocused() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+            !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
             ImGui::SetWindowFocus();
         }
 
@@ -3925,12 +3947,16 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
         ImFont* font = ImGui::GetFont();
         float fontSize = ImGui::GetFontSize();
         charWidth = font->CalcTextSizeA(fontSize, FLT_MAX, -1.0f, "X").x;
-        lineHeight = ImGui::GetTextLineHeightWithSpacing();
+        lineHeight = std::round(fontSize * lineHeightFactor);
+        // Center the font's real line box (ascent-descent), which can differ from fontSize
+        ImFontBaked* baked = ImGui::GetFontBaked();
+        textOffsetY = (lineHeight - (baked->Ascent - baked->Descent)) * 0.5f;
 
         if (showLineNumbers) {
-            char lineNumBuf[16];
-            snprintf(lineNumBuf, sizeof(lineNumBuf), "%d", static_cast<int>(lines.size()));
-            lineNumberWidth = font->CalcTextSizeA(fontSize, FLT_MAX, -1.0f, lineNumBuf).x + leftMargin * 2;
+            lineNumberDigits = 1;
+            for (size_t n = lines.size(); n >= 10; n /= 10) lineNumberDigits++;
+            lineNumberDigits = std::max(lineNumberDigits, 4);
+            lineNumberWidth = lineNumberDigits * charWidth + leftMargin * 2;
         } else {
             lineNumberWidth = 0;
         }

@@ -193,6 +193,7 @@ namespace doriax::editor {
         void SetHighlightCurrentLine(bool enable) { highlightCurrentLine = enable; }
         void SetMatchBrackets(bool enable) { matchBrackets = enable; }
         void SetShowMinimap(bool show) { showMinimap = show; }
+        void SetLineHeightFactor(float factor) { lineHeightFactor = factor; } // relative to the pushed ImGui font size
         void RequestFocus() { pendingFocus = true; }
 
         // Auto-complete
@@ -222,6 +223,10 @@ namespace doriax::editor {
         // Callbacks
         using TextChangedCallback = std::function<void()>;
         void SetTextChangedCallback(TextChangedCallback callback) { onTextChanged = callback; }
+
+        // Font zoom requests (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+MouseWheel); delta is +1/-1 steps, 0 means reset
+        using FontZoomCallback = std::function<void(int)>;
+        void SetFontZoomCallback(FontZoomCallback callback) { onFontZoom = callback; }
 
     private:
         // Text data
@@ -316,12 +321,16 @@ namespace doriax::editor {
         // Character metrics
         float charWidth;
         float lineHeight;
+        float lineHeightFactor;
+        float textOffsetY; // centers glyphs vertically within lineHeight
+        int lineNumberDigits;
         float lineNumberWidth;
         float leftMargin;
         float textStartX;
 
-        // Callback
+        // Callbacks
         TextChangedCallback onTextChanged;
+        FontZoomCallback onFontZoom;
 
         // Semantic suggestions engine
         std::unique_ptr<SemanticSuggestions> suggestions;

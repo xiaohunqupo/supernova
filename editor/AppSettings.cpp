@@ -17,6 +17,7 @@ int AppSettings::resourcesIconSize = 32;
 int AppSettings::resourcesLayout = 0;
 int AppSettings::resourcesItemViewStyle = 1;
 float AppSettings::resourcesLeftPanelWidth = 200.0f;
+float AppSettings::codeEditorFontSize = AppSettings::defaultCodeEditorFontSize;
 
 bool AppSettings::initialize() {
     // Get config file path in the application directory
@@ -96,6 +97,14 @@ bool AppSettings::loadSettings() {
             }
         }
 
+        // Load code editor settings
+        if (settingsData["code_editor"]) {
+            auto codeNode = settingsData["code_editor"];
+            if (codeNode["font_size"]) {
+                setCodeEditorFontSize(codeNode["font_size"].as<float>());
+            }
+        }
+
         return true;
     } catch (const std::exception& e) {
         Out::error("Failed to load settings: %s", e.what());
@@ -134,6 +143,11 @@ bool AppSettings::saveSettings() {
         resNode["item_view_style"] = resourcesItemViewStyle;
         resNode["left_panel_width"] = resourcesLeftPanelWidth;
         settingsData["resources_window"] = resNode;
+
+        // Code editor settings
+        YAML::Node codeNode;
+        codeNode["font_size"] = codeEditorFontSize;
+        settingsData["code_editor"] = codeNode;
 
         // Save to file
         std::ofstream fout(configFilePath.string());
@@ -251,6 +265,14 @@ void AppSettings::setResourcesItemViewStyle(int style) {
 
 void AppSettings::setResourcesLeftPanelWidth(float width) {
     resourcesLeftPanelWidth = width;
+}
+
+float AppSettings::getCodeEditorFontSize() {
+    return codeEditorFontSize;
+}
+
+void AppSettings::setCodeEditorFontSize(float size) {
+    codeEditorFontSize = std::clamp(size, minCodeEditorFontSize, maxCodeEditorFontSize);
 }
 
 } // namespace doriax::editor

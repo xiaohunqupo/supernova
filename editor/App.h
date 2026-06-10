@@ -66,6 +66,8 @@ namespace doriax::editor{
         ImGuiID dockspace_id;
         ImGuiID dock_id_middle_top;
 
+        static ImFont* codeFont;
+
         Structure* structureWindow;
         Properties* propertiesWindow;
         OutputWindow* outputWindow;
@@ -178,6 +180,14 @@ namespace doriax::editor{
 
         static std::filesystem::path getUserCacheBaseDir();
         static std::filesystem::path getUserShaderCacheDir();
+
+        // Monospace font used by the code editor
+        static ImFont* getCodeFont();
+
+        // ImGui sizes fonts by their line box (ascent-descent) while CSS/VSCode use the em size.
+        // JetBrains Mono's line box is (1020 - -300) / 1000upm = 1.32em; multiply a CSS-like
+        // font size by this to get the equivalent ImGui font size.
+        static constexpr float codeFontEmScale = 1.32f;
 
         // Tab notification helpers
         static void pushTabNotificationStyle();
