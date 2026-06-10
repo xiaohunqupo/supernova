@@ -68,13 +68,13 @@ FILE* DoriaxAndroid::platformFopen(const char* fname, const char* mode) {
 void DoriaxAndroid::platformLog(const int type, const char *fmt, va_list args){
     int priority = ANDROID_LOG_VERBOSE;
 
-    if (type == S_LOG_VERBOSE){
+    if (type == D_LOG_VERBOSE){
         priority = ANDROID_LOG_VERBOSE;
-    }else if (type == S_LOG_DEBUG){
+    }else if (type == D_LOG_DEBUG){
         priority = ANDROID_LOG_DEBUG;
-    }else if (type == S_LOG_WARN){
+    }else if (type == D_LOG_WARN){
         priority = ANDROID_LOG_WARN;
-    }else if (type == S_LOG_ERROR){
+    }else if (type == D_LOG_ERROR){
         priority = ANDROID_LOG_ERROR;
     }
 

@@ -1002,12 +1002,12 @@ bool UISystem::handleTextEditKeyDown(TextEditComponent& textedit, TextComponent&
         return false;
     }
 
-    bool shift = (mods & S_MODIFIER_SHIFT) != 0;
-    bool control = (mods & S_MODIFIER_CONTROL) != 0;
+    bool shift = (mods & D_MODIFIER_SHIFT) != 0;
+    bool control = (mods & D_MODIFIER_CONTROL) != 0;
     size_t numCodepoints = StringUtils::countCodepoints(text.text);
     bool changed = false;
 
-    if (control && key == S_KEY_A){
+    if (control && key == D_KEY_A){
         textedit.selectionAnchor = 0;
         textedit.cursorIndex = static_cast<int>(numCodepoints);
         textEditResetBlink(textedit);
@@ -1025,15 +1025,15 @@ bool UISystem::handleTextEditKeyDown(TextEditComponent& textedit, TextComponent&
         changed = true;
     };
 
-    if (key == S_KEY_LEFT){
+    if (key == D_KEY_LEFT){
         moveCursor(textedit.cursorIndex - 1);
-    }else if (key == S_KEY_RIGHT){
+    }else if (key == D_KEY_RIGHT){
         moveCursor(textedit.cursorIndex + 1);
-    }else if (key == S_KEY_HOME){
+    }else if (key == D_KEY_HOME){
         moveCursor(0);
-    }else if (key == S_KEY_END){
+    }else if (key == D_KEY_END){
         moveCursor(static_cast<int>(numCodepoints));
-    }else if (key == S_KEY_DELETE){
+    }else if (key == D_KEY_DELETE){
         if (textEditHasSelection(textedit)){
             textEditDeleteSelection(textedit, text);
             changed = true;
@@ -2394,7 +2394,7 @@ bool UISystem::eventOnPointerDown(float x, float y){
                     if (text){
                         ImageComponent& img = scene->getComponent<ImageComponent>(lastUIFromPointer);
                         float localX = x - transform.worldPosition.x;
-                        bool extendSelection = (Input::getModifiers() & S_MODIFIER_SHIFT) != 0;
+                        bool extendSelection = (Input::getModifiers() & D_MODIFIER_SHIFT) != 0;
                         if (text->text.empty()){
                             textedit.cursorIndex = 0;
                             if (!extendSelection){

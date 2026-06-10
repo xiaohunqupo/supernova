@@ -564,127 +564,127 @@ void NativeEngine::updateSystemBarOffset() {
 
 int NativeEngine::getDoriaxKey(int32_t key){
     if (key == AKEYCODE_SPACE)
-        return S_KEY_SPACE;
+        return D_KEY_SPACE;
     if (key == AKEYCODE_APOSTROPHE)
-        return S_KEY_APOSTROPHE;
+        return D_KEY_APOSTROPHE;
     if (key == AKEYCODE_COMMA)
-        return S_KEY_COMMA;
+        return D_KEY_COMMA;
     if (key == AKEYCODE_MINUS)
-        return S_KEY_MINUS;
+        return D_KEY_MINUS;
     if (key == AKEYCODE_PERIOD)
-        return S_KEY_PERIOD;
+        return D_KEY_PERIOD;
     if (key == AKEYCODE_SLASH)
-        return S_KEY_SLASH;
+        return D_KEY_SLASH;
 
     if (key >= AKEYCODE_0 && key <= AKEYCODE_9)
-        return key + S_KEY_0 - AKEYCODE_0;
+        return key + D_KEY_0 - AKEYCODE_0;
 
     if (key == AKEYCODE_SEMICOLON)
-        return S_KEY_SEMICOLON;
+        return D_KEY_SEMICOLON;
     if (key == AKEYCODE_EQUALS)
-        return S_KEY_EQUAL;
+        return D_KEY_EQUAL;
 
     if (key >= AKEYCODE_A && key <= AKEYCODE_Z)
-        return key + S_KEY_A - AKEYCODE_A;
+        return key + D_KEY_A - AKEYCODE_A;
 
     if (key == AKEYCODE_LEFT_BRACKET)
-        return S_KEY_LEFT_BRACKET;
+        return D_KEY_LEFT_BRACKET;
     if (key == AKEYCODE_BACKSLASH)
-        return S_KEY_BACKSLASH;
+        return D_KEY_BACKSLASH;
     if (key == AKEYCODE_RIGHT_BRACKET)
-        return S_KEY_RIGHT_BRACKET;
+        return D_KEY_RIGHT_BRACKET;
     if (key == AKEYCODE_GRAVE)
-        return S_KEY_GRAVE_ACCENT;
+        return D_KEY_GRAVE_ACCENT;
 
     if (key == AKEYCODE_ESCAPE)
-        return S_KEY_ESCAPE;
+        return D_KEY_ESCAPE;
     if (key == AKEYCODE_ENTER)
-        return S_KEY_ENTER;
+        return D_KEY_ENTER;
     if (key == AKEYCODE_TAB)
-        return S_KEY_TAB;
+        return D_KEY_TAB;
     if (key == AKEYCODE_DEL)
-        return S_KEY_BACKSPACE;
+        return D_KEY_BACKSPACE;
     if (key == AKEYCODE_INSERT)
-        return S_KEY_INSERT;
+        return D_KEY_INSERT;
     if (key == AKEYCODE_FORWARD_DEL)
-        return S_KEY_DELETE;
+        return D_KEY_DELETE;
     if (key == AKEYCODE_DPAD_RIGHT)
-        return S_KEY_RIGHT;
+        return D_KEY_RIGHT;
     if (key == AKEYCODE_DPAD_LEFT)
-        return S_KEY_LEFT;
+        return D_KEY_LEFT;
     if (key == AKEYCODE_DPAD_DOWN)
-        return S_KEY_DOWN;
+        return D_KEY_DOWN;
     if (key == AKEYCODE_DPAD_UP)
-        return S_KEY_UP;
+        return D_KEY_UP;
     if (key == AKEYCODE_PAGE_UP)
-        return S_KEY_PAGE_UP;
+        return D_KEY_PAGE_UP;
     if (key == AKEYCODE_PAGE_DOWN)
-        return S_KEY_PAGE_DOWN;
+        return D_KEY_PAGE_DOWN;
     if (key == AKEYCODE_MOVE_HOME)
-        return S_KEY_HOME;
+        return D_KEY_HOME;
     if (key == AKEYCODE_MOVE_END)
-        return S_KEY_END;
+        return D_KEY_END;
     if (key == AKEYCODE_CAPS_LOCK)
-        return S_KEY_CAPS_LOCK;
+        return D_KEY_CAPS_LOCK;
     if (key == AKEYCODE_SCROLL_LOCK)
-        return S_KEY_SCROLL_LOCK;
+        return D_KEY_SCROLL_LOCK;
     if (key == AKEYCODE_NUM_LOCK)
-        return S_KEY_NUM_LOCK;
+        return D_KEY_NUM_LOCK;
     if (key == AKEYCODE_SYSRQ)
-        return S_KEY_PRINT_SCREEN;
+        return D_KEY_PRINT_SCREEN;
     if (key == AKEYCODE_BREAK)
-        return S_KEY_PAUSE;
+        return D_KEY_PAUSE;
 
     if (key >= AKEYCODE_F1 && key <= AKEYCODE_F12)
-        return key + S_KEY_F1 - AKEYCODE_F1;
+        return key + D_KEY_F1 - AKEYCODE_F1;
 
     if (key >= AKEYCODE_NUMPAD_0 && key <= AKEYCODE_NUMPAD_9)
-        return key + S_KEY_KP_0 - AKEYCODE_NUMPAD_0;
+        return key + D_KEY_KP_0 - AKEYCODE_NUMPAD_0;
     if (key == AKEYCODE_NUMPAD_DOT)
-        return S_KEY_KP_DECIMAL;
+        return D_KEY_KP_DECIMAL;
     if (key == AKEYCODE_NUMPAD_DIVIDE)
-        return S_KEY_KP_DIVIDE;
+        return D_KEY_KP_DIVIDE;
     if (key == AKEYCODE_NUMPAD_MULTIPLY)
-        return S_KEY_KP_MULTIPLY;
+        return D_KEY_KP_MULTIPLY;
     if (key == AKEYCODE_NUMPAD_SUBTRACT)
-        return S_KEY_KP_SUBTRACT;
+        return D_KEY_KP_SUBTRACT;
     if (key == AKEYCODE_NUMPAD_ADD)
-        return S_KEY_KP_ADD;
+        return D_KEY_KP_ADD;
     if (key == AKEYCODE_NUMPAD_ENTER)
-        return S_KEY_KP_ENTER;
+        return D_KEY_KP_ENTER;
     if (key == AKEYCODE_NUMPAD_EQUALS)
-        return S_KEY_KP_EQUAL;
+        return D_KEY_KP_EQUAL;
 
     if (key == AKEYCODE_SHIFT_LEFT)
-        return S_KEY_LEFT_SHIFT;
+        return D_KEY_LEFT_SHIFT;
     if (key == AKEYCODE_CTRL_LEFT)
-        return S_KEY_LEFT_CONTROL;
+        return D_KEY_LEFT_CONTROL;
     if (key == AKEYCODE_ALT_LEFT)
-        return S_KEY_LEFT_ALT;
+        return D_KEY_LEFT_ALT;
     if (key == AKEYCODE_META_LEFT)
-        return S_KEY_LEFT_SUPER;
+        return D_KEY_LEFT_SUPER;
     if (key == AKEYCODE_SHIFT_RIGHT)
-        return S_KEY_RIGHT_SHIFT;
+        return D_KEY_RIGHT_SHIFT;
     if (key == AKEYCODE_CTRL_RIGHT)
-        return S_KEY_RIGHT_CONTROL;
+        return D_KEY_RIGHT_CONTROL;
     if (key == AKEYCODE_ALT_RIGHT)
-        return S_KEY_RIGHT_ALT;
+        return D_KEY_RIGHT_ALT;
     if (key == AKEYCODE_META_RIGHT)
-        return S_KEY_RIGHT_SUPER;
+        return D_KEY_RIGHT_SUPER;
     if (key == AKEYCODE_MENU)
-        return S_KEY_MENU;
+        return D_KEY_MENU;
 
     return 0;
 }
 
 int NativeEngine::getDoriaxModifiers(int32_t mods){
     int modifiers = 0;
-    if (mods & AMETA_CTRL_ON) modifiers |= S_MODIFIER_CONTROL;
-    if (mods & AMETA_SHIFT_ON) modifiers |= S_MODIFIER_SHIFT;
-    if (mods & AMETA_ALT_ON)  modifiers |= S_MODIFIER_ALT;
-    if (mods & AMETA_META_ON) modifiers |= S_MODIFIER_SUPER;
-    if (mods & AMETA_CAPS_LOCK_ON) modifiers |= S_MODIFIER_CAPS_LOCK;
-    if (mods & AMETA_NUM_LOCK_ON) modifiers |= S_MODIFIER_NUM_LOCK;
+    if (mods & AMETA_CTRL_ON) modifiers |= D_MODIFIER_CONTROL;
+    if (mods & AMETA_SHIFT_ON) modifiers |= D_MODIFIER_SHIFT;
+    if (mods & AMETA_ALT_ON)  modifiers |= D_MODIFIER_ALT;
+    if (mods & AMETA_META_ON) modifiers |= D_MODIFIER_SUPER;
+    if (mods & AMETA_CAPS_LOCK_ON) modifiers |= D_MODIFIER_CAPS_LOCK;
+    if (mods & AMETA_NUM_LOCK_ON) modifiers |= D_MODIFIER_NUM_LOCK;
 
     return modifiers;
 }

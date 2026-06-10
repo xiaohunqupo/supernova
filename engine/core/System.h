@@ -5,10 +5,10 @@
 #ifndef SYSTEM_H
 #define SYSTEM_H
 
-#define S_LOG_VERBOSE 1
-#define S_LOG_DEBUG 2
-#define S_LOG_WARN 3
-#define S_LOG_ERROR 4
+#define D_LOG_VERBOSE 1
+#define D_LOG_DEBUG 2
+#define D_LOG_WARN 3
+#define D_LOG_ERROR 4
 
 #include "Export.h"
 #include <stdio.h>

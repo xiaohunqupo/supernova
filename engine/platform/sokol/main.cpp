@@ -17,13 +17,13 @@ void sokol_frame(void) {
 
 int convMouseButtom(sapp_mousebutton mouse_button){
     if (mouse_button == SAPP_MOUSEBUTTON_LEFT){
-        return S_MOUSE_BUTTON_LEFT;
+        return D_MOUSE_BUTTON_LEFT;
     }else if (mouse_button == SAPP_MOUSEBUTTON_RIGHT){
-        return S_MOUSE_BUTTON_RIGHT;
+        return D_MOUSE_BUTTON_RIGHT;
     }else if (mouse_button == SAPP_MOUSEBUTTON_MIDDLE){
-        return S_MOUSE_BUTTON_MIDDLE;
+        return D_MOUSE_BUTTON_MIDDLE;
     }
-    return S_MOUSE_BUTTON_LEFT;
+    return D_MOUSE_BUTTON_LEFT;
 }
 
 static void sokol_event(const sapp_event* e) {

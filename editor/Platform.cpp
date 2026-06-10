@@ -38,10 +38,10 @@ void editor::Platform::platformLog(const int type, const char *fmt, va_list args
     vsnprintf(buf, sizeof(buf), fmt, args);
 
     switch (type) {
-        case S_LOG_WARN:
+        case D_LOG_WARN:
             editor::Out::warning(buf);
             break;
-        case S_LOG_ERROR:
+        case D_LOG_ERROR:
             editor::Out::error(buf);
             break;
         default:

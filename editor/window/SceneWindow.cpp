@@ -547,19 +547,19 @@ void editor::SceneWindow::forwardPlayKeyboardInput(ImGuiIO& io, int mods){
         }
     };
 
-    forwardKeyPress(ImGuiKey_Tab, S_KEY_TAB, L'\t', false);
-    forwardKeyPress(ImGuiKey_Backspace, S_KEY_BACKSPACE, L'\b');
-    forwardKeyPress(ImGuiKey_Enter, S_KEY_ENTER, L'\r', false);
-    forwardKeyPress(ImGuiKey_KeypadEnter, S_KEY_ENTER, L'\r', false);
-    forwardKeyPress(ImGuiKey_Escape, S_KEY_ESCAPE, L'\e', false);
-    forwardKeyPress(ImGuiKey_LeftArrow, S_KEY_LEFT);
-    forwardKeyPress(ImGuiKey_RightArrow, S_KEY_RIGHT);
-    forwardKeyPress(ImGuiKey_Home, S_KEY_HOME, 0, false);
-    forwardKeyPress(ImGuiKey_End, S_KEY_END, 0, false);
-    forwardKeyPress(ImGuiKey_Delete, S_KEY_DELETE);
+    forwardKeyPress(ImGuiKey_Tab, D_KEY_TAB, L'\t', false);
+    forwardKeyPress(ImGuiKey_Backspace, D_KEY_BACKSPACE, L'\b');
+    forwardKeyPress(ImGuiKey_Enter, D_KEY_ENTER, L'\r', false);
+    forwardKeyPress(ImGuiKey_KeypadEnter, D_KEY_ENTER, L'\r', false);
+    forwardKeyPress(ImGuiKey_Escape, D_KEY_ESCAPE, L'\e', false);
+    forwardKeyPress(ImGuiKey_LeftArrow, D_KEY_LEFT);
+    forwardKeyPress(ImGuiKey_RightArrow, D_KEY_RIGHT);
+    forwardKeyPress(ImGuiKey_Home, D_KEY_HOME, 0, false);
+    forwardKeyPress(ImGuiKey_End, D_KEY_END, 0, false);
+    forwardKeyPress(ImGuiKey_Delete, D_KEY_DELETE);
 
-    if ((mods & S_MODIFIER_CONTROL) != 0){
-        forwardKeyPress(ImGuiKey_A, S_KEY_A, 0, false);
+    if ((mods & D_MODIFIER_CONTROL) != 0){
+        forwardKeyPress(ImGuiKey_A, D_KEY_A, 0, false);
     }
 }
 
@@ -586,10 +586,10 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         float y = mousePos.y - windowPos.y;
 
         int mods = 0;
-        if (io.KeyShift) mods |= S_MODIFIER_SHIFT;
-        if (io.KeyCtrl) mods |= S_MODIFIER_CONTROL;
-        if (io.KeyAlt) mods |= S_MODIFIER_ALT;
-        if (io.KeySuper) mods |= S_MODIFIER_SUPER;
+        if (io.KeyShift) mods |= D_MODIFIER_SHIFT;
+        if (io.KeyCtrl) mods |= D_MODIFIER_CONTROL;
+        if (io.KeyAlt) mods |= D_MODIFIER_ALT;
+        if (io.KeySuper) mods |= D_MODIFIER_SUPER;
 
         Engine::systemMouseMove(x, y, mods);
 

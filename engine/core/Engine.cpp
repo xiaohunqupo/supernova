@@ -919,9 +919,9 @@ void Engine::systemTouchStart(int pointer, float x, float y){
             //-----------------
             if (Engine::isCallMouseInTouchEvent()){
                 //-----------------
-                Input::addMousePressed(S_MOUSE_BUTTON_1);
+                Input::addMousePressed(D_MOUSE_BUTTON_1);
                 Input::setMousePosition(x, y);
-                Engine::onMouseDown.call(S_MOUSE_BUTTON_1, x, y, 0);
+                Engine::onMouseDown.call(D_MOUSE_BUTTON_1, x, y, 0);
                 //-----------------
             }
         }
@@ -946,9 +946,9 @@ void Engine::systemTouchEnd(int pointer, float x, float y){
             //-----------------
             if (Engine::isCallMouseInTouchEvent()){
                 //-----------------
-                Input::releaseMousePressed(S_MOUSE_BUTTON_1);
+                Input::releaseMousePressed(D_MOUSE_BUTTON_1);
                 Input::setMousePosition(x, y);
-                Engine::onMouseUp.call(S_MOUSE_BUTTON_1, x, y, 0);
+                Engine::onMouseUp.call(D_MOUSE_BUTTON_1, x, y, 0);
                 //-----------------
             }
         }
@@ -1000,7 +1000,7 @@ void Engine::systemMouseDown(int button, float x, float y, int mods){
         uiEventReceived = false;
         for (int i = 0; i < scenes.size(); i++){
             if (scenes[i]->canReceiveUIEvents())
-                if (button == S_MOUSE_BUTTON_1)
+                if (button == D_MOUSE_BUTTON_1)
                     if (scenes[i]->getSystem<UISystem>()->eventOnPointerDown(x, y))
                         uiEventReceived = true;
         }
@@ -1029,7 +1029,7 @@ void Engine::systemMouseUp(int button, float x, float y, int mods){
         uiEventReceived = false;
         for (int i = 0; i < scenes.size(); i++){
             if (scenes[i]->canReceiveUIEvents())
-                if (button == S_MOUSE_BUTTON_1)
+                if (button == D_MOUSE_BUTTON_1)
                     if (scenes[i]->getSystem<UISystem>()->eventOnPointerUp(x, y))
                         uiEventReceived = true;
         }
@@ -1067,7 +1067,7 @@ void Engine::systemMouseMove(float x, float y, int mods){
             //-----------------
             if (Engine::isCallTouchInMouseEvent()){
                 //-----------------
-                if (Input::isMousePressed(S_MOUSE_BUTTON_LEFT) || Input::isMousePressed(S_MOUSE_BUTTON_RIGHT)){
+                if (Input::isMousePressed(D_MOUSE_BUTTON_LEFT) || Input::isMousePressed(D_MOUSE_BUTTON_RIGHT)){
                     Input::setTouchPosition(0, x, y);
                     Engine::onTouchMove.call(0, x, y);
                 }

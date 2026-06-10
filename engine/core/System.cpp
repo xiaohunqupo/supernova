@@ -121,17 +121,17 @@ bool System::syncFileSystem(){
 void System::platformLog(const int type, const char *fmt, va_list args){
     const char* priority;
 
-    if (type == S_LOG_VERBOSE){
+    if (type == D_LOG_VERBOSE){
         priority = "VERBOSE";
-    }else if (type == S_LOG_DEBUG){
+    }else if (type == D_LOG_DEBUG){
         priority = "DEBUG";
-    }else if (type == S_LOG_WARN){
+    }else if (type == D_LOG_WARN){
         priority = "WARN";
-    }else if (type == S_LOG_ERROR){
+    }else if (type == D_LOG_ERROR){
         priority = "ERROR";
     }
 
-    if ((type == S_LOG_VERBOSE) || (type == S_LOG_DEBUG) || (type == S_LOG_WARN) || (type == S_LOG_ERROR))
+    if ((type == D_LOG_VERBOSE) || (type == D_LOG_DEBUG) || (type == D_LOG_WARN) || (type == D_LOG_ERROR))
         printf("(%s): ", priority);
 
     vprintf(fmt, args);
