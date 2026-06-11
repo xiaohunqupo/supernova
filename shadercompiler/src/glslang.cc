@@ -472,6 +472,8 @@ bool shadercompiler::compile_to_spirv(std::vector<spirv_t>& spirvvec, const std:
             def += std::string("#define IS_HLSL\n");
         }else if (args.lang == LANG_MSL){
             def += std::string("#define IS_MSL\n");
+        }else if (args.lang == LANG_SPIRV){
+            def += std::string("#define IS_VULKAN\n");
         }
 
         EShLanguage stage = get_stage(inputs[i].stage_type);

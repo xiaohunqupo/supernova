@@ -49,4 +49,9 @@ void main() {
     // gl_Position.w is the eye-space depth for perspective and exactly 1.0 for
     // ortho/UI, so this single expression gives world-space sizing in both cases.
     gl_PointSize = max(a_pointsize * pointsParams.pointScale / gl_Position.w, 1.0);
+
+    #ifdef IS_VULKAN
+        // GL [-1,1] to Vulkan [0,1] depth range (spirv-cross fixup_clipspace equivalent)
+        gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
+    #endif
 }

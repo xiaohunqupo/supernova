@@ -1460,7 +1460,7 @@ std::filesystem::path editor::App::getUserCacheBaseDir() {
 }
 
 std::filesystem::path editor::App::getUserShaderCacheDir(){
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v1";
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v2";
 }
 
 void editor::App::pushTabNotificationStyle(){

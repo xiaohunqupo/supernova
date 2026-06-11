@@ -240,12 +240,13 @@ bool SokolTexture::createTexture(
     sampler_desc.wrap_v = getWrap(wrapV);
 
     // all faces of a mip level must be in one contiguous memory block
+    unsigned char* combined = NULL;
     if (numFaces > 1){
         size_t total_size = 0;
         for (int f = 0; f < numFaces; f++){
             total_size += size[f];
         }
-        unsigned char* combined = (unsigned char*)malloc(total_size);
+        combined = (unsigned char*)malloc(total_size);
         size_t offset = 0;
         for (int f = 0; f < numFaces; f++){
             memcpy(combined + offset, data[f], size[f]);
@@ -253,7 +254,6 @@ bool SokolTexture::createTexture(
         }
         image_desc.data.mip_levels[0].ptr = combined;
         image_desc.data.mip_levels[0].size = total_size;
-        SystemRender::scheduleCleanup(cleanupMipmapTexture, combined);
     }else{
         image_desc.data.mip_levels[0].ptr = data[0];
         image_desc.data.mip_levels[0].size = size[0];
@@ -267,6 +267,11 @@ bool SokolTexture::createTexture(
         }else{
             image = sg_make_image(image_desc);
         }
+    }
+    // must come after image creation: in the synchronous path scheduleCleanup
+    // frees immediately, and the data is only consumed inside sg_make_image
+    if (combined){
+        SystemRender::scheduleCleanup(cleanupMipmapTexture, combined);
     }
     if (Engine::isAsyncThread()){
         sampler = SokolCmdQueue::add_command_make_sampler(sampler_desc);

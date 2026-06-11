@@ -113,10 +113,11 @@ ShaderStageType editor::ShaderBuilder::mapStageType(shadercompiler::stage_type_t
 ShaderLang editor::ShaderBuilder::mapLang(shadercompiler::lang_type_t lang) {
     using namespace shadercompiler;
     switch(lang) {
-        case LANG_GLSL: return ShaderLang::GLSL;
-        case LANG_HLSL: return ShaderLang::HLSL;
-        case LANG_MSL:  return ShaderLang::MSL;
-        default:        return ShaderLang::GLSL;
+        case LANG_GLSL:  return ShaderLang::GLSL;
+        case LANG_HLSL:  return ShaderLang::HLSL;
+        case LANG_MSL:   return ShaderLang::MSL;
+        case LANG_SPIRV: return ShaderLang::SPIRV;
+        default:         return ShaderLang::GLSL;
     }
 }
 
@@ -139,6 +140,13 @@ ShaderData editor::ShaderBuilder::convertToShaderData(
         stage.type = mapStageType(cross.stage_type);
         stage.name = args.output_basename;  // Using output basename for stage name
         stage.source = cross.source;
+
+        // SPIRV (Vulkan) outputs bytecode instead of source
+        if (!cross.bytecode.empty()) {
+            stage.bytecode.size = static_cast<uint32_t>(cross.bytecode.size() * sizeof(uint32_t));
+            stage.bytecode.data = new unsigned char[stage.bytecode.size];
+            memcpy(stage.bytecode.data, cross.bytecode.data(), stage.bytecode.size);
+        }
 
         // Attributes
         for (const auto& attr : cross.inputs) {
@@ -417,6 +425,8 @@ std::string editor::ShaderBuilder::getLangSuffix(shadercompiler::lang_type_t lan
         return "_hlsl" + std::to_string(version);
     } else if (lang == shadercompiler::LANG_MSL) {
         return (platform == shadercompiler::SHADER_IOS) ? "_msl" + std::to_string(version) + "ios" : "_msl" + std::to_string(version) + "macos";
+    } else if (lang == shadercompiler::LANG_SPIRV) {
+        return "_spirv" + std::to_string(version);
     }
     return "";
 }

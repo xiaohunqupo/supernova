@@ -213,9 +213,16 @@ uint32_t base_slot(const shadercompiler::lang_type_t* lang, const stage_type_t s
     if (!lang)
         return res;
 
+    // SPIRV (Vulkan): sokol_gfx.h requires uniform blocks in descriptor set 0
+    // (bindings unique across the whole shader, 0..15) and textures, samplers
+    // and storage buffers sharing descriptor set 1 (bindings unique across all
+    // of them, 0..127). Uniqueness is achieved with disjoint per-type and
+    // per-stage base offsets.
     switch (type) {
         case BindingType::UNIFORM_BLOCK:
-            // TODO: wgsl
+            if (*lang == LANG_SPIRV) {
+                res = (stage_type == STAGE_VERTEX) ? 0 : MaxUniformBlocks;
+            } // TODO: wgsl
             break;
         case BindingType::IMAGE_SAMPLER:
             if (*lang == LANG_GLSL) {
@@ -223,10 +230,14 @@ uint32_t base_slot(const shadercompiler::lang_type_t* lang, const stage_type_t s
             }
             break;
         case BindingType::IMAGE:
-            // TODO: wgsl
+            if (*lang == LANG_SPIRV) {
+                res = (stage_type == STAGE_VERTEX) ? 0 : MaxImages;
+            } // TODO: wgsl
             break;
         case BindingType::SAMPLER:
-            // TODO: wgsl
+            if (*lang == LANG_SPIRV) {
+                res = 2 * MaxImages + ((stage_type == STAGE_VERTEX) ? 0 : MaxSamplers);
+            } // TODO: wgsl
             break;
         case BindingType::STORAGE_BUFFER:
             if (*lang == LANG_MSL) {
@@ -237,10 +248,21 @@ uint32_t base_slot(const shadercompiler::lang_type_t* lang, const stage_type_t s
                 if (stage_type == STAGE_FRAGMENT) {
                     res = MaxStorageBuffers;
                 }
+            } else if (*lang == LANG_SPIRV) {
+                res = 2 * MaxImages + 2 * MaxSamplers + ((stage_type == STAGE_VERTEX) ? 0 : MaxStorageBuffers);
             } // TODO: wgsl
             break;
     }
     return res;
+}
+
+// SPIRV (Vulkan): textures, samplers and storage buffers go in descriptor set 1,
+// everything else (uniform blocks) in descriptor set 0
+static uint32_t descriptor_set(const shadercompiler::lang_type_t* lang, BindingType type){
+    if (lang && *lang == LANG_SPIRV && type != BindingType::UNIFORM_BLOCK) {
+        return 1;
+    }
+    return 0;
 }
 
 static void fix_bind_slots(spirv_cross::Compiler* compiler, const stage_type_t stage_type, const shadercompiler::lang_type_t* lang) {
@@ -250,7 +272,7 @@ static void fix_bind_slots(spirv_cross::Compiler* compiler, const stage_type_t s
     {
         uint32_t binding = base_slot(lang, stage_type, BindingType::UNIFORM_BLOCK);
         for (const spirv_cross::Resource& res: shader_resources.uniform_buffers) {
-            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, 0);
+            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, descriptor_set(lang, BindingType::UNIFORM_BLOCK));
             compiler->set_decoration(res.id, spv::DecorationBinding, binding++);
         }
     }
@@ -259,7 +281,7 @@ static void fix_bind_slots(spirv_cross::Compiler* compiler, const stage_type_t s
     {
         uint32_t binding = base_slot(lang, stage_type, BindingType::IMAGE_SAMPLER);
         for (const spirv_cross::Resource& res: shader_resources.sampled_images) {
-            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, 0);
+            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, descriptor_set(lang, BindingType::IMAGE_SAMPLER));
             compiler->set_decoration(res.id, spv::DecorationBinding, binding++);
         }
     }
@@ -268,7 +290,7 @@ static void fix_bind_slots(spirv_cross::Compiler* compiler, const stage_type_t s
     {
         uint32_t binding = base_slot(lang, stage_type, BindingType::IMAGE);
         for (const spirv_cross::Resource& res: shader_resources.separate_images) {
-            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, 0);
+            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, descriptor_set(lang, BindingType::IMAGE));
             compiler->set_decoration(res.id, spv::DecorationBinding, binding++);
         }
     }
@@ -277,7 +299,7 @@ static void fix_bind_slots(spirv_cross::Compiler* compiler, const stage_type_t s
     {
         uint32_t binding = base_slot(lang, stage_type, BindingType::SAMPLER);
         for (const spirv_cross::Resource& res: shader_resources.separate_samplers) {
-            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, 0);
+            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, descriptor_set(lang, BindingType::SAMPLER));
             compiler->set_decoration(res.id, spv::DecorationBinding, binding++);
         }
     }
@@ -286,10 +308,78 @@ static void fix_bind_slots(spirv_cross::Compiler* compiler, const stage_type_t s
     {
         uint32_t binding = base_slot(lang, stage_type, BindingType::STORAGE_BUFFER);
         for (const spirv_cross::Resource& res: shader_resources.storage_buffers) {
-            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, 0);
+            compiler->set_decoration(res.id, spv::DecorationDescriptorSet, descriptor_set(lang, BindingType::STORAGE_BUFFER));
             compiler->set_decoration(res.id, spv::DecorationBinding, binding++);
         }
     }
+}
+
+// Rewrites OpDecorate DescriptorSet/Binding literals in the SPIRV binary so the
+// emitted bytecode matches the slot allocation of fix_bind_slots() (the binary
+// is fed directly to Vulkan, there is no cross-compile step to apply decorations)
+static bool patch_spirv_bind_slots(std::vector<uint32_t>& bytecode, const stage_type_t stage_type, const shadercompiler::lang_type_t* lang, const input_t& input) {
+    // compute the target set/binding per resource id (same logic and ordering as fix_bind_slots)
+    spirv_cross::Parser spirv_parser(bytecode);
+    spirv_parser.parse();
+    spirv_cross::Compiler compiler(std::move(spirv_parser.get_parsed_ir()));
+    fix_bind_slots(&compiler, stage_type, lang);
+
+    struct slot_t { uint32_t set; uint32_t binding; bool set_patched; bool binding_patched; };
+    std::unordered_map<uint32_t, slot_t> slots;
+
+    spirv_cross::ShaderResources res = compiler.get_shader_resources();
+    auto collect = [&compiler, &slots](const spirv_cross::SmallVector<spirv_cross::Resource>& resources) {
+        for (const spirv_cross::Resource& r: resources) {
+            slots[r.id] = {
+                compiler.get_decoration(r.id, spv::DecorationDescriptorSet),
+                compiler.get_decoration(r.id, spv::DecorationBinding),
+                false, false
+            };
+        }
+    };
+    collect(res.uniform_buffers);
+    collect(res.separate_images);
+    collect(res.separate_samplers);
+    collect(res.storage_buffers);
+
+    // SPIRV binary layout: 5-word header, then instructions of
+    // [wordcount<<16 | opcode, operands...]; OpDecorate is
+    // [op, target-id, decoration, literal...]
+    const uint32_t SpvOpDecorate = 71;
+    const uint32_t SpvDecorationBinding = 33;
+    const uint32_t SpvDecorationDescriptorSet = 34;
+
+    size_t offset = 5;
+    while (offset < bytecode.size()) {
+        const uint32_t opcode = bytecode[offset] & 0xffff;
+        const uint32_t word_count = bytecode[offset] >> 16;
+        if (word_count == 0 || offset + word_count > bytecode.size()) {
+            fprintf(stderr, "%s: malformed SPIRV binary\n", input.filename.c_str());
+            return false;
+        }
+        if (opcode == SpvOpDecorate && word_count == 4) {
+            auto it = slots.find(bytecode[offset + 1]);
+            if (it != slots.end()) {
+                if (bytecode[offset + 2] == SpvDecorationDescriptorSet) {
+                    bytecode[offset + 3] = it->second.set;
+                    it->second.set_patched = true;
+                } else if (bytecode[offset + 2] == SpvDecorationBinding) {
+                    bytecode[offset + 3] = it->second.binding;
+                    it->second.binding_patched = true;
+                }
+            }
+        }
+        offset += word_count;
+    }
+
+    for (const auto& [id, slot]: slots) {
+        if (!slot.set_patched || !slot.binding_patched) {
+            fprintf(stderr, "%s: resource id %u is missing DescriptorSet/Binding decorations in SPIRV\n", input.filename.c_str(), id);
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static bool parse_stage_reflection(spirvcross_t& spirvcross, const spirv_cross::Compiler* compiler) {
@@ -450,7 +540,7 @@ static bool parse_stage_reflection(spirvcross_t& spirvcross, const spirv_cross::
 //
 // From https://github.com/floooh/sokol-tools
 //
-static bool parse_reflection(const std::vector<uint32_t>& bytecode, const stage_type_t stage_type, spirvcross_t& spirvcross) {
+static bool parse_reflection(const std::vector<uint32_t>& bytecode, const stage_type_t stage_type, spirvcross_t& spirvcross, const shadercompiler::lang_type_t* lang = nullptr) {
     // NOTE: do *NOT* use CompilerReflection here, this doesn't generate
     // the right reflection info for depth textures and comparison samplers
     spirv_cross::CompilerGLSL compiler(bytecode);
@@ -464,7 +554,7 @@ static bool parse_reflection(const std::vector<uint32_t>& bytecode, const stage_
     compiler.set_common_options(options);
     flatten_uniform_blocks(&compiler);
     to_combined_image_samplers(&compiler);
-    fix_bind_slots(&compiler, stage_type, nullptr);
+    fix_bind_slots(&compiler, stage_type, lang);
     // NOTE: we need to compile here, otherwise the reflection won't be
     // able to detect depth-textures and comparison-samplers!
     compiler.compile();
@@ -520,6 +610,30 @@ bool validate_inputs_and_outputs(std::vector<spirvcross_t>& spirvcrossvec, const
 
 bool shadercompiler::compile_to_lang(std::vector<spirvcross_t>& spirvcrossvec, const std::vector<spirv_t>& spirvvec, const std::vector<input_t>& inputs, const args_t& args){
     for (int i = 0; i < inputs.size(); i++){
+        // SPIRV (Vulkan): no cross-compilation, the SPIRV bytecode itself is the
+        // output; only the set/binding decorations are patched to the sokol_gfx.h
+        // Vulkan binding convention
+        if (args.lang == LANG_SPIRV) {
+            spirvcrossvec[i].bytecode = spirvvec[i].bytecode;
+            if (!patch_spirv_bind_slots(spirvcrossvec[i].bytecode, inputs[i].stage_type, &args.lang, inputs[i]))
+                return false;
+
+            {
+                // validate against the same rules of the other languages
+                spirv_cross::Parser spirv_parser(spirvvec[i].bytecode);
+                spirv_parser.parse();
+                spirv_cross::Compiler validate_compiler(std::move(spirv_parser.get_parsed_ir()));
+                spirv_cross::ShaderResources res = validate_compiler.get_shader_resources();
+                if (!validate_uniform_blocks_and_separate_image_samplers(&validate_compiler, res, inputs[i]))
+                    return false;
+            }
+
+            if (!parse_reflection(spirvvec[i].bytecode, inputs[i].stage_type, spirvcrossvec[i], &args.lang))
+                return false;
+
+            continue;
+        }
+
         spirv_cross::Parser spirv_parser(std::move(spirvvec[i].bytecode));
 	    spirv_parser.parse();
 

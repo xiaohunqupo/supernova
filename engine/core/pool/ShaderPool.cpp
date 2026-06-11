@@ -20,6 +20,9 @@
 #ifdef SOKOL_D3D11
 #include "hlsl5.h"
 #endif
+#ifdef SOKOL_VULKAN
+#include "spirv10.h"
+#endif
 #if SOKOL_METAL || DORIAX_APPLE
 #include <TargetConditionals.h>
 #if TARGET_OS_IPHONE
@@ -93,6 +96,9 @@ std::string ShaderPool::getShaderLangStr(ShaderLang lang, int version, bool es, 
             return "msl" + std::to_string(version) + "macos";
         }
     }
+    if (lang == ShaderLang::SPIRV) {
+        return "spirv" + std::to_string(version);
+    }
 
     return "<unknown>";
 }
@@ -106,6 +112,8 @@ std::string ShaderPool::getShaderLangStr(){
         return getShaderLangStr(ShaderLang::MSL, 21, false, Engine::getPlatform());
     }else if (Engine::getGraphicBackend() == GraphicBackend::D3D11){
         return getShaderLangStr(ShaderLang::HLSL, 50, false, Engine::getPlatform());
+    }else if (Engine::getGraphicBackend() == GraphicBackend::VULKAN){
+        return getShaderLangStr(ShaderLang::SPIRV, 10, false, Engine::getPlatform());
     }
 
     return "<unknown>";

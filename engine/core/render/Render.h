@@ -200,7 +200,8 @@ namespace doriax{
     enum class ShaderLang{
         GLSL,
         MSL,
-        HLSL
+        HLSL,
+        SPIRV
     };
 
     enum class ShaderVertexType{

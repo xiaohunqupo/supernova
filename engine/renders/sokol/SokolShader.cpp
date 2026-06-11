@@ -170,6 +170,7 @@ bool SokolShader::createShader(ShaderData& shaderData){
             ubdesc->hlsl_register_b_n = stage->uniformblocks[ub].binding;
             ubdesc->msl_buffer_n = stage->uniformblocks[ub].binding;
             ubdesc->wgsl_group0_binding_n = stage->uniformblocks[ub].binding;
+            ubdesc->spirv_set0_binding_n = stage->uniformblocks[ub].binding;
             // GL/GLES always flatten UBs if same type inside to not declare individual uniforms and use only one glUniform4fv call
             if ((shaderData.lang == ShaderLang::GLSL) && (stage->uniformblocks[ub].uniforms.size() > 0)) {
                 if (stage->uniformblocks[ub].flattened){
@@ -199,6 +200,7 @@ bool SokolShader::createShader(ShaderData& shaderData){
             sbdesc->msl_buffer_n = stage->storagebuffers[sb].binding;
             sbdesc->wgsl_group1_binding_n = stage->storagebuffers[sb].binding;
             sbdesc->glsl_binding_n = stage->storagebuffers[sb].binding;
+            sbdesc->spirv_set1_binding_n = stage->storagebuffers[sb].binding;
         }
 
         std::unordered_set<std::string> usedTextures;
@@ -222,6 +224,7 @@ bool SokolShader::createShader(ShaderData& shaderData){
                 img->hlsl_register_t_n = stage->textures[t].binding;
                 img->msl_texture_n = stage->textures[t].binding;
                 img->wgsl_group1_binding_n = stage->textures[t].binding;
+                img->spirv_set1_binding_n = stage->textures[t].binding;
             }else{
                 Log::warn("Texture '%s' is not used", stage->textures[t].name.c_str());
             }
@@ -237,6 +240,7 @@ bool SokolShader::createShader(ShaderData& shaderData){
                 sampler->hlsl_register_s_n = stage->samplers[s].binding;
                 sampler->msl_sampler_n = stage->samplers[s].binding;
                 sampler->wgsl_group1_binding_n = stage->samplers[s].binding;
+                sampler->spirv_set1_binding_n = stage->samplers[s].binding;
             }else{
                 Log::warn("Sampler '%s' is not used", stage->samplers[s].name.c_str());
             }

@@ -15,11 +15,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/supernovaengine/supernova/actions/workflows/cmake.yml"><img src="https://github.com/supernovaengine/supernova/actions/workflows/cmake.yml/badge.svg?branch=main" alt="Editor Desktop"></a>
-  <a href="https://github.com/supernovaengine/supernova/actions/workflows/engine-cmake.yaml"><img src="https://github.com/supernovaengine/supernova/actions/workflows/engine-cmake.yaml/badge.svg?branch=main" alt="Engine Desktop"></a>
-  <a href="https://github.com/supernovaengine/supernova/actions/workflows/engine-android.yml"><img src="https://github.com/supernovaengine/supernova/actions/workflows/engine-android.yml/badge.svg?branch=main" alt="Engine Android"></a>
-  <a href="https://github.com/supernovaengine/supernova/actions/workflows/engine-emscripten.yaml"><img src="https://github.com/supernovaengine/supernova/actions/workflows/engine-emscripten.yaml/badge.svg?branch=main" alt="Engine Emscripten"></a>
-  <a href="https://github.com/supernovaengine/supernova/actions/workflows/engine-xcode.yaml"><img src="https://github.com/supernovaengine/supernova/actions/workflows/engine-xcode.yaml/badge.svg?branch=main" alt="Engine iOS/macOS"></a>
+  <a href="https://github.com/doriaxengine/doriax/actions/workflows/cmake.yml"><img src="https://github.com/doriaxengine/doriax/actions/workflows/cmake.yml/badge.svg?branch=main" alt="Editor Desktop"></a>
+  <a href="https://github.com/doriaxengine/doriax/actions/workflows/engine-cmake.yaml"><img src="https://github.com/doriaxengine/doriax/actions/workflows/engine-cmake.yaml/badge.svg?branch=main" alt="Engine Desktop"></a>
+  <a href="https://github.com/doriaxengine/doriax/actions/workflows/engine-android.yml"><img src="https://github.com/doriaxengine/doriax/actions/workflows/engine-android.yml/badge.svg?branch=main" alt="Engine Android"></a>
+  <a href="https://github.com/doriaxengine/doriax/actions/workflows/engine-emscripten.yaml"><img src="https://github.com/doriaxengine/doriax/actions/workflows/engine-emscripten.yaml/badge.svg?branch=main" alt="Engine Emscripten"></a>
+  <a href="https://github.com/doriaxengine/doriax/actions/workflows/engine-xcode.yaml"><img src="https://github.com/doriaxengine/doriax/actions/workflows/engine-xcode.yaml/badge.svg?branch=main" alt="Engine iOS/macOS"></a>
   <a href="https://discord.gg/yXXDyJf3gT"><img src="https://img.shields.io/discord/1356958061880934480?label=Discord&logo=discord&style=flat&color=5865F2" alt="Join our Discord"></a>
 </p>
 
@@ -38,7 +38,7 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 - Shader compilation and cross-platform shader translation for exported projects
 - Lua for fast iteration and C++ for native performance
 - ECS-based, data-oriented runtime designed for efficiency
-- Cross-platform deployment with OpenGL, Metal, and DirectX backends
+- Cross-platform deployment with OpenGL, Vulkan, Metal, and DirectX backends
 
 ## Editor Workflow
 
@@ -76,7 +76,7 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 | --- | --- |
 | Editor downloads | Windows, Linux, macOS |
 | Project targets | Windows, Linux, macOS, Android, iOS, HTML5 |
-| Graphics APIs | OpenGL, Metal, DirectX |
+| Graphics APIs | OpenGL, Vulkan, Metal, DirectX |
 | Scripting | Lua, C++ |
 
 ## Getting Started

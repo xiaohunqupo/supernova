@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        config: 
+        config:
         - {
             name: "Windows MSVC",
             os: windows-latest,
@@ -23,14 +23,15 @@ jobs:
             cxx: "cl",
             generators: "Visual Studio 17 2022"
           }
-#        - {
-#            name: "Windows MinGW",
-#            os: windows-latest,
-#            artifact: "windows_mingw",
-#            cc: "gcc",
-#            cxx: "g++",
-#            generators: "Ninja"
-#          }
+        - {
+            name: "Windows MSVC Vulkan",
+            os: windows-latest,
+            artifact: "windows_msvc_vulkan",
+            cc: "cl",
+            cxx: "cl",
+            generators: "Visual Studio 17 2022",
+            graphic_backend: "vulkan"
+          }
         - {
             name: "Ubuntu GCC",
             os: ubuntu-latest,
@@ -63,6 +64,14 @@ jobs:
           ninja --version
           cmake --version
 
+      - name: Install Vulkan SDK on Windows
+        if: startsWith(matrix.config.os, 'windows') && matrix.config.graphic_backend == 'vulkan'
+        uses: jakoch/install-vulkan-sdk-action@v1.0.0
+        with:
+          vulkan_version: 1.3.296.0
+          install_runtime: false
+          cache: true
+
       - name: Install dependencies on Ubuntu
         if: startsWith(matrix.config.os, 'ubuntu')
         run: |
@@ -88,12 +97,17 @@ jobs:
         run: |
           mkdir build
           mkdir instdir
+          BACKEND_FLAG=""
+          if [ -n "${{ matrix.config.graphic_backend }}" ]; then
+            BACKEND_FLAG="-DGRAPHIC_BACKEND=${{ matrix.config.graphic_backend }}"
+          fi
           cmake \
             -S engine \
             -B build \
             -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
             -G "${{ matrix.config.generators }}" \
-            -DCMAKE_INSTALL_PREFIX:PATH=instdir
+            -DCMAKE_INSTALL_PREFIX:PATH=instdir \
+            $BACKEND_FLAG
 
       - name: Build
         shell: bash

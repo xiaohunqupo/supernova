@@ -131,7 +131,8 @@ namespace doriax {
         GLES3,
         D3D11,
         METAL,
-        WGPU
+        WGPU,
+        VULKAN
     };
 
     enum class BodyType{

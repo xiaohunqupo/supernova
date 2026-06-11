@@ -21,6 +21,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
             )
         endif()
     endif()
+    if(GRAPHIC_BACKEND STREQUAL "vulkan")
+        list(APPEND SOKOL_LINK_LIBRARIES
+            vulkan-1
+        )
+    endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -30,6 +35,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         # For sokol_audio.h
         #asound
     )
+
+    if(GRAPHIC_BACKEND STREQUAL "vulkan")
+        list(APPEND SOKOL_LINK_LIBRARIES
+            vulkan
+        )
+    endif()
 
     find_package(Threads REQUIRED)
 endif()

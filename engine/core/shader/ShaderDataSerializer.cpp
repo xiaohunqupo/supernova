@@ -153,8 +153,13 @@ void ShaderDataSerializerHelper::writeShaderData(Writer& out, uint64_t shaderKey
         writeString(out, stage.name);
         writeString(out, stage.source);
 
-        // Intentionally do not serialize bytecode (engine uses stage.source for GLSL).
-        writeU32(out, 0);
+        // Bytecode is only present for SPIRV (Vulkan); source-based languages write 0
+        if (stage.bytecode.data && stage.bytecode.size > 0) {
+            writeU32(out, stage.bytecode.size);
+            out.write(stage.bytecode.data, stage.bytecode.size);
+        } else {
+            writeU32(out, 0);
+        }
 
         writeU32(out, static_cast<uint32_t>(stage.attributes.size()));
         for (const auto& a : stage.attributes) {
@@ -227,9 +232,10 @@ void ShaderDataSerializerHelper::writeShaderData(Writer& out, uint64_t shaderKey
 
 const char* ShaderDataSerializerHelper::shaderLangName(ShaderLang lang) {
     switch (lang) {
-        case ShaderLang::GLSL: return "GLSL";
-        case ShaderLang::MSL:  return "MSL";
-        case ShaderLang::HLSL: return "HLSL";
+        case ShaderLang::GLSL:  return "GLSL";
+        case ShaderLang::MSL:   return "MSL";
+        case ShaderLang::HLSL:  return "HLSL";
+        case ShaderLang::SPIRV: return "SPIRV";
         default:                       return "Unknown";
     }
 }
@@ -509,16 +515,27 @@ bool ShaderDataSerializerHelper::readShaderData(FileData& in, const std::string&
             return setErr(err, "Failed to read stage strings: " + filepath);
         }
 
-        // bytecodeSize (we do not support serialized bytecode here)
+        // Bytecode is only present for SPIRV (Vulkan)
         uint32_t bytecodeSize = 0;
         if (!readU32(in, bytecodeSize)) {
             return setErr(err, "Failed to read bytecode size: " + filepath);
         }
-        if (bytecodeSize != 0) {
-            return setErr(err, "SDAT bytecode not supported (expected 0): " + filepath);
+        if (bytecodeSize > kMaxString) {
+            return setErr(err, "Bytecode too large: " + filepath);
         }
-        stage.bytecode.data = nullptr;
-        stage.bytecode.size = 0;
+        if (bytecodeSize > 0) {
+            stage.bytecode.data = new unsigned char[bytecodeSize];
+            stage.bytecode.size = bytecodeSize;
+            if (in.read(stage.bytecode.data, bytecodeSize) != bytecodeSize) {
+                delete[] stage.bytecode.data;
+                stage.bytecode.data = nullptr;
+                stage.bytecode.size = 0;
+                return setErr(err, "Failed to read bytecode: " + filepath);
+            }
+        } else {
+            stage.bytecode.data = nullptr;
+            stage.bytecode.size = 0;
+        }
 
         uint32_t attrCount = 0;
         if (!readU32(in, attrCount)) {

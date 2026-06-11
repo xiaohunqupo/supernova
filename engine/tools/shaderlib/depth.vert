@@ -59,7 +59,12 @@ void main() {
     gl_Position = lightMVPMatrix * pos;
 
     v_projZW = gl_Position.zw;
-    #ifndef IS_GLSL
+    // Vulkan keeps the GL orientation: sokol_gfx.h flips Y with a negative viewport
+    #if !defined(IS_GLSL) && !defined(IS_VULKAN)
         gl_Position.y = -gl_Position.y;
+    #endif
+    #ifdef IS_VULKAN
+        // GL [-1,1] to Vulkan [0,1] depth range (spirv-cross fixup_clipspace equivalent)
+        gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
     #endif
 }

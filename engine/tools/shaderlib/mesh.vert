@@ -203,4 +203,8 @@ void main() {
     #endif
 
     gl_Position = pbrParams.mvpMatrix * pos;
+    #ifdef IS_VULKAN
+        // GL [-1,1] to Vulkan [0,1] depth range (spirv-cross fixup_clipspace equivalent)
+        gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
+    #endif
 }

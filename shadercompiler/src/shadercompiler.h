@@ -45,7 +45,8 @@ namespace shadercompiler{
     enum lang_type_t{
         LANG_GLSL,
         LANG_HLSL,
-        LANG_MSL
+        LANG_MSL,
+        LANG_SPIRV
     };
 
     enum platform_t{
@@ -300,6 +301,7 @@ namespace shadercompiler{
         std::string entry_point;
 
         std::string source;
+        std::vector<uint32_t> bytecode; // only for LANG_SPIRV (Vulkan)
 
         std::vector<s_attr_t> inputs;
         std::vector<s_attr_t> outputs;

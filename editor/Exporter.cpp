@@ -781,6 +781,10 @@ bool editor::Exporter::buildAndSaveShaders() {
     if (config.selectedPlatforms.count(Platform::iOS)) {
         requiredFormats.push_back({shadercompiler::LANG_MSL, 21, false, shadercompiler::SHADER_IOS, "msl21ios"});
     }
+    if (config.selectedPlatforms.count(Platform::Linux) || config.selectedPlatforms.count(Platform::Windows)) {
+        // Vulkan (GRAPHIC_BACKEND=vulkan) is available on desktop Linux and Windows
+        requiredFormats.push_back({shadercompiler::LANG_SPIRV, 10, false, shadercompiler::SHADER_DEFAULT, "spirv10"});
+    }
 
     // Default to glsl410 if no platforms require anything
     if (requiredFormats.empty()) {
