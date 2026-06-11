@@ -111,7 +111,7 @@ bool editor::ResourcesWindow::isOpen() const{
 
 void editor::ResourcesWindow::notifyProjectPathChange(){
     // Clear thumbnail textures when changing projects
-    thumbnailTextures.clear();
+    clearThumbnailTextures();
 
     // Clear the thumbnail queue
     {
@@ -144,7 +144,7 @@ void editor::ResourcesWindow::notifyResourceFileChanged(const fs::path& filePath
     }
 
     fs::path thumbnailPath = project->getThumbnailPath(filePath);
-    thumbnailTextures.erase(thumbnailPath.string());
+    evictThumbnailTexture(thumbnailPath.string());
 
     for (auto& file : files) {
         if ((currentPath / file.name) == filePath) {
@@ -161,6 +161,10 @@ void editor::ResourcesWindow::requestThumbnailGeneration(const fs::path& filePat
     FileType type = classifyThumbnailFileType(filePath);
     if (type == FileType::NONE) {
         return;
+    }
+
+    if (forceRegenerate) {
+        evictThumbnailTexture(project->getThumbnailPath(filePath).string());
     }
 
     queueThumbnailGeneration(filePath, type, forceRegenerate);
@@ -515,17 +519,20 @@ void editor::ResourcesWindow::renderFileListing(bool showDirectories){
             float dispW = static_cast<float>(iconSize);
             float dispH = static_cast<float>(iconSize);
 
-            if (file.hasThumbnail && thumbnailTextures.find(file.thumbnailPath) != thumbnailTextures.end()){
-                Texture& thumbTexture = thumbnailTextures[file.thumbnailPath];
-                if (!thumbTexture.empty()){
-                    int tw = thumbTexture.getWidth();
-                    int th = thumbTexture.getHeight();
-                    float scale = std::min(static_cast<float>(iconSize) / static_cast<float>(tw),
-                                           static_cast<float>(iconSize) / static_cast<float>(th));
-                    dispW = std::max(1.0f, tw * scale);
-                    dispH = std::max(1.0f, th * scale);
-
-                    fileIconImage = (ImTextureID)(intptr_t)thumbTexture.getRender()->getGLHandler();
+            // Only resolve thumbnails for items inside the visible region, so
+            // the GPU texture cache stays bounded with large directories
+            // (clipped items never draw the image anyway)
+            if (file.hasThumbnail && ImGui::IsItemVisible()){
+                int tw = 0;
+                int th = 0;
+                if (ImTextureID thumbTex = getThumbnailTexture(file, tw, th)){
+                    if (tw > 0 && th > 0){
+                        float scale = std::min(static_cast<float>(iconSize) / static_cast<float>(tw),
+                                               static_cast<float>(iconSize) / static_cast<float>(th));
+                        dispW = std::max(1.0f, tw * scale);
+                        dispH = std::max(1.0f, th * scale);
+                    }
+                    fileIconImage = thumbTex;
                 }
             }
 
@@ -1600,34 +1607,77 @@ void editor::ResourcesWindow::thumbnailWorker() {
     }
 }
 
-// Load a thumbnail texture for a file entry
-bool editor::ResourcesWindow::loadThumbnail(FileEntry& entry) {
-    fs::path filePath = currentPath / entry.name;
-    fs::path thumbnailPath = project->getThumbnailPath(filePath);
-
-    if (!fs::exists(thumbnailPath)) {
-        entry.hasThumbnail = false;
-        entry.thumbnailPath.clear();
-        return true;
+// Get (or lazily create) the GPU texture for a file entry's thumbnail.
+// Returns 0 if the thumbnail is not usable; the caller falls back to the
+// default file icon.
+ImTextureID editor::ResourcesWindow::getThumbnailTexture(const FileEntry& entry, int& outWidth, int& outHeight) {
+    auto it = thumbnailTextures.find(entry.thumbnailPath);
+    if (it == thumbnailTextures.end()) {
+        ThumbnailTexture cached;
+        cached.texture = Texture(entry.thumbnailPath, TextureData(entry.thumbnailPath.c_str()));
+        cached.failed = !cached.texture.load();
+        it = thumbnailTextures.emplace(entry.thumbnailPath, std::move(cached)).first;
     }
 
-    const std::string thumbnailKey = thumbnailPath.string();
+    ThumbnailTexture& cached = it->second;
+    cached.lastUsedFrame = ImGui::GetFrameCount();
 
-    // Only load if not already in cache (explicit invalidation via
-    // notifyResourceFileChanged erases from thumbnailTextures)
-    if (thumbnailTextures.find(thumbnailKey) == thumbnailTextures.end()) {
-        Texture thumbTexture(thumbnailPath.string(), TextureData(thumbnailPath.string().c_str()));
-        if (thumbTexture.load()) {
-            thumbnailTextures[thumbnailKey] = thumbTexture;
-        } else {
-            return false;
+    if (cached.failed) {
+        return (ImTextureID)0;
+    }
+
+    TextureRender* render = cached.texture.getRender();
+    if (!render || !render->isCreated()) {
+        // GPU creation failed (e.g. texture pool exhausted); keep the entry
+        // marked as failed so we don't retry every frame. LRU eviction will
+        // drop it eventually, allowing a retry on a later visit.
+        cached.failed = true;
+        return (ImTextureID)0;
+    }
+
+    outWidth = static_cast<int>(cached.texture.getWidth());
+    outHeight = static_cast<int>(cached.texture.getHeight());
+
+    return (ImTextureID)(intptr_t)render->getGLHandler();
+}
+
+void editor::ResourcesWindow::evictThumbnailTexture(const std::string& thumbnailKey) {
+    auto it = thumbnailTextures.find(thumbnailKey);
+    if (it != thumbnailTextures.end()) {
+        // destroy() also removes the entries from TexturePool/TextureDataPool,
+        // otherwise the GPU texture would outlive the cache (and a later
+        // reload would pick up the stale pooled texture)
+        it->second.texture.destroy();
+        thumbnailTextures.erase(it);
+    }
+}
+
+void editor::ResourcesWindow::enforceThumbnailCacheLimit() {
+    const int currentFrame = ImGui::GetFrameCount();
+
+    while (thumbnailTextures.size() > MAX_THUMBNAIL_TEXTURES) {
+        auto oldest = thumbnailTextures.end();
+        for (auto it = thumbnailTextures.begin(); it != thumbnailTextures.end(); ++it) {
+            if (it->second.lastUsedFrame == currentFrame) {
+                continue; // used this frame, keep it
+            }
+            if (oldest == thumbnailTextures.end() || it->second.lastUsedFrame < oldest->second.lastUsedFrame) {
+                oldest = it;
+            }
         }
+        if (oldest == thumbnailTextures.end()) {
+            break; // everything in the cache is visible this frame
+        }
+        oldest->second.texture.destroy();
+        thumbnailTextures.erase(oldest);
     }
+}
 
-    entry.hasThumbnail = true;
-    entry.thumbnailPath = thumbnailKey;
-
-    return true;
+void editor::ResourcesWindow::clearThumbnailTextures() {
+    for (auto& [key, cached] : thumbnailTextures) {
+        cached.texture.destroy();
+    }
+    thumbnailTextures.clear();
 }
 
 fs::path editor::ResourcesWindow::uniqueRelativePath(const fs::path& directory, const std::string& baseName, const std::string& extension) {
@@ -1737,7 +1787,7 @@ void editor::ResourcesWindow::cleanupThumbnails() {
             fs::remove(p, ec);
 
             // Also remove from the loaded thumbnails cache
-            thumbnailTextures.erase(thumbnailPath);
+            evictThumbnailTexture(thumbnailPath);
         }
     }
 
@@ -1799,12 +1849,18 @@ void editor::ResourcesWindow::show() {
             thumbFile = completedThumbnailQueue.front();
             completedThumbnailQueue.pop();
         }
-        // Find and update the corresponding file entry
+        // Find and mark the corresponding file entry; the texture itself is
+        // created on demand when the item becomes visible
         for (auto& file : files) {
             if ((currentPath / file.name) == thumbFile.path) {
-                if (!loadThumbnail(file)){
-                    std::lock_guard<std::mutex> lock(completedThumbnailMutex);
-                    completedThumbnailQueue.push(thumbFile);
+                fs::path thumbnailPath = project->getThumbnailPath(thumbFile.path);
+                std::error_code ec;
+                if (fs::exists(thumbnailPath, ec) && !ec) {
+                    file.hasThumbnail = true;
+                    file.thumbnailPath = thumbnailPath.string();
+                } else {
+                    file.hasThumbnail = false;
+                    file.thumbnailPath.clear();
                 }
                 break;
             }
@@ -2015,6 +2071,10 @@ void editor::ResourcesWindow::show() {
     }
 
     ImGui::End();
+
+    // Evict least-recently-used thumbnail textures (entries used this frame
+    // are never evicted)
+    enforceThumbnailCacheLimit();
 
     if (wasOpen && !windowOpen) {
         setOpen(false);

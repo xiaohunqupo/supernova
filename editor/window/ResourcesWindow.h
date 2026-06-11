@@ -47,6 +47,12 @@ namespace doriax::editor {
         FileType type = FileType::NONE;
     };
 
+    struct ThumbnailTexture {
+        Texture texture;
+        int lastUsedFrame = 0;
+        bool failed = false;
+    };
+
     class ResourcesWindow {
     private:
         Project* project;
@@ -77,7 +83,10 @@ namespace doriax::editor {
         Texture fileIcon;
         Texture sceneIcon;
         Texture entityIcon;
-        std::unordered_map<std::string, Texture> thumbnailTextures;
+        // Bounded cache of GPU thumbnail textures; must stay well below the
+        // sokol image/sampler pool sizes (2048), which are shared with scenes
+        static constexpr size_t MAX_THUMBNAIL_TEXTURES = 512;
+        std::unordered_map<std::string, ThumbnailTexture> thumbnailTextures;
         std::unordered_set<std::string> pendingThumbnailRequests;
 
         int iconSize;
@@ -158,7 +167,10 @@ namespace doriax::editor {
 
         void queueThumbnailGeneration(const fs::path& filePath, FileType type, bool forceRegenerate = false);
         void thumbnailWorker();
-        bool loadThumbnail(FileEntry& entry);
+        ImTextureID getThumbnailTexture(const FileEntry& entry, int& outWidth, int& outHeight);
+        void evictThumbnailTexture(const std::string& thumbnailKey);
+        void enforceThumbnailCacheLimit();
+        void clearThumbnailTextures();
 
         void saveMaterialFile(const fs::path& directory, const char* materialContent, size_t contentLen, const MaterialPayload* sourceMaterial = nullptr);
         void saveEntityFile(const fs::path& directory, const char* entityContent, size_t contentLen);
