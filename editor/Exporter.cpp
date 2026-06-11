@@ -713,9 +713,11 @@ bool editor::Exporter::copyEngine() {
         return false;
     }
 
-    std::string appName = Factory::toIdentifier(project->getName());
-    if (appName.empty()) {
+    std::string appName;
+    if (project->getName().empty()) {
         appName = "doriax-project";
+    } else {
+        appName = Factory::toIdentifier(project->getName());
     }
 
     std::ifstream cmakeIfs(cmakeDst, std::ios::in | std::ios::binary);
