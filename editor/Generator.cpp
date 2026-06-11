@@ -206,6 +206,21 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
         }
     }
 
+#ifdef _WIN32
+    // A compiler override without an explicit generator makes CMake fall back
+    // to the Visual Studio generator, which ignores CMAKE_C/CXX_COMPILER
+    // (MSBuild always drives cl.exe) and fails at link time. Fail early with
+    // an actionable message instead. Honor CMAKE_GENERATOR if the user set it.
+    if (generator.empty() && (!cCompiler.empty() || !cxxCompiler.empty())) {
+        const char* envGenerator = std::getenv("CMAKE_GENERATOR");
+        if (!envGenerator || !*envGenerator) {
+            Out::error("The selected compiler '%s' cannot be used with the default Visual Studio generator. Install Ninja (https://ninja-build.org), add it to PATH and re-select the compiler in Project Settings, or switch to the MSVC compiler.",
+                (!cxxCompiler.empty() ? cxxCompiler : cCompiler).c_str());
+            return false;
+        }
+    }
+#endif
+
     const fs::path exePath = FileUtils::getExecutableDir();
 
     // CMake stores path values (e.g. CMAKE_C_COMPILER) into generated .cmake
@@ -1526,14 +1541,16 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
 #ifdef _WIN32
             // Determine generator from the target triple.
             // MinGW-targeting Clang uses MinGW Makefiles;
-            // MSVC-targeting Clang works best with Ninja (or VS generator as fallback).
+            // MSVC-targeting Clang requires Ninja: the Visual Studio
+            // generator ignores CMAKE_C/CXX_COMPILER (MSBuild always drives
+            // cl.exe), so without Ninja this kit has no usable generator.
             if (machine.find("mingw") != std::string::npos) {
                 kit.generator = "MinGW Makefiles";
+            } else if (!findCompiler("ninja").empty()) {
+                kit.generator = "Ninja";
             } else {
-                if (!findCompiler("ninja").empty()) {
-                    kit.generator = "Ninja";
-                }
-                // Otherwise leave empty; CMake will pick the VS generator.
+                kit.available = false;
+                kit.unavailableReason = "requires Ninja on PATH (https://ninja-build.org)";
             }
 #endif
             kits.push_back(kit);

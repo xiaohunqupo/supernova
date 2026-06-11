@@ -56,6 +56,8 @@ namespace doriax::editor {
         std::string cCompiler;    // e.g. "/usr/bin/gcc"
         std::string cxxCompiler;  // e.g. "/usr/bin/g++"
         std::string generator;    // e.g. "MinGW Makefiles" (Windows only, empty = CMake default)
+        bool available = true;            // false = detected but not usable (shown disabled in UI)
+        std::string unavailableReason;    // e.g. "requires Ninja on PATH"
     };
 
     class Generator {

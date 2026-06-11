@@ -182,7 +182,7 @@ void ProjectSettingsWindow::open(Project* project) {
     std::string currentGen = project->getCMakeGenerator();
     if (!currentCxx.empty() || !currentGen.empty()) {
         for (size_t i = 0; i < m_availableKits.size(); i++) {
-            if (m_availableKits[i].cxxCompiler == currentCxx && m_availableKits[i].generator == currentGen) {
+            if (m_availableKits[i].available && m_availableKits[i].cxxCompiler == currentCxx && m_availableKits[i].generator == currentGen) {
                 m_cmakeKitIndex = static_cast<int>(i + 1);
                 break;
             }
@@ -384,8 +384,15 @@ void ProjectSettingsWindow::drawSettings() {
                 ImGui::SetItemDefaultFocus();
             }
             for (size_t i = 0; i < m_availableKits.size(); i++) {
+                const auto& kit = m_availableKits[i];
+                if (!kit.available) {
+                    ImGui::BeginDisabled();
+                    ImGui::Selectable((kit.displayName + " (" + kit.unavailableReason + ")").c_str(), false);
+                    ImGui::EndDisabled();
+                    continue;
+                }
                 isSelected = (m_cmakeKitIndex == static_cast<int>(i + 1));
-                if (ImGui::Selectable(m_availableKits[i].displayName.c_str(), isSelected)) {
+                if (ImGui::Selectable(kit.displayName.c_str(), isSelected)) {
                     m_cmakeKitIndex = static_cast<int>(i + 1);
                 }
                 if (isSelected) {
