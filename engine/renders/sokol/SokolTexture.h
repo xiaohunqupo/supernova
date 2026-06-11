@@ -15,6 +15,7 @@ namespace doriax{
     private:
         sg_image image;
         sg_sampler sampler;
+        sg_view view;
 
         sg_image_type getTextureType(TextureType textureType);
         sg_filter getFilter(TextureFilter textureFilter);
@@ -22,6 +23,7 @@ namespace doriax{
         sg_wrap getWrap(TextureWrap textureWrap);
 
         sg_image generateMipmaps(const sg_image_desc* desc_);
+        void createTextureView(const char* label);
 
         static void cleanupMipmapTexture(void* data);
 
@@ -49,6 +51,7 @@ namespace doriax{
 
         sg_image get();
         sg_sampler getSampler();
+        sg_view getView();
     };
 }
 

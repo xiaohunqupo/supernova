@@ -188,11 +188,14 @@ bool SokolShader::createShader(ShaderData& shaderData){
 
         // storage buffers
         for (int sb = 0; sb < stage->storagebuffers.size(); sb++) {
-            sg_shader_storage_buffer* sbdesc = &shader_desc.storage_buffers[stage->storagebuffers[sb].slot];
+            sg_shader_storage_buffer_view* sbdesc = &shader_desc.views[SOKOL_STORAGEBUFFER_VIEW_SLOT_OFFSET + stage->storagebuffers[sb].slot].storage_buffer;
 
             sbdesc->stage = shader_stage;
             sbdesc->readonly = stage->storagebuffers[sb].readonly;
+            // SPIRV-Cross derives both HLSL register spaces from the same binding
+            // decoration: register(tn) for readonly and register(un) for read/write
             sbdesc->hlsl_register_t_n = stage->storagebuffers[sb].binding;
+            sbdesc->hlsl_register_u_n = stage->storagebuffers[sb].binding;
             sbdesc->msl_buffer_n = stage->storagebuffers[sb].binding;
             sbdesc->wgsl_group1_binding_n = stage->storagebuffers[sb].binding;
             sbdesc->glsl_binding_n = stage->storagebuffers[sb].binding;
@@ -210,7 +213,7 @@ bool SokolShader::createShader(ShaderData& shaderData){
         // textures
         for (int t = 0; t < stage->textures.size(); t++) {
             if (usedTextures.find(stage->textures[t].name) != usedTextures.end()) {
-                sg_shader_image* img = &shader_desc.images[stage->textures[t].slot];
+                sg_shader_texture_view* img = &shader_desc.views[stage->textures[t].slot].texture;
 
                 img->stage = shader_stage;
                 img->image_type = textureToSokolType(stage->textures[t].type);
@@ -241,7 +244,7 @@ bool SokolShader::createShader(ShaderData& shaderData){
 
         // texture sampler pair
         for (int ts = 0; ts < stage->textureSamplerPairs.size(); ts++) {
-            sg_shader_image_sampler_pair* imgsamplerpair = &shader_desc.image_sampler_pairs[stage->textureSamplerPairs[ts].slot];
+            sg_shader_texture_sampler_pair* imgsamplerpair = &shader_desc.texture_sampler_pairs[stage->textureSamplerPairs[ts].slot];
 
             // get texture index
             int texIndex = -1;
@@ -258,7 +261,7 @@ bool SokolShader::createShader(ShaderData& shaderData){
             }
 
             imgsamplerpair->stage = shader_stage;
-            imgsamplerpair->image_slot = texIndex;
+            imgsamplerpair->view_slot = texIndex;
             imgsamplerpair->sampler_slot = samIndex;
             imgsamplerpair->glsl_name = stage->textureSamplerPairs[ts].name.c_str();
         }

@@ -6,9 +6,9 @@
 
 # Sokol
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**24-May-2025** sokol_gfx.h: the Compute Milestone 2 update
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**24-May-2026**: properly handle window minimized state in sokol_app.h vulkan backend)
 
-[![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)[![Dlang](https://github.com/kassane/sokol-d/actions/workflows/build.yml/badge.svg)](https://github.com/kassane/sokol-d/actions/workflows/build.yml)[![C3](https://github.com/floooh/sokol-c3/actions/workflows/build.yml/badge.svg)](https://github.com/floooh/sokol-c3/actions/workflows/build.yml)
+[![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)[![Dlang](https://github.com/floooh/sokol-d/actions/workflows/build.yml/badge.svg)](https://github.com/floooh/sokol-d/actions/workflows/build.yml)[![C3](https://github.com/floooh/sokol-c3/actions/workflows/build.yml/badge.svg)](https://github.com/floooh/sokol-c3/actions/workflows/build.yml)
 
 ## Examples and Related Projects
 
@@ -16,12 +16,14 @@
 
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
+- [Syntonic Dentiforms Redux](https://aras-p.github.io/SyntonicDentiforms/) demo remaster by Aras Pranckevičius ([blog post](https://aras-p.info/blog/2026/04/13/Syntonic-Dentiforms-redux/)).
+
 - [Everybody Wants to Crank the World](https://aras-p.github.io/demo-pd-cranktheworld/) demo by
 Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/demo-pd-cranktheworld)).
 
 - [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
 
-- [LearnOpenGL examples ported to sokol-gfx](https://zeromake.github.io/learnopengl-examples/) ([git repo](https://github.com/zeromake/learnopengl-examples))
+- [NanoVG backend](https://github.com/vinnyhorgan/nanovg) a sokol_gfx backend for the amazing [NanoVG](https://github.com/memononen/nanovg) library.
 
 - [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
 
@@ -30,6 +32,10 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 - [Tiny 8-bit emulators](https://floooh.github.io/tiny8bit/)
 
 - A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), also available in [Zig](https://github.com/floooh/pacman.zig/)
+
+- [Soluna](https://github.com/cloudwu/soluna), a framework to make 2D games in Lua by @cloudwu
+
+- [Deep Future](https://github.com/cloudwu/deepfuture): ...and a game implemented with Soluna
 
 - [Solar Storm](https://store.steampowered.com/app/2754920/Solar_Storm/), a turn-based scifi artillery game built with Odin and Sokol, released on Steam.
 
@@ -45,6 +51,10 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 
 - ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
 [source](https://github.com/bqqbarbhg/spear))
+
+- ['Brick Warrior'](https://github.com/chrishulbert/brickwarrior) - a 1990's Breakout clone ported to Sokol :)
+
+- [LearnOpenGL examples ported to sokol-gfx (may be outdated)](https://zeromake.github.io/learnopengl-examples/) ([git repo](https://github.com/zeromake/learnopengl-examples))
 
 - [Command line tools](https://github.com/floooh/sokol-tools) (shader compiler)
 
@@ -68,11 +78,14 @@ useful details for integrating the Sokol headers into your own project with your
 - [**sokol\_gl.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h): OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
 - [**sokol\_fontstash.h**](https://github.com/floooh/sokol/blob/master/util/sokol_fontstash.h): sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
 - [**sokol\_gfx\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h): debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
+- [**sokol\_app\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_app_imgui.h): debug-inspection UI for sokol_app.h (implemented with Dear ImGui)
 - [**sokol\_debugtext.h**](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h): a simple text renderer using vintage home computer fonts
 - [**sokol\_memtrack.h**](https://github.com/floooh/sokol/blob/master/util/sokol_memtrack.h): easily track memory allocations in sokol headers
 - [**sokol\_shape.h**](https://github.com/floooh/sokol/blob/master/util/sokol_shape.h): generate simple shapes and plug them into sokol-gfx resource creation structs
 - [**sokol\_color.h**](https://github.com/floooh/sokol/blob/master/util/sokol_color.h): X11 style color constants and functions for creating sg_color objects
 - [**sokol\_spine.h**](https://github.com/floooh/sokol/blob/master/util/sokol_spine.h): a sokol-style wrapper around the Spine C runtime (http://en.esotericsoftware.com/spine-in-depth)
+- [**sokol\_letterbox.h**](https://github.com/floooh/sokol/blob/master/util/sokol_letterbox.h): compute viewport params for rendering fixed-aspect-ratio content in a variable-aspect-ratio canvas
+- [**sokol\_framebuffer.h**](https://github.com/floooh/sokol/blob/master/util/sokol_framebuffer.h): provides CPU-framebuffers rendered via sokol_gfx.h
 
 ## 'Official' Language Bindings
 
@@ -82,7 +95,7 @@ These are automatically updated on changes to the C headers:
 - [sokol-odin](https://github.com/floooh/sokol-odin)
 - [sokol-nim](https://github.com/floooh/sokol-nim)
 - [sokol-rust](https://github.com/floooh/sokol-rust)
-- [sokol-d](https://github.com/kassane/sokol-d)
+- [sokol-d](https://github.com/floooh/sokol-d)
 - [sokol-jai](https://github.com/colinbellino/sokol-jai)
 - [sokol-c3](https://github.com/floooh/sokol-c3)
 

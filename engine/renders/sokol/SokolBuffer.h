@@ -13,6 +13,7 @@ namespace doriax{
 
     private:
         sg_buffer buffer;
+        sg_view view; // only created for storage buffers
 
     public:
         SokolBuffer();
@@ -25,6 +26,7 @@ namespace doriax{
         bool isCreated();
 
         sg_buffer get();
+        sg_view getView();
     };
 }
 

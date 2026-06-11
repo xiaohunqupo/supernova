@@ -11,22 +11,25 @@ using namespace doriax;
 
 SokolFramebuffer::SokolFramebuffer(){
     for (int i = 0; i < 6; i++){
-        attachments[i].id = SG_INVALID_ID;
+        colorAttachmentViews[i].id = SG_INVALID_ID;
     }
+    depthAttachmentView.id = SG_INVALID_ID;
 }
 
 SokolFramebuffer::SokolFramebuffer(const SokolFramebuffer& rhs){
     for (int i = 0; i < 6; i++){
-        attachments[i] = rhs.attachments[i];
+        colorAttachmentViews[i] = rhs.colorAttachmentViews[i];
     }
+    depthAttachmentView = rhs.depthAttachmentView;
     colorTexture = rhs.colorTexture;
     depthTexture = rhs.depthTexture;
 }
 
 SokolFramebuffer& SokolFramebuffer::operator=(const SokolFramebuffer& rhs){
     for (int i = 0; i < 6; i++){
-        attachments[i] = rhs.attachments[i];
+        colorAttachmentViews[i] = rhs.colorAttachmentViews[i];
     }
+    depthAttachmentView = rhs.depthAttachmentView;
     colorTexture = rhs.colorTexture;
     depthTexture = rhs.depthTexture;
 
@@ -52,17 +55,26 @@ bool SokolFramebuffer::createFramebuffer(TextureType textureType, int width, int
     size_t faces = (textureType == TextureType::TEXTURE_CUBE)? 6 : 1;
 
     for (int i = 0; i < faces; i++){
-        sg_attachments_desc attachments_desc = {0};
-        attachments_desc.colors[0].image = colorTexture.backend.get();
-        attachments_desc.colors[0].slice = i;
-        attachments_desc.depth_stencil.image = depthTexture.backend.get();
-        attachments_desc.label = "shadow-map-pass";
+        sg_view_desc color_view_desc = {0};
+        color_view_desc.color_attachment.image = colorTexture.backend.get();
+        color_view_desc.color_attachment.slice = i;
+        color_view_desc.label = "framebuffer-color-attachment-view";
 
         if (Engine::isAsyncThread()){
-            attachments[i] = SokolCmdQueue::add_command_make_attachments(attachments_desc);
+            colorAttachmentViews[i] = SokolCmdQueue::add_command_make_view(color_view_desc);
         }else{
-            attachments[i] = sg_make_attachments(attachments_desc);
+            colorAttachmentViews[i] = sg_make_view(color_view_desc);
         }
+    }
+
+    sg_view_desc depth_view_desc = {0};
+    depth_view_desc.depth_stencil_attachment.image = depthTexture.backend.get();
+    depth_view_desc.label = "framebuffer-depth-attachment-view";
+
+    if (Engine::isAsyncThread()){
+        depthAttachmentView = SokolCmdQueue::add_command_make_view(depth_view_desc);
+    }else{
+        depthAttachmentView = sg_make_view(depth_view_desc);
     }
 
     bool created = isCreated();
@@ -76,14 +88,22 @@ bool SokolFramebuffer::createFramebuffer(TextureType textureType, int width, int
 void SokolFramebuffer::destroyFramebuffer(){
     if (sg_isvalid()){
         for (int i = 0; i < 6; i++){
-            if (attachments[i].id == SG_INVALID_ID) {
+            if (colorAttachmentViews[i].id == SG_INVALID_ID) {
                 continue;
             }
 
             if (Engine::isAsyncThread()){
-                SokolCmdQueue::add_command_destroy_attachments(attachments[i]);
+                SokolCmdQueue::add_command_destroy_view(colorAttachmentViews[i]);
             }else{
-                sg_destroy_attachments(attachments[i]);
+                sg_destroy_view(colorAttachmentViews[i]);
+            }
+        }
+
+        if (depthAttachmentView.id != SG_INVALID_ID){
+            if (Engine::isAsyncThread()){
+                SokolCmdQueue::add_command_destroy_view(depthAttachmentView);
+            }else{
+                sg_destroy_view(depthAttachmentView);
             }
         }
     }
@@ -92,8 +112,9 @@ void SokolFramebuffer::destroyFramebuffer(){
     depthTexture.destroyTexture();
 
     for (int i = 0; i < 6; i++){
-        attachments[i].id = SG_INVALID_ID;
+        colorAttachmentViews[i].id = SG_INVALID_ID;
     }
+    depthAttachmentView.id = SG_INVALID_ID;
 }
 
 bool SokolFramebuffer::isCreated(){
@@ -103,12 +124,18 @@ bool SokolFramebuffer::isCreated(){
 
     bool hasAttachment = false;
     for (int i = 0; i < 6; i++) {
-        if (attachments[i].id == SG_INVALID_ID) {
+        if (colorAttachmentViews[i].id == SG_INVALID_ID) {
             continue;
         }
 
         hasAttachment = true;
-        if (sg_query_attachments_state(attachments[i]) != SG_RESOURCESTATE_VALID) {
+        if (sg_query_view_state(colorAttachmentViews[i]) != SG_RESOURCESTATE_VALID) {
+            return false;
+        }
+    }
+
+    if (depthAttachmentView.id != SG_INVALID_ID) {
+        if (sg_query_view_state(depthAttachmentView) != SG_RESOURCESTATE_VALID) {
             return false;
         }
     }
@@ -124,29 +151,19 @@ TextureRender& SokolFramebuffer::getDepthTexture(){
     return depthTexture;
 }
 
-uint32_t SokolFramebuffer::getGLHandler() const{
-    if (attachments[0].id != SG_INVALID_ID && sg_isvalid()){
-        sg_gl_attachments_info info = sg_gl_query_attachments_info(attachments[0]);
-
-        return info.framebuffer;
-    }
-
-    return 0;
-}
-
 const void* SokolFramebuffer::getD3D11HandlerColorRTV() const{
-    if (attachments[0].id != SG_INVALID_ID && sg_isvalid()){
-        sg_d3d11_attachments_info info = sg_d3d11_query_attachments_info(attachments[0]);
+    if (colorAttachmentViews[0].id != SG_INVALID_ID && sg_isvalid()){
+        sg_d3d11_view_info info = sg_d3d11_query_view_info(colorAttachmentViews[0]);
 
-        return info.color_rtv[0];
+        return info.rtv;
     }
 
     return nullptr;
 }
 
 const void* SokolFramebuffer::getD3D11HandlerDSV() const{
-    if (attachments[0].id != SG_INVALID_ID && sg_isvalid()){
-        sg_d3d11_attachments_info info = sg_d3d11_query_attachments_info(attachments[0]);
+    if (depthAttachmentView.id != SG_INVALID_ID && sg_isvalid()){
+        sg_d3d11_view_info info = sg_d3d11_query_view_info(depthAttachmentView);
 
         return info.dsv;
     }
@@ -155,5 +172,10 @@ const void* SokolFramebuffer::getD3D11HandlerDSV() const{
 }
 
 sg_attachments SokolFramebuffer::get(size_t face){
-    return attachments[face];
+    sg_attachments attachments = {};
+
+    attachments.colors[0] = colorAttachmentViews[face];
+    attachments.depth_stencil = depthAttachmentView;
+
+    return attachments;
 }

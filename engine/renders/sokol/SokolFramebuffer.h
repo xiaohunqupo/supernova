@@ -15,7 +15,8 @@ namespace doriax{
     class SokolFramebuffer{
 
     private:
-        sg_attachments attachments[6];
+        sg_view colorAttachmentViews[6];
+        sg_view depthAttachmentView;
 
         TextureRender colorTexture;
         TextureRender depthTexture;
@@ -32,7 +33,6 @@ namespace doriax{
         TextureRender& getColorTexture();
         TextureRender& getDepthTexture();
 
-        uint32_t getGLHandler() const;
         const void* getD3D11HandlerColorRTV() const;
         const void* getD3D11HandlerDSV() const;
 

@@ -8,6 +8,7 @@
 #include "math/Matrix4.h"
 #include "Log.h"
 #include "SokolCmdQueue.h"
+#include "SokolShader.h"
 #include "Engine.h"
 
 using namespace doriax;
@@ -184,25 +185,25 @@ void SokolObject::addAttribute(int slot, BufferRender* buffer, unsigned int elem
 
 void SokolObject::addStorageBuffer(int slot, ShaderStageType stage, BufferRender* buffer){
     if (slot != -1){
-        sg_buffer sbuf = buffer->backend.get();
+        sg_view sbufview = buffer->backend.getView();
 
         if (stage == ShaderStageType::VERTEX){
-            bind.storage_buffers[slot] = sbuf;
+            bind.views[SOKOL_STORAGEBUFFER_VIEW_SLOT_OFFSET + slot] = sbufview;
         }else if (stage == ShaderStageType::FRAGMENT){
-            bind.storage_buffers[slot] = sbuf;
+            bind.views[SOKOL_STORAGEBUFFER_VIEW_SLOT_OFFSET + slot] = sbufview;
         }
     }
 }
 
 void SokolObject::addTexture(std::pair<int, int> slot, ShaderStageType stage, TextureRender* texture){
     if (slot.first != -1){
-        sg_image image = texture->backend.get();
+        sg_view texview = texture->backend.getView();
         sg_sampler sampler = texture->backend.getSampler();
         if (stage == ShaderStageType::VERTEX){
-            bind.images[slot.first] = image;
+            bind.views[slot.first] = texview;
             bind.samplers[slot.second] = sampler;
         }else if (stage == ShaderStageType::FRAGMENT){
-            bind.images[slot.first] = image;
+            bind.views[slot.first] = texview;
             bind.samplers[slot.second] = sampler;
         }
     }

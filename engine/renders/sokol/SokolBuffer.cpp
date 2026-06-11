@@ -11,12 +11,14 @@ using namespace doriax;
 
 SokolBuffer::SokolBuffer(){
     buffer.id = SG_INVALID_ID;
+    view.id = SG_INVALID_ID;
 }
 
-SokolBuffer::SokolBuffer(const SokolBuffer& rhs): buffer(rhs.buffer) {}
+SokolBuffer::SokolBuffer(const SokolBuffer& rhs): buffer(rhs.buffer), view(rhs.view) {}
 
 SokolBuffer& SokolBuffer::operator=(const SokolBuffer& rhs){
     buffer = rhs.buffer;
+    view = rhs.view;
     return *this;
 }
 
@@ -54,6 +56,17 @@ bool SokolBuffer::createBuffer(unsigned int size, void* data, BufferType type, B
         buffer = sg_make_buffer(vbuf_desc);
     }
 
+    if (type == BufferType::STORAGE_BUFFER && buffer.id != SG_INVALID_ID){
+        sg_view_desc view_desc = {0};
+        view_desc.storage_buffer.buffer = buffer;
+
+        if (Engine::isAsyncThread()){
+            view = SokolCmdQueue::add_command_make_view(view_desc);
+        }else{
+            view = sg_make_view(view_desc);
+        }
+    }
+
     // cannot two updates in same draw loop
     //if (usage != BufferUsage::IMMUTABLE){
     //    updateBuffer(size, data);
@@ -77,6 +90,13 @@ void SokolBuffer::updateBuffer(unsigned int size, void* data){
 }
 
 void SokolBuffer::destroyBuffer(){
+    if (view.id != SG_INVALID_ID && sg_isvalid()){
+        if (Engine::isAsyncThread()){
+            SokolCmdQueue::add_command_destroy_view(view);
+        }else{
+            sg_destroy_view(view);
+        }
+    }
     if (buffer.id != SG_INVALID_ID && sg_isvalid()){
         if (Engine::isAsyncThread()){
             SokolCmdQueue::add_command_destroy_buffer(buffer);
@@ -86,6 +106,7 @@ void SokolBuffer::destroyBuffer(){
     }
 
     buffer.id = SG_INVALID_ID;
+    view.id = SG_INVALID_ID;
 }
 
 bool SokolBuffer::isCreated(){
@@ -98,4 +119,8 @@ bool SokolBuffer::isCreated(){
 
 sg_buffer SokolBuffer::get(){
     return buffer;
+}
+
+sg_view SokolBuffer::getView(){
+    return view;
 }

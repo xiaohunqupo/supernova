@@ -10,6 +10,12 @@
 #include "sokol_gfx.h"
 
 namespace doriax{
+
+    // textures and storage buffers share the sg_bindings.views[] bindspace, but
+    // shader reflection (ShaderData) keeps independent slot counters for each type,
+    // so storage-buffer view slots are placed after the texture range
+    enum { SOKOL_STORAGEBUFFER_VIEW_SLOT_OFFSET = SG_MAX_VIEW_BINDSLOTS - 8 };
+
     class SokolShader{
 
     private:

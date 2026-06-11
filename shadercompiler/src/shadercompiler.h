@@ -15,14 +15,15 @@ namespace shadercompiler{
     //
     // From https://github.com/floooh/sokol-tools
     //
-    // keep these in sync with:
-    //  - SG_MAX_UNIFORMBLOCK_BINDSLOTS
-    //  - SG_MAX_IMAGE_BINDSLOTS
-    //  - SG_MAX_SAMPLER_BINDSLOTS
-    //  - SG_MAX_STORAGEBUFFER_BINDSLOTS
-    //  - SG_MAX_IMAGE_SAMPLERS_PAIRS
+    // keep these in sync with sokol_gfx.h:
+    //  - MaxUniformBlocks: _SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE (8), also the
+    //    MSL storage buffer base slot (Metal requires [[buffer(n)]] of storage
+    //    buffers in range [8, 31 - SG_MAX_VERTEXBUFFER_BINDSLOTS))
+    //  - MaxImages/MaxStorageBuffers: share SG_MAX_VIEW_BINDSLOTS (32)
+    //  - MaxSamplers: SG_MAX_SAMPLER_BINDSLOTS
+    //  - MaxImageSamplers: SG_MAX_TEXTURE_SAMPLER_PAIRS
     //
-    inline static const int MaxUniformBlocks = 10;
+    inline static const int MaxUniformBlocks = 8;
     inline static const int MaxImages = 16;
     inline static const int MaxSamplers = 16;
     inline static const int MaxStorageBuffers = 8;

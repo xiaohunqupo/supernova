@@ -85,7 +85,7 @@ void SokolCmdQueue::execute_commands(bool resource_only)
 		for (const auto& command : m_commands[m_commit_commands_index])
 		{
 			// ignore command?
-			if (resource_only && !(command.type >= SokolRenderCommand::TYPE::MAKE_BUFFER && command.type <= SokolRenderCommand::TYPE::DESTROY_ATTACHMENTS))
+			if (resource_only && !(command.type >= SokolRenderCommand::TYPE::MAKE_BUFFER && command.type <= SokolRenderCommand::TYPE::DESTROY_VIEW))
 			{
 				continue;
 			}
@@ -114,8 +114,8 @@ void SokolCmdQueue::execute_commands(bool resource_only)
 			case SokolRenderCommand::TYPE::MAKE_PIPELINE:
 				sg_init_pipeline(command.make_pipeline.pipeline, command.make_pipeline.desc);
 				break;
-			case SokolRenderCommand::TYPE::MAKE_ATTACHMENTS:
-				sg_init_attachments(command.make_attachments.attachments, command.make_attachments.desc);
+			case SokolRenderCommand::TYPE::MAKE_VIEW:
+				sg_init_view(command.make_view.view, command.make_view.desc);
 				break;
 			case SokolRenderCommand::TYPE::DESTROY_BUFFER:
 				sg_uninit_buffer(command.destroy_buffer.buffer);
@@ -132,8 +132,8 @@ void SokolCmdQueue::execute_commands(bool resource_only)
 			case SokolRenderCommand::TYPE::DESTROY_PIPELINE:
 				sg_uninit_pipeline(command.destroy_pipeline.pipeline);
 				break;
-			case SokolRenderCommand::TYPE::DESTROY_ATTACHMENTS:
-				sg_uninit_attachments(command.destroy_attachments.attachments);
+			case SokolRenderCommand::TYPE::DESTROY_VIEW:
+				sg_uninit_view(command.destroy_view.view);
 				break;
 			case SokolRenderCommand::TYPE::UPDATE_BUFFER:
 				sg_update_buffer(command.update_buffer.buffer, command.update_buffer.data);
@@ -231,8 +231,8 @@ void SokolCmdQueue::wait_for_flush()
 				case SokolRenderCommand::TYPE::MAKE_PIPELINE:
 					//sg_init_pipeline(command.make_pipeline.pipeline, command.make_pipeline.desc);
 					break;
-				case SokolRenderCommand::TYPE::MAKE_ATTACHMENTS:
-					//sg_init_attachments(command.make_attachments.attachments, command.make_attachments.desc);
+				case SokolRenderCommand::TYPE::MAKE_VIEW:
+					//sg_init_view(command.make_view.view, command.make_view.desc);
 					break;
 				case SokolRenderCommand::TYPE::DESTROY_BUFFER:
 					sg_uninit_buffer(command.destroy_buffer.buffer);
@@ -249,8 +249,8 @@ void SokolCmdQueue::wait_for_flush()
 				case SokolRenderCommand::TYPE::DESTROY_PIPELINE:
 					sg_uninit_pipeline(command.destroy_pipeline.pipeline);
 					break;
-				case SokolRenderCommand::TYPE::DESTROY_ATTACHMENTS:
-					sg_uninit_attachments(command.destroy_attachments.attachments);
+				case SokolRenderCommand::TYPE::DESTROY_VIEW:
+					sg_uninit_view(command.destroy_view.view);
 					break;
 				default:
 					break;
@@ -372,19 +372,19 @@ sg_pipeline SokolCmdQueue::add_command_make_pipeline(const sg_pipeline_desc& des
 
 // ----------------------------------------------------------------------------------------------------
 
-sg_attachments SokolCmdQueue::add_command_make_attachments(const sg_attachments_desc& desc)
+sg_view SokolCmdQueue::add_command_make_view(const sg_view_desc& desc)
 {
 	// add command
-	SokolRenderCommand& command = m_commands[m_pending_commands_index].emplace_back(SokolRenderCommand::TYPE::MAKE_ATTACHMENTS);
+	SokolRenderCommand& command = m_commands[m_pending_commands_index].emplace_back(SokolRenderCommand::TYPE::MAKE_VIEW);
 
 	// copy args
-	command.make_attachments.desc = desc;
+	command.make_view.desc = desc;
 
-	// alloc attachments
-	command.make_attachments.attachments = sg_alloc_attachments();
-	
-	// return attachments
-	return command.make_attachments.attachments;
+	// alloc view
+	command.make_view.view = sg_alloc_view();
+
+	// return view
+	return command.make_view.view;
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -459,16 +459,16 @@ void SokolCmdQueue::add_command_destroy_pipeline(sg_pipeline pipeline)
 
 // ----------------------------------------------------------------------------------------------------
 
-void SokolCmdQueue::add_command_destroy_attachments(sg_attachments atts)
+void SokolCmdQueue::add_command_destroy_view(sg_view view)
 {
 	// add command
-	SokolRenderCommand& command = m_commands[m_pending_commands_index].emplace_back(SokolRenderCommand::TYPE::DESTROY_ATTACHMENTS);
+	SokolRenderCommand& command = m_commands[m_pending_commands_index].emplace_back(SokolRenderCommand::TYPE::DESTROY_VIEW);
 
 	// copy args
-	command.destroy_attachments.attachments = atts;
+	command.destroy_view.view = view;
 
 	// schedule cleanup
-	schedule_cleanup(dealloc_attachments_cb, (void*)(uintptr_t)command.destroy_attachments.attachments.id);
+	schedule_cleanup(dealloc_view_cb, (void*)(uintptr_t)command.destroy_view.view.id);
 }
 
 // ----------------------------------------------------------------------------------------------------

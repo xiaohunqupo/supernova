@@ -35,12 +35,24 @@
     #endif
 
     #if USE_GL_READPIXELS && defined(_WIN32)
+        typedef void (APIENTRY *PFNGLGENFRAMEBUFFERSPROC)(GLsizei n, GLuint* framebuffers);
         typedef void (APIENTRY *PFNGLBINDFRAMEBUFFERPROC)(GLenum target, GLuint framebuffer);
+        typedef void (APIENTRY *PFNGLFRAMEBUFFERTEXTURE2DPROC)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+        typedef void (APIENTRY *PFNGLDELETEFRAMEBUFFERSPROC)(GLsizei n, const GLuint* framebuffers);
+        static PFNGLGENFRAMEBUFFERSPROC glGenFramebuffersPtr = nullptr;
         static PFNGLBINDFRAMEBUFFERPROC glBindFramebufferPtr = nullptr;
+        static PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2DPtr = nullptr;
+        static PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffersPtr = nullptr;
+        #define glGenFramebuffers glGenFramebuffersPtr
         #define glBindFramebuffer glBindFramebufferPtr
+        #define glFramebufferTexture2D glFramebufferTexture2DPtr
+        #define glDeleteFramebuffers glDeleteFramebuffersPtr
 
         #ifndef GL_FRAMEBUFFER
         #define GL_FRAMEBUFFER 0x8D40
+        #endif
+        #ifndef GL_COLOR_ATTACHMENT0
+        #define GL_COLOR_ATTACHMENT0 0x8CE0
         #endif
     #endif
 #endif
@@ -76,18 +88,27 @@ void editor::GraphicUtils::saveFramebufferImage(Framebuffer* framebuffer, fs::pa
 
         #if USE_GL_READPIXELS
             #if defined(_WIN32)
-                if (!glBindFramebufferPtr) {
+                if (!glGenFramebuffersPtr) {
+                    glGenFramebuffersPtr = (PFNGLGENFRAMEBUFFERSPROC)wglGetProcAddress("glGenFramebuffers");
                     glBindFramebufferPtr = (PFNGLBINDFRAMEBUFFERPROC)wglGetProcAddress("glBindFramebuffer");
-                    if (!glBindFramebufferPtr) {
+                    glFramebufferTexture2DPtr = (PFNGLFRAMEBUFFERTEXTURE2DPROC)wglGetProcAddress("glFramebufferTexture2D");
+                    glDeleteFramebuffersPtr = (PFNGLDELETEFRAMEBUFFERSPROC)wglGetProcAddress("glDeleteFramebuffers");
+                    if (!glGenFramebuffersPtr || !glBindFramebufferPtr || !glFramebufferTexture2DPtr || !glDeleteFramebuffersPtr) {
                         delete[] pixels;
-                        Out::error("Engine failure: Failed to load glBindFramebuffer");
+                        Out::error("Engine failure: Failed to load GL framebuffer functions");
                         return;
                     }
                 }
             #endif
-            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->getRender().getGLHandler());
+            // sokol no longer exposes its internal FBOs, read through a temporary
+            // one attached to the framebuffer color texture
+            GLuint readFbo = 0;
+            glGenFramebuffers(1, &readFbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer->getRender().getColorTexture().getGLHandler(), 0);
             glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &readFbo);
         #else
             glBindTexture(GL_TEXTURE_2D, framebuffer->getRender().getColorTexture().getGLHandler());
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);

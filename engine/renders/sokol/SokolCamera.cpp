@@ -38,12 +38,14 @@ void SokolCamera::setLoadActionLoad(){
 }
 
 void SokolCamera::startRenderPass(FramebufferRender* framebuffer, size_t face){
+    pass.swapchain = {};
     pass.attachments = framebuffer->backend.get(face);
     //SokolCmdQueue::add_command_begin_pass(pass);
     sg_begin_pass(pass);
 }
 
 void SokolCamera::startRenderPass(int width, int height){
+    pass.attachments = {};
     pass.swapchain = System::instance().getSokolSwapchain();
     pass.swapchain.width = width;
     pass.swapchain.height = height;
@@ -52,6 +54,7 @@ void SokolCamera::startRenderPass(int width, int height){
 }
 
 void SokolCamera::startRenderPass(){
+    pass.attachments = {};
     pass.swapchain = System::instance().getSokolSwapchain();
     //SokolCmdQueue::add_command_begin_pass(pass);
     sg_begin_pass(pass);

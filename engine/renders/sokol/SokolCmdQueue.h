@@ -38,13 +38,13 @@ namespace doriax {
 				MAKE_SAMPLER,
 				MAKE_SHADER,
 				MAKE_PIPELINE,
-				MAKE_ATTACHMENTS,
+				MAKE_VIEW,
 				DESTROY_BUFFER,
 				DESTROY_IMAGE,
 				DESTROY_SAMPLER,
 				DESTROY_SHADER,
 				DESTROY_PIPELINE,
-				DESTROY_ATTACHMENTS,
+				DESTROY_VIEW,
 				UPDATE_BUFFER,
 				APPEND_BUFFER,
 				UPDATE_IMAGE,
@@ -107,9 +107,9 @@ namespace doriax {
 			
 			struct
 			{
-				sg_attachments_desc desc;
-				sg_attachments attachments;
-			} make_attachments;
+				sg_view_desc desc;
+				sg_view view;
+			} make_view;
 			
 			struct
 			{
@@ -138,8 +138,8 @@ namespace doriax {
 			
 			struct
 			{
-				sg_attachments attachments;
-			} destroy_attachments;
+				sg_view view;
+			} destroy_view;
 			
 			struct
 			{
@@ -247,14 +247,14 @@ namespace doriax {
 		static sg_sampler add_command_make_sampler(const sg_sampler_desc& desc);
 		static sg_shader add_command_make_shader(const sg_shader_desc& desc);
 		static sg_pipeline add_command_make_pipeline(const sg_pipeline_desc& desc);
-		static sg_attachments add_command_make_attachments(const sg_attachments_desc& desc);
-		
+		static sg_view add_command_make_view(const sg_view_desc& desc);
+
 		static void add_command_destroy_buffer(sg_buffer buffer);
 		static void add_command_destroy_image(sg_image image);
 		static void add_command_destroy_sampler(sg_sampler sampler);
 		static void add_command_destroy_shader(sg_shader shader);
 		static void add_command_destroy_pipeline(sg_pipeline pipeline);
-		static void add_command_destroy_attachments(sg_attachments atts);
+		static void add_command_destroy_view(sg_view view);
 		
 		static void add_command_update_buffer(sg_buffer buffer, const sg_range& data);
 		static void add_command_append_buffer(sg_buffer buffer, const sg_range& data);
@@ -290,7 +290,7 @@ namespace doriax {
 		static void dealloc_sampler_cb(void* cleanup_data) { sg_dealloc_sampler({(uint32_t)(uintptr_t)cleanup_data}); }
 		static void dealloc_shader_cb(void* cleanup_data) { sg_dealloc_shader({(uint32_t)(uintptr_t)cleanup_data}); }
 		static void dealloc_pipeline_cb(void* cleanup_data) { sg_dealloc_pipeline({(uint32_t)(uintptr_t)cleanup_data}); }
-		static void dealloc_attachments_cb(void* cleanup_data) { sg_dealloc_attachments({(uint32_t)(uintptr_t)cleanup_data}); }
+		static void dealloc_view_cb(void* cleanup_data) { sg_dealloc_view({(uint32_t)(uintptr_t)cleanup_data}); }
 
 		static std::vector<SokolRenderCommand> m_commands[2];
 		static int32_t m_pending_commands_index;

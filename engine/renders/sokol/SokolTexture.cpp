@@ -9,18 +9,23 @@
 #include "render/SystemRender.h"
 #include "Engine.h"
 
+#include <cstring>
+#include <cstdlib>
+
 using namespace doriax;
 
 SokolTexture::SokolTexture(){
     image.id = SG_INVALID_ID;
     sampler.id = SG_INVALID_ID;
+    view.id = SG_INVALID_ID;
 }
 
-SokolTexture::SokolTexture(const SokolTexture& rhs): image(rhs.image), sampler(rhs.sampler) {}
+SokolTexture::SokolTexture(const SokolTexture& rhs): image(rhs.image), sampler(rhs.sampler), view(rhs.view) {}
 
-SokolTexture& SokolTexture::operator=(const SokolTexture& rhs){ 
+SokolTexture& SokolTexture::operator=(const SokolTexture& rhs){
     image = rhs.image;
     sampler = rhs.sampler;
+    view = rhs.view;
     return *this;
 }
 
@@ -85,6 +90,7 @@ void SokolTexture::cleanupMipmapTexture(void* data){
 }
 
 // https://github.com/floooh/sokol/issues/102
+// mip-level data layout: all slices (cube faces) of a level in one contiguous block
 sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
     sg_image_desc desc = *desc_;
 
@@ -105,94 +111,91 @@ sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
         }
     }
 
+    int num_slices = (desc.num_slices > 0)? desc.num_slices : 1;
 
-    int w = desc.width;
-    int h = desc.height * desc.num_slices;
     int total_size = 0;
-    for (int level = 1; level < SG_MAX_MIPMAPS; ++level) {
-        w /=2;
-        h /=2;
+    {
+        int w = desc.width;
+        int h = desc.height;
+        for (int level = 1; level < SG_MAX_MIPMAPS; ++level) {
+            if (w == 1 && h == 1)
+                break;
 
-        if (w < 1 && h < 1)
-            break;
+            w /= 2;
+            h /= 2;
 
-        if (w < 1)
-            w = 1;
+            if (w < 1)
+                w = 1;
 
-        if (h < 1)
-            h = 1;
+            if (h < 1)
+                h = 1;
 
-        total_size += (w * h * pixel_size);
+            total_size += (w * h * num_slices * pixel_size);
+        }
     }
 
-    int cube_faces = 0;
-    for (; cube_faces < SG_CUBEFACE_NUM; ++cube_faces) {
-        if (!desc.data.subimage[cube_faces][0].ptr)
-            break;
-    }
-
-    total_size *= cube_faces;
     unsigned char *big_target = (unsigned char *)malloc(total_size);
     unsigned char *target = big_target;
 
-    for (int cube_face = 0; cube_face < cube_faces; ++cube_face)
-    {
-        int target_width = desc.width;
-        int target_height = desc.height;
+    const unsigned char* source = (const unsigned char*)desc.data.mip_levels[0].ptr;
+    int source_width = desc.width;
+    int source_height = desc.height;
 
-        for (int level = 1; level < SG_MAX_MIPMAPS; ++level) {
-            unsigned char* source = (unsigned char*)desc.data.subimage[cube_face][level - 1].ptr;
-            if (!source)
-                break;
+    for (int level = 1; level < SG_MAX_MIPMAPS; ++level) {
+        if (!source)
+            break;
 
-            int source_width = target_width;
-            int source_height = target_height;
-            target_width /= 2;
-            target_height /= 2;
-            if (target_width < 1 && target_height < 1)
-                break;
+        if (source_width == 1 && source_height == 1)
+            break;
 
-            if (target_width < 1)
-                target_width = 1;
+        int target_width = source_width / 2;
+        int target_height = source_height / 2;
 
-            if (target_height < 1)
-                target_height = 1;
+        if (target_width < 1)
+            target_width = 1;
 
-            unsigned img_size = target_width * target_height * desc.num_slices * pixel_size;
-            unsigned char *miptarget = target;
+        if (target_height < 1)
+            target_height = 1;
 
-            for (int slice = 0; slice < desc.num_slices; ++slice) {
-                for (int x = 0; x < target_width; ++x)
+        unsigned level_size = target_width * target_height * num_slices * pixel_size;
+
+        for (int slice = 0; slice < num_slices; ++slice) {
+            const unsigned char* srcslice = source + (slice * source_width * source_height * pixel_size);
+            unsigned char* miptarget = target + (slice * target_width * target_height * pixel_size);
+
+            for (int x = 0; x < target_width; ++x)
+            {
+                for (int y = 0; y < target_height; ++y)
                 {
-                    for (int y = 0; y < target_height; ++y)
+                    for (int chanell = 0; chanell < pixel_size; ++chanell)
                     {
-                        for (int chanell = 0; chanell < pixel_size; ++chanell)
-                        {
-                            int color = 0;
-                            int sx = x * 2;
-                            int sy = y * 2;
-                            const int sx1 = (sx + 1 < source_width) ? (sx + 1) : (source_width - 1);
-                            const int sy1 = (sy + 1 < source_height) ? (sy + 1) : (source_height - 1);
+                        int color = 0;
+                        int sx = x * 2;
+                        int sy = y * 2;
+                        const int sx1 = (sx + 1 < source_width) ? (sx + 1) : (source_width - 1);
+                        const int sy1 = (sy + 1 < source_height) ? (sy + 1) : (source_height - 1);
 
-                            color += source[(sy * source_width + sx) * pixel_size + chanell];
-                            color += source[(sy * source_width + sx1) * pixel_size + chanell];
-                            color += source[(sy1 * source_width + sx1) * pixel_size + chanell];
-                            color += source[(sy1 * source_width + sx) * pixel_size + chanell];
-                            color /= 4;
-                            miptarget[(y * target_width + x) * pixel_size + chanell] = (uint8_t)color;
-                        }
+                        color += srcslice[(sy * source_width + sx) * pixel_size + chanell];
+                        color += srcslice[(sy * source_width + sx1) * pixel_size + chanell];
+                        color += srcslice[(sy1 * source_width + sx1) * pixel_size + chanell];
+                        color += srcslice[(sy1 * source_width + sx) * pixel_size + chanell];
+                        color /= 4;
+                        miptarget[(y * target_width + x) * pixel_size + chanell] = (uint8_t)color;
                     }
                 }
-
-                source += (source_width * source_height * pixel_size);
-                miptarget += (target_width * target_height * pixel_size);
             }
-            desc.data.subimage[cube_face][level].ptr = target;
-            desc.data.subimage[cube_face][level].size = img_size;
-            target += img_size;
-            if (desc.num_mipmaps <= level)
-                desc.num_mipmaps = level + 1;
         }
+
+        desc.data.mip_levels[level].ptr = target;
+        desc.data.mip_levels[level].size = level_size;
+
+        source = target;
+        target += level_size;
+        source_width = target_width;
+        source_height = target_height;
+
+        if (desc.num_mipmaps <= level)
+            desc.num_mipmaps = level + 1;
     }
 
     sg_image img;
@@ -203,7 +206,7 @@ sg_image SokolTexture::generateMipmaps(const sg_image_desc* desc_){
         img = sg_make_image(desc);
     }
     SystemRender::scheduleCleanup(cleanupMipmapTexture, big_target);
-    
+
     return img;
 }
 
@@ -226,7 +229,7 @@ bool SokolTexture::createTexture(
     image_desc.width = width;
     image_desc.height = height;
     image_desc.pixel_format = pixelFormat;
-    image_desc.num_slices = 1;
+    image_desc.num_slices = (type == TextureType::TEXTURE_CUBE)? 6 : 1;
     image_desc.label = label.c_str();
 
     sg_sampler_desc sampler_desc = {0};
@@ -236,9 +239,24 @@ bool SokolTexture::createTexture(
     sampler_desc.wrap_u = getWrap(wrapU);
     sampler_desc.wrap_v = getWrap(wrapV);
 
-    for (int f = 0; f < numFaces; f++){
-        image_desc.data.subimage[f][0].ptr = data[f];
-        image_desc.data.subimage[f][0].size = size[f];
+    // all faces of a mip level must be in one contiguous memory block
+    if (numFaces > 1){
+        size_t total_size = 0;
+        for (int f = 0; f < numFaces; f++){
+            total_size += size[f];
+        }
+        unsigned char* combined = (unsigned char*)malloc(total_size);
+        size_t offset = 0;
+        for (int f = 0; f < numFaces; f++){
+            memcpy(combined + offset, data[f], size[f]);
+            offset += size[f];
+        }
+        image_desc.data.mip_levels[0].ptr = combined;
+        image_desc.data.mip_levels[0].size = total_size;
+        SystemRender::scheduleCleanup(cleanupMipmapTexture, combined);
+    }else{
+        image_desc.data.mip_levels[0].ptr = data[0];
+        image_desc.data.mip_levels[0].size = size[0];
     }
 
     if (sampler_desc.mipmap_filter == SG_FILTER_LINEAR || sampler_desc.mipmap_filter == SG_FILTER_NEAREST){
@@ -256,20 +274,44 @@ bool SokolTexture::createTexture(
         sampler = sg_make_sampler(sampler_desc);
     }
 
-    if (image.id != SG_INVALID_ID && sampler.id != SG_INVALID_ID)
+    createTextureView(label.c_str());
+
+    if (image.id != SG_INVALID_ID && sampler.id != SG_INVALID_ID && view.id != SG_INVALID_ID)
         return true;
 
     return false;
+}
+
+void SokolTexture::createTextureView(const char* label){
+    if (image.id == SG_INVALID_ID){
+        view.id = SG_INVALID_ID;
+        return;
+    }
+
+    sg_view_desc view_desc = {0};
+    view_desc.texture.image = image;
+    view_desc.label = label;
+
+    if (Engine::isAsyncThread()){
+        view = SokolCmdQueue::add_command_make_view(view_desc);
+    }else{
+        view = sg_make_view(view_desc);
+    }
 }
 
 bool SokolTexture::createFramebufferTexture(
             TextureType type, bool depth, bool shadowMap, int width, int height, 
             TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV){
     sg_image_desc img_desc = {0};
-    img_desc.usage.render_attachment = true;
+    if (depth){
+        img_desc.usage.depth_stencil_attachment = true;
+    }else{
+        img_desc.usage.color_attachment = true;
+    }
     img_desc.type = getTextureType(type);
     img_desc.width = width;
     img_desc.height = height;
+    img_desc.num_slices = (type == TextureType::TEXTURE_CUBE)? 6 : 1;
 
     sg_sampler_desc sampler_desc = {0};
     sampler_desc.min_filter = getFilter(minFilter);
@@ -301,13 +343,22 @@ bool SokolTexture::createFramebufferTexture(
         sampler = sg_make_sampler(sampler_desc);
     }
 
-    if (image.id != SG_INVALID_ID && sampler.id != SG_INVALID_ID)
+    createTextureView(img_desc.label);
+
+    if (image.id != SG_INVALID_ID && sampler.id != SG_INVALID_ID && view.id != SG_INVALID_ID)
         return true;
 
     return false;
 }
 
 void SokolTexture::destroyTexture(){
+    if (view.id != SG_INVALID_ID && sg_isvalid()){
+        if (Engine::isAsyncThread()){
+            SokolCmdQueue::add_command_destroy_view(view);
+        }else{
+            sg_destroy_view(view);
+        }
+    }
     if (image.id != SG_INVALID_ID && sg_isvalid()){
         if (Engine::isAsyncThread()){
             SokolCmdQueue::add_command_destroy_image(image);
@@ -325,6 +376,7 @@ void SokolTexture::destroyTexture(){
 
     image.id = SG_INVALID_ID;
     sampler.id = SG_INVALID_ID;
+    view.id = SG_INVALID_ID;
 }
 
 uint32_t SokolTexture::getGLHandler() const{
@@ -371,4 +423,8 @@ sg_image SokolTexture::get(){
 
 sg_sampler SokolTexture::getSampler(){
     return sampler;
+}
+
+sg_view SokolTexture::getView(){
+    return view;
 }
