@@ -5,7 +5,7 @@
 
 #if defined(DORIAX_ANDROID)
 #define SOKOL_EXTERNAL_GL_LOADER
-#include <GLES3/gl3.h>
+#include <GLES3/gl31.h>
 #endif
 
 #if defined(_WIN32)
