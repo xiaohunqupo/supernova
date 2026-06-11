@@ -327,22 +327,7 @@ bool editor::Generator::runCommand(const std::string& command, const fs::path& w
         char buffer[BUFFER_SIZE];
         std::string accumulator;
 
-        DWORD exitCode = 1;
-        bool finished = false;
-
-        while (!finished) {
-            if (cancelRequested.load(std::memory_order_relaxed)) {
-                terminateCurrentProcess();
-                CloseHandle(pi.hThread);
-                {
-                    std::lock_guard<std::mutex> lock(processHandleMutex);
-                    currentProcessHandle = NULL;
-                }
-                CloseHandle(pi.hProcess);
-                CloseHandle(hReadPipe);  // Close pipe at the end
-                return false;
-            }
-
+        auto drainPipe = [&]() {
             DWORD bytesAvailable = 0;
             while (PeekNamedPipe(hReadPipe, nullptr, 0, nullptr, &bytesAvailable, nullptr) && bytesAvailable > 0) {
                 DWORD bytesRead = 0;
@@ -350,7 +335,6 @@ bool editor::Generator::runCommand(const std::string& command, const fs::path& w
                     break;
                 }
 
-                buffer[bytesRead] = '\0';
                 accumulator.append(buffer, bytesRead);
 
                 size_t pos = 0;
@@ -367,6 +351,25 @@ bool editor::Generator::runCommand(const std::string& command, const fs::path& w
                 }
                 accumulator.erase(0, pos);
             }
+        };
+
+        DWORD exitCode = 1;
+        bool finished = false;
+
+        while (!finished) {
+            if (cancelRequested.load(std::memory_order_relaxed)) {
+                terminateCurrentProcess();
+                CloseHandle(pi.hThread);
+                {
+                    std::lock_guard<std::mutex> lock(processHandleMutex);
+                    currentProcessHandle = NULL;
+                }
+                CloseHandle(pi.hProcess);
+                CloseHandle(hReadPipe);  // Close pipe at the end
+                return false;
+            }
+
+            drainPipe();
 
             DWORD waitResult = WaitForSingleObject(pi.hProcess, 50);
             if (waitResult == WAIT_OBJECT_0) {
@@ -379,8 +382,17 @@ bool editor::Generator::runCommand(const std::string& command, const fs::path& w
             }
         }
 
+        // The process can exit with output still buffered in the pipe — for a
+        // command that fails immediately that is ALL of its output. Drain it
+        // so errors are not silently dropped.
+        drainPipe();
+
         if (!accumulator.empty()) {
             Out::build("%s", accumulator.c_str());
+        }
+
+        if (exitCode != 0) {
+            Out::build("Process exited with code %lu", exitCode);
         }
 
         CloseHandle(hReadPipe);
@@ -484,6 +496,22 @@ bool editor::Generator::runCommand(const std::string& command, const fs::path& w
             }
         }
 
+        // The process can exit with output still buffered in the pipe — for a
+        // command that fails immediately that is ALL of its output. Drain it
+        // (non-blocking read) so errors are not silently dropped.
+        while (true) {
+            ssize_t bytesRead = read(pipefd[0], buffer, BUFFER_SIZE - 1);
+            if (bytesRead <= 0) break;
+            buffer[bytesRead] = '\0';
+            std::string line(buffer);
+            if (!line.empty() && line.back() == '\n') {
+                line.pop_back();
+            }
+            if (!line.empty()) {
+                Out::build("%s", line.c_str());
+            }
+        }
+
         // Always close the pipe after the loop
         close(pipefd[0]);
 
@@ -502,7 +530,11 @@ bool editor::Generator::runCommand(const std::string& command, const fs::path& w
         }
 
         if (WIFEXITED(status)) {
-            return WEXITSTATUS(status) == 0;
+            int code = WEXITSTATUS(status);
+            if (code != 0) {
+                Out::build("Process exited with code %d", code);
+            }
+            return code == 0;
         }
         if (WIFSIGNALED(status)) {
             Out::warning("Process terminated by signal %d", WTERMSIG(status));
@@ -1546,11 +1578,20 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
             // cl.exe), so without Ninja this kit has no usable generator.
             if (machine.find("mingw") != std::string::npos) {
                 kit.generator = "MinGW Makefiles";
-            } else if (!findCompiler("ninja").empty()) {
-                kit.generator = "Ninja";
             } else {
-                kit.available = false;
-                kit.unavailableReason = "requires Ninja on PATH (https://ninja-build.org)";
+                std::string ninjaPath = findCompiler("ninja");
+                // Verify ninja actually executes: a broken binary (e.g. a pip
+                // wrapper copied out of its Scripts folder, or a blocked
+                // download) passes the PATH check but fails when CMake runs it.
+                if (!ninjaPath.empty() && !runCmd("\"" + ninjaPath + "\" --version").empty()) {
+                    kit.generator = "Ninja";
+                } else if (ninjaPath.empty()) {
+                    kit.available = false;
+                    kit.unavailableReason = "requires Ninja on PATH (https://ninja-build.org)";
+                } else {
+                    kit.available = false;
+                    kit.unavailableReason = "Ninja at '" + ninjaPath + "' failed to run; reinstall from https://ninja-build.org";
+                }
             }
 #endif
             kits.push_back(kit);
