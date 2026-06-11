@@ -53,6 +53,7 @@ namespace doriax::editor {
         bool afterColon = false;             // Is cursor after ':' (Lua method access)
         std::string targetType;      // Inferred type for member completion filtering
         bool isCpp = false;          // True if editing C++ (filters out Lua-only properties)
+        bool manualInvoke = false;   // True when triggered explicitly (Ctrl+Space) — bypasses min prefix
     };
 
     class SemanticSuggestions {
@@ -84,6 +85,9 @@ namespace doriax::editor {
 
         // Type lookup: find the declared type of a symbol by name (searches fields/properties/variables)
         std::string FindSymbolType(const std::string& name) const;
+
+        // True if name is a registered Class or Enum symbol (for static access like Engine.foo / Scaling.NATIVE)
+        bool IsKnownClassOrEnum(const std::string& name) const;
 
         // Signature help: find parameter signatures for a function/method
         // Returns list of detail strings like "Mesh:setColor(Vector4 color)"
@@ -118,12 +122,10 @@ namespace doriax::editor {
         // Check if targetType equals typeName or is a descendant of it
         bool isTypeOrAncestor(const std::string& targetType, const std::string& symbolParent) const;
 
-        // Matching
-        int calculateMatchScore(const std::string& candidate, const std::string& query) const;
-        bool matchesQuery(const std::string& candidate, const std::string& query) const;
-        bool fuzzyMatch(const std::string& candidate, const std::string& query, int& outScore) const;
-        bool prefixMatch(const std::string& candidate, const std::string& query) const;
-        bool substringMatch(const std::string& candidate, const std::string& query) const;
+        // Matching: returns true if candidate matches query, with a tiered score
+        // (prefix > boundary substring > camelCase/snake_case initials > substring).
+        bool computeMatch(const std::string& candidate, const std::string& query, int& outScore) const;
+        static bool isWordBoundary(const std::string& candidate, size_t i);
 
         // Helpers
         std::string toLower(const std::string& str) const;

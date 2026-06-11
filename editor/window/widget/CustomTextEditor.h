@@ -198,7 +198,7 @@ namespace doriax::editor {
 
         // Auto-complete
         void SetAutoComplete(bool enable) { autoComplete = enable; }
-        void TriggerAutoComplete();
+        void TriggerAutoComplete(bool manualInvoke = false);
         void CloseAutoComplete();
         bool IsAutoCompleteOpen() const { return showAutoComplete; }
 
@@ -343,9 +343,10 @@ namespace doriax::editor {
         void initializePalette();
         void initializeSuggestions();
         void addEngineAPISuggestions();
-        void updateSuggestions();
+        void updateSuggestions(bool manualInvoke = false);
         void applySuggestion();
         void renderSuggestions(const ImVec2& origin);
+        bool isInCommentOrString(const TextPosition& pos) const;
         void triggerParamHint();
         void updateParamHint();
         void closeParamHint();

@@ -154,7 +154,16 @@ void editor::CodeEditor::updateAllProjectSymbols() {
                     if (end > start) {
                         std::string fname = line.substr(start, end - start);
                         if (fname != "(" && !fname.empty() && seenLua.insert(fname).second) {
-                            parsedLua.push_back({fname, 2, "project function", "", ""});
+                            // "function Player:update()" / "Player.update" -> method of Player,
+                            // so it only appears in member completion (player:upd...)
+                            size_t sep = fname.find_first_of(".:");
+                            if (sep != std::string::npos && sep > 0 && sep + 1 < fname.size()) {
+                                std::string owner = fname.substr(0, sep);
+                                std::string method = fname.substr(sep + 1);
+                                parsedLua.push_back({method, 9, owner + ":" + method + "()", owner, ""}); // SuggestionKind::Method = 9
+                            } else {
+                                parsedLua.push_back({fname, 2, "project function", "", ""});
+                            }
                         }
                     }
                 }

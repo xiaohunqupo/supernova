@@ -43,7 +43,7 @@ void SemanticSuggestions::ClearSnippets() {
 
 void SemanticSuggestions::UpdateDocumentWords(const std::vector<std::string>& lines) {
     documentWords.clear();
-    
+
     for (const auto& line : lines) {
         size_t i = 0;
         while (i < line.size()) {
@@ -51,8 +51,12 @@ void SemanticSuggestions::UpdateDocumentWords(const std::vector<std::string>& li
                 size_t start = i;
                 while (i < line.size() && isWordChar(line[i])) ++i;
                 std::string word = line.substr(start, i - start);
-                // Only add words with at least 2 characters
-                if (word.size() >= 2) {
+                // Only add identifiers with at least 2 characters; skip numbers and
+                // words already covered by keyword/type/builtin sources (avoids duplicates)
+                if (word.size() >= 2 && !std::isdigit(static_cast<unsigned char>(word[0])) &&
+                    keywords.find(word) == keywords.end() &&
+                    types.find(word) == types.end() &&
+                    builtinFunctions.find(word) == builtinFunctions.end()) {
                     documentWords.insert(word);
                 }
             } else {
@@ -111,6 +115,17 @@ std::string SemanticSuggestions::FindSymbolType(const std::string& name) const {
     return "";
 }
 
+bool SemanticSuggestions::IsKnownClassOrEnum(const std::string& name) const {
+    if (name.empty()) return false;
+    for (const auto& symbol : symbols) {
+        if ((symbol.kind == SuggestionKind::Class || symbol.kind == SuggestionKind::Enum) &&
+            symbol.label == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<std::string> SemanticSuggestions::FindSignatures(const std::string& functionName, const std::string& parentType) const {
     std::vector<std::string> results;
     for (const auto& symbol : symbols) {
@@ -120,7 +135,10 @@ std::vector<std::string> SemanticSuggestions::FindSignatures(const std::string& 
         if (!parentType.empty() && !symbol.parentType.empty()) {
             if (!isTypeOrAncestor(parentType, symbol.parentType)) continue;
         }
-        if (!symbol.detail.empty()) {
+        // Only real signatures (must contain a parameter list), no duplicates —
+        // generic details like "project function" are not overloads
+        if (symbol.detail.empty() || symbol.detail.find('(') == std::string::npos) continue;
+        if (std::find(results.begin(), results.end(), symbol.detail) == results.end()) {
             results.push_back(symbol.detail);
         }
     }
@@ -129,40 +147,47 @@ std::vector<std::string> SemanticSuggestions::FindSignatures(const std::string& 
 
 std::vector<SuggestionItem> SemanticSuggestions::GetSuggestions(const SuggestionContext& context) {
     std::vector<SuggestionItem> results;
-    
+
     const std::string& query = context.currentWord;
-    
-    // Don't suggest if query is too short (unless after special operators)
-    if (query.length() < static_cast<size_t>(minPrefixLength) && 
-        !context.afterDot && !context.afterArrow && !context.afterDoubleColon && !context.afterColon) {
+
+    bool isMemberAccess = (context.afterDot || context.afterArrow || context.afterDoubleColon || context.afterColon);
+
+    // Don't suggest if query is too short (unless after member access or explicit Ctrl+Space)
+    if (query.length() < static_cast<size_t>(minPrefixLength) &&
+        !isMemberAccess && !context.manualInvoke) {
         return results;
     }
-    
+
+    // Member access needs a valid receiver: skip after ')', numeric literals ("3."), etc.
+    if (isMemberAccess &&
+        (context.previousWord.empty() || std::isdigit(static_cast<unsigned char>(context.previousWord[0])))) {
+        return results;
+    }
+
     // If we have a target type, we strictly filter for members of that type (and don't add keywords/globals)
-    bool isMemberAccess = (context.afterDot || context.afterArrow || context.afterDoubleColon || context.afterColon);
     bool restrictToType = isMemberAccess && !context.targetType.empty();
 
-    if (!restrictToType) {
-        // Add candidates from all sources only if we are not restricting to a specific class type
-        if (!isMemberAccess) {
-            addCandidates(results, keywords, SuggestionKind::Keyword, query);
-            addCandidates(results, types, SuggestionKind::Type, query);
-            addCandidates(results, builtinFunctions, SuggestionKind::Function, query);
-            addCandidates(results, documentWords, SuggestionKind::Variable, query);
+    if (!isMemberAccess) {
+        addCandidates(results, keywords, SuggestionKind::Keyword, query);
+        addCandidates(results, types, SuggestionKind::Type, query);
+        addCandidates(results, builtinFunctions, SuggestionKind::Function, query);
+        addCandidates(results, documentWords, SuggestionKind::Variable, query);
 
-            // Add snippets
-            for (const auto& snippet : snippets) {
-                if (matchesQuery(snippet.label, query)) {
-                    SuggestionItem item = snippet;
-                    item.score = calculateMatchScore(snippet.label, query);
-                    // Boost snippet score slightly
-                    item.score += 5;
-                    results.push_back(item);
-                }
+        // Add snippets
+        for (const auto& snippet : snippets) {
+            int score;
+            if (computeMatch(snippet.label, query, score)) {
+                SuggestionItem item = snippet;
+                item.score = score + 5;
+                results.push_back(item);
             }
         }
+    } else if (!restrictToType && !query.empty()) {
+        // Member access on an unknown type: fall back to plain word suggestions
+        // once the user typed at least one character (like VSCode's word-based completion)
+        addCandidates(results, documentWords, SuggestionKind::Text, query);
     }
-    
+
     // Add custom symbols (this includes our engine API methods & properties)
     for (const auto& symbol : symbols) {
         // In C++, skip Lua-only properties (e.g. "alpha", "color") — use getter/setter methods instead
@@ -170,33 +195,78 @@ std::vector<SuggestionItem> SemanticSuggestions::GetSuggestions(const Suggestion
             continue;
         }
 
-        if (restrictToType) {
-            // If restricting, only match symbols belonging to this type or its ancestors
-            if (!isTypeOrAncestor(context.targetType, symbol.parentType)) {
+        if (isMemberAccess) {
+            // Members of an unknown type are never shown (word fallback handled above)
+            if (!restrictToType) continue;
+            // Only members of the target type or its ancestors
+            if (symbol.parentType.empty()) continue;
+            if (!isTypeOrAncestor(context.targetType, symbol.parentType)) continue;
+            // Lua ':' is method-call syntax — only callables make sense there
+            if (context.afterColon &&
+                symbol.kind != SuggestionKind::Method && symbol.kind != SuggestionKind::Function) {
                 continue;
             }
-        } else if (isMemberAccess) {
-            // Member access but unknown type — don't show random members from all classes
-            continue;
+        } else {
+            // Global scope: only top-level symbols (classes, enums, free functions).
+            // Members (methods/properties/enum values) only appear after '.', ':', '->' or '::'
+            if (!symbol.parentType.empty()) continue;
         }
 
-        if (matchesQuery(symbol.label, query)) {
+        int score;
+        if (computeMatch(symbol.label, query, score)) {
             SuggestionItem item = symbol;
-            item.score = calculateMatchScore(symbol.label, query);
+            item.score = score;
 
             // Boost exact parentType match (direct members over inherited)
             if (restrictToType && symbol.parentType == context.targetType) {
-                item.score += 50; 
+                item.score += 50;
+            }
+
+            // Boost kinds that fit the accessor used
+            if (context.afterDot) {
+                if (context.isCpp) {
+                    // C++ '.' is full member access: methods and fields first
+                    if (symbol.kind == SuggestionKind::Method || symbol.kind == SuggestionKind::Field ||
+                        symbol.kind == SuggestionKind::Function || symbol.kind == SuggestionKind::Constant ||
+                        symbol.kind == SuggestionKind::EnumMember) {
+                        item.score += 15;
+                    }
+                } else if (symbol.kind == SuggestionKind::Property || symbol.kind == SuggestionKind::Field ||
+                           symbol.kind == SuggestionKind::Constant || symbol.kind == SuggestionKind::EnumMember ||
+                           symbol.kind == SuggestionKind::Function) {
+                    // Lua '.' favors properties/constants/statics (methods use ':')
+                    item.score += 15;
+                }
+            }
+            if (context.afterArrow &&
+                (symbol.kind == SuggestionKind::Method || symbol.kind == SuggestionKind::Field)) {
+                item.score += 15;
+            }
+            if (context.afterDoubleColon &&
+                (symbol.kind == SuggestionKind::Function || symbol.kind == SuggestionKind::Constant ||
+                 symbol.kind == SuggestionKind::EnumMember)) {
+                item.score += 15;
+            }
+
+            // Prefer the symbol entry (has detail/doc) over the bare Type candidate of the same name
+            if (!isMemberAccess &&
+                (symbol.kind == SuggestionKind::Class || symbol.kind == SuggestionKind::Enum)) {
+                item.score += 9;
             }
 
             results.push_back(item);
         }
     }
-    
-    // Remove duplicates (prefer higher-ranked kind)
+
+    // Remove duplicates by label, preferring higher score. Snippets are kept
+    // separate so e.g. the "if" snippet survives next to the "if" keyword.
     std::unordered_map<std::string, size_t> seen;
     std::vector<SuggestionItem> unique;
     for (const auto& item : results) {
+        if (item.kind == SuggestionKind::Snippet) {
+            unique.push_back(item);
+            continue;
+        }
         auto it = seen.find(item.label);
         if (it == seen.end()) {
             seen[item.label] = unique.size();
@@ -209,29 +279,31 @@ std::vector<SuggestionItem> SemanticSuggestions::GetSuggestions(const Suggestion
         }
     }
     results = std::move(unique);
-    
-    // Remove the exact match of what's being typed (if it exists)
+
+    // Remove the exact match of what's being typed (snippets stay — they expand to more text)
     results.erase(
-        std::remove_if(results.begin(), results.end(), 
+        std::remove_if(results.begin(), results.end(),
             [&query, this](const SuggestionItem& item) {
+                if (item.kind == SuggestionKind::Snippet) return false;
                 std::string itemLower = caseSensitive ? item.label : toLower(item.label);
                 std::string queryLower = caseSensitive ? query : toLower(query);
                 return itemLower == queryLower;
             }),
         results.end()
     );
-    
-    // Sort by score (descending), then alphabetically
+
+    // Sort by score (descending), then shorter labels first, then alphabetically
     std::sort(results.begin(), results.end(), [](const SuggestionItem& a, const SuggestionItem& b) {
         if (a.score != b.score) return a.score > b.score;
+        if (a.label.size() != b.label.size()) return a.label.size() < b.label.size();
         return a.label < b.label;
     });
-    
+
     // Limit results
     if (results.size() > static_cast<size_t>(maxSuggestions)) {
         results.resize(maxSuggestions);
     }
-    
+
     return results;
 }
 
@@ -240,175 +312,101 @@ void SemanticSuggestions::addCandidates(std::vector<SuggestionItem>& results,
                                          SuggestionKind kind,
                                          const std::string& query) {
     for (const auto& word : source) {
-        if (matchesQuery(word, query)) {
+        int score;
+        if (computeMatch(word, query, score)) {
             SuggestionItem item;
             item.label = word;
             item.insertText = word;
             item.kind = kind;
-            item.score = calculateMatchScore(word, query);
-            
+            item.score = score;
+
             // Boost score for keywords and types
             if (kind == SuggestionKind::Keyword) item.score += 10;
             if (kind == SuggestionKind::Type) item.score += 8;
             if (kind == SuggestionKind::Function) item.score += 6;
-            
+
             results.push_back(item);
         }
     }
 }
 
-bool SemanticSuggestions::matchesQuery(const std::string& candidate, const std::string& query) const {
-    if (query.empty()) return true; // Show all candidates when no filter typed yet
-    
-    if (fuzzyMatching) {
-        int score;
-        return fuzzyMatch(candidate, query, score);
-    } else {
-        return prefixMatch(candidate, query);
-    }
-}
-
-int SemanticSuggestions::calculateMatchScore(const std::string& candidate, const std::string& query) const {
-    if (query.empty()) return 0;
-    
-    std::string candLower = caseSensitive ? candidate : toLower(candidate);
-    std::string queryLower = caseSensitive ? query : toLower(query);
-    
-    int score = 0;
-    
-    // Exact prefix match gets highest score
-    if (candLower.find(queryLower) == 0) {
-        score += 100;
-        // Bonus for exact length match
-        if (candLower.length() == queryLower.length()) {
-            score += 50;
-        }
-        // Bonus for case-sensitive prefix match
-        if (candidate.find(query) == 0) {
-            score += 20;
-        }
-    }
-    // Substring match
-    else if (candLower.find(queryLower) != std::string::npos) {
-        score += 50;
-    }
-    // Fuzzy match scoring
-    else if (fuzzyMatching) {
-        int fuzzyScore;
-        if (fuzzyMatch(candidate, query, fuzzyScore)) {
-            score += fuzzyScore;
-        }
-    }
-    
-    // Penalize very long candidates slightly
-    if (candidate.length() > query.length() + 10) {
-        score -= static_cast<int>(candidate.length() - query.length() - 10);
-    }
-    
-    // Bonus for camelCase/snake_case word boundary matches
-    size_t queryIdx = 0;
-    bool atBoundary = true;
-    for (size_t i = 0; i < candidate.size() && queryIdx < query.size(); ++i) {
-        char c = caseSensitive ? candidate[i] : std::tolower(candidate[i]);
-        char q = caseSensitive ? query[queryIdx] : std::tolower(query[queryIdx]);
-        
-        bool isBoundary = (i == 0) || 
-                          (candidate[i] == '_') || 
-                          (std::isupper(candidate[i]) && (i == 0 || !std::isupper(candidate[i-1])));
-        
-        if (c == q) {
-            if (isBoundary) {
-                score += 5; // Bonus for matching at word boundaries
-            }
-            queryIdx++;
-            atBoundary = false;
-        } else if (candidate[i] == '_') {
-            atBoundary = true;
-        }
-    }
-    
-    return score;
-}
-
-bool SemanticSuggestions::fuzzyMatch(const std::string& candidate, const std::string& query, int& outScore) const {
-    if (query.empty()) {
-        outScore = 0;
-        return true;
-    }
-    
-    if (query.length() > candidate.length()) {
-        outScore = 0;
-        return false;
-    }
-    
-    std::string candLower = caseSensitive ? candidate : toLower(candidate);
-    std::string queryLower = caseSensitive ? query : toLower(query);
-    
-    // Check if all query characters exist in candidate in order
-    size_t candIdx = 0;
-    size_t queryIdx = 0;
-    int score = 0;
-    int consecutiveBonus = 0;
-    size_t lastMatchIdx = 0;
-    
-    while (candIdx < candLower.size() && queryIdx < queryLower.size()) {
-        if (candLower[candIdx] == queryLower[queryIdx]) {
-            // Match found
-            score += 10;
-            
-            // Bonus for consecutive matches
-            if (queryIdx > 0 && candIdx == lastMatchIdx + 1) {
-                consecutiveBonus += 5;
-            }
-            
-            // Bonus for matching at start
-            if (candIdx == 0) {
-                score += 15;
-            }
-            
-            // Bonus for matching after separator
-            if (candIdx > 0 && (candidate[candIdx - 1] == '_' || candidate[candIdx - 1] == '-')) {
-                score += 10;
-            }
-            
-            // Bonus for camelCase boundary
-            if (candIdx > 0 && std::isupper(candidate[candIdx]) && std::islower(candidate[candIdx - 1])) {
-                score += 10;
-            }
-            
-            lastMatchIdx = candIdx;
-            queryIdx++;
-        }
-        candIdx++;
-    }
-    
-    if (queryIdx == queryLower.size()) {
-        outScore = score + consecutiveBonus;
-        // Penalize if matches are spread far apart
-        outScore -= static_cast<int>(lastMatchIdx - queryLower.size()) / 2;
-        return true;
-    }
-    
-    outScore = 0;
+bool SemanticSuggestions::isWordBoundary(const std::string& candidate, size_t i) {
+    if (i == 0) return true;
+    unsigned char c = static_cast<unsigned char>(candidate[i]);
+    unsigned char p = static_cast<unsigned char>(candidate[i - 1]);
+    if (p == '_' || p == '-' || p == '.') return true;
+    if (std::isupper(c) && !std::isupper(p)) return true;      // camelCase hump
+    if (std::isdigit(c) && !std::isdigit(p)) return true;      // letter→digit transition
     return false;
 }
 
-bool SemanticSuggestions::prefixMatch(const std::string& candidate, const std::string& query) const {
+// Tiered matching, modeled after VSCode's completion filter:
+//   1. prefix match           (strongest — what most users expect)
+//   2. substring starting at a word boundary ("Pos" -> setPosition)
+//   3. boundary-anchored subsequence ("sP" / "spos" -> setPosition);
+//      every query char must continue a run or start at a word boundary
+//   4. plain substring anywhere
+// Scattered fuzzy matches (e.g. "se" -> "translate") are rejected, which is
+// the main thing that keeps the list short and precise.
+bool SemanticSuggestions::computeMatch(const std::string& candidate, const std::string& query, int& outScore) const {
+    outScore = 0;
+    if (query.empty()) return true; // Show all candidates when no filter typed yet
     if (query.length() > candidate.length()) return false;
-    
-    std::string candLower = caseSensitive ? candidate : toLower(candidate);
-    std::string queryLower = caseSensitive ? query : toLower(query);
-    
-    return candLower.find(queryLower) == 0;
-}
 
-bool SemanticSuggestions::substringMatch(const std::string& candidate, const std::string& query) const {
-    if (query.length() > candidate.length()) return false;
-    
-    std::string candLower = caseSensitive ? candidate : toLower(candidate);
-    std::string queryLower = caseSensitive ? query : toLower(query);
-    
-    return candLower.find(queryLower) != std::string::npos;
+    std::string candCmp = caseSensitive ? candidate : toLower(candidate);
+    std::string queryCmp = caseSensitive ? query : toLower(query);
+
+    // Tier 1: prefix match
+    if (candCmp.compare(0, queryCmp.size(), queryCmp) == 0) {
+        outScore = 2000;
+        if (candidate.compare(0, query.size(), query) == 0) outScore += 100; // exact case
+        return true;
+    }
+
+    if (!fuzzyMatching) return false;
+
+    // Tier 2: substring beginning at a word boundary (e.g. "Pos" in "setPosition")
+    size_t found = candCmp.find(queryCmp);
+    while (found != std::string::npos) {
+        if (isWordBoundary(candidate, found)) {
+            outScore = 1200 - static_cast<int>(std::min<size_t>(found, 100)); // earlier is better
+            return true;
+        }
+        found = candCmp.find(queryCmp, found + 1);
+    }
+
+    // Tier 3: boundary-anchored subsequence (camelCase / snake_case initials)
+    {
+        size_t qi = 0;
+        size_t lastMatch = std::string::npos;
+        int bonus = 0;
+        for (size_t i = 0; i < candCmp.size() && qi < queryCmp.size(); ++i) {
+            if (candCmp[i] != queryCmp[qi]) continue;
+            bool consecutive = (lastMatch != std::string::npos && i == lastMatch + 1);
+            bool boundary = isWordBoundary(candidate, i);
+            // First query char must start at the very beginning of the candidate
+            if (qi == 0 && i != 0) break;
+            if (!consecutive && !boundary) continue;
+            if (boundary && qi > 0) bonus += 10;
+            if (consecutive) bonus += 5;
+            lastMatch = i;
+            qi++;
+        }
+        if (qi == queryCmp.size()) {
+            outScore = 800 + std::min(bonus, 150);
+            return true;
+        }
+    }
+
+    // Tier 4: plain substring anywhere — only for queries long enough to be
+    // intentional. Short unanchored substrings ("et" in "setPosition") are the
+    // main source of noise, and Tiers 1-3 already cover short queries precisely.
+    if (queryCmp.size() >= 3 && candCmp.find(queryCmp) != std::string::npos) {
+        outScore = 400;
+        return true;
+    }
+
+    return false;
 }
 
 std::string SemanticSuggestions::toLower(const std::string& str) const {

@@ -224,7 +224,10 @@ void CustomTextEditor::initializeSuggestions() {
 
     // Configure the suggestions engine
     suggestions->SetMinPrefixLength(1);
-    suggestions->SetMaxSuggestions(15);
+    // The popup shows ~10 rows and scrolls; a high cap keeps inherited members
+    // visible (e.g. Text has 15+ direct members that would otherwise crowd out
+    // EntityHandle:getEntity etc.)
+    suggestions->SetMaxSuggestions(200);
     suggestions->SetFuzzyMatching(true);
     suggestions->SetCaseSensitive(false);
 
@@ -1898,11 +1901,18 @@ std::string CustomTextEditor::inferTypeOfVariable(const std::string& varName, in
                 }
             }
         } else if (language == SyntaxLanguage::Lua) {
-            if (std::regex_search(line, match, luaLocalVarRegex)) {
-                return match[1].str();
-            }
-            if (std::regex_search(line, match, luaVarRegex)) {
-                return match[1].str();
+            if (std::regex_search(line, match, luaLocalVarRegex) ||
+                std::regex_search(line, match, luaVarRegex)) {
+                std::string typeName = match[1].str();
+                // Constructor-style call: "local p = Player.new()" / "Player.create()" -> Player
+                size_t sep = typeName.find_first_of(".:");
+                if (sep != std::string::npos) {
+                    std::string suffix = typeName.substr(sep + 1);
+                    if (suffix == "new" || suffix == "create") {
+                        typeName = typeName.substr(0, sep);
+                    }
+                }
+                return typeName;
             }
         }
     }
@@ -1971,6 +1981,9 @@ SuggestionContext CustomTextEditor::buildSuggestionContext() const {
             if (ctx.afterDoubleColon) {
                 // For ::, the previousWord IS the type name (e.g. Vector3::ZERO)
                 ctx.targetType = ctx.previousWord;
+            } else if (suggestions && suggestions->IsKnownClassOrEnum(ctx.previousWord)) {
+                // Static access on a class/enum name itself (e.g. Engine.setScene, Scaling.NATIVE)
+                ctx.targetType = ctx.previousWord;
             } else {
                 ctx.targetType = inferTypeOfVariable(ctx.previousWord, pos.line);
                 // Fallback: look up the variable in project symbols (e.g. header member variables)
@@ -1991,13 +2004,14 @@ SuggestionContext CustomTextEditor::buildSuggestionContext() const {
     return ctx;
 }
 
-void CustomTextEditor::TriggerAutoComplete() {
+void CustomTextEditor::TriggerAutoComplete(bool manualInvoke) {
     if (!autoComplete || readOnly || !suggestions) return;
 
     autoCompleteAnchor = cursors[primaryCursor].position;
-    updateSuggestions();
+    updateSuggestions(manualInvoke);
     showAutoComplete = !currentSuggestions.empty();
     suggestionIndex = 0;
+    scrollToSuggestion = true; // scroll back to top when the popup opens or refilters
 }
 
 void CustomTextEditor::CloseAutoComplete() {
@@ -2080,14 +2094,19 @@ void CustomTextEditor::triggerParamHint() {
                 int varStart = varEnd + 1;
                 while (varStart > 0 && (std::isalnum(funcLine[varStart - 1]) || funcLine[varStart - 1] == '_')) varStart--;
                 std::string varName = funcLine.substr(varStart, varEnd - varStart + 1);
-                parentType = inferTypeOfVariable(varName, searchLine);
-                if (parentType.empty() && suggestions) {
-                    parentType = suggestions->FindSymbolType(varName);
-                }
-                // Strip namespace
-                size_t lastColon = parentType.rfind(':');
-                if (lastColon != std::string::npos) {
-                    parentType = parentType.substr(lastColon + 1);
+                if (suggestions && suggestions->IsKnownClassOrEnum(varName)) {
+                    // Static call on a class name itself (e.g. Engine.setScene)
+                    parentType = varName;
+                } else {
+                    parentType = inferTypeOfVariable(varName, searchLine);
+                    if (parentType.empty() && suggestions) {
+                        parentType = suggestions->FindSymbolType(varName);
+                    }
+                    // Strip namespace
+                    size_t lastColon = parentType.rfind(':');
+                    if (lastColon != std::string::npos) {
+                        parentType = parentType.substr(lastColon + 1);
+                    }
                 }
             }
         } else if (accessor == '>' && beforeFunc > 0 && funcLine[beforeFunc - 1] == '-') {
@@ -2369,23 +2388,72 @@ void CustomTextEditor::UpdateProjectSymbols(const std::vector<ProjectSymbol>& sy
         addEngineAPISuggestions();
     }
 
+    // Engine API symbols are authoritative (real signatures). Engine headers may live
+    // inside the project tree, so the project scanner can produce duplicates of the
+    // same members with a generic "project function" detail — skip those.
+    static const std::unordered_set<std::string> engineKeys = [] {
+        std::unordered_set<std::string> keys;
+        for (const auto& sym : getEngineAPISymbols()) {
+            keys.insert(std::string(sym.name) + "\x1f" + (sym.parent ? sym.parent : ""));
+        }
+        return keys;
+    }();
+
     // Add pre-parsed project symbols
     for (const auto& sym : symbols) {
+        if (engineKeys.find(sym.name + "\x1f" + sym.parentType) != engineKeys.end()) continue;
         suggestions->AddSymbol(sym.name, static_cast<SuggestionKind>(sym.kind), sym.detail, sym.parentType, sym.typeInfo);
     }
 }
 
-void CustomTextEditor::updateSuggestions() {
-    if (!suggestions) return;
+bool CustomTextEditor::isInCommentOrString(const TextPosition& pos) const {
+    if (pos.line < 0 || pos.line >= static_cast<int>(lineTokens.size())) return false;
+
+    // Look at the character just typed (left of the cursor)
+    int col = pos.column > 0 ? pos.column - 1 : 0;
+    for (const auto& token : lineTokens[pos.line]) {
+        if (col >= token.start && col < token.start + token.length) {
+            return token.type == TokenType::Comment ||
+                   token.type == TokenType::MultiLineComment ||
+                   token.type == TokenType::String;
+        }
+    }
+    return false;
+}
+
+void CustomTextEditor::updateSuggestions(bool manualInvoke) {
+    if (!suggestions || cursors.empty()) return;
+
+    // No suggestions inside comments or string literals
+    if (isInCommentOrString(cursors[primaryCursor].position)) {
+        currentSuggestions.clear();
+        autoCompleteItems.clear();
+        showAutoComplete = false;
+        return;
+    }
 
     // Update document words in the suggestions engine
     suggestions->UpdateDocumentWords(lines);
 
     // Build context and get suggestions
     SuggestionContext ctx = buildSuggestionContext();
+    ctx.manualInvoke = manualInvoke;
     autoCompleteAnchor = findWordStart(cursors[primaryCursor].position);
 
     currentSuggestions = suggestions->GetSuggestions(ctx);
+
+    // Close the popup if filtering (e.g. backspace) left nothing to show
+    if (showAutoComplete && currentSuggestions.empty()) {
+        showAutoComplete = false;
+    }
+
+    // Every content refilter (typing forward or backspace) re-ranks the list,
+    // so snap the selection back to the best match at the top and scroll it into
+    // view — matching VSCode, where each keystroke selects the top result.
+    if (!currentSuggestions.empty()) {
+        suggestionIndex = 0;
+        scrollToSuggestion = true;
+    }
 
     // Also populate the old autoCompleteItems for backward compatibility
     autoCompleteItems.clear();
@@ -3061,9 +3129,9 @@ void CustomTextEditor::handleKeyboardInput() {
         }
     }
 
-    // Trigger auto-complete with Ctrl+Space
+    // Trigger auto-complete with Ctrl+Space (manual invoke shows the full list)
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Space)) {
-        TriggerAutoComplete();
+        TriggerAutoComplete(true);
     }
 
     // Update param hint after any cursor movement
