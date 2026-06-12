@@ -66,6 +66,7 @@ namespace doriax::editor {
         fs::path getExportProjectRoot() const;
         fs::path getShaderOutputDir() const;
         static bool shouldSkipExportSupportFile(const fs::path& relativePath);
+        static bool isCppSourceFile(const fs::path& path);
 
         bool checkTargetDir();
         bool clearGenerated();

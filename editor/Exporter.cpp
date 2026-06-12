@@ -9,6 +9,7 @@
 #include "pool/ShaderPool.h"
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <future>
 #include <map>
@@ -194,6 +195,23 @@ fs::path editor::Exporter::getShaderOutputDir() const {
 
 bool editor::Exporter::shouldSkipExportSupportFile(const fs::path& relativePath) {
     return relativePath == "CMakeLists.txt" || relativePath.filename() == "AGENTS.md";
+}
+
+bool editor::Exporter::isCppSourceFile(const fs::path& path) {
+    // C++ scripts are exported to project/scripts by copyCppScripts(); they must
+    // never be duplicated into the assets or lua trees. The exported build globs
+    // every .cpp under the project root recursively, so a stray source file in
+    // both assets and lua would compile twice and break linking with multiple
+    // definition errors. Filter by extension so unregistered/orphan scripts are
+    // skipped too (not only those attached to a scene).
+    std::string ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    static const std::set<std::string> cppExtensions = {
+        ".cpp", ".cc", ".cxx", ".c++", ".c",
+        ".h", ".hpp", ".hh", ".hxx", ".h++", ".inl"
+    };
+    return cppExtensions.count(ext) > 0;
 }
 
 bool editor::Exporter::checkTargetDir() {
@@ -429,23 +447,6 @@ bool editor::Exporter::copyAssets() {
     fs::path assetsDst = getExportProjectRoot() / "assets";
     fs::create_directories(assetsDst, ec);
 
-    // Collect C++ script paths to exclude from asset copy
-    std::set<fs::path> scriptPaths;
-    for (const auto& sceneProject : project->getScenes()) {
-        for (const auto& script : sceneProject.cppScripts) {
-            if (!script.path.empty()) {
-                fs::path p = script.path;
-                if (p.is_relative()) p = project->getProjectPath() / p;
-                scriptPaths.insert(fs::weakly_canonical(p, ec));
-            }
-            if (!script.headerPath.empty()) {
-                fs::path p = script.headerPath;
-                if (p.is_relative()) p = project->getProjectPath() / p;
-                scriptPaths.insert(fs::weakly_canonical(p, ec));
-            }
-        }
-    }
-
     // Copies srcDir into assetsDst preserving hierarchy relative to srcDir.
     auto copyDirMaintainingHierarchy = [&](const fs::path& srcDir) {
         for (auto& entry : fs::recursive_directory_iterator(srcDir, fs::directory_options::skip_permission_denied, ec)) {
@@ -459,8 +460,8 @@ bool editor::Exporter::copyAssets() {
             // Skip project support files that should not ship as assets
             if (shouldSkipExportSupportFile(relPath)) continue;
 
-            // Skip C++ script files (handled by copyCppScripts)
-            if (entry.is_regular_file() && scriptPaths.count(fs::weakly_canonical(entry.path(), ec))) continue;
+            // Skip C++ source/header files; registered scripts ship via copyCppScripts
+            if (entry.is_regular_file() && isCppSourceFile(entry.path())) continue;
 
             fs::path destPath = assetsDst / relPath;
             if (entry.is_directory()) {
@@ -522,23 +523,6 @@ bool editor::Exporter::copyLua() {
     fs::path luaDst = getExportProjectRoot() / "lua";
     fs::create_directories(luaDst, ec);
 
-    // Collect C++ script paths to exclude
-    std::set<fs::path> scriptPaths;
-    for (const auto& sceneProject : project->getScenes()) {
-        for (const auto& script : sceneProject.cppScripts) {
-            if (!script.path.empty()) {
-                fs::path p = script.path;
-                if (p.is_relative()) p = project->getProjectPath() / p;
-                scriptPaths.insert(fs::weakly_canonical(p, ec));
-            }
-            if (!script.headerPath.empty()) {
-                fs::path p = script.headerPath;
-                if (p.is_relative()) p = project->getProjectPath() / p;
-                scriptPaths.insert(fs::weakly_canonical(p, ec));
-            }
-        }
-    }
-
     fs::path terrainMapsSrc = fs::weakly_canonical(project->getTerrainMapsDir(), ec);
 
     for (auto it = fs::recursive_directory_iterator(luaSrc, fs::directory_options::skip_permission_denied, ec);
@@ -560,8 +544,8 @@ bool editor::Exporter::copyLua() {
             if (!ec && entryCanonical == terrainMapsSrc) { it.disable_recursion_pending(); continue; }
         }
 
-        // Skip C++ script files (handled by copyCppScripts)
-        if (entry.is_regular_file() && scriptPaths.count(fs::weakly_canonical(entry.path(), ec))) continue;
+        // Skip C++ source/header files; registered scripts ship via copyCppScripts
+        if (entry.is_regular_file() && isCppSourceFile(entry.path())) continue;
 
         fs::path destPath = luaDst / relPath;
         if (entry.is_directory()) {
