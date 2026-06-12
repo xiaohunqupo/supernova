@@ -38,6 +38,7 @@ namespace doriax{
 		Vector4 eyePos;
 		Vector4 cameraDir;
 		Vector4 globalIllum; //global illumination
+		Vector4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
 	} fs_lighting_t;
 
 	typedef struct fs_fog_t {
@@ -109,6 +110,7 @@ namespace doriax{
 		bool hasLights;
 		bool hasShadows;
 		bool hasFog;
+		bool hasIBL;
 		bool hasMultipleCameras;
 
 		fs_lighting_t fs_lighting;
@@ -126,6 +128,7 @@ namespace doriax{
 		bool loadLights(int numLights);
 		void processLights(int numLights, CameraComponent& camera, Transform& cameraTransform);
 		bool loadAndProcessFog();
+		void updateSkyEnvironment(SkyComponent& sky);
 		TextureShaderType getShadowMapByIndex(int index);
 		TextureShaderType getShadowMapCubeByIndex(int index);
 		void configureLightShadowNearFar(LightComponent& light, const CameraComponent& camera);

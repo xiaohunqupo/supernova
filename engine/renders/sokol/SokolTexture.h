@@ -34,7 +34,14 @@ namespace doriax{
 
         bool createTexture(
                     const std::string& label, int width, int height,
-                    ColorFormat colorFormat, TextureType type, int numFaces, void* data[6], size_t size[6], 
+                    ColorFormat colorFormat, TextureType type, int numFaces, void* data[6], size_t size[6],
+                    TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV);
+
+        // creates a cubemap with custom (pre-filtered) mipmap data,
+        // data[level] must contain all 6 faces in one contiguous block
+        bool createTextureCubeWithMips(
+                    const std::string& label, int width,
+                    ColorFormat colorFormat, int numMipmaps, void* data[], size_t size[],
                     TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV);
 
         bool createFramebufferTexture(

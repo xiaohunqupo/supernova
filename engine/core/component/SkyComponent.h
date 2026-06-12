@@ -28,6 +28,14 @@ namespace doriax{
 
         float rotation = 0;
 
+        bool visible = true; // when false the sky is not drawn but still feeds IBL
+
+        // IBL environment maps generated from texture
+        TextureRender irradianceMap;
+        TextureRender prefilteredMap;
+        bool envMapsLoaded = false;
+        bool needUpdateEnvironment = true;
+
         bool needUpdateTexture = false;
         bool needUpdateSky = true;
         bool needReload = false;

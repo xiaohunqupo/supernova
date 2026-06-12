@@ -1227,7 +1227,7 @@ bool editor::Properties::canAddComponent(SceneProject* sceneProject, Entity enti
     return std::find(existingComponents.begin(), existingComponents.end(), cpType) == existingComponents.end();
 }
 
-Texture editor::Properties::getMaterialPreview(const Material& material, const std::string id){
+Texture editor::Properties::getMaterialPreview(const Material& material, const std::string id, bool receiveIBL){
     MaterialRender& materialRender = materialRenders[id];
 
     auto texPending = [](const Texture& t) {
@@ -1239,7 +1239,9 @@ Texture editor::Properties::getMaterialPreview(const Material& material, const s
                    texPending(material.metallicRoughnessTexture) || texPending(material.occlusionTexture) ||
                    texPending(material.normalTexture);
 
-    if ((materialRender.getMaterial() != material) || !materialRender.getFramebuffer()->isCreated() || pending){
+    if ((materialRender.getMaterial() != material) || materialRender.getReceiveIBL() != receiveIBL ||
+        !materialRender.getFramebuffer()->isCreated() || pending){
+        materialRender.setReceiveIBL(receiveIBL);
         materialRender.applyMaterial(material);
         Engine::executeSceneOnce(materialRender.getScene());
     }
@@ -3466,7 +3468,12 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         ImGui::BeginGroup();
 
-        Texture texRender = getMaterialPreview(newValue, id);
+        bool receiveIBL = true;
+        if (cpType == ComponentType::MeshComponent && !entities.empty()) {
+            receiveIBL = sceneProject->scene->getComponent<MeshComponent>(entities[0]).receiveIBL;
+        }
+
+        Texture texRender = getMaterialPreview(newValue, id, receiveIBL);
         float thumbSize = ImGui::GetFrameHeight() * 3;
         ImGui::Image(texRender.getRender()->getGLHandler(), ImVec2(thumbSize, thumbSize), ImVec2(0, 1), ImVec2(1, 0));
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
@@ -4595,6 +4602,10 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
 
         ImGui::EndPopup();
     }
+
+    RowSettings iblSettings;
+    iblSettings.help = "Light this mesh with the scene's Sky environment (image-based lighting). Requires a Sky entity with a texture.";
+    propertyRow(RowPropertyType::Bool, cpType, "receiveIBL", "Receive IBL", sceneProject, entities, iblSettings);
 
     propertyRow(RowPropertyType::Bool, cpType, "castShadows", "Cast Shadows", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "receiveShadows", "Receive Shadows", sceneProject, entities);
@@ -7202,6 +7213,9 @@ void editor::Properties::drawSkyComponent(ComponentType cpType, SceneProject* sc
 
     beginTable(cpType, getLabelSize("Rotation"));
 
+    RowSettings visibleSettings;
+    visibleSettings.help = "When disabled, the sky is not drawn but still provides image-based lighting to meshes.";
+    propertyRow(RowPropertyType::Bool, cpType, "visible", "Visible", sceneProject, entities, visibleSettings);
     propertyRow(RowPropertyType::TextureCube, cpType, "texture", "Texture", sceneProject, entities);
     propertyRow(RowPropertyType::Color4L, cpType, "color", "Color", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "rotation", "Rotation", sceneProject, entities);

@@ -140,6 +140,8 @@ namespace doriax{
         SHADOWMAP8,
         SHADOWCUBEMAP1,
         SKYCUBE,
+        IRRADIANCEMAP,
+        PREFILTEREDMAP,
         UI,
         POINTS,
         HEIGHTMAP,

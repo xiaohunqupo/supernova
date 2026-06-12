@@ -5,6 +5,7 @@
 #include "object/Object.h"
 #include "object/Shape.h"
 #include "object/Light.h"
+#include "object/environment/SkyBox.h"
 
 namespace doriax::editor{
 
@@ -14,8 +15,10 @@ namespace doriax::editor{
         Camera* camera;
 
         Light* light;
+        SkyBox* sky;
 
         Shape* sphere;
+        bool receiveIBL = true;
     public:
         MaterialRender();
         virtual ~MaterialRender();
@@ -27,6 +30,9 @@ namespace doriax::editor{
 
         void applyMaterial(const Material& material);
         const Material getMaterial();
+
+        void setReceiveIBL(bool value);
+        bool getReceiveIBL() const;
 
         Framebuffer* getFramebuffer();
         Texture getTexture();

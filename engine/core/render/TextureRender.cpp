@@ -31,6 +31,16 @@ bool TextureRender::createTexture(
         return false;
 }
 
+bool TextureRender::createTextureCubeWithMips(
+                const std::string& label, int width,
+                ColorFormat colorFormat, int numMipmaps, void* data[], size_t size[],
+                TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV){
+    if (Engine::isViewLoaded() && !isCreated())
+        return backend.createTextureCubeWithMips(label, width, colorFormat, numMipmaps, data, size, minFilter, magFilter, wrapU, wrapV);
+    else
+        return false;
+}
+
 bool TextureRender::createFramebufferTexture(
                 TextureType type, bool depth, bool shadowMap, int width, int height, 
                 TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV){

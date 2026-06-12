@@ -14,7 +14,9 @@
 #include "pool/ShaderPool.h"
 #include "pool/TexturePool.h"
 #include "math/Vector3.h"
+#include "texture/IBLEnvironment.h"
 #include "util/Angle.h"
+#include "util/Color.h"
 #include "buffer/ExternalBuffer.h"
 #include "math/AABB.h"
 #include <memory>
@@ -46,6 +48,7 @@ void RenderSystem::load(){
     hasLights = false;
     hasShadows = false;
     hasFog = false;
+    hasIBL = false;
     hasMultipleCameras = false;
 
     createEmptyTextures();
@@ -306,6 +309,16 @@ void RenderSystem::processLights(int numLights, CameraComponent& camera, Transfo
     fs_lighting.cameraDir = Vector4(camera.worldDirection.x, camera.worldDirection.y, camera.worldDirection.z, 0.0);
     fs_lighting.globalIllum = Vector4(scene->getGlobalIlluminationColorLinear(), scene->getGlobalIlluminationIntensity());
 
+    fs_lighting.envColor = Vector4(1.0, 1.0, 1.0, 0.0);
+    if (hasIBL){
+        auto skys = scene->getComponentArray<SkyComponent>();
+        if (skys->size() > 0){
+            SkyComponent& sky = skys->getComponentFromIndex(0);
+            Vector3 linColor = Color::sRGBToLinear(Vector3(sky.color.x, sky.color.y, sky.color.z));
+            fs_lighting.envColor = Vector4(linColor.x, linColor.y, linColor.z, Angle::defaultToRad(sky.rotation));
+        }
+    }
+
     // Setting intensity of other lights to zero
     for (int i = numLights; i < MAX_LIGHTS; i++){
         fs_lighting.color_intensity[i].w = 0.0;
@@ -333,6 +346,44 @@ bool RenderSystem::loadAndProcessFog(){
     }
 
     return hasFog;
+}
+
+// generates (or regenerates) the IBL environment maps from the sky texture,
+// must run while the texture pixels are still on CPU (before the sky GPU upload)
+void RenderSystem::updateSkyEnvironment(SkyComponent& sky){
+    if (!sky.needUpdateEnvironment)
+        return;
+
+    if (sky.texture.empty() || sky.texture.getNumFaces() != 6){
+        if (sky.envMapsLoaded){
+            sky.irradianceMap.destroyTexture();
+            sky.prefilteredMap.destroyTexture();
+            sky.envMapsLoaded = false;
+        }
+        sky.needUpdateEnvironment = false;
+        return;
+    }
+
+    TextureLoadResult texResult = sky.texture.load();
+
+    if (texResult.state == ResourceLoadState::Loading){
+        return; // try again next frame
+    }
+
+    if (texResult.state == ResourceLoadState::Finished && texResult.data){
+        if (sky.envMapsLoaded){
+            sky.irradianceMap.destroyTexture();
+            sky.prefilteredMap.destroyTexture();
+            sky.envMapsLoaded = false;
+        }
+
+        if (IBLEnvironment::generate(sky.texture.getId(), *(texResult.data), sky.irradianceMap, sky.prefilteredMap)){
+            sky.envMapsLoaded = true;
+            needReloadMeshes();
+        }
+    }
+
+    sky.needUpdateEnvironment = false;
 }
 
 TextureShaderType RenderSystem::getShadowMapByIndex(int index){
@@ -715,6 +766,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         bool p_unlit = false;
         bool p_punctual = false;
+        bool p_ibl = false;
         bool p_hasTexture1 = false;
         bool p_hasNormalMap = false;
         bool p_hasNormal = false;
@@ -728,8 +780,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         if (terrain && (!terrain->blendMap.empty() || hasPBRTextures)){
             p_hasTexture1 = true;
         }
-        if (hasLights && mesh.receiveLights){
-            p_punctual = true;
+        bool useIBL = hasIBL && mesh.receiveIBL;
+        if ((hasLights || useIBL) && mesh.receiveLights){
+            p_punctual = hasLights;
+            p_ibl = useIBL;
 
             p_hasNormal = true;
             if (mesh.submeshes[i].hasTangent){
@@ -749,11 +803,11 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         }
 
         mesh.submeshes[i].shaderProperties = ShaderPool::getMeshProperties(
-                        p_unlit, p_hasTexture1, false, p_punctual, 
-                        p_receiveShadows, p_shadowsPCF, p_hasNormal, p_hasNormalMap, 
-                        p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect, 
+                        p_unlit, p_hasTexture1, false, p_punctual,
+                        p_receiveShadows, p_shadowsPCF, p_hasNormal, p_hasNormalMap,
+                        p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
-                        (terrain)?true:false, (instmesh)?true:false);
+                        (terrain)?true:false, (instmesh)?true:false, p_ibl);
         mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties);
         if (hasShadows && mesh.castShadows){
             mesh.submeshes[i].depthShaderProperties = ShaderPool::getDepthMeshProperties(
@@ -773,7 +827,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         if (hasFog){
             mesh.submeshes[i].slotFSFog = shaderData.getUniformBlockIndex(UniformBlockType::FS_FOG);
         }
-        if (hasLights && mesh.receiveLights){
+        if ((hasLights || useIBL) && mesh.receiveLights){
             mesh.submeshes[i].slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
             if (hasShadows && mesh.receiveShadows){
                 mesh.submeshes[i].slotVSShadows = shaderData.getUniformBlockIndex(UniformBlockType::VS_SHADOWS);
@@ -794,6 +848,15 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             return false;
         }
         loadShadowTextures(shaderData, mesh.submeshes[i].render, mesh.receiveLights, mesh.receiveShadows);
+
+        if (p_ibl){
+            auto skyArray = scene->getComponentArray<SkyComponent>();
+            if (skyArray->size() > 0){
+                SkyComponent& sky = skyArray->getComponentFromIndex(0);
+                render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, &sky.irradianceMap);
+                render.addTexture(shaderData.getTextureIndex(TextureShaderType::PREFILTEREDMAP), ShaderStageType::FRAGMENT, &sky.prefilteredMap);
+            }
+        }
 
         if (terrain){
             mesh.submeshes[i].slotVSTerrain = shaderData.getUniformBlockIndex(UniformBlockType::TERRAIN_VS_PARAMS);
@@ -1061,8 +1124,12 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
                 render.applyUniformBlock(mesh.submeshes[i].slotFSFog, sizeof(float) * 8, &fs_fog);
             }
 
-            if (hasLights && mesh.receiveLights){
-                render.applyUniformBlock(mesh.submeshes[i].slotFSLighting, sizeof(float) * (16 * MAX_LIGHTS + 12), &fs_lighting);
+            // a submesh is lit (uses the lighting block + full PBR params) unless it
+            // was compiled as MATERIAL_UNLIT (property bit 0)
+            bool submeshLit = !(mesh.submeshes[i].shaderProperties & (1u << 0));
+
+            if (submeshLit){
+                render.applyUniformBlock(mesh.submeshes[i].slotFSLighting, sizeof(float) * (16 * MAX_LIGHTS + 16), &fs_lighting);
                 if (hasShadows && mesh.receiveShadows){
                     render.applyUniformBlock(mesh.submeshes[i].slotVSShadows, sizeof(float) * (20 * MAX_SHADOWSMAP), &vs_shadows);
                     render.applyUniformBlock(mesh.submeshes[i].slotFSShadows, sizeof(float) * (4 * (MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP)), &fs_shadows);
@@ -1085,7 +1152,7 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
                 }
             }
 
-            if (hasLights && mesh.receiveLights){
+            if (submeshLit){
                 render.applyUniformBlock(mesh.submeshes[i].slotFSParams, sizeof(float) * 12, &mesh.submeshes[i].material);
             }else{
                 render.applyUniformBlock(mesh.submeshes[i].slotFSParams, sizeof(float) * 4, &mesh.submeshes[i].material);
@@ -1845,6 +1912,12 @@ void RenderSystem::destroySky(Entity entity, SkyComponent& sky){
 
         //Destroy texture
         sky.texture.destroy();
+
+        //Destroy IBL environment maps
+        sky.irradianceMap.destroyTexture();
+        sky.prefilteredMap.destroyTexture();
+        sky.envMapsLoaded = false;
+        sky.needUpdateEnvironment = true;
     }
 
     //Destroy render
@@ -2910,6 +2983,7 @@ void RenderSystem::update(double dt){
     loadAndProcessFog();
 
     auto skys = scene->getComponentArray<SkyComponent>();
+    bool newHasIBL = false;
     if (skys->size() > 0){
         SkyComponent& sky = skys->getComponentFromIndex(0);
         Entity entity = skys->getEntity(0);
@@ -2923,6 +2997,13 @@ void RenderSystem::update(double dt){
             if (sky.texture.empty()){
                 sky.needReload = true;
             }
+            // texture changed: IBL environment maps must be regenerated (or destroyed)
+            sky.needUpdateEnvironment = true;
+        }
+
+        // generate IBL maps before loadSky uploads (and releases) the texture pixels
+        if (Engine::isViewLoaded()){
+            updateSkyEnvironment(sky);
         }
 
         if (sky.loaded && sky.needReload){
@@ -2931,6 +3012,13 @@ void RenderSystem::update(double dt){
         if (!sky.loadCalled){
             loadSky(entity, sky, pipelines);
         }
+
+        newHasIBL = sky.envMapsLoaded;
+    }
+
+    if (hasIBL != newHasIBL){
+        hasIBL = newHasIBL;
+        needReloadMeshes();
     }
 
     for (int i = 0; i < transforms->size(); i++){
@@ -3287,11 +3375,13 @@ void RenderSystem::draw(){
         if (skys->size() > 0){
             SkyComponent& sky = skys->getComponentFromIndex(0);
             Entity entity = skys->getEntity(0);
-            if (hasMultipleCameras){
-                updateSkyViewProjection(sky, camera);
-            }
+            if (sky.visible){
+                if (hasMultipleCameras){
+                    updateSkyViewProjection(sky, camera);
+                }
 
-            drawSky(sky, camera.renderToTexture || Engine::getFramebuffer());
+                drawSky(sky, camera.renderToTexture || Engine::getFramebuffer());
+            }
         }
 
         for (int i = 0; i < transforms->size(); i++){

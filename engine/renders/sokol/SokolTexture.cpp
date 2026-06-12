@@ -287,6 +287,63 @@ bool SokolTexture::createTexture(
     return false;
 }
 
+bool SokolTexture::createTextureCubeWithMips(
+            const std::string& label, int width,
+            ColorFormat colorFormat, int numMipmaps, void* data[], size_t size[],
+            TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV){
+
+    sg_pixel_format pixelFormat;
+    if (colorFormat == ColorFormat::RGBA){
+        pixelFormat = SG_PIXELFORMAT_RGBA8;
+    }else if (colorFormat == ColorFormat::RED){
+        pixelFormat = SG_PIXELFORMAT_R8;
+    }else{
+        Log::error("Renders only support 8bpp and 32bpp textures");
+        return false;
+    }
+
+    if (numMipmaps > SG_MAX_MIPMAPS){
+        Log::error("Cubemap %s has more mipmaps than supported", label.c_str());
+        return false;
+    }
+
+    sg_image_desc image_desc = {0};
+    image_desc.type = SG_IMAGETYPE_CUBE;
+    image_desc.width = width;
+    image_desc.height = width;
+    image_desc.pixel_format = pixelFormat;
+    image_desc.num_slices = 6;
+    image_desc.num_mipmaps = numMipmaps;
+    image_desc.label = label.c_str();
+
+    for (int level = 0; level < numMipmaps; level++){
+        image_desc.data.mip_levels[level].ptr = data[level];
+        image_desc.data.mip_levels[level].size = size[level];
+    }
+
+    sg_sampler_desc sampler_desc = {0};
+    sampler_desc.min_filter = getFilter(minFilter);
+    sampler_desc.mag_filter = getFilter(magFilter);
+    sampler_desc.mipmap_filter = getFilterMipmap(minFilter);
+    sampler_desc.wrap_u = getWrap(wrapU);
+    sampler_desc.wrap_v = getWrap(wrapV);
+
+    if (Engine::isAsyncThread()){
+        image = SokolCmdQueue::add_command_make_image(image_desc);
+        sampler = SokolCmdQueue::add_command_make_sampler(sampler_desc);
+    }else{
+        image = sg_make_image(image_desc);
+        sampler = sg_make_sampler(sampler_desc);
+    }
+
+    createTextureView(label.c_str());
+
+    if (image.id != SG_INVALID_ID && sampler.id != SG_INVALID_ID && view.id != SG_INVALID_ID)
+        return true;
+
+    return false;
+}
+
 void SokolTexture::createTextureView(const char* label){
     if (image.id == SG_INVALID_ID){
         view.id = SG_INVALID_ID;

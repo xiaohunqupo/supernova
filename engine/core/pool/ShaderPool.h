@@ -54,11 +54,11 @@ namespace doriax{
 
         static void setShaderBuilder(ShaderBuilderFn fn);
 
-        static uint32_t getMeshProperties(bool unlit, bool uv1, bool uv2, 
-						bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap, 
-						bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect, 
+        static uint32_t getMeshProperties(bool unlit, bool uv1, bool uv2,
+						bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap,
+						bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect,
                         bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
-                        bool terrain, bool instanced);
+                        bool terrain, bool instanced, bool ibl);
         static uint32_t getDepthMeshProperties(bool texture, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent, bool terrain, bool instanced);
         static uint32_t getUIProperties(bool texture, bool fontAtlasTexture, bool vertexColorVec3, bool vertexColorVec4);
         static uint32_t getPointsProperties(bool texture, bool vertexColorVec3, bool vertexColorVec4, bool textureRect);

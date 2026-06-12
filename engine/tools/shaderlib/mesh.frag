@@ -56,7 +56,7 @@ uniform u_fs_pbrParams {
     #endif
 } pbrParams;
 
-#ifdef USE_PUNCTUAL
+#if defined(USE_PUNCTUAL) || defined(USE_IBL)
     uniform u_fs_lighting {
         vec4 direction_range[MAX_LIGHTS]; //direction.xyz and range.w
         vec4 color_intensity[MAX_LIGHTS]; //color.xyz and intensity.w
@@ -65,7 +65,15 @@ uniform u_fs_pbrParams {
         vec4 eyePos; //eyePos.xyz
         vec4 cameraDir; //camera backward axis.xyz
         vec4 globalIllum; //globalColor.xyz and globalIntensity.w
+        vec4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
     } lighting;
+#endif
+
+#ifdef USE_IBL
+    uniform textureCube u_lambertianEnvTexture;
+    uniform textureCube u_GGXEnvTexture;
+    uniform sampler u_lambertianEnv_smp;
+    uniform sampler u_GGXEnv_smp;
 #endif
 
 #ifdef USE_SHADOWS
@@ -166,6 +174,9 @@ const float M_PI = 3.141592653589793;
 
 #include "includes/pbr.glsl"
 #include "includes/brdf.glsl"
+#ifndef MATERIAL_UNLIT
+    #include "includes/ibl.glsl"
+#endif
 #ifdef USE_PUNCTUAL
     #include "includes/punctual.glsl"
 #endif
@@ -230,12 +241,22 @@ void main() {
         vec3 f_diffuse = vec3(0.0);
         vec3 f_emissive = vec3(0.0);
 
+        #if defined(USE_PUNCTUAL) || defined(USE_IBL)
+            vec3 toEye = lighting.eyePos.xyz - v_position;
+            vec3 v = normalize(toEye);
+        #endif
+
         #ifdef USE_IBL
-            //TODO
+            // image based lighting from the environment (sky) cubemaps
+            f_specular += getIBLRadianceGGX(n, v, materialInfo.perceptualRoughness, materialInfo.f0);
+            f_diffuse += getIBLRadianceLambertian(n, v, materialInfo.perceptualRoughness, materialInfo.albedoColor, materialInfo.f0);
         #else
             #ifdef USE_PUNCTUAL
-                // simple global illumination
-                f_diffuse += lighting.globalIllum.xyz * lighting.globalIllum.w * baseColor.rgb;
+                // environment light from a constant color (scene global illumination)
+                vec3 ambientLight = lighting.globalIllum.xyz * lighting.globalIllum.w;
+                float ambNdotV = clampedDot(n, v);
+                f_specular += envRadianceGGX(ambientLight, ambNdotV, materialInfo.perceptualRoughness, materialInfo.f0);
+                f_diffuse += envRadianceLambertian(ambientLight, ambNdotV, materialInfo.perceptualRoughness, materialInfo.albedoColor, materialInfo.f0);
             #endif
         #endif
 
@@ -248,9 +269,6 @@ void main() {
 
         // Apply light sources
         #ifdef USE_PUNCTUAL
-            vec3 toEye = lighting.eyePos.xyz - v_position;
-            vec3 v = normalize(toEye);
-
             for (int i = 0; i < MAX_LIGHTS; ++i){
 
                 //Cannot be in function to avoid GLES2 index errors

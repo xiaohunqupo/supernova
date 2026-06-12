@@ -251,7 +251,7 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
 
 int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
     switch (shaderType) {
-        case ShaderType::MESH:   return 19;
+        case ShaderType::MESH:   return 20;
         case ShaderType::DEPTH:  return 7;
         case ShaderType::UI:     return 4;
         case ShaderType::POINTS: return 4;
@@ -283,6 +283,7 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 16: return shortName ? "Mtg" : "Morph Tangent";
             case 17: return shortName ? "Ter" : "Terrain";
             case 18: return shortName ? "Ist" : "Instancing";
+            case 19: return shortName ? "Ibl" : "IBL";
         }
     } else if (shaderType == ShaderType::DEPTH) {
         switch (bit) {
@@ -414,11 +415,11 @@ uint32_t ShaderPool::getPropertiesFromKey(ShaderKey key) {
 }
 
 uint32_t ShaderPool::getMeshProperties(
-    bool unlit, bool uv1, bool uv2, 
-    bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap, 
-    bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect, 
+    bool unlit, bool uv1, bool uv2,
+    bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap,
+    bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect,
     bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
-    bool terrain, bool instanced){
+    bool terrain, bool instanced, bool ibl){
     uint32_t prop = 0;
 
     prop |= unlit            ? (1 <<  0) : 0;
@@ -440,6 +441,7 @@ uint32_t ShaderPool::getMeshProperties(
     prop |= morphTangent     ? (1 << 16) : 0;
     prop |= terrain          ? (1 << 17) : 0;
     prop |= instanced        ? (1 << 18) : 0;
+    prop |= ibl              ? (1 << 19) : 0;
 
     return prop;
 }

@@ -650,6 +650,7 @@ set(DORIAX_SRCS
     core/subsystem/RenderSystem.cpp
     core/subsystem/UISystem.cpp
     core/texture/Framebuffer.cpp
+    core/texture/IBLEnvironment.cpp
     core/texture/Texture.cpp
     core/texture/TextureData.cpp
     core/thread/ResourceProgress.cpp

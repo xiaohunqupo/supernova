@@ -235,7 +235,7 @@ namespace doriax::editor{
 
         bool canAddComponent(SceneProject* sceneProject, Entity entity, ComponentType cpType);
 
-        Texture getMaterialPreview(const Material& material, const std::string id);
+        Texture getMaterialPreview(const Material& material, const std::string id, bool receiveIBL = true);
         Texture getDirectionPreview(const Vector3& direction, const std::string id);
         bool drawSpriteFramePreview(Texture* texture, const Rect& rect, const ImVec2& size, const char* itemId);
 

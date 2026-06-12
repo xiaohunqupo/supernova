@@ -3344,6 +3344,7 @@ YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool e
     node["worldAABB"] = encodeAABB(mesh.worldAABB);
 
     node["receiveLights"] = mesh.receiveLights;
+    node["receiveIBL"] = mesh.receiveIBL;
     node["castShadows"] = mesh.castShadows;
     node["receiveShadows"] = mesh.receiveShadows;
     node["shadowsBillboard"] = mesh.shadowsBillboard;
@@ -3422,6 +3423,7 @@ MeshComponent editor::Stream::decodeMeshComponent(const YAML::Node& node, const 
     if (node["worldAABB"]) mesh.worldAABB = decodeAABB(node["worldAABB"]);
 
     if (node["receiveLights"]) mesh.receiveLights = node["receiveLights"].as<bool>();
+    if (node["receiveIBL"]) mesh.receiveIBL = node["receiveIBL"].as<bool>();
     if (node["castShadows"]) mesh.castShadows = node["castShadows"].as<bool>();
     if (node["receiveShadows"]) mesh.receiveShadows = node["receiveShadows"].as<bool>();
     if (node["shadowsBillboard"]) mesh.shadowsBillboard = node["shadowsBillboard"].as<bool>();
@@ -4428,6 +4430,7 @@ YAML::Node editor::Stream::encodeSkyComponent(const SkyComponent& sky) {
     node["texture"] = encodeTexture(sky.texture);
     node["color"] = encodeVector4(sky.color);
     node["rotation"] = sky.rotation;
+    node["visible"] = sky.visible;
 
     return node;
 }
@@ -4458,6 +4461,7 @@ SkyComponent editor::Stream::decodeSkyComponent(const YAML::Node& node, const Sk
     }
     if (node["color"]) sky.color = decodeVector4(node["color"]);
     if (node["rotation"]) sky.rotation = node["rotation"].as<float>();
+    if (node["visible"]) sky.visible = node["visible"].as<bool>();
 
     return sky;
 }

@@ -262,6 +262,10 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_shadowCubeMap1";
     }else if (type == TextureShaderType::SKYCUBE){
         texstr = "u_skyTexture";
+    }else if (type == TextureShaderType::IRRADIANCEMAP){
+        texstr = "u_lambertianEnvTexture";
+    }else if (type == TextureShaderType::PREFILTEREDMAP){
+        texstr = "u_GGXEnvTexture";
     }else if (type == TextureShaderType::UI){
         texstr = "u_uiTexture";
     }else if (type == TextureShaderType::POINTS){

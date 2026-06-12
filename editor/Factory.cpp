@@ -698,6 +698,7 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
     code << ind << "MeshComponent mesh;\n";
+    code << ind << "mesh.receiveIBL = " << formatBool(mesh.receiveIBL) << ";\n";
     code << ind << "mesh.castShadows = " << formatBool(mesh.castShadows) << ";\n";
     code << ind << "mesh.receiveShadows = " << formatBool(mesh.receiveShadows) << ";\n";
     code << ind << "mesh.vertexCount = " << formatUInt(mesh.vertexCount) << ";\n";
@@ -1312,6 +1313,7 @@ std::string editor::Factory::createSkyComponent(int indentSpaces, EntityRegistry
     }
     code << ind << "sky.color = " << formatVector4(sky.color) << ";\n";
     code << ind << "sky.rotation = " << formatFloat(sky.rotation) << ";\n";
+    code << ind << "sky.visible = " << formatBool(sky.visible) << ";\n";
 
     addComponentCode(code, ind, sceneName, entityName, entity, "SkyComponent", "sky", assignExisting);
     return code.str();

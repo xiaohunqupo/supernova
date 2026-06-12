@@ -102,6 +102,7 @@ namespace doriax{
         AABB worldAABB; // initially NULL
 
         bool receiveLights = true;
+        bool receiveIBL = false; // image-based lighting from a sky environment
         bool castShadows = true;
         bool receiveShadows = true;
         bool shadowsBillboard = true;
