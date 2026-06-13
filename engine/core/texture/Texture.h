@@ -92,6 +92,7 @@ namespace doriax{
             void releaseData();
 
             bool empty() const;
+            Framebuffer* getFramebuffer() const;
             bool isFramebuffer() const;
             bool isFramebufferOutdated() const;
 

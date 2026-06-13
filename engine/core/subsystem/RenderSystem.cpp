@@ -348,6 +348,19 @@ bool RenderSystem::loadAndProcessFog(){
     return hasFog;
 }
 
+// pooled maps stay alive in TexturePool for reuse; only unpooled ones are destroyed
+void RenderSystem::releaseSkyEnvironment(SkyComponent& sky){
+    if (sky.irradianceMap && sky.irradianceMap.use_count() == 1){
+        sky.irradianceMap->destroyTexture();
+    }
+    if (sky.prefilteredMap && sky.prefilteredMap.use_count() == 1){
+        sky.prefilteredMap->destroyTexture();
+    }
+    sky.irradianceMap.reset();
+    sky.prefilteredMap.reset();
+    sky.envMapsLoaded = false;
+}
+
 // generates (or regenerates) the IBL environment maps from the sky texture,
 // must run while the texture pixels are still on CPU (before the sky GPU upload)
 void RenderSystem::updateSkyEnvironment(SkyComponent& sky){
@@ -355,13 +368,28 @@ void RenderSystem::updateSkyEnvironment(SkyComponent& sky){
         return;
 
     if (sky.texture.empty() || sky.texture.getNumFaces() != 6){
-        if (sky.envMapsLoaded){
-            sky.irradianceMap.destroyTexture();
-            sky.prefilteredMap.destroyTexture();
-            sky.envMapsLoaded = false;
-        }
+        releaseSkyEnvironment(sky);
         sky.needUpdateEnvironment = false;
         return;
+    }
+
+    // generation is expensive (cosine + GGX convolution), reuse cached maps
+    const std::string texId = sky.texture.getId();
+    const std::string irradianceId = texId + "|ibl|irradiance";
+    const std::string prefilteredId = texId + "|ibl|prefiltered";
+
+    if (!texId.empty()){
+        std::shared_ptr<TextureRender> irradiance = TexturePool::get(irradianceId);
+        std::shared_ptr<TextureRender> prefiltered = TexturePool::get(prefilteredId);
+        if (irradiance && prefiltered){
+            releaseSkyEnvironment(sky);
+            sky.irradianceMap = irradiance;
+            sky.prefilteredMap = prefiltered;
+            sky.envMapsLoaded = true;
+            needReloadMeshes();
+            sky.needUpdateEnvironment = false;
+            return;
+        }
     }
 
     TextureLoadResult texResult = sky.texture.load();
@@ -371,14 +399,17 @@ void RenderSystem::updateSkyEnvironment(SkyComponent& sky){
     }
 
     if (texResult.state == ResourceLoadState::Finished && texResult.data){
-        if (sky.envMapsLoaded){
-            sky.irradianceMap.destroyTexture();
-            sky.prefilteredMap.destroyTexture();
-            sky.envMapsLoaded = false;
-        }
+        releaseSkyEnvironment(sky);
 
-        if (IBLEnvironment::generate(sky.texture.getId(), *(texResult.data), sky.irradianceMap, sky.prefilteredMap)){
+        std::shared_ptr<TextureRender> irradiance = std::make_shared<TextureRender>();
+        std::shared_ptr<TextureRender> prefiltered = std::make_shared<TextureRender>();
+
+        if (IBLEnvironment::generate(texId, *(texResult.data), *irradiance, *prefiltered)){
+            sky.irradianceMap = irradiance;
+            sky.prefilteredMap = prefiltered;
             sky.envMapsLoaded = true;
+            TexturePool::add(irradianceId, irradiance);
+            TexturePool::add(prefilteredId, prefiltered);
             needReloadMeshes();
         }
     }
@@ -853,8 +884,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             auto skyArray = scene->getComponentArray<SkyComponent>();
             if (skyArray->size() > 0){
                 SkyComponent& sky = skyArray->getComponentFromIndex(0);
-                render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, &sky.irradianceMap);
-                render.addTexture(shaderData.getTextureIndex(TextureShaderType::PREFILTEREDMAP), ShaderStageType::FRAGMENT, &sky.prefilteredMap);
+                if (sky.irradianceMap && sky.prefilteredMap){
+                    render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, sky.irradianceMap.get());
+                    render.addTexture(shaderData.getTextureIndex(TextureShaderType::PREFILTEREDMAP), ShaderStageType::FRAGMENT, sky.prefilteredMap.get());
+                }
             }
         }
 
@@ -1913,10 +1946,8 @@ void RenderSystem::destroySky(Entity entity, SkyComponent& sky){
         //Destroy texture
         sky.texture.destroy();
 
-        //Destroy IBL environment maps
-        sky.irradianceMap.destroyTexture();
-        sky.prefilteredMap.destroyTexture();
-        sky.envMapsLoaded = false;
+        //Release IBL environment maps (pooled maps are kept for reuse)
+        releaseSkyEnvironment(sky);
         sky.needUpdateEnvironment = true;
     }
 
@@ -1980,7 +2011,8 @@ Rect RenderSystem::getScissorRect(UILayoutComponent& layout, ImageComponent& img
         objScreenWidth = layout.width * widthRatio * camScaleX;
         objScreenHeight = layout.height * heightRatio * camScaleY;
 
-        if (camera.type == CameraType::CAMERA_UI)
+        // flipped rendering puts UI y=0 at scissor row 0, so no bottom-left conversion
+        if (camera.type == CameraType::CAMERA_UI && !isRenderingFlipped(camera))
             objScreenPosY = (float) System::instance().getScreenHeight() - objScreenHeight - objScreenPosY;
 
         if (!(img.patchMarginLeft == 0 && img.patchMarginTop == 0 && img.patchMarginRight == 0 && img.patchMarginBottom == 0)) {
@@ -2002,7 +2034,8 @@ Rect RenderSystem::getScissorRect(UILayoutComponent& layout, ImageComponent& img
         objScreenWidth = layout.width;
         objScreenHeight = layout.height;
 
-        if (camera.type == CameraType::CAMERA_UI)
+        // flipped rendering puts UI y=0 at scissor row 0, so no bottom-left conversion
+        if (camera.type == CameraType::CAMERA_UI && !isRenderingFlipped(camera))
             objScreenPosY = (float) camera.framebuffer->getHeight() - objScreenHeight - objScreenPosY;
 
         if (!(img.patchMarginLeft == 0 && img.patchMarginTop == 0 && img.patchMarginRight == 0 && img.patchMarginBottom == 0)) {
@@ -2110,6 +2143,11 @@ void RenderSystem::updateSkyViewProjection(SkyComponent& sky, CameraComponent& c
     Matrix4 rotationMatrix = Quaternion(0, sky.rotation, 0).getRotationMatrix();
 
     sky.skyViewProjectionMatrix = camera.projectionMatrix * skyViewMatrix * rotationMatrix;
+
+    if (isRenderingFlipped(camera)){
+        static const Matrix4 flipYMatrix = Matrix4::scaleMatrix(Vector3(1, -1, 1));
+        sky.skyViewProjectionMatrix = flipYMatrix * sky.skyViewProjectionMatrix;
+    }
 
     sky.needUpdateSky = false;
 }
@@ -2827,6 +2865,37 @@ void RenderSystem::changeDestroy(void* data){
     delete (check_load_t*)data;
 }
 
+// a texture cannot be sampled in the pass that renders into it; objects showing a
+// camera's framebuffer must be skipped when drawing that same camera
+bool RenderSystem::samplesCameraTarget(const CameraComponent& camera, const MeshComponent& mesh){
+    if (!camera.renderToTexture)
+        return false;
+
+    for (unsigned int i = 0; i < mesh.numSubmeshes; i++){
+        const Material& material = mesh.submeshes[i].material;
+        if (material.baseColorTexture.getFramebuffer() == camera.framebuffer ||
+            material.metallicRoughnessTexture.getFramebuffer() == camera.framebuffer ||
+            material.normalTexture.getFramebuffer() == camera.framebuffer ||
+            material.occlusionTexture.getFramebuffer() == camera.framebuffer ||
+            material.emissiveTexture.getFramebuffer() == camera.framebuffer){
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool RenderSystem::samplesCameraTarget(const CameraComponent& camera, const Texture& texture){
+    return camera.renderToTexture && texture.getFramebuffer() == camera.framebuffer;
+}
+
+bool RenderSystem::isRenderingFlipped(const CameraComponent& camera){
+    // OpenGL offscreen targets are bottom-up; rendering them with a Y-flipped
+    // projection makes framebuffer textures top-left origin on every backend.
+    // Must match the PIP_RTT pipeline selection (its winding is reversed on GL).
+    return (camera.renderToTexture || Engine::getFramebuffer()) && Engine::isOpenGL();
+}
+
 void RenderSystem::updateMVP(size_t index, Transform& transform, CameraComponent& camera, Transform& cameraTransform){
     if (transform.billboard && !transform.fakeBillboard){
 
@@ -2904,6 +2973,13 @@ void RenderSystem::updateMVP(size_t index, Transform& transform, CameraComponent
 
         transform.modelViewProjectionMatrix = camera.viewProjectionMatrix * transform.modelMatrix;
 
+    }
+
+    if (isRenderingFlipped(camera)){
+        // flip only the render matrix; camera.viewProjectionMatrix stays logical
+        // (top-left screen origin) for frustum planes, rays and UI hit tests
+        static const Matrix4 flipYMatrix = Matrix4::scaleMatrix(Vector3(1, -1, 1));
+        transform.modelViewProjectionMatrix = flipYMatrix * transform.modelViewProjectionMatrix;
     }
 
     transform.distanceToCamera = (cameraTransform.worldPosition - transform.worldPosition).length();
@@ -3433,7 +3509,7 @@ void RenderSystem::draw(){
             if (signature.test(scene->getComponentId<MeshComponent>())){
                 MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
 
-                if (transform.visible){
+                if (transform.visible && !samplesCameraTarget(camera, mesh)){
 
                     InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(entity);
                     if (instmesh){
@@ -3467,7 +3543,7 @@ void RenderSystem::draw(){
                 if (signature.test(scene->getComponentId<TextComponent>())){
                     isText = true;
                 }
-                if (transform.visible)
+                if (transform.visible && !samplesCameraTarget(camera, ui.texture))
                     drawUI(ui, transform, camera.renderToTexture || Engine::getFramebuffer());
 
             }else if (signature.test(scene->getComponentId<PointsComponent>())){
@@ -3479,7 +3555,7 @@ void RenderSystem::draw(){
                     sortPoints(points, transform, camera, cameraTransform);
                 }
 
-                if (transform.visible){
+                if (transform.visible && !samplesCameraTarget(camera, points.texture)){
                     if (!points.transparent || !camera.transparentSort){
                         drawPoints(points, transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
                     }else{

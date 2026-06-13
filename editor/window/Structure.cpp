@@ -18,6 +18,7 @@
 #include "command/type/RemoveEntityFromBundleCmd.h"
 #include "command/type/AddEntityToBundleCmd.h"
 #include "command/type/SetMainCameraCmd.h"
+#include "util/CameraTextureLink.h"
 #include "util/EntityPayload.h"
 #include "util/UIUtils.h"
 #include "util/Util.h"
@@ -1237,8 +1238,12 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                             CommandHandle::get(project->getSelectedSceneId())->addCommand(new SetMainCameraCmd(project, project->getSelectedSceneId(), NULL_ENTITY));
                         }
                     } else {
-                        if (ImGui::MenuItem(ICON_FA_EYE"  Set as Main Camera", nullptr, false, !node.isMainCamera)) {
+                        bool usedAsTexture = CameraTextureLink::isCameraUsed(sceneProject->scene, node.id);
+                        if (ImGui::MenuItem(ICON_FA_EYE"  Set as Main Camera", nullptr, false, !usedAsTexture)) {
                             CommandHandle::get(project->getSelectedSceneId())->addCommand(new SetMainCameraCmd(project, project->getSelectedSceneId(), node.id));
+                        }
+                        if (usedAsTexture && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetTooltip("Camera is used as texture source (render to texture)");
                         }
                     }
                 }

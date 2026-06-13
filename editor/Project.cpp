@@ -33,6 +33,7 @@
 #include "util/FileDialogs.h"
 #include "util/SHA1.h"
 #include "util/GraphicUtils.h"
+#include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 #include "util/Util.h"
 
@@ -2359,6 +2360,9 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
                 if (!entityNode["entity"] || !entityNode["components"]) continue;
                 ProjectUtils::removeDynamicInstmesh(entityNode["entity"].as<Entity>(), entityNode["components"], sceneProject->scene);
             }
+
+            // snapshot decode leaves camera-linked textures unresolved (no framebuffer)
+            CameraTextureLink::resolve(sceneProject->scene);
 
             // Clear the snapshot
             sceneProject->playStateSnapshot = YAML::Node();

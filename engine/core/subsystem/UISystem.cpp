@@ -1482,12 +1482,10 @@ void UISystem::applyAnchorPreset(UILayoutComponent& layout){
 }
 
 void UISystem::changeFlipY(UIComponent& ui, CameraComponent& camera){
+    // framebuffer textures need no special case: offscreen passes render with a
+    // Y-flipped projection on GL, so they are top-left origin on every backend
     ui.flipY = false;
     if (camera.type != CameraType::CAMERA_UI){
-        ui.flipY = !ui.flipY;
-    }
-
-    if (ui.texture.isFramebuffer() && Engine::isOpenGL()){
         ui.flipY = !ui.flipY;
     }
 }

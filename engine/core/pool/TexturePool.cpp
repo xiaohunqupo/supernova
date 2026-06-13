@@ -75,6 +75,12 @@ std::shared_ptr<TextureRender> TexturePool::get(const std::string& id, TextureTy
 	return shared;
 }
 
+void TexturePool::add(const std::string& id, std::shared_ptr<TextureRender> render){
+	if (!id.empty() && render){
+		getMap()[id] = render;
+	}
+}
+
 void TexturePool::remove(const std::string& id){
 	auto& map = getMap();
 	auto it = map.find(id);

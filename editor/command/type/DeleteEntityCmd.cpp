@@ -2,6 +2,7 @@
 
 #include "Stream.h"
 #include "Out.h"
+#include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 #include "command/type/MoveEntityOrderCmd.h"
 
@@ -185,6 +186,9 @@ bool editor::DeleteEntityCmd::execute(){
         sceneProject->isModified = true;
     }
 
+    // unbind framebuffers of textures linked to deleted render-to-texture cameras
+    CameraTextureLink::resolve(sceneProject->scene);
+
     return true;
 }
 
@@ -208,6 +212,9 @@ void editor::DeleteEntityCmd::undo(){
     if (lastSelected.size() > 0){
         project->replaceSelectedEntities(sceneId, lastSelected);
     }
+
+    // recreated cameras get a new framebuffer; rebind linked textures
+    CameraTextureLink::resolve(sceneProject->scene);
 
     sceneProject->isModified = wasModified;
 }

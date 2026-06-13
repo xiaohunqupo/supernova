@@ -121,6 +121,9 @@ namespace doriax{
 		static void changeLoaded(void* data);
 		static void changeDestroy(void* data);
 
+		static bool samplesCameraTarget(const CameraComponent& camera, const MeshComponent& mesh);
+		static bool samplesCameraTarget(const CameraComponent& camera, const Texture& texture);
+		static bool isRenderingFlipped(const CameraComponent& camera);
 		void updateMVP(size_t index, Transform& transform, CameraComponent& camera, Transform& cameraTransform);
 
 		void createEmptyTextures();
@@ -128,6 +131,7 @@ namespace doriax{
 		bool loadLights(int numLights);
 		void processLights(int numLights, CameraComponent& camera, Transform& cameraTransform);
 		bool loadAndProcessFog();
+		void releaseSkyEnvironment(SkyComponent& sky);
 		void updateSkyEnvironment(SkyComponent& sky);
 		TextureShaderType getShadowMapByIndex(int index);
 		TextureShaderType getShadowMapCubeByIndex(int index);

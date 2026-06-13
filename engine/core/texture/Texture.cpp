@@ -543,6 +543,10 @@ bool Texture::empty() const{
     return false;
 }
 
+Framebuffer* Texture::getFramebuffer() const{
+    return framebuffer;
+}
+
 bool Texture::isFramebuffer() const{
     if (framebuffer)
         return true;

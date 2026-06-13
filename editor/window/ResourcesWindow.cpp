@@ -29,6 +29,7 @@
 #include <fstream>
 #include <sstream>
 #include <thread>
+#include <chrono>
 #include <mutex>
 #include <atomic>
 #include "stb_image.h"
@@ -183,7 +184,7 @@ void editor::ResourcesWindow::processMaterialThumbnails() {
         FileType capturedType = FileType::MATERIAL;
 
         // Use the callback to notify when the image save is complete
-        GraphicUtils::saveFramebufferImage(materialRender.getFramebuffer(), thumbnailPath, true, 
+        GraphicUtils::saveFramebufferImage(materialRender.getFramebuffer(), thumbnailPath, false, 
             [this, capturedPath, capturedType]() {
                 // This code runs after the image has been saved
                 {
@@ -212,7 +213,7 @@ void editor::ResourcesWindow::processModelThumbnails() {
         fs::path capturedPath = pendingModelPath;
         FileType capturedType = FileType::MODEL;
 
-        GraphicUtils::saveFramebufferImage(modelRender.getFramebuffer(), thumbnailPath, true,
+        GraphicUtils::saveFramebufferImage(modelRender.getFramebuffer(), thumbnailPath, false,
             [this, capturedPath, capturedType]() {
                 {
                     std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
@@ -1459,6 +1460,20 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
 }
 
 void editor::ResourcesWindow::thumbnailWorker() {
+    // warm shared preview resources in background: rendering the material preview
+    // scene once generates the IBL environment maps, which are pooled by texture id
+    // (TexturePool), so the first material preview in Properties opens without lag
+    {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!stopThumbnailThread && !Engine::isViewLoaded() && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (!stopThumbnailThread && Engine::isViewLoaded()) {
+            Engine::AsyncThreadScope asyncThreadScope;
+            Engine::executeSceneOnce(materialRender.getScene());
+        }
+    }
+
     while (!stopThumbnailThread) {
         ThumbnailRequest thumbFile;
         {

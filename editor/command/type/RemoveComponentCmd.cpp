@@ -2,6 +2,7 @@
 
 #include "Stream.h"
 #include "Out.h"
+#include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 
 using namespace doriax;
@@ -52,6 +53,10 @@ bool editor::RemoveComponentCmd::execute() {
             }
         }
 
+        if (componentType == ComponentType::CameraComponent){
+            CameraTextureLink::resolve(sceneProject->scene);
+        }
+
         sceneProject->isModified = true;
     }
 
@@ -82,6 +87,10 @@ void editor::RemoveComponentCmd::undo() {
                 }
 
             }
+        }
+
+        if (componentType == ComponentType::CameraComponent){
+            CameraTextureLink::resolve(sceneProject->scene);
         }
 
         sceneProject->isModified = wasModified;

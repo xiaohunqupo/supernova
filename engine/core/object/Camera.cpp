@@ -520,7 +520,10 @@ void Camera::slideUp(float distance){
 void Camera::setRenderToTexture(bool renderToTexture){
     CameraComponent& camera = getComponent<CameraComponent>();
 
-	camera.renderToTexture = renderToTexture;
+	if (camera.renderToTexture != renderToTexture){
+		camera.renderToTexture = renderToTexture;
+		camera.needUpdate = true; // render target orientation can differ (GL)
+	}
 }
 
 bool Camera::isRenderToTexture() const{

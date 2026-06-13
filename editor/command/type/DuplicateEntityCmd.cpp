@@ -3,6 +3,7 @@
 #include "Stream.h"
 #include "Out.h"
 #include "command/type/DeleteEntityCmd.h"
+#include "util/CameraTextureLink.h"
 
 using namespace doriax;
 
@@ -114,6 +115,9 @@ bool editor::DuplicateEntityCmd::execute(){
     if (createdEntities.empty()){
         return false;
     }
+
+    // bind framebuffers of duplicated camera-linked textures
+    CameraTextureLink::resolve(scene);
 
     // Identify top-level duplicates (decoded with no parent)
     std::vector<Entity> createdTopLevel;

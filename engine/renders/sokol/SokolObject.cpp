@@ -268,7 +268,13 @@ bool SokolObject::endLoad(uint8_t pipelines, bool enableFaceCulling, CullingMode
 
         if (enableFaceCulling){
             pip_rtt_desc.cull_mode = getCullMode(cullingMode);
-            pip_rtt_desc.face_winding = getFaceWinding(windingOrder);
+            WindingOrder rttWinding = windingOrder;
+            if (Engine::isOpenGL()){
+                // offscreen passes render with a Y-flipped projection on GL
+                // (top-left origin), which reverses the triangle winding
+                rttWinding = (windingOrder == WindingOrder::CCW) ? WindingOrder::CW : WindingOrder::CCW;
+            }
+            pip_rtt_desc.face_winding = getFaceWinding(rttWinding);
         }
 
         pip_rtt_desc.sample_count = 1;

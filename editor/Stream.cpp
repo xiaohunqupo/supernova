@@ -4,6 +4,7 @@
 #include "Catalog.h"
 #include "Factory.h"
 #include "pool/SoundPool.h"
+#include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 #include "render/SceneRender2D.h"
 
@@ -895,6 +896,17 @@ Matrix4 editor::Stream::decodeMatrix4(const YAML::Node& node) {
 
 YAML::Node editor::Stream::encodeTexture(const Texture& texture, bool embedData) {
     YAML::Node node;
+
+    // camera render-to-texture link; checked before empty() because an
+    // unresolved link has no framebuffer bound yet
+    Entity linkedCamera = CameraTextureLink::parse(texture.getId());
+    if (linkedCamera != NULL_ENTITY) {
+        node["textureType"] = "2D";
+        node["source"] = "camera";
+        node["camera"] = linkedCamera;
+        return node;
+    }
+
     if (texture.empty() || texture.isFramebuffer())
         return node;
 
@@ -1005,6 +1017,12 @@ Texture editor::Stream::decodeTexture(const YAML::Node& node) {
             } else if (source == "id") {
                 if (node["id"]) {
                     texture.setId(node["id"].as<std::string>());
+                }
+            } else if (source == "camera") {
+                // framebuffer is bound later by CameraTextureLink::resolve,
+                // after every entity of the scene exists
+                if (node["camera"]) {
+                    texture.setId(CameraTextureLink::makeId(node["camera"].as<Entity>()));
                 }
             }
         }
@@ -1711,6 +1729,8 @@ void editor::Stream::decodeSceneProjectEntities(Project* project, SceneProject* 
     for (const auto& entityNode : entitiesNode){
         decodeEntity(entityNode, sceneProject->scene, &sceneProject->entities, project, sceneProject);
     }
+
+    CameraTextureLink::resolve(sceneProject->scene);
 }
 
 YAML::Node editor::Stream::encodeEditorCamera(Camera* camera, float zoom) {

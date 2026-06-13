@@ -199,6 +199,7 @@ set(DORIAX_EDITOR_SOURCES
 
     ${EDITOR_DIR}/util/ShaderHeaderBuilder.cpp
     ${EDITOR_DIR}/util/GraphicUtils.cpp
+    ${EDITOR_DIR}/util/CameraTextureLink.cpp
     ${EDITOR_DIR}/util/EntityBundle.cpp
     ${EDITOR_DIR}/util/ProjectUtils.cpp
     ${EDITOR_DIR}/util/ScriptParser.cpp

@@ -451,12 +451,10 @@ bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
 }
 
 void MeshSystem::changeFlipY(bool& flipY, CameraComponent& camera, MeshComponent& mesh){
+    // framebuffer textures need no special case: offscreen passes render with a
+    // Y-flipped projection on GL, so they are top-left origin on every backend
     flipY = false;
     if (camera.type != CameraType::CAMERA_UI){
-        flipY = !flipY;
-    }
-
-    if (mesh.submeshes[0].material.baseColorTexture.isFramebuffer() && Engine::isOpenGL()){
         flipY = !flipY;
     }
 }

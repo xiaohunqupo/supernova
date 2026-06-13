@@ -30,9 +30,10 @@ namespace doriax{
 
         bool visible = true; // when false the sky is not drawn but still feeds IBL
 
-        // IBL environment maps generated from texture
-        TextureRender irradianceMap;
-        TextureRender prefilteredMap;
+        // IBL environment maps generated from texture (shared via TexturePool,
+        // generation is expensive so maps are cached by sky texture id)
+        std::shared_ptr<TextureRender> irradianceMap;
+        std::shared_ptr<TextureRender> prefilteredMap;
         bool envMapsLoaded = false;
         bool needUpdateEnvironment = true;
 

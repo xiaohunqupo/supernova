@@ -5,6 +5,7 @@
 #include "util/Util.h"
 #include "util/FileDialogs.h"
 #include "util/EntityPayload.h"
+#include "util/CameraTextureLink.h"
 #include "external/IconsFontAwesome6.h"
 #include "command/CommandHandle.h"
 #include "command/type/PropertyCmd.h"
@@ -15,6 +16,7 @@
 #include "command/type/SceneNameCmd.h"
 #include "command/type/MeshChangeCmd.h"
 #include "command/type/ModelLoadCmd.h"
+#include "command/type/SetMainCameraCmd.h"
 #include "command/type/AddComponentCmd.h"
 #include "command/type/RemoveComponentCmd.h"
 #include "command/type/ComponentToBundleSharedCmd.h"
@@ -911,6 +913,30 @@ void editor::Properties::dragDropResourcesFont(ComponentType cpType, std::string
 }
 
 
+void editor::Properties::applyCameraTexture(Entity cameraEntity, ComponentType cpType, const std::string& id, SceneProject* sceneProject, std::vector<Entity>& entities, std::function<void()> onValueChanged){
+    Scene* scene = sceneProject->scene;
+    CameraComponent* camera = scene->findComponent<CameraComponent>(cameraEntity);
+    if (!camera)
+        return;
+
+    Texture texture = CameraTextureLink::make(scene, cameraEntity);
+
+    auto multiCmd = new MultiPropertyCmd();
+    if (!camera->renderToTexture) {
+        multiCmd->addPropertyCmd<bool>(project, sceneProject->id, cameraEntity, ComponentType::CameraComponent, "renderToTexture", true);
+    }
+    if (sceneProject->mainCamera == cameraEntity) {
+        // a render-to-texture camera cannot be the scene main camera
+        multiCmd->addCommand(std::make_unique<SetMainCameraCmd>(project, sceneProject->id, NULL_ENTITY));
+    }
+    for (Entity& entity : entities){
+        multiCmd->addPropertyCmd<Texture>(project, sceneProject->id, entity, cpType, id, texture, onValueChanged);
+    }
+    cmd = multiCmd;
+    CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+    cmd->setNoMerge();
+}
+
 void editor::Properties::dragDropResourcesTexture(ComponentType cpType, std::string id, SceneProject* sceneProject, std::vector<Entity> entities, ComponentType componentType){
     // Block DnD while playing for non-script components
     if (sceneProject && sceneProject->playState != ScenePlayState::STOPPED) {
@@ -966,6 +992,17 @@ void editor::Properties::dragDropResourcesTexture(ComponentType cpType, std::str
                         originalTex.erase(id);
                     }
                 }
+            }
+        }
+
+        // camera entity dragged from the structure window (render to texture)
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("entity")) {
+            const EntityPayload* entityPayload = reinterpret_cast<const EntityPayload*>(payload->Data);
+            bool sameScene = (entityPayload->entitySceneId == 0 || entityPayload->entitySceneId == sceneProject->id);
+            if (sameScene && sceneProject->scene->findComponent<CameraComponent>(entityPayload->entity)) {
+                applyCameraTexture(entityPayload->entity, cpType, id, sceneProject, entities, nullptr);
+                finishProperty = true;
+                ImGui::SetWindowFocus(Properties::WINDOW_NAME);
             }
         }
         ImGui::EndDragDropTarget();
@@ -1231,6 +1268,8 @@ Texture editor::Properties::getMaterialPreview(const Material& material, const s
     MaterialRender& materialRender = materialRenders[id];
 
     auto texPending = [](const Texture& t) {
+        if (t.isFramebuffer() || CameraTextureLink::isCameraTexture(t))
+            return false; // framebuffer textures never enter the pool
         std::string tid = t.getId();
         return !tid.empty() && !TexturePool::get(tid);
     };
@@ -1816,7 +1855,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             float thumbSize = ImGui::GetFrameHeight() * 3;
             ImU32 border_col = IM_COL32(128, 128, 128, 255); // Gray border
 
-            drawImageWithBorderAndRounding(&dirTexRender, ImVec2(thumbSize, thumbSize), 4.0f, border_col, 1.0f, true);
+            drawImageWithBorderAndRounding(&dirTexRender, ImVec2(thumbSize, thumbSize), 4.0f, border_col);
 
             static bool draggingDirection = false;
 
@@ -3059,6 +3098,8 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         ImGui::PushStyleColor(ImGuiCol_ChildBg, App::ThemeColors::filenameLabel);
 
+        bool isCameraTexture = CameraTextureLink::isCameraTexture(newValue);
+
         float thumbSize = ImGui::GetFrameHeight() * 3;
         Texture* thumbTexture = findThumbnail(newValue.getPath());
         if (thumbTexture) {
@@ -3072,14 +3113,25 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
                 ImGui::Image(thumbTexture->getRender()->getGLHandler(), ImVec2(thumbTexture->getWidth(), thumbTexture->getHeight()));
                 ImGui::EndTooltip();
             }
+        } else if (isCameraTexture && newValue.isFramebuffer() && newValue.getFramebuffer()->isCreated()) {
+            // live preview of the linked camera framebuffer
+            ImU32 border_col = ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+            if (dif){
+                border_col = ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            }
+            drawImageWithBorderAndRounding(&newValue, ImVec2(thumbSize, thumbSize), ImGui::GetStyle().FrameRounding, border_col);
         }
 
-        // Use calculated width for the frame
-        ImGui::BeginChild("textureframe", ImVec2(- ImGui::CalcTextSize(ICON_FA_GEAR).x - ImGui::GetStyle().ItemSpacing.x * 2 - ImGui::GetStyle().FramePadding.x * 2, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2), 
+        ImVec2 texButtonSize = ImGui::CalcItemSize(ImVec2(0, 0), ImGui::GetFrameHeight(), ImGui::GetFrameHeight());
+        // reserve: two buttons, two gaps between items and one trailing gap on the right
+        float texButtonsReserve = texButtonSize.x * 2 + ImGui::GetStyle().ItemSpacing.x * 3;
+        ImGui::BeginChild("textureframe", ImVec2(-texButtonsReserve, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2),
             false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         std::string texName = newValue.getId();
-        if (std::filesystem::exists(texName)) {
+        if (isCameraTexture) {
+            texName = std::string(ICON_FA_VIDEO) + " " + CameraTextureLink::cameraName(sceneProject->scene, newValue);
+        } else if (std::filesystem::exists(texName)) {
             texName = std::filesystem::path(texName).filename().string();
         }
         if (texName.empty()) {
@@ -3104,7 +3156,10 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         ImGui::SameLine();
 
-        if (ImGui::Button(ICON_FA_FOLDER_OPEN)) {
+        // no horizontal frame padding so the icons fit centered in the square buttons
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
+
+        if (ImGui::Button(ICON_FA_FOLDER_OPEN, texButtonSize)) {
             std::string path = editor::FileDialogs::openFileDialog(project->getProjectPath().string(), FILE_DIALOG_IMAGE);
             if (!path.empty()) {
                 std::filesystem::path projectPath = project->getProjectPath();
@@ -3124,6 +3179,39 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
                     }
                 }
             }
+        }
+        ImGui::SetItemTooltip("Image file");
+
+        ImGui::SameLine();
+
+        if (ImGui::Button(ICON_FA_VIDEO, texButtonSize)) {
+            ImGui::OpenPopup("cameratexturepopup");
+        }
+        ImGui::SetItemTooltip("Camera as source (render to texture)");
+
+        ImGui::PopStyleVar();
+
+        if (ImGui::BeginPopup("cameratexturepopup")) {
+            Scene* scene = sceneProject->scene;
+            auto camerasArray = scene->getComponentArray<CameraComponent>();
+            bool hasCamera = false;
+            for (size_t c = 0; c < camerasArray->size(); c++) {
+                Entity cameraEntity = camerasArray->getEntity(c);
+                // only user scene entities; skips editor-internal cameras
+                if (std::find(sceneProject->entities.begin(), sceneProject->entities.end(), cameraEntity) == sceneProject->entities.end())
+                    continue;
+
+                hasCamera = true;
+                std::string cameraLabel = std::string(ICON_FA_VIDEO) + " " + scene->getEntityName(cameraEntity);
+                if (ImGui::MenuItem(cameraLabel.c_str())) {
+                    applyCameraTexture(cameraEntity, cpType, id, sceneProject, entities, settings.onValueChanged);
+                    finishProperty = true;
+                }
+            }
+            if (!hasCamera) {
+                ImGui::TextDisabled("No camera in scene");
+            }
+            ImGui::EndPopup();
         }
 
         // Error popup modal
@@ -3475,7 +3563,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         Texture texRender = getMaterialPreview(newValue, id, receiveIBL);
         float thumbSize = ImGui::GetFrameHeight() * 3;
-        ImGui::Image(texRender.getRender()->getGLHandler(), ImVec2(thumbSize, thumbSize), ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::Image(texRender.getRender()->getGLHandler(), ImVec2(thumbSize, thumbSize));
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
             materialButtonGroups[id] = !materialButtonGroups[id];
         }
@@ -3603,7 +3691,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             float availWidth = ImGui::GetCurrentWindow()->Size.x;
             float xPos = (availWidth - imageDragSize) * 0.5f;
             ImGui::SetCursorPosX(xPos);
-            ImGui::Image(texRender.getRender()->getGLHandler(), ImVec2(imageDragSize, imageDragSize), ImVec2(0, 1), ImVec2(1, 0));
+            ImGui::Image(texRender.getRender()->getGLHandler(), ImVec2(imageDragSize, imageDragSize));
             ImGui::EndDragDropSource();
         }
 
@@ -4437,7 +4525,7 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
         bool updatedPreview = false;
 
         Texture texRender = shapePreviewRender.getTexture();
-        ImGui::Image(texRender.getRender()->getGLHandler(), ImVec2(secondColSize, secondColSize), ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::Image(texRender.getRender()->getGLHandler(), ImVec2(secondColSize, secondColSize));
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##geometry_type", &shapeParams.geometryType, geometryTypes, IM_ARRAYSIZE(geometryTypes))) {
             updatedPreview = true;

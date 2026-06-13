@@ -1602,7 +1602,7 @@ void editor::SceneWindow::show() {
                     sceneProject.needUpdateRender = true;
                 }
 
-                ImGui::Image((ImTextureID)(intptr_t)sceneProject.sceneRender->getTexture().getGLHandler(), ImGui::GetContentRegionAvail(), ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::Image((ImTextureID)(intptr_t)sceneProject.sceneRender->getTexture().getGLHandler(), ImGui::GetContentRegionAvail());
 
                 if (sceneProject.playState == ScenePlayState::STOPPED){
                     if (ImGui::IsWindowHovered()) {

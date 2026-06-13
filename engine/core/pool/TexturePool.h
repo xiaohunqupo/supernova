@@ -22,6 +22,7 @@ namespace doriax{
     public:
         static std::shared_ptr<TextureRender> get(const std::string& id);
         static std::shared_ptr<TextureRender> get(const std::string& id, TextureType type, const std::shared_ptr<std::array<TextureData,6>> &data, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV);
+        static void add(const std::string& id, std::shared_ptr<TextureRender> render);
         static void remove(const std::string& id);
 
         // necessary for engine shutdown

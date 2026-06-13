@@ -5,6 +5,7 @@
 #include "Catalog.h"
 #include "Configs.h"
 #include "Stream.h"
+#include "util/CameraTextureLink.h"
 #include <cmath>
 #include <sstream>
 #include <iomanip>
@@ -2067,6 +2068,36 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
             std::string componentsCode = createAllComponents(indentSpaces+8, scene, entity, projectPath, "scene");
             out << componentsCode;
             out << ind2 << "}\n";
+        }
+    }
+
+    // Camera render-to-texture links; deferred so every camera entity already exists
+    {
+        std::ostringstream links;
+        for (Entity entity : entities) {
+            for (ComponentType cpType : Catalog::findComponents(scene, entity)) {
+                std::map<std::string, PropertyData> properties = Catalog::findEntityProperties(scene, entity, cpType);
+                for (auto& [propName, prop] : properties) {
+                    if (prop.type != PropertyType::Texture || !prop.ref)
+                        continue;
+
+                    Texture* texture = static_cast<Texture*>(prop.ref);
+                    Entity cameraEntity = CameraTextureLink::parse(texture->getId());
+                    if (cameraEntity == NULL_ENTITY)
+                        continue;
+                    if (!scene->findComponent<CameraComponent>(cameraEntity))
+                        continue;
+
+                    links << ind2 << "scene->getComponent<" << Catalog::getComponentName(cpType) << ">(" << entity << ")."
+                          << propName << ".setFramebuffer(scene->getComponent<CameraComponent>(" << cameraEntity << ").framebuffer);\n";
+                }
+            }
+        }
+        std::string linksStr = links.str();
+        if (!linksStr.empty()) {
+            out << "\n";
+            out << ind2 << "// Camera render-to-texture links\n";
+            out << linksStr;
         }
     }
 

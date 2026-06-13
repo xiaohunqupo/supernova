@@ -1,5 +1,6 @@
 #include "AddComponentCmd.h"
 
+#include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 
 using namespace doriax;
@@ -43,6 +44,10 @@ void editor::AddComponentCmd::undo() {
             if (project->isEntityInBundle(sceneId, entity)){
                 project->removeComponentFromBundle(sceneId, entity, componentType, false, false);
             }
+        }
+
+        if (componentType == ComponentType::CameraComponent){
+            CameraTextureLink::resolve(scene);
         }
 
         sceneProject->isModified = wasModified;
