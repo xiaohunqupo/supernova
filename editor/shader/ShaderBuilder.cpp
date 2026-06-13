@@ -255,6 +255,7 @@ void editor::ShaderBuilder::addMeshPropertyDefinitions(std::vector<shadercompile
     if (prop & (1 << 17)) defs.push_back({"HAS_TERRAIN", "1"});               // 'Ter'
     if (prop & (1 << 18)) defs.push_back({"HAS_INSTANCING", "1"});            // 'Ist'
     if (prop & (1 << 19)) defs.push_back({"USE_IBL", "1"});                   // 'Ibl'
+    if (prop & (1 << 20)) defs.push_back({"USE_MIRROR", "1"});                // 'Mir'
 }
 
 void editor::ShaderBuilder::addDepthMeshPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {

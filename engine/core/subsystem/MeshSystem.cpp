@@ -1694,6 +1694,63 @@ void MeshSystem::createPlane(MeshComponent& mesh, float width, float depth, unsi
         mesh.needReload = true;
 }
 
+// Vertical quad in the XY plane facing +Z (width along X, height along Y).
+// Unlike createPlane (horizontal, +Y normal), a wall stands upright — its +Z
+// normal matches the MirrorComponent default, so a mirror needs no rotation.
+void MeshSystem::createWall(MeshComponent& mesh, float width, float height, unsigned int tiles){
+    mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
+    mesh.numSubmeshes = 1;
+
+    mesh.buffer.clear();
+    mesh.buffer.addAttribute(AttributeType::POSITION, 3);
+    mesh.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
+    mesh.buffer.addAttribute(AttributeType::NORMAL, 3);
+    mesh.buffer.addAttribute(AttributeType::COLOR, 4);
+
+    float halfWidth = width / 2.0;
+    float halfHeight = height / 2.0;
+
+    Attribute* attVertex = mesh.buffer.getAttribute(AttributeType::POSITION);
+    mesh.buffer.addVector3(attVertex, Vector3(-halfWidth, -halfHeight, 0));
+    mesh.buffer.addVector3(attVertex, Vector3(halfWidth, -halfHeight, 0));
+    mesh.buffer.addVector3(attVertex, Vector3(halfWidth, halfHeight, 0));
+    mesh.buffer.addVector3(attVertex, Vector3(-halfWidth, halfHeight, 0));
+
+    Attribute* attTexcoord = mesh.buffer.getAttribute(AttributeType::TEXCOORD1);
+    mesh.buffer.addVector2(attTexcoord, Vector2(0.0f, 1.0f * tiles));
+    mesh.buffer.addVector2(attTexcoord, Vector2(1.0f * tiles, 1.0f * tiles));
+    mesh.buffer.addVector2(attTexcoord, Vector2(1.0f * tiles, 0.0f));
+    mesh.buffer.addVector2(attTexcoord, Vector2(0.0f, 0.0f));
+
+    Attribute* attNormal = mesh.buffer.getAttribute(AttributeType::NORMAL);
+    mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
+    mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
+    mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
+    mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
+
+    Attribute* attColor = mesh.buffer.getAttribute(AttributeType::COLOR);
+    mesh.buffer.addVector4(attColor, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    mesh.buffer.addVector4(attColor, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    mesh.buffer.addVector4(attColor, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    mesh.buffer.addVector4(attColor, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    static const uint16_t indices_array[] = {
+        0,  1,  2,
+        0,  2,  3,
+    };
+
+    mesh.indices.clear();
+
+    mesh.indices.setValues(
+        0, mesh.indices.getAttribute(AttributeType::INDEX),
+        6, (char*)&indices_array[0], sizeof(uint16_t));
+
+    calculateMeshAABB(mesh);
+
+    if (mesh.loaded)
+        mesh.needReload = true;
+}
+
 void MeshSystem::createBox(MeshComponent& mesh, float width, float height, float depth, unsigned int tiles){
     mesh.submeshes[0].primitiveType = PrimitiveType::TRIANGLES;
     mesh.numSubmeshes = 1;

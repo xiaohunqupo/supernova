@@ -17,7 +17,10 @@ namespace doriax{
 
         void createPlane(float width, float depth);
         void createPlane(float width, float depth, unsigned int tiles);
-        
+
+        void createWall(float width, float height);
+        void createWall(float width, float height, unsigned int tiles);
+
         void createBox(float width, float height, float depth);
         void createBox(float width, float height, float depth, unsigned int tiles);
 

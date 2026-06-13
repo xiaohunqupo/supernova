@@ -18,26 +18,29 @@ SokolObject::SokolObject(){
     pip.id = SG_INVALID_ID;
     depth_pip.id = SG_INVALID_ID;
     rtt_pip.id = SG_INVALID_ID;
-    bind = {}; 
+    rtt_invert_pip.id = SG_INVALID_ID;
+    bind = {};
     pipeline_desc = {};
     bindSlotIndex = 0;
 }
 
 SokolObject::SokolObject(const SokolObject& rhs) {
-    bind = rhs.bind; 
+    bind = rhs.bind;
     pip = rhs.pip;
     depth_pip = rhs.depth_pip;
     rtt_pip = rhs.rtt_pip;
+    rtt_invert_pip = rhs.rtt_invert_pip;
     pipeline_desc = rhs.pipeline_desc;
     bindSlotIndex = rhs.bindSlotIndex;
     bufferToBindSlot = rhs.bufferToBindSlot;
 }
 
-SokolObject& SokolObject::operator=(const SokolObject& rhs) { 
-    bind = rhs.bind; 
+SokolObject& SokolObject::operator=(const SokolObject& rhs) {
+    bind = rhs.bind;
     pip = rhs.pip;
     depth_pip = rhs.depth_pip;
     rtt_pip = rhs.rtt_pip;
+    rtt_invert_pip = rhs.rtt_invert_pip;
     pipeline_desc = rhs.pipeline_desc;
     bindSlotIndex = rhs.bindSlotIndex;
     bufferToBindSlot = rhs.bufferToBindSlot;
@@ -117,6 +120,7 @@ void SokolObject::beginLoad(PrimitiveType primitiveType){
     pip = {0};
     depth_pip = {0};
     rtt_pip = {0};
+    rtt_invert_pip = {0};
     pipeline_desc = {0};
 
     pipeline_desc.primitive_type = getPrimitiveType(primitiveType);
@@ -263,43 +267,61 @@ bool SokolObject::endLoad(uint8_t pipelines, bool enableFaceCulling, CullingMode
         }
     }
 
-    if (pipelines & (int)PipelineType::PIP_RTT){
+    // PIP_RTT (offscreen) and PIP_RTT_INVERT (planar reflection) share an identical
+    // pipeline except for triangle winding, so build the common desc once.
+    if (pipelines & ((int)PipelineType::PIP_RTT | (int)PipelineType::PIP_RTT_INVERT)){
         sg_pipeline_desc pip_rtt_desc = pipeline_desc;
 
-        if (enableFaceCulling){
-            pip_rtt_desc.cull_mode = getCullMode(cullingMode);
-            WindingOrder rttWinding = windingOrder;
-            if (Engine::isOpenGL()){
-                // offscreen passes render with a Y-flipped projection on GL
-                // (top-left origin), which reverses the triangle winding
-                rttWinding = (windingOrder == WindingOrder::CCW) ? WindingOrder::CW : WindingOrder::CCW;
-            }
-            pip_rtt_desc.face_winding = getFaceWinding(rttWinding);
-        }
-
         pip_rtt_desc.sample_count = 1;
-
         pip_rtt_desc.depth.write_enabled = true;
         pip_rtt_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
-
         pip_rtt_desc.colors[0].write_mask = SG_COLORMASK_RGBA;
         pip_rtt_desc.colors[0].blend.enabled = true;
         pip_rtt_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
         pip_rtt_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
         pip_rtt_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
         pip_rtt_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-
         pip_rtt_desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
         pip_rtt_desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
 
-        if (Engine::isAsyncThread()){
-            rtt_pip = SokolCmdQueue::add_command_make_pipeline(pip_rtt_desc);
-        }else{
-            rtt_pip = sg_make_pipeline(pip_rtt_desc);
+        // offscreen passes render with a Y-flipped projection on GL (top-left
+        // origin), which reverses the triangle winding
+        WindingOrder rttWinding = windingOrder;
+        if (Engine::isOpenGL()){
+            rttWinding = (windingOrder == WindingOrder::CCW) ? WindingOrder::CW : WindingOrder::CCW;
+        }
+        if (enableFaceCulling){
+            pip_rtt_desc.cull_mode = getCullMode(cullingMode);
         }
 
-        if (rtt_pip.id == SG_INVALID_ID){
-            return false;
+        if (pipelines & (int)PipelineType::PIP_RTT){
+            if (enableFaceCulling){
+                pip_rtt_desc.face_winding = getFaceWinding(rttWinding);
+            }
+            if (Engine::isAsyncThread()){
+                rtt_pip = SokolCmdQueue::add_command_make_pipeline(pip_rtt_desc);
+            }else{
+                rtt_pip = sg_make_pipeline(pip_rtt_desc);
+            }
+            if (rtt_pip.id == SG_INVALID_ID){
+                return false;
+            }
+        }
+
+        if (pipelines & (int)PipelineType::PIP_RTT_INVERT){
+            // planar reflection mirrors handedness, reversing winding once more
+            if (enableFaceCulling){
+                WindingOrder invWinding = (rttWinding == WindingOrder::CCW) ? WindingOrder::CW : WindingOrder::CCW;
+                pip_rtt_desc.face_winding = getFaceWinding(invWinding);
+            }
+            if (Engine::isAsyncThread()){
+                rtt_invert_pip = SokolCmdQueue::add_command_make_pipeline(pip_rtt_desc);
+            }else{
+                rtt_invert_pip = sg_make_pipeline(pip_rtt_desc);
+            }
+            if (rtt_invert_pip.id == SG_INVALID_ID){
+                return false;
+            }
         }
     }
 
@@ -319,6 +341,11 @@ bool SokolObject::beginDraw(PipelineType pipType){
         }
         //SokolCmdQueue::add_command_apply_pipeline(rtt_pip);
         sg_apply_pipeline(rtt_pip);
+    }else if (pipType == PipelineType::PIP_RTT_INVERT){
+        if (rtt_invert_pip.id == SG_INVALID_ID){
+            return false;
+        }
+        sg_apply_pipeline(rtt_invert_pip);
     }else{
         if (pip.id == SG_INVALID_ID){
             return false;
@@ -366,12 +393,20 @@ void SokolObject::destroy(){
                 sg_destroy_pipeline(rtt_pip);
             }
         }
+        if (rtt_invert_pip.id != SG_INVALID_ID){
+            if (Engine::isAsyncThread()){
+                SokolCmdQueue::add_command_destroy_pipeline(rtt_invert_pip);
+            }else{
+                sg_destroy_pipeline(rtt_invert_pip);
+            }
+        }
     }
 
     pip.id = SG_INVALID_ID;
     depth_pip.id = SG_INVALID_ID;
     rtt_pip.id = SG_INVALID_ID;
-    bind = {}; 
+    rtt_invert_pip.id = SG_INVALID_ID;
+    bind = {};
     pipeline_desc = {};
     bindSlotIndex = 0;
 }

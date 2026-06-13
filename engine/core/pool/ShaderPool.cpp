@@ -251,7 +251,7 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
 
 int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
     switch (shaderType) {
-        case ShaderType::MESH:   return 20;
+        case ShaderType::MESH:   return 21;
         case ShaderType::DEPTH:  return 7;
         case ShaderType::UI:     return 4;
         case ShaderType::POINTS: return 4;
@@ -284,6 +284,7 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 17: return shortName ? "Ter" : "Terrain";
             case 18: return shortName ? "Ist" : "Instancing";
             case 19: return shortName ? "Ibl" : "IBL";
+            case 20: return shortName ? "Mir" : "Mirror";
         }
     } else if (shaderType == ShaderType::DEPTH) {
         switch (bit) {
@@ -419,7 +420,7 @@ uint32_t ShaderPool::getMeshProperties(
     bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap,
     bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect,
     bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
-    bool terrain, bool instanced, bool ibl){
+    bool terrain, bool instanced, bool ibl, bool mirror){
     uint32_t prop = 0;
 
     prop |= unlit            ? (1 <<  0) : 0;
@@ -442,6 +443,7 @@ uint32_t ShaderPool::getMeshProperties(
     prop |= terrain          ? (1 << 17) : 0;
     prop |= instanced        ? (1 << 18) : 0;
     prop |= ibl              ? (1 << 19) : 0;
+    prop |= mirror           ? (1 << 20) : 0;
 
     return prop;
 }

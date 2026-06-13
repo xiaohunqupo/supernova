@@ -12,6 +12,7 @@
 #include "component/BoneComponent.h"
 #include "component/SkyComponent.h"
 #include "component/FogComponent.h"
+#include "component/MirrorComponent.h"
 #include "component/ImageComponent.h"
 #include "component/UILayoutComponent.h"
 #include "component/UIContainerComponent.h"

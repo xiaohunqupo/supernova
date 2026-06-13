@@ -798,6 +798,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         bool p_unlit = false;
         bool p_punctual = false;
         bool p_ibl = false;
+        bool p_mirror = (scene->findComponent<MirrorComponent>(entity) != NULL);
         bool p_hasTexture1 = false;
         bool p_hasNormalMap = false;
         bool p_hasNormal = false;
@@ -838,7 +839,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                         p_receiveShadows, p_shadowsPCF, p_hasNormal, p_hasNormalMap,
                         p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
-                        (terrain)?true:false, (instmesh)?true:false, p_ibl);
+                        (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror);
         mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties);
         if (hasShadows && mesh.castShadows){
             mesh.submeshes[i].depthShaderProperties = ShaderPool::getDepthMeshProperties(
@@ -857,6 +858,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         mesh.submeshes[i].slotFSParams = shaderData.getUniformBlockIndex(UniformBlockType::PBR_FS_PARAMS);
         if (hasFog){
             mesh.submeshes[i].slotFSFog = shaderData.getUniformBlockIndex(UniformBlockType::FS_FOG);
+        }
+        if (p_mirror){
+            mesh.submeshes[i].slotFSMirror = shaderData.getUniformBlockIndex(UniformBlockType::FS_MIRROR);
         }
         if ((hasLights || useIBL) && mesh.receiveLights){
             mesh.submeshes[i].slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
@@ -1148,13 +1152,22 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
                 }
             }
 
-            if (!render.beginDraw((renderToTexture)?PIP_RTT:PIP_DEFAULT)){
+            PipelineType pipType = PIP_DEFAULT;
+            if (renderToTexture){
+                // reflection cameras flip winding to keep front faces visible
+                pipType = camera.invertCulling ? PIP_RTT_INVERT : PIP_RTT;
+            }
+            if (!render.beginDraw(pipType)){
                 mesh.needReload = true;
                 return false;
             }
 
             if (hasFog){
                 render.applyUniformBlock(mesh.submeshes[i].slotFSFog, sizeof(float) * 8, &fs_fog);
+            }
+
+            if (mesh.submeshes[i].slotFSMirror != -1){
+                render.applyUniformBlock(mesh.submeshes[i].slotFSMirror, sizeof(float) * 16, &mesh.mirrorViewProjection);
             }
 
             // a submesh is lit (uses the lighting block + full PBR params) unless it
@@ -1905,7 +1918,7 @@ bool RenderSystem::loadSky(Entity entity, SkyComponent& sky, uint8_t pipelines){
     return true;
 }
 
-bool RenderSystem::drawSky(SkyComponent& sky, bool renderToTexture){
+bool RenderSystem::drawSky(SkyComponent& sky, bool renderToTexture, bool invertCulling){
     if (sky.loaded){
 
         if (sky.needUpdateTexture || sky.texture.isFramebufferOutdated()){
@@ -1920,7 +1933,13 @@ bool RenderSystem::drawSky(SkyComponent& sky, bool renderToTexture){
 
         ObjectRender& render = sky.render;
 
-        if (!render.beginDraw((renderToTexture)?PIP_RTT:PIP_DEFAULT)){
+        // a reflection pass flips handedness, so the sky cube needs reversed winding
+        // (like meshes) or back-face culling removes its inward-facing faces
+        PipelineType pipType = PIP_DEFAULT;
+        if (renderToTexture){
+            pipType = invertCulling ? PIP_RTT_INVERT : PIP_RTT;
+        }
+        if (!render.beginDraw(pipType)){
             sky.needReload = true;
             return false;
         }
@@ -2119,6 +2138,12 @@ void RenderSystem::updateCamera(CameraComponent& camera, Transform& transform){
         camera.viewMatrix.translateInPlace(-transform.worldPosition.x, -transform.worldPosition.y, -transform.worldPosition.z);
     }
 
+    // planar reflection drives the view matrix directly (mainView * reflect);
+    // projection above still comes from the copied perspective params
+    if (camera.hasCustomViewMatrix){
+        camera.viewMatrix = camera.customViewMatrix;
+    }
+
     camera.worldRight = Vector3(camera.viewMatrix[0][0], camera.viewMatrix[1][0], camera.viewMatrix[2][0]);
     camera.worldUp = Vector3(camera.viewMatrix[0][1], camera.viewMatrix[1][1], camera.viewMatrix[2][1]);
     camera.worldDirection = Vector3(camera.viewMatrix[0][2], camera.viewMatrix[1][2], camera.viewMatrix[2][2]);
@@ -2127,6 +2152,124 @@ void RenderSystem::updateCamera(CameraComponent& camera, Transform& transform){
     camera.viewProjectionMatrix = camera.projectionMatrix * camera.viewMatrix;
 
     updateCameraFrustumPlanes(camera.viewProjectionMatrix, camera.frustumPlanes);
+}
+
+// Creates the internal render-to-texture camera a mirror drives: a hidden system
+// entity (not serialized, not shown in the editor) whose framebuffer feeds the
+// mirror mesh base texture. Returns the camera entity.
+Entity RenderSystem::createMirrorCamera(Entity mirrorEntity){
+    Entity camEntity = scene->createSystemEntity();
+    scene->addComponent<Transform>(camEntity, {});
+    scene->addComponent<CameraComponent>(camEntity, {});
+
+    CameraComponent& cam = scene->getComponent<CameraComponent>(camEntity);
+    cam.type = CameraType::CAMERA_PERSPECTIVE;
+    cam.renderToTexture = true;
+    cam.autoResize = false; // driven entirely by updateMirrors
+    int w = (Engine::getCanvasWidth() > 0) ? Engine::getCanvasWidth() : 1024;
+    int h = (Engine::getCanvasHeight() > 0) ? Engine::getCanvasHeight() : 1024;
+    cam.framebuffer->setWidth(w);
+    cam.framebuffer->setHeight(h);
+
+    return camEntity;
+}
+
+// Drives each mirror's reflection camera: its view = mainView * reflect(plane),
+// so the reflected scene is rendered into that camera's framebuffer. Runs after
+// the main camera is updated and before the draw pass. The handedness flip from
+// the reflection is compensated by invertCulling on the reflection camera.
+void RenderSystem::updateMirrors(Entity mainCameraEntity){
+    auto mirrors = scene->getComponentArray<MirrorComponent>();
+    if (mirrors->size() == 0)
+        return;
+
+    CameraComponent* mainCameraPtr = scene->findComponent<CameraComponent>(mainCameraEntity);
+    if (!mainCameraPtr)
+        return;
+
+    // copy main camera state before any camera creation: creating a reflection
+    // camera below can reallocate the camera/transform arrays and dangle references
+    const Matrix4 mainView = mainCameraPtr->viewMatrix;
+    const CameraType mainType = mainCameraPtr->type;
+    const float mYfov = mainCameraPtr->yfov, mAspect = mainCameraPtr->aspect;
+    const float mNear = mainCameraPtr->nearClip, mFar = mainCameraPtr->farClip;
+    const float mLeft = mainCameraPtr->leftClip, mRight = mainCameraPtr->rightClip;
+    const float mBottom = mainCameraPtr->bottomClip, mTop = mainCameraPtr->topClip;
+    // mainCameraPtr must not be used past here (may dangle after camera creation)
+
+    // Creating a reflection camera appends to the camera/transform arrays but never
+    // the mirror array, so indexed iteration over mirrors stays valid in one pass;
+    // transforms/cameras are (re)fetched after creation since their arrays may move.
+    for (size_t i = 0; i < mirrors->size(); i++){
+        Entity entity = mirrors->getEntity(i);
+
+        Entity camEntity = mirrors->getComponentFromIndex(i).reflectionCamera;
+        if (camEntity == NULL_ENTITY || !scene->isEntityCreated(camEntity)){
+            camEntity = createMirrorCamera(entity);
+            mirrors->getComponentFromIndex(i).reflectionCamera = camEntity;
+        }
+
+        CameraComponent* refCam = scene->findComponent<CameraComponent>(camEntity);
+        Transform* refCamTransform = scene->findComponent<Transform>(camEntity);
+        Transform* mirrorTransform = scene->findComponent<Transform>(entity);
+        if (!refCam || !refCamTransform || !mirrorTransform)
+            continue;
+
+        // mirror plane in world space (entity position, world-rotated normal)
+        Vector3 worldNormal = (mirrorTransform->worldRotation * mirrors->getComponentFromIndex(i).normal).normalize();
+        Plane plane(worldNormal, mirrorTransform->worldPosition);
+
+        // reflection view keeps the handedness flip (true mirror); winding is
+        // restored by invertCulling so reflected geometry shows front faces
+        refCam->customViewMatrix = mainView * Matrix4::reflectMatrix(plane);
+        refCam->hasCustomViewMatrix = true;
+        refCam->invertCulling = true;
+        refCam->renderToTexture = true;
+
+        // match the main camera projection so the reflection lines up 1:1
+        refCam->type = mainType;
+        refCam->yfov = mYfov;
+        refCam->aspect = mAspect;
+        refCam->nearClip = mNear;
+        refCam->farClip = mFar;
+        refCam->leftClip = mLeft;
+        refCam->rightClip = mRight;
+        refCam->bottomClip = mBottom;
+        refCam->topClip = mTop;
+
+        // recompute the reflection camera matrices with the override applied
+        updateCamera(*refCam, *refCamTransform);
+
+        // oblique near-plane clipping: move the reflection camera's near plane onto
+        // the mirror plane so geometry behind the mirror doesn't leak into the
+        // reflection. The clip plane (mirror plane, normal toward the front/reflecting
+        // side) is taken to the reflection camera's view space via inverse-transpose.
+        // Applied ONLY to viewProjectionMatrix (used by meshes), NOT projectionMatrix:
+        // the skybox renders from projectionMatrix and the oblique depth would clip it.
+        // Only the depth row changes, so projective sampling (clip.xy/w) is unaffected.
+        Vector4 worldClipPlane(worldNormal.x, worldNormal.y, worldNormal.z, plane.d);
+        Vector4 viewClipPlane = refCam->viewMatrix.inverse().transpose() * worldClipPlane;
+        Matrix4 obliqueProjection = refCam->projectionMatrix.obliqueNearClip(viewClipPlane);
+        refCam->viewProjectionMatrix = obliqueProjection * refCam->viewMatrix;
+        updateCameraFrustumPlanes(refCam->viewProjectionMatrix, refCam->frustumPlanes);
+
+        MeshComponent* mesh = scene->findComponent<MeshComponent>(entity);
+        if (mesh && mesh->numSubmeshes > 0){
+            // (re)bind the reflection framebuffer to the mesh base texture every frame.
+            // Doing this per-frame (not just at camera creation) re-heals the mirror
+            // after a play-stop snapshot restore, which clears the framebuffer binding
+            // (framebuffer textures aren't serialized). One-shot: no rebind once matched.
+            Texture& baseTex = mesh->submeshes[0].material.baseColorTexture;
+            if (baseTex.getFramebuffer() != refCam->framebuffer){
+                baseTex.setFramebuffer(refCam->framebuffer);
+                mesh->needReload = true;
+            }
+
+            // hand the reflection VP to the mirror mesh for projective sampling
+            // (USE_MIRROR shader); logical matrix, the shader handles the texture origin
+            mesh->mirrorViewProjection = refCam->viewProjectionMatrix;
+        }
+    }
 }
 
 void RenderSystem::updateSkyViewProjection(SkyComponent& sky, CameraComponent& camera){
@@ -3052,6 +3195,18 @@ void RenderSystem::update(double dt){
         }
     }
 
+    // mirrors render the scene with reversed winding (handedness flip); bake the
+    // inverted RTT pipeline for meshes only when a mirror is present
+    if (scene->getComponentArray<MirrorComponent>()->size() > 0){
+        pipelines |= PIP_RTT_INVERT;
+    }
+
+    // drive mirror reflection cameras from the (now updated) main camera, so the
+    // reflection passes render with current matrices in the draw step. This may
+    // create reflection camera entities (reallocating the camera/transform arrays),
+    // so fetch mainCamera/mainCameraTransform references AFTER it returns.
+    updateMirrors(mainCameraEntity);
+
     CameraComponent& mainCamera =  scene->getComponent<CameraComponent>(mainCameraEntity);
     Transform& mainCameraTransform =  scene->getComponent<Transform>(mainCameraEntity);
 
@@ -3456,7 +3611,7 @@ void RenderSystem::draw(){
                     updateSkyViewProjection(sky, camera);
                 }
 
-                drawSky(sky, camera.renderToTexture || Engine::getFramebuffer());
+                drawSky(sky, camera.renderToTexture || Engine::getFramebuffer(), camera.invertCulling);
             }
         }
 
@@ -3660,5 +3815,12 @@ void RenderSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
     } else if (componentId == scene->getComponentId<CameraComponent>()) {
         CameraComponent& camera = scene->getComponent<CameraComponent>(entity);
         destroyCamera(camera, true);
+    } else if (componentId == scene->getComponentId<MirrorComponent>()) {
+        // destroy the internal reflection camera owned by this mirror
+        MirrorComponent& mirror = scene->getComponent<MirrorComponent>(entity);
+        if (mirror.reflectionCamera != NULL_ENTITY && scene->isEntityCreated(mirror.reflectionCamera)){
+            scene->destroyEntity(mirror.reflectionCamera);
+        }
+        needReloadMeshes();
     }
 }

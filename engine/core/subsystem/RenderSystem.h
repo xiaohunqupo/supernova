@@ -169,7 +169,7 @@ namespace doriax{
 		bool drawLines(LinesComponent& lines, Transform& transform, Transform& camTransform, bool renderToTexture);
 		void destroyLines(Entity entity, LinesComponent& lines);
 
-		bool drawSky(SkyComponent& sky, bool renderToTexture);
+		bool drawSky(SkyComponent& sky, bool renderToTexture, bool invertCulling);
 		void destroySky(Entity entity, SkyComponent& sky);
 
 		void destroyLight(LightComponent& light);
@@ -199,6 +199,8 @@ namespace doriax{
 		void updateFramebuffer(CameraComponent& camera);
 		void updateTransform(Transform& transform);
 		void updateCamera(CameraComponent& camera, Transform& transform);
+		void updateMirrors(Entity mainCameraEntity);
+		Entity createMirrorCamera(Entity mirrorEntity);
 
 		// camera
 		void updateCameraSize(Entity entity);

@@ -156,6 +156,8 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_fs_lighting";
     }else if (type == UniformBlockType::FS_FOG){
         ustr = "u_fs_fog";
+    }else if (type == UniformBlockType::FS_MIRROR){
+        ustr = "u_fs_mirror";
     }else if (type == UniformBlockType::VS_SHADOWS){
         ustr = "u_vs_shadows";
     }else if (type == UniformBlockType::FS_SHADOWS){

@@ -87,6 +87,7 @@ namespace doriax{
         virtual ~MeshSystem();
 
         void createPlane(MeshComponent& mesh, float width=1, float depth=1, unsigned int tiles=1);
+        void createWall(MeshComponent& mesh, float width=1, float height=1, unsigned int tiles=1);
         void createBox(MeshComponent& mesh, float width=1, float height=1, float depth=1, unsigned int tiles=1);
         void createSphere(MeshComponent& mesh, float radius=1, unsigned int slices=36, unsigned int stacks=18);
         void createCylinder(MeshComponent& mesh, float baseRadius=1, float topRadius=1, float height=2, unsigned int slices=36, unsigned int stacks=18);

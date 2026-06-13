@@ -376,6 +376,10 @@ namespace {
         makeFastProperty<FogComponent, float, &FogComponent::linearEnd>("linearEnd", PropertyType::Float, UpdateFlags_None),
     };
 
+    static const FastPropertyDescriptor kMirrorProperties[] = {
+        makeFastProperty<MirrorComponent, Vector3, &MirrorComponent::normal>("normal", PropertyType::Vector3, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kCameraProperties[] = {
         makeFastProperty<CameraComponent, CameraType, &CameraComponent::type>("type", PropertyType::Enum, UpdateFlags_Camera),
         makeFastProperty<CameraComponent, Vector3, &CameraComponent::target>("target", PropertyType::Vector3, UpdateFlags_Camera),
@@ -1192,6 +1196,10 @@ namespace {
         return resolveDirectProperties(static_cast<FogComponent*>(comp), propertyName, kFogProperties);
     }
 
+    PropertyData resolveMirrorPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<MirrorComponent*>(comp), propertyName, kMirrorProperties);
+    }
+
     PropertyData resolveCameraPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<CameraComponent*>(comp), propertyName, kCameraProperties);
     }
@@ -2004,6 +2012,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kFogProperties);
     }
 
+    void enumerateMirrorProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kMirrorProperties);
+    }
+
     void enumerateCameraProperties(void* comp, std::map<std::string, PropertyData>& ps) {
         enumerateFromDescriptors(comp, ps, kCameraProperties);
     }
@@ -2650,6 +2662,7 @@ namespace {
         {ComponentType::TerrainComponent, &findComponentPtr<TerrainComponent>, &resolveTerrainPropertyFast, &enumerateTerrainProperties},
         {ComponentType::LightComponent, &findComponentPtr<LightComponent>, &resolveLightPropertyFast, &enumerateLightProperties},
         {ComponentType::FogComponent, &findComponentPtr<FogComponent>, &resolveFogPropertyFast, &enumerateFogProperties},
+        {ComponentType::MirrorComponent, &findComponentPtr<MirrorComponent>, &resolveMirrorPropertyFast, &enumerateMirrorProperties},
         {ComponentType::CameraComponent, &findComponentPtr<CameraComponent>, &resolveCameraPropertyFast, &enumerateCameraProperties},
         {ComponentType::SoundComponent, &findComponentPtr<SoundComponent>, &resolveAudioPropertyFast, &enumerateAudioProperties},
         {ComponentType::SkyComponent, &findComponentPtr<SkyComponent>, &resolveSkyPropertyFast, &enumerateSkyProperties},
@@ -2770,6 +2783,8 @@ std::string editor::Catalog::getComponentName(ComponentType component, bool remo
         name = "ColorActionComponent";
     }else if(component == ComponentType::FogComponent){
         name = "FogComponent";
+    }else if(component == ComponentType::MirrorComponent){
+        name = "MirrorComponent";
     }else if(component == ComponentType::ImageComponent){
         name = "ImageComponent";
     }else if(component == ComponentType::InstancedMeshComponent){
@@ -2889,6 +2904,8 @@ ComponentId editor::Catalog::getComponentId(const EntityRegistry* registry, Comp
             return registry->getComponentId<ColorActionComponent>();
         case ComponentType::FogComponent:
             return registry->getComponentId<FogComponent>();
+        case ComponentType::MirrorComponent:
+            return registry->getComponentId<MirrorComponent>();
         case ComponentType::ImageComponent:
             return registry->getComponentId<ImageComponent>();
         case ComponentType::InstancedMeshComponent:
@@ -2985,6 +3002,8 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
         return ComponentType::ColorActionComponent;
     }else if(normalizedName == "fog"){
         return ComponentType::FogComponent;
+    }else if(normalizedName == "mirror"){
+        return ComponentType::MirrorComponent;
     }else if(normalizedName == "image"){
         return ComponentType::ImageComponent;
     }else if(normalizedName == "instancedmesh"){
@@ -3141,6 +3160,9 @@ std::vector<editor::ComponentType> editor::Catalog::findComponents(EntityRegistr
     }
     if (registry->findComponent<FogComponent>(entity)){
         ret.push_back(ComponentType::FogComponent);
+    }
+    if (registry->findComponent<MirrorComponent>(entity)){
+        ret.push_back(ComponentType::MirrorComponent);
     }
     if (registry->findComponent<ImageComponent>(entity)){
         ret.push_back(ComponentType::ImageComponent);
@@ -3344,6 +3366,9 @@ int editor::Catalog::getComponentStructuralUpdateFlags(ComponentType compType) {
     switch (compType) {
         case ComponentType::LightComponent:
         case ComponentType::FogComponent:
+        // adding/removing a mirror toggles the inverted-culling pipeline baked
+        // into meshes, so they must reload
+        case ComponentType::MirrorComponent:
             return UpdateFlags_Scene_Mesh_Reload;
         default:
             return UpdateFlags_None;
@@ -3649,6 +3674,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::FogComponent: {
             YAML::Node encoded = Stream::encodeFogComponent(sourceRegistry->getComponent<FogComponent>(sourceEntity));
             targetRegistry->getComponent<FogComponent>(targetEntity) = Stream::decodeFogComponent(encoded);
+            break;
+        }
+
+        case ComponentType::MirrorComponent: {
+            YAML::Node encoded = Stream::encodeMirrorComponent(sourceRegistry->getComponent<MirrorComponent>(sourceEntity));
+            targetRegistry->getComponent<MirrorComponent>(targetEntity) = Stream::decodeMirrorComponent(encoded);
             break;
         }
 

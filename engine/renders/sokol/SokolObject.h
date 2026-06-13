@@ -45,6 +45,7 @@ namespace doriax{
         sg_pipeline pip;
         sg_pipeline depth_pip;
         sg_pipeline rtt_pip;
+        sg_pipeline rtt_invert_pip;
 
         sg_pipeline_desc pipeline_desc;
 

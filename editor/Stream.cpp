@@ -2487,6 +2487,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::FogComponent, true)] = encodeFogComponent(fog);
     }
 
+    if (signature.test(registry->getComponentId<MirrorComponent>())) {
+        MirrorComponent mirror = registry->getComponent<MirrorComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::MirrorComponent, true)] = encodeMirrorComponent(mirror);
+    }
+
     if (signature.test(registry->getComponentId<CameraComponent>())) {
         CameraComponent camera = registry->getComponent<CameraComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::CameraComponent, true)] = encodeCameraComponent(camera);
@@ -2871,6 +2876,20 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             int flags = Catalog::getChangedUpdateFlags(ComponentType::FogComponent, existing, &fog);
             registry->getComponent<FogComponent>(entity) = fog;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::MirrorComponent, true);
+    if (compNode[compName]) {
+        MirrorComponent* existing = registry->findComponent<MirrorComponent>(entity);
+        MirrorComponent mirror = decodeMirrorComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<MirrorComponent>())){
+            registry->addComponent<MirrorComponent>(entity, mirror);
+            Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::MirrorComponent));
+        }else{
+            int flags = Catalog::getChangedUpdateFlags(ComponentType::MirrorComponent, existing, &mirror);
+            registry->getComponent<MirrorComponent>(entity) = mirror;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -4242,6 +4261,27 @@ FogComponent editor::Stream::decodeFogComponent(const YAML::Node& node, const Fo
     if (node["linearEnd"]) fog.linearEnd = node["linearEnd"].as<float>();
 
     return fog;
+}
+
+YAML::Node editor::Stream::encodeMirrorComponent(const MirrorComponent& mirror) {
+    YAML::Node node;
+
+    // reflectionCamera is an engine-created runtime entity; not serialized
+    node["normal"] = encodeVector3(mirror.normal);
+
+    return node;
+}
+
+MirrorComponent editor::Stream::decodeMirrorComponent(const YAML::Node& node, const MirrorComponent* oldMirror) {
+    MirrorComponent mirror;
+
+    if (oldMirror) {
+        mirror = *oldMirror;
+    }
+
+    if (node["normal"]) mirror.normal = decodeVector3(node["normal"]);
+
+    return mirror;
 }
 
 YAML::Node editor::Stream::encodeCameraComponent(const CameraComponent& camera) {

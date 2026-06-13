@@ -25,6 +25,14 @@ void Shape::createPlane(float width, float depth, unsigned int tiles){
     scene->getSystem<MeshSystem>()->createPlane(getComponent<MeshComponent>(), width, depth, tiles);
 }
 
+void Shape::createWall(float width, float height){
+    scene->getSystem<MeshSystem>()->createWall(getComponent<MeshComponent>(), width, height);
+}
+
+void Shape::createWall(float width, float height, unsigned int tiles){
+    scene->getSystem<MeshSystem>()->createWall(getComponent<MeshComponent>(), width, height, tiles);
+}
+
 void Shape::createBox(float width, float height, float depth){
     scene->getSystem<MeshSystem>()->createBox(getComponent<MeshComponent>(), width, height, depth);
 }

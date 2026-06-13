@@ -102,6 +102,7 @@ namespace doriax{
         PBR_FS_PARAMS,
         FS_LIGHTING,
         FS_FOG,
+        FS_MIRROR,
         VS_SHADOWS,
         FS_SHADOWS,
         SKY_VS_PARAMS,
@@ -193,9 +194,10 @@ namespace doriax{
     };
 
     enum PipelineType {
-        PIP_DEFAULT = 1 << 0,
-        PIP_RTT     = 1 << 1,
-        PIP_DEPTH   = 1 << 2
+        PIP_DEFAULT     = 1 << 0,
+        PIP_RTT         = 1 << 1,
+        PIP_DEPTH       = 1 << 2,
+        PIP_RTT_INVERT  = 1 << 3  // render-to-texture with reversed winding (planar reflection)
     };
 
     //-------Start shader definition--------

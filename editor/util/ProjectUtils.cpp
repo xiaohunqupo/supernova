@@ -506,6 +506,13 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
                 registry->addComponent<FogComponent>(entity, Stream::decodeFogComponent(componentNode));
             }
             break;
+        case ComponentType::MirrorComponent:
+            if (!componentNode.IsDefined() || componentNode.IsNull()){
+                registry->addComponent<MirrorComponent>(entity, {});
+            }else{
+                registry->addComponent<MirrorComponent>(entity, Stream::decodeMirrorComponent(componentNode));
+            }
+            break;
         case ComponentType::ImageComponent:
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<ImageComponent>(entity, {});
@@ -895,6 +902,12 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
                 oldComponent = Stream::encodeFogComponent(registry->getComponent<FogComponent>(entity));
             }
             registry->removeComponent<FogComponent>(entity);
+            break;
+        case ComponentType::MirrorComponent:
+            if (encodeComponent){
+                oldComponent = Stream::encodeMirrorComponent(registry->getComponent<MirrorComponent>(entity));
+            }
+            registry->removeComponent<MirrorComponent>(entity);
             break;
         case ComponentType::ImageComponent:
             if (encodeComponent){

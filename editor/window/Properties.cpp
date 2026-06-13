@@ -1386,6 +1386,9 @@ void editor::Properties::updateMeshShape(MeshComponent& meshComp, MeshSystem* me
         case 5: // Torus
             meshSys->createTorus(meshComp, shapeParams.torusRadius, shapeParams.torusRingRadius, shapeParams.torusSides, shapeParams.torusRings);
             break;
+        case 6: // Wall
+            meshSys->createWall(meshComp, shapeParams.wallWidth, shapeParams.wallHeight, shapeParams.wallTiles);
+            break;
     }
 }
 
@@ -4514,7 +4517,7 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
         ImGui::Text("Create Shape");
         ImGui::Separator();
 
-        const char* geometryTypes[] = { "Plane", "Box", "Sphere", "Cylinder", "Capsule", "Torus" };
+        const char* geometryTypes[] = { "Plane", "Box", "Sphere", "Cylinder", "Capsule", "Torus", "Wall" };
 
         beginTable(cpType, getLabelSize("Geometry Type"), "geometry_popup");
 
@@ -4661,6 +4664,23 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
 
                 propertyHeader("Rings", secondColSize);
                 if (ImGui::DragInt("##torus_rings", (int*)&shapeParams.torusRings, 1, 3, 100)) {
+                    updatedPreview = true;
+                }
+                break;
+
+            case 6: // Wall
+                propertyHeader("Width", secondColSize);
+                if (ImGui::DragFloat("##wall_width", &shapeParams.wallWidth, 0.1f, 0.1f, 100.0f, "%.2f")) {
+                    updatedPreview = true;
+                }
+
+                propertyHeader("Height", secondColSize);
+                if (ImGui::DragFloat("##wall_height", &shapeParams.wallHeight, 0.1f, 0.1f, 100.0f, "%.2f")) {
+                    updatedPreview = true;
+                }
+
+                propertyHeader("Tiles", secondColSize);
+                if (ImGui::DragInt("##wall_tiles", (int*)&shapeParams.wallTiles, 1, 1, 100)) {
                     updatedPreview = true;
                 }
                 break;
@@ -6793,6 +6813,15 @@ void editor::Properties::drawFogComponent(ComponentType cpType, SceneProject* sc
     } else {
         propertyRow(RowPropertyType::Float, cpType, "density", "Density", sceneProject, entities, settingsDensity);
     }
+    endTable();
+}
+
+void editor::Properties::drawMirrorComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    RowSettings normalSettings;
+    normalSettings.help = "Reflecting surface normal in local space (the mirror plane is this normal at the entity's position). Flip its sign if the reflection clips the wrong side. The reflection camera is created automatically.";
+
+    beginTable(cpType, getLabelSize("Normal"));
+    propertyRow(RowPropertyType::Direction, cpType, "normal", "Normal", sceneProject, entities, normalSettings);
     endTable();
 }
 
@@ -11265,6 +11294,8 @@ void editor::Properties::show(){
                     drawLightComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::FogComponent){
                     drawFogComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::MirrorComponent){
+                    drawMirrorComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::CameraComponent){
                     drawCameraComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::SoundComponent){

@@ -9,6 +9,7 @@
 #include "Quaternion.h"
 #include "AABB.h"
 #include "OBB.h"
+#include "Plane.h"
 
 using namespace doriax;
 
@@ -589,6 +590,63 @@ Matrix4 Matrix4::lookAtMatrix(Vector3 eye, Vector3 center, Vector3 up){
     r.translateInPlace(-eye.x, -eye.y, -eye.z);
 
     return r;
+}
+
+// Householder reflection across a plane (normal·p + d = 0); reflects world
+// points so a camera viewed through it sees the mirror image. v' = R * v.
+Matrix4 Matrix4::reflectMatrix(const Plane& plane){
+    Plane p = plane.normalized();
+    float a = p.normal.x;
+    float b = p.normal.y;
+    float c = p.normal.z;
+    float d = p.d;
+
+    Matrix4 r; // identity
+
+    r.set(0, 0, 1.0f - 2.0f * a * a);
+    r.set(1, 0, -2.0f * a * b);
+    r.set(2, 0, -2.0f * a * c);
+    r.set(3, 0, -2.0f * a * d);
+
+    r.set(0, 1, -2.0f * a * b);
+    r.set(1, 1, 1.0f - 2.0f * b * b);
+    r.set(2, 1, -2.0f * b * c);
+    r.set(3, 1, -2.0f * b * d);
+
+    r.set(0, 2, -2.0f * a * c);
+    r.set(1, 2, -2.0f * b * c);
+    r.set(2, 2, 1.0f - 2.0f * c * c);
+    r.set(3, 2, -2.0f * c * d);
+
+    return r;
+}
+
+Matrix4 Matrix4::obliqueNearClip(const Vector4& clipPlane) const {
+    Matrix4 m = *this;
+
+    auto sgn = [](float v) -> float { return (v > 0.0f) - (v < 0.0f); };
+
+    // clip-space corner opposite the clip plane, transformed to view space
+    Vector4 q;
+    q.x = (sgn(clipPlane.x) + get(2, 0)) / get(0, 0);
+    q.y = (sgn(clipPlane.y) + get(2, 1)) / get(1, 1);
+    q.z = -1.0f;
+    q.w = (1.0f + get(2, 2)) / get(3, 2);
+
+    // scale the plane so the new near plane lands exactly on it
+    float denom = clipPlane.dotProduct(q);
+    if (std::fabs(denom) < 1e-6f) {
+        return m; // plane nearly parallel to view direction (mirror edge-on)
+    }
+    Vector4 c = clipPlane * (2.0f / denom);
+
+    // replace the projection's depth (3rd) row; x/y/w rows untouched
+    m.set(0, 2, c.x);
+    m.set(1, 2, c.y);
+    m.set(2, 2, c.z + 1.0f);
+    m.set(3, 2, c.w);
+
+    return m;
 }
 
 Matrix4 Matrix4::frustumMatrix(float left, float right, float bottom, float top, float near, float far){

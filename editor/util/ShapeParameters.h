@@ -6,6 +6,8 @@ namespace doriax::editor{
         int geometryType = 0;
         float planeWidth = 10.0f, planeDepth = 10.0f;
         unsigned int planeTiles = 1;
+        float wallWidth = 10.0f, wallHeight = 10.0f;
+        unsigned int wallTiles = 1;
         float boxWidth = 1.0f, boxHeight = 1.0f, boxDepth = 1.0f;
         unsigned int boxTiles = 1;
         float sphereRadius = 1.0f;

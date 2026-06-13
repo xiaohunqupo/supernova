@@ -15,6 +15,8 @@ namespace doriax::editor{
         OBJECT,
         BOX,
         PLANE,
+        WALL,
+        MIRROR,
         SPHERE,
         CYLINDER,
         CAPSULE,

@@ -14,7 +14,7 @@ uniform u_vs_pbrParams {
 
 in vec3 a_position;
 
-#ifndef MATERIAL_UNLIT
+#if !defined(MATERIAL_UNLIT) || defined(USE_MIRROR)
     out vec3 v_position;
 #endif
 
@@ -132,8 +132,8 @@ void main() {
     #endif
 
     vec4 worldPos = pbrParams.modelMatrix * pos;
-    
-    #ifndef MATERIAL_UNLIT
+
+    #if !defined(MATERIAL_UNLIT) || defined(USE_MIRROR)
         v_position = vec3(worldPos.xyz) / worldPos.w;
     #endif
 

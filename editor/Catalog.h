@@ -90,7 +90,8 @@ namespace doriax::editor{
         TextEditComponent,
         TilemapComponent,
         TranslateTracksComponent,
-        UIContainerComponent
+        UIContainerComponent,
+        MirrorComponent
     };
 
     enum class PropertyType{

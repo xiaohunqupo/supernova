@@ -1460,7 +1460,9 @@ std::filesystem::path editor::App::getUserCacheBaseDir() {
 }
 
 std::filesystem::path editor::App::getUserShaderCacheDir(){
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v3";
+    // v4: mirror (USE_MIRROR) variants changed the u_fs_mirror block guard;
+    // bump so stale cached .sdat for those variants are rebuilt
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v4";
 }
 
 void editor::App::pushTabNotificationStyle(){

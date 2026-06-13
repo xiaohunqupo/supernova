@@ -8,6 +8,7 @@ EntityRegistry::EntityRegistry() {
     registerComponent<BoneComponent>();
     registerComponent<SkyComponent>();
     registerComponent<FogComponent>();
+    registerComponent<MirrorComponent>();
     registerComponent<UIContainerComponent>();
     registerComponent<UILayoutComponent>();
     registerComponent<SpriteComponent>();

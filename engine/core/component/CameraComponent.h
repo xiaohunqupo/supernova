@@ -76,6 +76,13 @@ namespace doriax{
         bool useTarget = true;
         bool autoResize = true;
 
+        // engine-driven override (planar reflection): when set, updateCamera uses
+        // customViewMatrix instead of position/target, and invertCulling flips
+        // triangle winding for the reflected (handedness-mirrored) pass
+        bool hasCustomViewMatrix = false;
+        Matrix4 customViewMatrix;
+        bool invertCulling = false;
+
         bool needUpdate = true;
     };
 

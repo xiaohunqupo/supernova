@@ -41,6 +41,7 @@ namespace doriax{
         int slotFSParams = -1;
         int slotFSLighting = -1;
         int slotFSFog = -1;
+        int slotFSMirror = -1;
         int slotVSSprite = -1;
         int slotVSShadows = -1;
         int slotFSShadows = -1;
@@ -94,6 +95,11 @@ namespace doriax{
         Matrix4 bonesMatrix[MAX_BONES];
         float normAdjustJoint = 1;
         float normAdjustWeight = 1;
+
+        // planar reflection: logical view-projection of the mirror's reflection
+        // camera, set each frame by RenderSystem::updateMirrors, uploaded to the
+        // USE_MIRROR shader for projective sampling of the reflection texture
+        Matrix4 mirrorViewProjection;
 
         float morphWeights[MAX_MORPHTARGETS];
 

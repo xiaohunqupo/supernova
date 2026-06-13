@@ -1,7 +1,15 @@
 #version 450
 
-#ifndef MATERIAL_UNLIT
+#if !defined(MATERIAL_UNLIT) || defined(USE_MIRROR)
     in vec3 v_position;
+#endif
+
+// declared only when actually sampled (USE_MIRROR + a base texture to sample);
+// otherwise the GL driver strips the unused block and its bind slot mismatches
+#if defined(USE_MIRROR) && defined(HAS_UV_SET1)
+    uniform u_fs_mirror {
+        mat4 mirrorVP; // logical view-projection of the reflection camera
+    } mirrorParams;
 #endif
 
 #ifdef HAS_NORMALS
@@ -193,6 +201,16 @@ const float M_PI = 3.141592653589793;
 
 void main() {
     vec4 baseColor = getBaseColor();
+
+    #if defined(USE_MIRROR) && defined(HAS_UV_SET1)
+        // planar reflection: sample the reflection texture by this fragment's
+        // screen position (projected through the reflection camera), not mesh UVs.
+        // Y is flipped for the top-left framebuffer origin (all backends).
+        vec4 mirrorClip = mirrorParams.mirrorVP * vec4(v_position, 1.0);
+        vec2 mirrorUV = vec2(mirrorClip.x / mirrorClip.w * 0.5 + 0.5,
+                             0.5 - mirrorClip.y / mirrorClip.w * 0.5);
+        baseColor = pbrParams.baseColorFactor * sRGBToLinear(texture(sampler2D(u_baseColorTexture, u_baseColor_smp), mirrorUV)) * getVertexColor();
+    #endif
 
     #ifdef HAS_TERRAIN
         baseColor = getTerrainColor(baseColor);

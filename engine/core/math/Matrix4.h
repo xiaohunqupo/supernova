@@ -11,6 +11,7 @@ namespace doriax {
     class Quaternion;
     class AABB;
     class OBB;
+    class Plane;
 
     class DORIAX_API Matrix4{
 
@@ -80,6 +81,12 @@ namespace doriax {
         static Matrix4 scaleMatrix(const Vector3& sf);
 
         static Matrix4 lookAtMatrix(Vector3 eye, Vector3 center, Vector3 up);
+        static Matrix4 reflectMatrix(const Plane& plane);
+
+        // Lengyel oblique near-plane: returns this projection with its near plane
+        // moved onto clipPlane (given in view space). Only the depth (3rd) row
+        // changes, so clip x/y/w are preserved. Used for planar-reflection clipping.
+        Matrix4 obliqueNearClip(const Vector4& clipPlane) const;
         static Matrix4 frustumMatrix(float left, float right, float bottom, float top, float near, float far);
         static Matrix4 orthoMatrix(float l, float r, float b, float t, float n, float f);
         static Matrix4 perspectiveMatrix(float yfov, float aspect, float near, float far);

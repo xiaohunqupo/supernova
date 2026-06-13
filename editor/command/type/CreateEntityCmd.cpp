@@ -106,6 +106,26 @@ bool editor::CreateEntityCmd::execute(){
         MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
         scene->getSystem<MeshSystem>()->createPlane(mesh, shapeDefs.planeWidth, shapeDefs.planeDepth);
 
+    }else if (type == EntityCreationType::WALL){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<MeshComponent>(entity, {});
+
+        ShapeParameters shapeDefs;
+        MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
+        scene->getSystem<MeshSystem>()->createWall(mesh, shapeDefs.wallWidth, shapeDefs.wallHeight);
+
+    }else if (type == EntityCreationType::MIRROR){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<MeshComponent>(entity, {});
+        scene->addComponent<MirrorComponent>(entity, {}); // default normal +Z matches the wall
+        updateFlags |= Catalog::getComponentStructuralUpdateFlags(ComponentType::MirrorComponent);
+
+        ShapeParameters shapeDefs;
+        MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
+        scene->getSystem<MeshSystem>()->createWall(mesh, shapeDefs.wallWidth, shapeDefs.wallHeight);
+
     }else if (type == EntityCreationType::SPHERE){
 
         scene->addComponent<Transform>(entity, {});

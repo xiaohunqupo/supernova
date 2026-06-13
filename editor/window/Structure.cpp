@@ -109,6 +109,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
+    if (ImGui::MenuItem(ICON_FA_CLONE"  Mirror")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Mirror", EntityCreationType::MIRROR, parent, addToBundle));
+        openParent = parent;
+    }
+
     if (ImGui::BeginMenu(ICON_FA_VOLUME_HIGH"  Sound")){
         if (ImGui::MenuItem(ICON_FA_FILE_AUDIO"  Sound Source")){
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Sound Source", EntityCreationType::SOUND, parent, addToBundle));
@@ -128,6 +133,10 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         }
         if (ImGui::MenuItem(ICON_FA_DICE_D20"  Plane")){
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Plane", EntityCreationType::PLANE, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_DICE_D20"  Wall")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Wall", EntityCreationType::WALL, parent, addToBundle));
             openParent = parent;
         }
         if (ImGui::MenuItem(ICON_FA_DICE_D20"  Sphere")){
