@@ -77,6 +77,9 @@ void editor::SceneWindow::resetProjectState() {
     mouseLeftDraggedInside = false;
     draggingMouse.clear();
     suppressLeftMouseUntilRelease.clear();
+    resyncLookDelta.clear();
+    lookActive.clear();
+    lookReturnPos.clear();
     walkSpeed.clear();
     width.clear();
     height.clear();
@@ -90,6 +93,9 @@ void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
     }
     draggingMouse.erase(sceneId);
     suppressLeftMouseUntilRelease.erase(sceneId);
+    resyncLookDelta.erase(sceneId);
+    lookActive.erase(sceneId);
+    lookReturnPos.erase(sceneId);
     walkSpeed.erase(sceneId);
     width.erase(sceneId);
     height.erase(sceneId);
@@ -929,6 +935,18 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
             (altHeld && !gizmoSideActive && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !suppressLeftMouse))) {
         draggingMouse[sceneId] = true;
 
+        // The right-button look hides/locks the cursor (GLFW_CURSOR_DISABLED). GLFW then
+        // reports a virtual cursor position that drifts during the drag and is reset on the
+        // next lock, so io.MousePos is discontinuous across drags. The first reported motion
+        // after re-locking yields a huge bogus delta that would snap the view back. Arm a
+        // flag to discard that first delta whenever a right-look drag begins.
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+            resyncLookDelta[sceneId] = true;
+            // Remember where the look began so we can restore it on release (see below).
+            lookActive[sceneId] = true;
+            lookReturnPos[sceneId] = mousePos;
+        }
+
         ImGui::SetWindowFocus();
     }
 
@@ -938,6 +956,16 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         Backend::enableMouseCursor();
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+
+        // While looking, the cursor was locked (GLFW_CURSOR_DISABLED) and its virtual position
+        // may have drifted far outside the window. GLFW restores the real cursor to the lock
+        // point, but ImGui's io.MousePos keeps the stale far-off value until the next motion,
+        // which leaves the next click failing the isMouseInWindow test. Snap io.MousePos back
+        // to where the look started so subsequent clicks register again.
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && lookActive[sceneId]) {
+            io.AddMousePosEvent(lookReturnPos[sceneId].x, lookReturnPos[sceneId].y);
+            lookActive[sceneId] = false;
+        }
     }
 
     Camera* camera = sceneProject->sceneRender->getCamera();
@@ -957,8 +985,21 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
                 walkingMode = true;
 
-                camera->rotateView(-0.1 * mouseDelta.x);
-                camera->elevateView(-0.1 * mouseDelta.y);
+                float lookDeltaX = mouseDelta.x;
+                float lookDeltaY = mouseDelta.y;
+
+                // Swallow the first non-zero motion after the cursor was (re)locked: it is the
+                // discontinuity from GLFW's virtual cursor being reset, not real mouse movement.
+                if (resyncLookDelta[sceneId]) {
+                    if (lookDeltaX != 0.0f || lookDeltaY != 0.0f) {
+                        lookDeltaX = 0.0f;
+                        lookDeltaY = 0.0f;
+                        resyncLookDelta[sceneId] = false;
+                    }
+                }
+
+                camera->rotateView(-0.1 * lookDeltaX);
+                camera->elevateView(-0.1 * lookDeltaY);
 
                 // Restore up vector after rotation (fixes Y-snap leaving Z as up)
                 Vector3 dir = camera->getWorldDirection().normalize();
