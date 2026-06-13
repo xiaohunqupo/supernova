@@ -30,6 +30,10 @@
 		17C554F82FB903B0008804C2 /* ModelPool.h in Headers */ = {isa = PBXBuildFile; fileRef = 17C554F62FB903B0008804C2 /* ModelPool.h */; };
 		17C554F92FB903B0008804C2 /* ModelPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17C554F72FB903B0008804C2 /* ModelPool.cpp */; };
 		17C554FA2FB903B0008804C2 /* ModelPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17C554F72FB903B0008804C2 /* ModelPool.cpp */; };
+		17FB42732FDDA6E3002F919C /* MirrorComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 17FB42722FDDA6E3002F919C /* MirrorComponent.h */; };
+		17FB42762FDDA782002F919C /* IBLEnvironment.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17FB42752FDDA782002F919C /* IBLEnvironment.cpp */; };
+		17FB42772FDDA782002F919C /* IBLEnvironment.h in Headers */ = {isa = PBXBuildFile; fileRef = 17FB42742FDDA782002F919C /* IBLEnvironment.h */; };
+		17FB42782FDDA782002F919C /* IBLEnvironment.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17FB42752FDDA782002F919C /* IBLEnvironment.cpp */; };
 		71033D662BD1A7D200D81FB5 /* ScrollbarComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 71033D652BD1A7D200D81FB5 /* ScrollbarComponent.h */; };
 		71033D692BD1A7F100D81FB5 /* Scrollbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71033D672BD1A7F000D81FB5 /* Scrollbar.cpp */; };
 		71033D6A2BD1A7F100D81FB5 /* Scrollbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71033D672BD1A7F000D81FB5 /* Scrollbar.cpp */; };
@@ -1306,6 +1310,9 @@
 		17A4DD6C2F5E4F8800C1BFC6 /* HybridArray.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HybridArray.h; sourceTree = "<group>"; };
 		17C554F62FB903B0008804C2 /* ModelPool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ModelPool.h; sourceTree = "<group>"; };
 		17C554F72FB903B0008804C2 /* ModelPool.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ModelPool.cpp; sourceTree = "<group>"; };
+		17FB42722FDDA6E3002F919C /* MirrorComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MirrorComponent.h; sourceTree = "<group>"; };
+		17FB42742FDDA782002F919C /* IBLEnvironment.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = IBLEnvironment.h; sourceTree = "<group>"; };
+		17FB42752FDDA782002F919C /* IBLEnvironment.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = IBLEnvironment.cpp; sourceTree = "<group>"; };
 		71033D652BD1A7D200D81FB5 /* ScrollbarComponent.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ScrollbarComponent.h; sourceTree = "<group>"; };
 		71033D672BD1A7F000D81FB5 /* Scrollbar.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Scrollbar.cpp; sourceTree = "<group>"; };
 		71033D682BD1A7F000D81FB5 /* Scrollbar.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Scrollbar.h; sourceTree = "<group>"; };
@@ -3432,6 +3439,7 @@
 				7126757D2B65F4470031089C /* LinesComponent.h */,
 				7162FC4525962A0E0075B97D /* MeshComponent.h */,
 				71ABBD3E27A879B9001CE3AF /* MeshPolygonComponent.h */,
+				17FB42722FDDA6E3002F919C /* MirrorComponent.h */,
 				7170A3CA2818A87E0003E965 /* ModelComponent.h */,
 				71E5450D284D5BDF00C68FAB /* MorphTracksComponent.h */,
 				7181A0AC2BC8B6B400AC230B /* PanelComponent.h */,
@@ -3539,6 +3547,8 @@
 			children = (
 				717AD990292FC30A007D7DB5 /* Framebuffer.h */,
 				717AD991292FC30A007D7DB5 /* Framebuffer.cpp */,
+				17FB42742FDDA782002F919C /* IBLEnvironment.h */,
+				17FB42752FDDA782002F919C /* IBLEnvironment.cpp */,
 				715CB11A288CD5790049344B /* Material.h */,
 				7162FC6D25962A0E0075B97D /* Texture.h */,
 				7162FC6C25962A0E0075B97D /* Texture.cpp */,
@@ -4396,6 +4406,7 @@
 				71E54513284D5BE000C68FAB /* MorphTracksComponent.h in Headers */,
 				711BFE3A2E6E5AE500677D11 /* ScriptComponent.h in Headers */,
 				71FCE4BE28E0FA01003C5217 /* LuaFunction.h in Headers */,
+				17FB42732FDDA6E3002F919C /* MirrorComponent.h in Headers */,
 				17235ADA2FD2F65000AF8D04 /* ProgressbarComponent.h in Headers */,
 				71AD5E712E9F2B86004951AB /* ScriptProperty.h in Headers */,
 				71AD5E722E9F2B86004951AB /* ScriptBase.h in Headers */,
@@ -4415,6 +4426,7 @@
 				71ABBD14277A3166001CE3AF /* AlphaActionComponent.h in Headers */,
 				71451BF4270CA3EA00712643 /* SpriteFrameData.h in Headers */,
 				7170A3CC2818A87E0003E965 /* ModelComponent.h in Headers */,
+				17FB42772FDDA782002F919C /* IBLEnvironment.h in Headers */,
 				713E580827BA9CB700376680 /* MeshPolygon.h in Headers */,
 				71ABBD23277A31E6001CE3AF /* UISystem.h in Headers */,
 				71033D662BD1A7D200D81FB5 /* ScrollbarComponent.h in Headers */,
@@ -5589,6 +5601,7 @@
 				71651FF92AA804B4008D9BF5 /* Contact2D.cpp in Sources */,
 				71BE622125B1DB83006D6E02 /* TextureData.cpp in Sources */,
 				713D82A8259D307F00567F9F /* Camera.cpp in Sources */,
+				17FB42782FDDA782002F919C /* IBLEnvironment.cpp in Sources */,
 				71EA6DA82AE20B8C00CA9A75 /* CollideShapeResult3D.cpp in Sources */,
 				713D82A9259D307F00567F9F /* Object.cpp in Sources */,
 				7170A3DC2818A8A30003E965 /* Fog.cpp in Sources */,
@@ -5765,6 +5778,7 @@
 				71651FF82AA804B4008D9BF5 /* Contact2D.cpp in Sources */,
 				71BE624325B1DB9E006D6E02 /* ShaderPool.cpp in Sources */,
 				71BE622025B1DB83006D6E02 /* TextureData.cpp in Sources */,
+				17FB42762FDDA782002F919C /* IBLEnvironment.cpp in Sources */,
 				71EA6DA72AE20B8C00CA9A75 /* CollideShapeResult3D.cpp in Sources */,
 				7162FD3925963AE00075B97D /* Quaternion.cpp in Sources */,
 				7162FD3B25963AE00075B97D /* AABB.cpp in Sources */,
