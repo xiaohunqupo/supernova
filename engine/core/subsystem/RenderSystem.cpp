@@ -725,8 +725,8 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
     if (terrain){
         for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
             for (int s = 0; s < 2; s++){
-                size_t bufferSize = terrain->nodes.size() * terrain->nodesbuffer[v][s].getStride();
-                terrain->nodesbuffer[v][s].getRender()->createBuffer(bufferSize, terrain->nodesbuffer[v][s].getData(), terrain->nodesbuffer[v][s].getType(), terrain->nodesbuffer[v][s].getUsage());
+                size_t bufferSize = terrain->nodes.size() * terrain->views[v].nodesbuffer[s].getStride();
+                terrain->views[v].nodesbuffer[s].getRender()->createBuffer(bufferSize, terrain->views[v].nodesbuffer[s].getData(), terrain->views[v].nodesbuffer[s].getType(), terrain->views[v].nodesbuffer[s].getUsage());
             }
         }
 
@@ -915,8 +915,8 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
             // bind view 0 as the load-time default; per-view buffers (same layout) are
             // swapped in at draw via ObjectRender::replaceVertexBuffer
-            for (auto const &attr : terrain->nodesbuffer[0][i].getAttributes()) {
-                render.addAttribute(shaderData.getAttrIndex(attr.first), terrain->nodesbuffer[0][i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->nodesbuffer[0][i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+            for (auto const &attr : terrain->views[0].nodesbuffer[i].getAttributes()) {
+                render.addAttribute(shaderData.getAttrIndex(attr.first), terrain->views[0].nodesbuffer[i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->views[0].nodesbuffer[i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
             }
         }
 
@@ -1002,8 +1002,8 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                 mesh.submeshes[i].slotVSDepthTerrain = depthShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_TERRAIN_VS_PARAMS);
 
                 // shadow depth pass always renders the main camera's selection (view 0)
-                for (auto const &attr : terrain->nodesbuffer[0][i].getAttributes()) {
-                    depthRender.addAttribute(depthShaderData.getAttrIndex(attr.first), terrain->nodesbuffer[0][i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->nodesbuffer[0][i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                for (auto const &attr : terrain->views[0].nodesbuffer[i].getAttributes()) {
+                    depthRender.addAttribute(depthShaderData.getAttrIndex(attr.first), terrain->views[0].nodesbuffer[i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->views[0].nodesbuffer[i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
                 }
             }
 
@@ -1126,12 +1126,12 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             }
         }
 
-        if (terrain && terrain->needUpdateNodesBuffer[terrainView]){
+        if (terrain && terrain->views[terrainView].needUpdateNodesBuffer){
             for (int s = 0; s < 2; s++){
-                terrain->nodesbuffer[terrainView][s].getRender()->updateBuffer(terrain->nodesbuffer[terrainView][s].getSize(), terrain->nodesbuffer[terrainView][s].getData());
+                terrain->views[terrainView].nodesbuffer[s].getRender()->updateBuffer(terrain->views[terrainView].nodesbuffer[s].getSize(), terrain->views[terrainView].nodesbuffer[s].getData());
             }
 
-            terrain->needUpdateNodesBuffer[terrainView] = false;
+            terrain->views[terrainView].needUpdateNodesBuffer = false;
         }
 
         if (terrain && terrain->needUpdateTexture){
@@ -1152,9 +1152,9 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             ObjectRender& render = mesh.submeshes[i].render;
 
             if (terrain){
-                instanceCount = terrain->nodesbuffer[terrainView][i].getCount();
+                instanceCount = terrain->views[terrainView].nodesbuffer[i].getCount();
                 // swap in this view's node instance buffer (no-op for view 0)
-                render.replaceVertexBuffer(terrain->nodesbuffer[0][i].getRender(), terrain->nodesbuffer[terrainView][i].getRender());
+                render.replaceVertexBuffer(terrain->views[0].nodesbuffer[i].getRender(), terrain->views[terrainView].nodesbuffer[i].getRender());
             }
 
             bool needUpdateFramebuffer = checkPBRFrabebufferUpdate(mesh.submeshes[i].material);
@@ -1220,7 +1220,7 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
 
             if (terrain){
                 // morph from this view's eye position (paired with its node selection)
-                terrain->eyePos = terrain->nodesEyePos[terrainView];
+                terrain->eyePos = terrain->views[terrainView].nodesEyePos;
                 render.applyUniformBlock(mesh.submeshes[i].slotVSTerrain, sizeof(float) * 8, &(terrain->eyePos));
             }
 
@@ -1277,7 +1277,7 @@ bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, con
 
             if (terrain){
                 // shadow depth renders the main camera's selection (view 0)
-                terrain->eyePos = terrain->nodesEyePos[0];
+                terrain->eyePos = terrain->views[0].nodesEyePos;
                 depthRender.applyUniformBlock(mesh.submeshes[i].slotVSDepthTerrain, sizeof(float) * 8, &(terrain->eyePos));
             }
 
@@ -1332,7 +1332,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
             //Destroy terrain buffer
             for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
                 for (int s = 0; s < 2; s++){
-                    terrain->nodesbuffer[v][s].getRender()->destroyBuffer();
+                    terrain->views[v].nodesbuffer[s].getRender()->destroyBuffer();
                 }
             }
         }
@@ -2371,16 +2371,16 @@ void RenderSystem::updateTerrain(TerrainComponent& terrain, Transform& transform
         }
 
         for (int s = 0; s < 2; s++){
-            terrain.nodesbuffer[viewIndex][s].clear();
+            terrain.views[viewIndex].nodesbuffer[s].clear();
         }
 
         for (int i = 0; i < (terrain.rootGridSize*terrain.rootGridSize); i++){
             terrainNodeLODSelect(terrain, transform, camera, cameraTransform, terrain.nodes[terrain.grid[i]], terrain.levels-1, viewIndex);
         }
 
-        terrain.needUpdateNodesBuffer[viewIndex] = true;
+        terrain.views[viewIndex].needUpdateNodesBuffer = true;
 
-        terrain.nodesEyePos[viewIndex] = Vector3(cameraTransform.worldPosition.x, cameraTransform.worldPosition.y, cameraTransform.worldPosition.z);
+        terrain.views[viewIndex].nodesEyePos = Vector3(cameraTransform.worldPosition.x, cameraTransform.worldPosition.y, cameraTransform.worldPosition.z);
     }
 }
 
@@ -2440,7 +2440,7 @@ bool RenderSystem::terrainNodeLODSelect(TerrainComponent& terrain, Transform& tr
         //Full resolution
         terrainNode.resolution = terrain.resolution;
         terrainNode.visible = true;
-        appendTerrainNode(terrain.nodesbuffer[viewIndex][0], terrainNode);
+        appendTerrainNode(terrain.views[viewIndex].nodesbuffer[0], terrainNode);
 
         return true;
     } else {
@@ -2449,7 +2449,7 @@ bool RenderSystem::terrainNodeLODSelect(TerrainComponent& terrain, Transform& tr
             //Full resolution
             terrainNode.resolution = terrain.resolution;
             terrainNode.visible = true;
-            appendTerrainNode(terrain.nodesbuffer[viewIndex][0], terrainNode);
+            appendTerrainNode(terrain.views[viewIndex].nodesbuffer[0], terrainNode);
         } else {
             for (int i = 0; i < 4; i++) {
                 TerrainNode& child = terrain.nodes[terrainNode.childs[i]];
@@ -2458,7 +2458,7 @@ bool RenderSystem::terrainNodeLODSelect(TerrainComponent& terrain, Transform& tr
                     child.resolution = terrain.resolution / 2;
                     child.currentRange = terrainNode.currentRange;
                     child.visible = true;
-                    appendTerrainNode(terrain.nodesbuffer[viewIndex][1], child);
+                    appendTerrainNode(terrain.views[viewIndex].nodesbuffer[1], child);
                 }
             }
         }

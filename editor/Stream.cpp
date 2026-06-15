@@ -4107,7 +4107,7 @@ TerrainComponent editor::Stream::decodeTerrainComponent(const YAML::Node& node, 
     terrain.needUpdateTerrain = true;
     terrain.needUpdateTexture = true;
     for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
-        terrain.needUpdateNodesBuffer[v] = false;
+        terrain.views[v].needUpdateNodesBuffer = false;
     }
     terrain.heightMapLoaded = false;
     terrain.nodes.clear();

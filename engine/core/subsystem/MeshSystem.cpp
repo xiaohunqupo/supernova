@@ -1547,14 +1547,14 @@ bool MeshSystem::createTerrain(TerrainComponent& terrain, MeshComponent& mesh){
 
     for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
         for (int s = 0; s < 2; s++){
-            terrain.nodesbuffer[v][s].clear();
-            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODEPOSITION, 2, true);
-            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODESIZE, 1, true);
-            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODERANGE, 1, true);
-            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODERESOLUTION, 1, true);
-            terrain.nodesbuffer[v][s].setRenderAttributes(true);
-            terrain.nodesbuffer[v][s].setInstanceBuffer(true);
-            terrain.nodesbuffer[v][s].setUsage(BufferUsage::STREAM);
+            terrain.views[v].nodesbuffer[s].clear();
+            terrain.views[v].nodesbuffer[s].addAttribute(AttributeType::TERRAINNODEPOSITION, 2, true);
+            terrain.views[v].nodesbuffer[s].addAttribute(AttributeType::TERRAINNODESIZE, 1, true);
+            terrain.views[v].nodesbuffer[s].addAttribute(AttributeType::TERRAINNODERANGE, 1, true);
+            terrain.views[v].nodesbuffer[s].addAttribute(AttributeType::TERRAINNODERESOLUTION, 1, true);
+            terrain.views[v].nodesbuffer[s].setRenderAttributes(true);
+            terrain.views[v].nodesbuffer[s].setInstanceBuffer(true);
+            terrain.views[v].nodesbuffer[s].setUsage(BufferUsage::STREAM);
         }
     }
 
@@ -3523,9 +3523,9 @@ bool MeshSystem::createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent&
             terrain.nodes.clear();
             for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
                 for (int s = 0; s < 2; s++){
-                    terrain.nodesbuffer[v][s].clear();
+                    terrain.views[v].nodesbuffer[s].clear();
                 }
-                terrain.needUpdateNodesBuffer[v] = false;
+                terrain.views[v].needUpdateNodesBuffer = false;
             }
             mesh.verticesAABB = AABB::ZERO;
             mesh.aabb = AABB::ZERO;

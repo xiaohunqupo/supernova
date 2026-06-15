@@ -37,12 +37,23 @@ namespace doriax{
         float visible = false;
     };
 
+    // Per-view CDLOD state. Index 0 is the main camera (also reused by the shadow
+    // depth pass); 1..N-1 are render-to-texture cameras (mirror reflections, scene
+    // captures), each selecting and morphing its own node cut. Grouping the per-view
+    // buffers in a struct (instead of a 2-D array of InterleavedBuffer) keeps MSVC's
+    // code generation from crashing when the ECS pool instantiates TerrainComponent.
+    struct TerrainView{
+        // 0 = fullRes, 1 = halfRes; selected and uploaded independently once per frame
+        InterleavedBuffer nodesbuffer[2];
+        // per-view morph origin, paired with this view's node selection
+        Vector3 nodesEyePos;
+        bool needUpdateNodesBuffer = false;
+    };
+
     struct DORIAX_API TerrainComponent{
-        // per-view CDLOD node instance buffers: [view][0 = fullRes, 1 = halfRes].
-        // Each view is selected and uploaded independently (once per frame), so a
-        // mirror/RTT camera renders complete, correctly-tessellated terrain instead
-        // of reusing the main camera's cut.
-        InterleavedBuffer nodesbuffer[MAX_TERRAIN_VIEWS][2];
+        // per-view CDLOD node selection (see TerrainView). Extra RTT cameras beyond
+        // MAX_TERRAIN_VIEWS fall back to the main camera's selection (view 0).
+        TerrainView views[MAX_TERRAIN_VIEWS];
 
         Texture heightMap;
         Texture blendMap;
@@ -64,8 +75,8 @@ namespace doriax{
 
         //-----u_vs_terrainParams
         // eyePos is the morph origin for the view currently being drawn; it is set
-        // from nodesEyePos[view] right before the uniform upload (keep this block's
-        // memory layout intact — it is uploaded as a contiguous struct).
+        // from views[view].nodesEyePos right before the uniform upload (keep this
+        // block's memory layout intact — it is uploaded as a contiguous struct).
         Vector3 eyePos;
         float terrainSize = 200;
         float maxHeight = 5;
@@ -74,15 +85,11 @@ namespace doriax{
         float textureDetailTiles = 20; //int
         //-----
 
-        // per-view morph origin, paired with each view's node selection
-        Vector3 nodesEyePos[MAX_TERRAIN_VIEWS];
-
         int rootGridSize = 2;
         int levels = 6;
 
         bool needUpdateTerrain = true;
         bool needUpdateTexture = false;
-        bool needUpdateNodesBuffer[MAX_TERRAIN_VIEWS] = {false};
     };
     
 }
