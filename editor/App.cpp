@@ -331,7 +331,7 @@ void editor::App::showMenu(){
                 resourcesWindow->setOpen(true);
                 outputWindow->setOpen(true);
                 animationWindow->setOpen(true);
-                buildDockspace();
+                buildDockspace(true);
             }
             ImGui::EndMenu();
         }
@@ -645,42 +645,68 @@ void editor::App::showAlert(){
     }
 }
 
-void editor::App::buildDockspace(){
+void editor::App::buildDockspace(bool resetLayout){
+    // A reset forces every tab back to its default slot even if the ini has a
+    // customized position saved for it (see dockTabWindow()).
+    forceDockTabs = resetLayout;
+
+    // Keep an existing layout (restored from the persisted ini) so the user's
+    // customizations survive; only recover the scene node we dock tabs into.
+    // A reset rebuilds the default skeleton from scratch instead.
+    if (!resetLayout && ImGui::DockBuilderGetNode(dockspace_id) != nullptr) {
+        dock_id_middle_top = getCentralDockId();
+    } else {
+        buildDefaultLayout();
+    }
+
+    dockProjectTabs();
+
+    ImGui::DockBuilderFinish(dockspace_id);
+
+    forceDockTabs = false;
+}
+
+void editor::App::buildDefaultLayout(){
+    const ImVec2 viewport = ImGui::GetMainViewport()->Size;
     ImGuiID dock_id_left, dock_id_left_top, dock_id_left_bottom, dock_id_right, dock_id_middle, dock_id_middle_bottom;
-    float size;
 
     ImGui::DockBuilderRemoveNode(dockspace_id);
     ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-    ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, viewport);
 
-    // Split the dockspace into left and middle
-    size = 14*ImGui::GetFontSize();
+    // Structure on the left, Resources split off its bottom.
     ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.0f, &dock_id_left, &dock_id_middle);
-    ImGui::DockBuilderSetNodeSize(dock_id_left, ImVec2(size, ImGui::GetMainViewport()->Size.y)); // Set left node size
+    ImGui::DockBuilderSetNodeSize(dock_id_left, ImVec2(14*ImGui::GetFontSize(), viewport.y));
     ImGui::DockBuilderDockWindow(Structure::WINDOW_NAME, dock_id_left);
 
-    size = 50*ImGui::GetFontSize();
     ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Down, 0.0f, &dock_id_left_bottom, &dock_id_left_top);
-    ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(ImGui::GetMainViewport()->Size.x, size));
+    ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(viewport.x, 50*ImGui::GetFontSize()));
     ImGui::DockBuilderDockWindow(ResourcesWindow::WINDOW_NAME, dock_id_left_bottom);
 
-    // Split the middle into right and remaining middle
-    size = 19*ImGui::GetFontSize();
+    // Properties on the right.
     ImGui::DockBuilderSplitNode(dock_id_middle, ImGuiDir_Right, 0.0f, &dock_id_right, &dock_id_middle);
-    ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(size, ImGui::GetMainViewport()->Size.y)); // Set right node size
+    ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(19*ImGui::GetFontSize(), viewport.y));
     ImGui::DockBuilderDockWindow(Properties::WINDOW_NAME, dock_id_right);
 
-    // Split the remaining middle into top and bottom
-    size = 10*ImGui::GetFontSize();
+    // Output/Animation across the bottom; scenes fill the remaining centre.
     ImGui::DockBuilderSplitNode(dock_id_middle, ImGuiDir_Down, 0.0f, &dock_id_middle_bottom, &dock_id_middle_top);
-    ImGui::DockBuilderSetNodeSize(dock_id_middle_bottom, ImVec2(ImGui::GetMainViewport()->Size.x, size)); // Set bottom node size
+    ImGui::DockBuilderSetNodeSize(dock_id_middle_bottom, ImVec2(viewport.x, 10*ImGui::GetFontSize()));
     ImGui::DockBuilderDockWindow(OutputWindow::WINDOW_NAME, dock_id_middle_bottom);
     ImGui::DockBuilderDockWindow(AnimationWindow::WINDOW_NAME, dock_id_middle_bottom);
 
-    // Dock tabs in their saved order
+    // Mark the scene area as the central node. CentralNode is a saved flag, so it
+    // persists in the ini and lets getCentralDockId() recover this node on the
+    // next launch without rebuilding the layout.
+    if (ImGuiDockNode* centerNode = ImGui::DockBuilderGetNode(dock_id_middle_top)) {
+        centerNode->SetLocalFlags(centerNode->LocalFlags | ImGuiDockNodeFlags_CentralNode);
+    }
+}
+
+void editor::App::dockProjectTabs(){
+    // Re-open code tabs and dock scenes in their saved order. dockTabWindow()
+    // leaves already-known windows where the ini put them (unless resetting).
     for (const auto& tab : project.getTabs()) {
         if (tab.type == TabType::SCENE) {
-            // Find scene by filepath
             for (auto& sceneProject : project.getScenes()) {
                 if (sceneProject.opened && sceneProject.filepath.string() == tab.filepath) {
                     addNewSceneToDock(sceneProject.id);
@@ -695,15 +721,41 @@ void editor::App::buildDockspace(){
         }
     }
 
-    // Dock any opened scenes that weren't in tabs (fallback)
+    // Dock any opened scenes that weren't in tabs (fallback).
     for (auto& sceneProject : project.getScenes()) {
         if (!sceneProject.opened) continue;
         if (!project.hasTab(TabType::SCENE, sceneProject.filepath.string())) {
             addNewSceneToDock(sceneProject.id);
         }
     }
+}
 
-    ImGui::DockBuilderFinish(dockspace_id);
+void editor::App::dockTabWindow(const std::string& windowName){
+    // Auto-dock only a window the layout ini has never seen, so we never override
+    // a position the user chose (docked or intentionally floating). A layout reset
+    // (forceDockTabs) overrides this and snaps every tab back to the default slot.
+    if (forceDockTabs || !ImGui::FindWindowSettingsByID(ImHashStr(windowName.c_str()))) {
+        ImGui::DockBuilderDockWindow(windowName.c_str(), dock_id_middle_top);
+    }
+}
+
+ImGuiID editor::App::getCentralDockId(){
+    // The scene area carries ImGuiDockNodeFlags_CentralNode (a saved flag, so it
+    // survives in the ini). We scan for it rather than calling
+    // DockBuilderGetCentralNode(), which reads root->CentralNode — only populated
+    // once DockSpace() has processed the dockspace, not yet true on the first
+    // frame after the layout is restored from the ini.
+    ImGuiContext* ctx = ImGui::GetCurrentContext();
+    for (const ImGuiStoragePair& pair : ctx->DockContext.Nodes.Data) {
+        ImGuiDockNode* node = static_cast<ImGuiDockNode*>(pair.val_p);
+        if (node && node->IsCentralNode() && ImGui::DockNodeGetRootNode(node)->ID == dockspace_id) {
+            return node->ID;
+        }
+    }
+
+    // No central node yet (e.g. a pre-existing ini without one): fall back to the
+    // dockspace root so windows still attach somewhere sensible.
+    return dockspace_id;
 }
 
 void editor::App::showStyleEditor(){
@@ -741,9 +793,11 @@ void editor::App::setup() {
 
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
-    #ifdef _DEBUG
-    io.IniFilename = nullptr;  // Disable saving to ini file
-    #endif
+    // Persist the docking layout next to settings.yaml at a stable absolute
+    // path, so it survives restarts regardless of the working directory or
+    // build type. (initializeSettings() above has already set the config dir.)
+    layoutIniPath = (AppSettings::getConfigDirectory() / "editor_layout.ini").string();
+    io.IniFilename = layoutIniPath.c_str();
 
     io.Fonts->AddFontDefault();
 
@@ -1151,7 +1205,7 @@ void editor::App::engineShutdown(){
 
 void editor::App::addNewSceneToDock(uint32_t sceneId){
     if (isInitialized){
-        ImGui::DockBuilderDockWindow(("###Scene" + std::to_string(sceneId)).c_str(), dock_id_middle_top);
+        dockTabWindow("###Scene" + std::to_string(sceneId));
     }
 }
 
@@ -1174,7 +1228,7 @@ void editor::App::prepareForProjectSwitch() {
 
 void editor::App::addNewCodeWindowToDock(fs::path path){
     if (isInitialized){
-        ImGui::DockBuilderDockWindow(("###" + path.string()).c_str(), dock_id_middle_top);
+        dockTabWindow("###" + path.string());
     }
 }
 

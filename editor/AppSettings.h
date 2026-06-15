@@ -36,7 +36,10 @@ private:
 public:
     // Initialization
     static bool initialize();
-    
+
+    // Directory where editor config files live (settings.yaml, layout ini, ...)
+    static std::filesystem::path getConfigDirectory();
+
     // Project settings
     static std::filesystem::path getLastProjectPath();
     static void setLastProjectPath(const std::filesystem::path& path);

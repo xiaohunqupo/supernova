@@ -49,7 +49,7 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 - Integrated code editor and scripting workflow for Lua and C++
 - Shader-aware export pipeline that prepares scenes, assets, scripts, engine files, and compiled shaders
 
-> **Note:** Terrain authoring, particle editing, audio tooling, and direct shader manipulation are not fully integrated into the editor yet — these features are available at the engine/runtime level.
+> **Note:** Direct shader manipulation is not fully integrated into the editor yet — this feature is available at the engine/runtime level.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-2d-tilemap.png" alt="Doriax Engine 2D tilemap editor" width="48%">

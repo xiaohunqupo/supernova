@@ -82,6 +82,13 @@ namespace doriax::editor{
         bool isInitialized;
         bool dockspaceNeedsRebuild;
 
+        // True only during an explicit "Reset Layout": forces tabs back to their
+        // default dock slot even when the ini has a saved position for them.
+        bool forceDockTabs = false;
+
+        // Backing buffer for ImGui's io.IniFilename (must outlive ImGui).
+        std::string layoutIniPath;
+
         AlertData alert;
         ProjectSaveDialog projectSaveDialog;
         SceneSaveDialog sceneSaveDialog;
@@ -114,7 +121,11 @@ namespace doriax::editor{
         void showAlert();
         void showFooter();
         void showStyleEditor();
-        void buildDockspace();
+        void buildDockspace(bool resetLayout = false);
+        void buildDefaultLayout();
+        void dockProjectTabs();
+        void dockTabWindow(const std::string& windowName);
+        ImGuiID getCentralDockId();
         void kewtStyleTheme();
         void processNextSaveDialog();
         bool popSaveDialogQueueItem();

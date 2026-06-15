@@ -27,6 +27,13 @@ bool AppSettings::initialize() {
     return loadSettings();
 }
 
+std::filesystem::path AppSettings::getConfigDirectory() {
+    if (configFilePath.empty()) {
+        return std::filesystem::current_path();
+    }
+    return configFilePath.parent_path();
+}
+
 void AppSettings::ensureConfigDirectory() {
     std::filesystem::path configDir = configFilePath.parent_path();
     if (!std::filesystem::exists(configDir)) {
