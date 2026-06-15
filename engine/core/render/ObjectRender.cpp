@@ -39,6 +39,10 @@ void ObjectRender::addStorageBuffer(int slot, ShaderStageType stage, BufferRende
     backend.addStorageBuffer(slot, stage, buffer);
 }
 
+void ObjectRender::replaceVertexBuffer(BufferRender* original, BufferRender* replacement){
+    backend.replaceVertexBuffer(original->backend.get().id, replacement->backend.get());
+}
+
 void ObjectRender::addTexture(std::pair<int, int> slot, ShaderStageType stage, TextureRender* texture){
     backend.addTexture(slot, stage, texture);
 }

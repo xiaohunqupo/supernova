@@ -1545,15 +1545,17 @@ bool MeshSystem::createTerrain(TerrainComponent& terrain, MeshComponent& mesh){
         }
     }
 
-    for (int s = 0; s < 2; s++){
-        terrain.nodesbuffer[s].clear();
-        terrain.nodesbuffer[s].addAttribute(AttributeType::TERRAINNODEPOSITION, 2, true);
-        terrain.nodesbuffer[s].addAttribute(AttributeType::TERRAINNODESIZE, 1, true);
-        terrain.nodesbuffer[s].addAttribute(AttributeType::TERRAINNODERANGE, 1, true);
-        terrain.nodesbuffer[s].addAttribute(AttributeType::TERRAINNODERESOLUTION, 1, true);
-        terrain.nodesbuffer[s].setRenderAttributes(true);
-        terrain.nodesbuffer[s].setInstanceBuffer(true);
-        terrain.nodesbuffer[s].setUsage(BufferUsage::STREAM);
+    for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
+        for (int s = 0; s < 2; s++){
+            terrain.nodesbuffer[v][s].clear();
+            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODEPOSITION, 2, true);
+            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODESIZE, 1, true);
+            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODERANGE, 1, true);
+            terrain.nodesbuffer[v][s].addAttribute(AttributeType::TERRAINNODERESOLUTION, 1, true);
+            terrain.nodesbuffer[v][s].setRenderAttributes(true);
+            terrain.nodesbuffer[v][s].setInstanceBuffer(true);
+            terrain.nodesbuffer[v][s].setUsage(BufferUsage::STREAM);
+        }
     }
 
     mesh.buffer.clear();
@@ -3519,8 +3521,11 @@ bool MeshSystem::createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent&
             terrain.heightMapLoaded = false;
             terrain.numNodes = 0;
             terrain.nodes.clear();
-            for (int s = 0; s < 2; s++){
-                terrain.nodesbuffer[s].clear();
+            for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
+                for (int s = 0; s < 2; s++){
+                    terrain.nodesbuffer[v][s].clear();
+                }
+                terrain.needUpdateNodesBuffer[v] = false;
             }
             mesh.verticesAABB = AABB::ZERO;
             mesh.aabb = AABB::ZERO;
@@ -3530,7 +3535,6 @@ bool MeshSystem::createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent&
                 mesh.needReload = true;
             }
             terrain.needUpdateTerrain = false;
-            terrain.needUpdateNodesBuffer = false;
             return false;
         }
 

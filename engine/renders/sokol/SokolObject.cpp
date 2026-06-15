@@ -187,6 +187,16 @@ void SokolObject::addAttribute(int slot, BufferRender* buffer, unsigned int elem
     }
 }
 
+void SokolObject::replaceVertexBuffer(uint32_t fromBufferId, sg_buffer toBuffer){
+    // A single interleaved buffer can occupy several bind slots (one per attribute
+    // offset on Metal/D3D), so swap every slot that referenced the original buffer.
+    for (auto const& kv : bufferToBindSlot){
+        if (kv.first.id == fromBufferId){
+            bind.vertex_buffers[kv.second] = toBuffer;
+        }
+    }
+}
+
 void SokolObject::addStorageBuffer(int slot, ShaderStageType stage, BufferRender* buffer){
     if (slot != -1){
         sg_view sbufview = buffer->backend.getView();

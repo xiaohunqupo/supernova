@@ -69,6 +69,10 @@ namespace doriax{
         void setShader(ShaderRender* shader);
         void setIndex(BufferRender* buffer, AttributeDataType dataType, size_t offset);
         void addAttribute(int slot, BufferRender* buffer, unsigned int elements, AttributeDataType dataType, unsigned int stride, size_t offset, bool normalized, bool perInstance);
+        // rebind every vertex bind-slot that was filled from fromBufferId to toBuffer,
+        // keeping the same per-slot layout/offset (used to swap a per-view instance
+        // buffer in just before draw). Affects only the bindings, not the pipeline.
+        void replaceVertexBuffer(uint32_t fromBufferId, sg_buffer toBuffer);
         void addStorageBuffer(int slot, ShaderStageType stage, BufferRender* buffer);
         void addTexture(std::pair<int, int> slot, ShaderStageType stage, TextureRender* texture);
         bool endLoad(uint8_t pipelines, bool enableFaceCulling, CullingMode cullingMode, WindingOrder windingOrder);

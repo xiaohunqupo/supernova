@@ -31,6 +31,7 @@ uint32_t RenderSystem::pixelsNormal[64];
 TextureRender RenderSystem::emptyWhite;
 TextureRender RenderSystem::emptyBlack;
 TextureRender RenderSystem::emptyCubeBlack;
+TextureRender RenderSystem::emptyCubeWhite;
 TextureRender RenderSystem::emptyNormal;
 
 bool RenderSystem::emptyTexturesCreated = false;
@@ -145,7 +146,13 @@ void RenderSystem::createEmptyTextures(){
         }
 
         emptyWhite.createTexture(
-                "empty|white", 8, 8, ColorFormat::RGBA, TextureType::TEXTURE_2D, 1, data_array, size_array, 
+                "empty|white", 8, 8, ColorFormat::RGBA, TextureType::TEXTURE_2D, 1, data_array, size_array,
+                TextureFilter::NEAREST, TextureFilter::NEAREST, TextureWrap::REPEAT, TextureWrap::REPEAT);
+
+        // white cube fallback for the skybox cube sampler: a color-only sky (no
+        // texture) multiplies skyParams.color by this, so white keeps the color intact
+        emptyCubeWhite.createTexture(
+                "empty|cube|white", 8, 8, ColorFormat::RGBA, TextureType::TEXTURE_CUBE, 6, data_array, size_array,
                 TextureFilter::NEAREST, TextureFilter::NEAREST, TextureWrap::REPEAT, TextureWrap::REPEAT);
 
         for (int i = 0; i < 64; i++) {
@@ -716,9 +723,11 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
     }
 
     if (terrain){
-        for (int s = 0; s < 2; s++){
-            size_t bufferSize = terrain->nodes.size() * terrain->nodesbuffer[s].getStride();
-            terrain->nodesbuffer[s].getRender()->createBuffer(bufferSize, terrain->nodesbuffer[s].getData(), terrain->nodesbuffer[s].getType(), terrain->nodesbuffer[s].getUsage());
+        for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
+            for (int s = 0; s < 2; s++){
+                size_t bufferSize = terrain->nodes.size() * terrain->nodesbuffer[v][s].getStride();
+                terrain->nodesbuffer[v][s].getRender()->createBuffer(bufferSize, terrain->nodesbuffer[v][s].getData(), terrain->nodesbuffer[v][s].getType(), terrain->nodesbuffer[v][s].getUsage());
+            }
         }
 
         // using same material in both terrain submeshes
@@ -904,8 +913,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
             terrain->needUpdateTexture = false;
 
-            for (auto const &attr : terrain->nodesbuffer[i].getAttributes()) {
-                render.addAttribute(shaderData.getAttrIndex(attr.first), terrain->nodesbuffer[i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->nodesbuffer[i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+            // bind view 0 as the load-time default; per-view buffers (same layout) are
+            // swapped in at draw via ObjectRender::replaceVertexBuffer
+            for (auto const &attr : terrain->nodesbuffer[0][i].getAttributes()) {
+                render.addAttribute(shaderData.getAttrIndex(attr.first), terrain->nodesbuffer[0][i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->nodesbuffer[0][i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
             }
         }
 
@@ -990,8 +1001,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             if (terrain){
                 mesh.submeshes[i].slotVSDepthTerrain = depthShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_TERRAIN_VS_PARAMS);
 
-                for (auto const &attr : terrain->nodesbuffer[i].getAttributes()) {
-                    depthRender.addAttribute(depthShaderData.getAttrIndex(attr.first), terrain->nodesbuffer[i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->nodesbuffer[i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                // shadow depth pass always renders the main camera's selection (view 0)
+                for (auto const &attr : terrain->nodesbuffer[0][i].getAttributes()) {
+                    depthRender.addAttribute(depthShaderData.getAttrIndex(attr.first), terrain->nodesbuffer[0][i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->nodesbuffer[0][i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
                 }
             }
 
@@ -1080,7 +1092,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
     return true;
 }
 
-bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraComponent& camera, Transform& camTransform, bool renderToTexture, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
+bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraComponent& camera, Transform& camTransform, bool renderToTexture, InstancedMeshComponent* instmesh, TerrainComponent* terrain, int terrainView){
     if (mesh.loaded){
 
         if (mesh.worldAABB != AABB::ZERO && !isInsideCamera(camera, mesh.worldAABB)) {
@@ -1114,12 +1126,12 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             }
         }
 
-        if (terrain && terrain->needUpdateNodesBuffer){
+        if (terrain && terrain->needUpdateNodesBuffer[terrainView]){
             for (int s = 0; s < 2; s++){
-                terrain->nodesbuffer[s].getRender()->updateBuffer(terrain->nodesbuffer[s].getSize(), terrain->nodesbuffer[s].getData());
+                terrain->nodesbuffer[terrainView][s].getRender()->updateBuffer(terrain->nodesbuffer[terrainView][s].getSize(), terrain->nodesbuffer[terrainView][s].getData());
             }
 
-            terrain->needUpdateNodesBuffer = false;
+            terrain->needUpdateNodesBuffer[terrainView] = false;
         }
 
         if (terrain && terrain->needUpdateTexture){
@@ -1140,7 +1152,9 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             ObjectRender& render = mesh.submeshes[i].render;
 
             if (terrain){
-                instanceCount = terrain->nodesbuffer[i].getCount();
+                instanceCount = terrain->nodesbuffer[terrainView][i].getCount();
+                // swap in this view's node instance buffer (no-op for view 0)
+                render.replaceVertexBuffer(terrain->nodesbuffer[0][i].getRender(), terrain->nodesbuffer[terrainView][i].getRender());
             }
 
             bool needUpdateFramebuffer = checkPBRFrabebufferUpdate(mesh.submeshes[i].material);
@@ -1205,6 +1219,8 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             }
 
             if (terrain){
+                // morph from this view's eye position (paired with its node selection)
+                terrain->eyePos = terrain->nodesEyePos[terrainView];
                 render.applyUniformBlock(mesh.submeshes[i].slotVSTerrain, sizeof(float) * 8, &(terrain->eyePos));
             }
 
@@ -1260,6 +1276,8 @@ bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, con
             }
 
             if (terrain){
+                // shadow depth renders the main camera's selection (view 0)
+                terrain->eyePos = terrain->nodesEyePos[0];
                 depthRender.applyUniformBlock(mesh.submeshes[i].slotVSDepthTerrain, sizeof(float) * 8, &(terrain->eyePos));
             }
 
@@ -1312,8 +1330,10 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
             }
 
             //Destroy terrain buffer
-            for (int s = 0; s < 2; s++){
-                terrain->nodesbuffer[s].getRender()->destroyBuffer();
+            for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
+                for (int s = 0; s < 2; s++){
+                    terrain->nodesbuffer[v][s].getRender()->destroyBuffer();
+                }
             }
         }
 
@@ -1889,7 +1909,7 @@ bool RenderSystem::loadSky(Entity entity, SkyComponent& sky, uint8_t pipelines){
     sky.slotVSParams = shaderData.getUniformBlockIndex(UniformBlockType::SKY_VS_PARAMS);
     sky.slotFSParams = shaderData.getUniformBlockIndex(UniformBlockType::SKY_FS_PARAMS);
 
-    if (TextureRender* textureRender = sky.texture.getRender(&emptyWhite)){
+    if (TextureRender* textureRender = sky.texture.getRender(&emptyCubeWhite)){
         if (!textureRender->isCreated()){
             return false;
         }
@@ -1923,7 +1943,7 @@ bool RenderSystem::drawSky(SkyComponent& sky, bool renderToTexture, bool invertC
 
         if (sky.needUpdateTexture || sky.texture.isFramebufferOutdated()){
             ShaderData& shaderData = sky.shader.get()->shaderData;
-            if (TextureRender* textureRender = sky.texture.getRender(&emptyWhite)){
+            if (TextureRender* textureRender = sky.texture.getRender(&emptyCubeWhite)){
                 if (textureRender->isCreated()){
                     sky.render.addTexture(shaderData.getTextureIndex(TextureShaderType::SKYCUBE), ShaderStageType::FRAGMENT, textureRender);
                     sky.needUpdateTexture = false;
@@ -2190,6 +2210,9 @@ void RenderSystem::updateMirrors(Entity mainCameraEntity){
     // copy main camera state before any camera creation: creating a reflection
     // camera below can reallocate the camera/transform arrays and dangle references
     const Matrix4 mainView = mainCameraPtr->viewMatrix;
+    // main camera eye in world space (reflected per-mirror below); derived from the
+    // view matrix so it doesn't depend on the (possibly dangling) camera component
+    const Vector3 mainEye = mainView.inverse() * Vector3(0.0f, 0.0f, 0.0f);
     const CameraType mainType = mainCameraPtr->type;
     const float mYfov = mainCameraPtr->yfov, mAspect = mainCameraPtr->aspect;
     const float mNear = mainCameraPtr->nearClip, mFar = mainCameraPtr->farClip;
@@ -2221,8 +2244,16 @@ void RenderSystem::updateMirrors(Entity mainCameraEntity){
 
         // reflection view keeps the handedness flip (true mirror); winding is
         // restored by invertCulling so reflected geometry shows front faces
-        refCam->customViewMatrix = mainView * Matrix4::reflectMatrix(plane);
+        Matrix4 reflectMat = Matrix4::reflectMatrix(plane);
+        refCam->customViewMatrix = mainView * reflectMat;
         refCam->hasCustomViewMatrix = true;
+
+        // Give the reflection camera the reflected eye position. The custom view
+        // matrix overrides the view, but distance-based effects still read the
+        // transform's worldPosition (terrain CDLOD detail + morph origin, transparent
+        // sorting, per-camera lighting eye) — without this they'd key off the origin
+        // and the reflected terrain would morph at the wrong LOD (visible cracks).
+        refCamTransform->worldPosition = reflectMat * mainEye;
         refCam->invertCulling = true;
         refCam->renderToTexture = true;
 
@@ -2333,23 +2364,23 @@ void RenderSystem::sortPoints(PointsComponent& points, Transform& transform, Cam
         points.needUpdateBuffer = true;
 }
 
-void RenderSystem::updateTerrain(TerrainComponent& terrain, Transform& transform, CameraComponent& camera, Transform& cameraTransform){
+void RenderSystem::updateTerrain(TerrainComponent& terrain, Transform& transform, CameraComponent& camera, Transform& cameraTransform, int viewIndex){
     if (terrain.heightMapLoaded){
         for (int i = 0; i < terrain.numNodes; i++){
             terrain.nodes[i].visible = false;
         }
 
         for (int s = 0; s < 2; s++){
-            terrain.nodesbuffer[s].clear();
+            terrain.nodesbuffer[viewIndex][s].clear();
         }
 
         for (int i = 0; i < (terrain.rootGridSize*terrain.rootGridSize); i++){
-            terrainNodeLODSelect(terrain, transform, camera, cameraTransform, terrain.nodes[terrain.grid[i]], terrain.levels-1);
+            terrainNodeLODSelect(terrain, transform, camera, cameraTransform, terrain.nodes[terrain.grid[i]], terrain.levels-1, viewIndex);
         }
 
-        terrain.needUpdateNodesBuffer = true;
+        terrain.needUpdateNodesBuffer[viewIndex] = true;
 
-        terrain.eyePos = Vector3(cameraTransform.worldPosition.x, cameraTransform.worldPosition.y, cameraTransform.worldPosition.z);
+        terrain.nodesEyePos[viewIndex] = Vector3(cameraTransform.worldPosition.x, cameraTransform.worldPosition.y, cameraTransform.worldPosition.z);
     }
 }
 
@@ -2382,7 +2413,15 @@ bool RenderSystem::isTerrainNodeInSphere(Vector3 position, float radius, const A
     return dist2 <= r2;
 }
 
-bool RenderSystem::terrainNodeLODSelect(TerrainComponent& terrain, Transform& transform, CameraComponent& camera, Transform& cameraTransform, TerrainNode& terrainNode, int lodLevel){
+// appends one selected CDLOD node's per-instance data (position, size, range, resolution)
+static void appendTerrainNode(InterleavedBuffer& buffer, const TerrainNode& node){
+    buffer.addVector2(AttributeType::TERRAINNODEPOSITION, node.position);
+    buffer.addFloat(AttributeType::TERRAINNODESIZE, node.size);
+    buffer.addFloat(AttributeType::TERRAINNODERANGE, node.currentRange);
+    buffer.addFloat(AttributeType::TERRAINNODERESOLUTION, node.resolution);
+}
+
+bool RenderSystem::terrainNodeLODSelect(TerrainComponent& terrain, Transform& transform, CameraComponent& camera, Transform& cameraTransform, TerrainNode& terrainNode, int lodLevel, int viewIndex){
     terrainNode.currentRange = terrain.ranges[lodLevel];
 
     AABB box = getTerrainNodeAABB(transform, terrainNode);
@@ -2401,10 +2440,7 @@ bool RenderSystem::terrainNodeLODSelect(TerrainComponent& terrain, Transform& tr
         //Full resolution
         terrainNode.resolution = terrain.resolution;
         terrainNode.visible = true;
-        terrain.nodesbuffer[0].addVector2(AttributeType::TERRAINNODEPOSITION, terrainNode.position);
-        terrain.nodesbuffer[0].addFloat(AttributeType::TERRAINNODESIZE, terrainNode.size);
-        terrain.nodesbuffer[0].addFloat(AttributeType::TERRAINNODERANGE, terrainNode.currentRange);
-        terrain.nodesbuffer[0].addFloat(AttributeType::TERRAINNODERESOLUTION, terrainNode.resolution);
+        appendTerrainNode(terrain.nodesbuffer[viewIndex][0], terrainNode);
 
         return true;
     } else {
@@ -2413,22 +2449,16 @@ bool RenderSystem::terrainNodeLODSelect(TerrainComponent& terrain, Transform& tr
             //Full resolution
             terrainNode.resolution = terrain.resolution;
             terrainNode.visible = true;
-            terrain.nodesbuffer[0].addVector2(AttributeType::TERRAINNODEPOSITION, terrainNode.position);
-            terrain.nodesbuffer[0].addFloat(AttributeType::TERRAINNODESIZE, terrainNode.size);
-            terrain.nodesbuffer[0].addFloat(AttributeType::TERRAINNODERANGE, terrainNode.currentRange);
-            terrain.nodesbuffer[0].addFloat(AttributeType::TERRAINNODERESOLUTION, terrainNode.resolution);
+            appendTerrainNode(terrain.nodesbuffer[viewIndex][0], terrainNode);
         } else {
             for (int i = 0; i < 4; i++) {
                 TerrainNode& child = terrain.nodes[terrainNode.childs[i]];
-                if (!terrainNodeLODSelect(terrain, transform, camera, cameraTransform, child, lodLevel-1)){
+                if (!terrainNodeLODSelect(terrain, transform, camera, cameraTransform, child, lodLevel-1, viewIndex)){
                     //Half resolution
                     child.resolution = terrain.resolution / 2;
                     child.currentRange = terrainNode.currentRange;
                     child.visible = true;
-                    terrain.nodesbuffer[1].addVector2(AttributeType::TERRAINNODEPOSITION, child.position);
-                    terrain.nodesbuffer[1].addFloat(AttributeType::TERRAINNODESIZE, child.size);
-                    terrain.nodesbuffer[1].addFloat(AttributeType::TERRAINNODERANGE, child.currentRange);
-                    terrain.nodesbuffer[1].addFloat(AttributeType::TERRAINNODERESOLUTION, child.resolution);
+                    appendTerrainNode(terrain.nodesbuffer[viewIndex][1], child);
                 }
             }
         }
@@ -3427,12 +3457,15 @@ void RenderSystem::update(double dt){
             // need to be updated for every camera
             if (!hasMultipleCameras){
                 updateMVP(i, transform, mainCamera, mainCameraTransform);
+            }
 
-                if (signature.test(scene->getComponentId<TerrainComponent>())){
-                    TerrainComponent& terrain = scene->getComponent<TerrainComponent>(entity);
+            // Select the main camera's CDLOD cut (view 0) once per frame; both the
+            // shadow depth pass and the main color pass use it. Render-to-texture
+            // cameras select their own views (1..N-1) during draw().
+            if (signature.test(scene->getComponentId<TerrainComponent>())){
+                TerrainComponent& terrain = scene->getComponent<TerrainComponent>(entity);
 
-                    updateTerrain(terrain, transform, mainCamera, mainCameraTransform);
-                }
+                updateTerrain(terrain, transform, mainCamera, mainCameraTransform, 0);
             }
             
             if (signature.test(scene->getComponentId<SoundComponent>())){
@@ -3561,6 +3594,11 @@ void RenderSystem::draw(){
         }
     }
 
+    // assigns each rendering camera its own terrain CDLOD view slot this frame:
+    // main camera = 0 (selected in update(), also used by the shadow pass), each
+    // render-to-texture camera = 1..N-1; cameras past the cap reuse the main view
+    int terrainViewCounter = 0;
+
     for (int i = 0; i < cameras->size(); i++){
         Entity cameraEntity = cameras->getEntity(i);
         CameraComponent& camera = cameras->getComponentFromIndex(i);
@@ -3570,6 +3608,12 @@ void RenderSystem::draw(){
 
         if (!isMainCamera && !camera.renderToTexture){
             continue; // camera is not used
+        }
+
+        int terrainView = 0;
+        if (!isMainCamera){
+            terrainViewCounter++;
+            terrainView = (terrainViewCounter < MAX_TERRAIN_VIEWS) ? terrainViewCounter : 0;
         }
 
         if (Engine::getMainScene() == scene || camera.renderToTexture){
@@ -3678,14 +3722,18 @@ void RenderSystem::draw(){
                         }
                     }
 
+                    // Per-view CDLOD: the main camera's selection (view 0) is done in
+                    // update(); each render-to-texture camera (mirror/RTT) selects its
+                    // own node cut here into its own buffer, so the reflection shows
+                    // complete, correctly-tessellated terrain.
                     TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
-                    if (terrain && hasMultipleCameras){
-                        updateTerrain(*terrain, transform, camera, cameraTransform);
+                    if (terrain && terrainView != 0){
+                        updateTerrain(*terrain, transform, camera, cameraTransform, terrainView);
                     }
 
                     if (!mesh.transparent || !camera.transparentSort){
                         //Draw opaque meshes if transparency is not necessary
-                        drawMesh(mesh, transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), instmesh, terrain);
+                        drawMesh(mesh, transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), instmesh, terrain, terrainView);
                     }else{
                         transparentRenders.push({TransparentRenderType::MESH, &mesh, nullptr, instmesh, terrain, &transform, transform.distanceToCamera});
                     }
@@ -3741,7 +3789,7 @@ void RenderSystem::draw(){
             TransparentRenderData renderData = transparentRenders.top();
 
             if (renderData.type == TransparentRenderType::MESH){
-                drawMesh(*renderData.mesh, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), renderData.instmesh, renderData.terrain);
+                drawMesh(*renderData.mesh, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), renderData.instmesh, renderData.terrain, terrainView);
             }else if (renderData.type == TransparentRenderType::POINTS){
                 drawPoints(*renderData.points, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
             }
