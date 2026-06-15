@@ -77,7 +77,11 @@ namespace doriax::editor {
     #endif
 
         bool configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator);
-        bool buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType);
+        bool buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& generator);
+        // Windows: command prefix that loads the MSVC toolchain environment
+        // (vcvars) so non-Visual-Studio generators such as Ninja can find the
+        // Windows SDK and CRT libraries. Returns "" when not needed / not found.
+        std::string msvcEnvPrefix(const std::string& generator);
         bool runCommand(const std::string& command, const fs::path& workingDir);
         bool clearStaleCMakeCache(const fs::path& projectPath, const fs::path& buildPath);
         // Remove CMake's cached configuration so the next configure starts clean.

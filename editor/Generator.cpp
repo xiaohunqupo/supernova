@@ -48,13 +48,13 @@ namespace {
         return result;
     }
 
-    bool hasVSWithCppTools() {
+    std::string vsInstallationPath() {
         std::string vswhere = findVswherePath();
-        if (vswhere.empty()) return false;
+        if (vswhere.empty()) return "";
         FILE* pipe = _popen(("\"" + vswhere + "\" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>nul").c_str(), "r");
-        if (!pipe) return false;
+        if (!pipe) return "";
         std::string result;
-        char buffer[256];
+        char buffer[512];
         while (fgets(buffer, sizeof(buffer), pipe)) {
             result += buffer;
         }
@@ -62,7 +62,21 @@ namespace {
         while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' ')) {
             result.pop_back();
         }
-        return !result.empty();
+        return result;
+    }
+
+    bool hasVSWithCppTools() {
+        return !vsInstallationPath().empty();
+    }
+
+    // Path to vcvarsall.bat for the latest VS install with C++ tools, or "".
+    std::string findVcvarsall() {
+        std::string installPath = vsInstallationPath();
+        if (installPath.empty()) return "";
+        fs::path vcvars = fs::path(installPath) / "VC" / "Auxiliary" / "Build" / "vcvarsall.bat";
+        std::error_code ec;
+        if (fs::exists(vcvars, ec)) return vcvars.string();
+        return "";
     }
 #endif
 }
@@ -173,6 +187,27 @@ bool editor::Generator::clearStaleCMakeCache(const fs::path& projectPath, const 
         return cleanBuildDirectory(buildPath);
     }
     return true;
+}
+
+std::string editor::Generator::msvcEnvPrefix(const std::string& generator) {
+#ifdef _WIN32
+    // Ninja (unlike the Visual Studio generator) runs the compiler directly and
+    // does NOT set up the MSVC toolchain environment. A standalone Clang or MSVC
+    // toolchain then cannot find the Windows SDK and CRT import libraries, so
+    // linking fails with errors like "could not open 'kernel32.lib'". Loading
+    // vcvars populates INCLUDE/LIB/PATH so the SDK is found. The Visual Studio
+    // generator configures this itself, and MinGW must not use MSVC's env.
+    if (generator == "Ninja") {
+        std::string vcvars = findVcvarsall();
+        if (!vcvars.empty()) {
+            // Suppress the vcvars banner; keep it scoped to this command only.
+            return "call \"" + vcvars + "\" x64 >nul && ";
+        }
+        Out::warning("Could not locate the Visual Studio environment (vcvarsall.bat). If linking fails with missing '*.lib' files, run the editor from a Developer Command Prompt or install the Windows SDK with Visual Studio.");
+    }
+#endif
+    (void)generator;
+    return "";
 }
 
 bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator) {
@@ -319,7 +354,7 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
     cmakeCommand += "-DDORIAX_LIB_DIR=\"" + toCMakePath(exePath.string()) + "\"";
 
     Out::info("Configuring CMake project with command: %s", cmakeCommand.c_str());
-    bool result = runCommand(cmakeCommand, projectPath);
+    bool result = runCommand(msvcEnvPrefix(generator) + cmakeCommand, projectPath);
 
     // Record which kit was used so we can detect changes next time.
     if (result) {
@@ -334,10 +369,12 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
     return result;
 }
 
-bool editor::Generator::buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType) {
+bool editor::Generator::buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& generator) {
     std::string buildCommand = "cmake --build \"" + buildPath.string() + "\" --config " + configType;
     Out::info("Building project...");
-    return runCommand(buildCommand, buildPath);
+    // The build step invokes the compiler/linker again, so it needs the same
+    // MSVC environment as configure (see msvcEnvPrefix).
+    return runCommand(msvcEnvPrefix(generator) + buildCommand, buildPath);
 }
 
 bool editor::Generator::runCommand(const std::string& command, const fs::path& workingDir) {
@@ -1765,7 +1802,7 @@ void editor::Generator::build(const fs::path projectPath, const fs::path project
                 return;
             }
 
-            if (!buildProject(projectPath, buildPath, configType)) {
+            if (!buildProject(projectPath, buildPath, configType, generator)) {
                 if (cancelRequested.load(std::memory_order_relaxed)) {
                     Out::warning("Build cancelled.");
                 } else {
