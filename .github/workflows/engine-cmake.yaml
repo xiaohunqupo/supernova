@@ -21,7 +21,7 @@ jobs:
             artifact: "windows_msvc",
             cc: "cl",
             cxx: "cl",
-            generators: "Visual Studio 17 2022"
+            generators: "Visual Studio 18 2026"
           }
         - {
             name: "Windows MSVC Vulkan",
@@ -29,7 +29,7 @@ jobs:
             artifact: "windows_msvc_vulkan",
             cc: "cl",
             cxx: "cl",
-            generators: "Visual Studio 17 2022",
+            generators: "Visual Studio 18 2026",
             graphic_backend: "vulkan"
           }
         - {

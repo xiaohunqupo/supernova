@@ -79,7 +79,11 @@ namespace doriax::editor {
         bool configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator);
         bool buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType);
         bool runCommand(const std::string& command, const fs::path& workingDir);
-        void clearStaleCMakeCache(const fs::path& projectPath, const fs::path& buildPath);
+        bool clearStaleCMakeCache(const fs::path& projectPath, const fs::path& buildPath);
+        // Remove CMake's cached configuration so the next configure starts clean.
+        // Returns false (with a logged error) if the cache could not be removed,
+        // usually because another program holds a lock on the build directory.
+        bool cleanBuildDirectory(const fs::path& buildPath);
         std::string getPlatformCMakeConfig();
         std::string getPlatformEditorHeader();
         std::string getPlatformEditorSource(const fs::path& projectPath);

@@ -91,15 +91,50 @@ editor::Generator::~Generator() {
     waitForBuildToComplete();
 }
 
-void editor::Generator::clearStaleCMakeCache(const fs::path& projectPath, const fs::path& buildPath) {
+bool editor::Generator::cleanBuildDirectory(const fs::path& buildPath) {
+    std::error_code ec;
+
+    // Best-effort full wipe first.
+    fs::remove_all(buildPath, ec);
+
+    // CMakeCache.txt and CMakeFiles/ are what actually pin the previous
+    // generator/compiler. If the full wipe above was blocked partway by a
+    // locked file elsewhere in the tree (a loaded plugin DLL, an IDE's
+    // CMake Tools extension, an antivirus scan), make sure at least these are
+    // gone, retrying briefly in case the lock is transient.
+    const fs::path cacheFile = buildPath / "CMakeCache.txt";
+    const fs::path cacheDir  = buildPath / "CMakeFiles";
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        if (!fs::exists(cacheFile) && !fs::exists(cacheDir)) {
+            break;
+        }
+        fs::remove(cacheFile, ec);
+        fs::remove_all(cacheDir, ec);
+        if (!fs::exists(cacheFile) && !fs::exists(cacheDir)) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    fs::create_directories(buildPath, ec);
+
+    if (fs::exists(cacheFile)) {
+        Out::error("Could not remove the previous CMake cache at: %s", cacheFile.string().c_str());
+        Out::error("The build directory is locked by another program. Close any editor or IDE using it (e.g. the VS Code \"CMake Tools\" extension), stop any running build, then delete the '.doriax/build' folder and try again.");
+        return false;
+    }
+    return true;
+}
+
+bool editor::Generator::clearStaleCMakeCache(const fs::path& projectPath, const fs::path& buildPath) {
     fs::path cacheFile = buildPath / "CMakeCache.txt";
     if (!fs::exists(cacheFile)) {
-        return;
+        return true;
     }
 
     std::ifstream cache(cacheFile);
     if (!cache.is_open()) {
-        return;
+        return true;
     }
 
     std::string line;
@@ -115,7 +150,7 @@ void editor::Generator::clearStaleCMakeCache(const fs::path& projectPath, const 
     cache.close();
 
     if (cachedHomeDir.empty()) {
-        return;
+        return true;
     }
 
     // Compare canonical paths to handle trailing slashes, symlinks, etc.
@@ -135,13 +170,15 @@ void editor::Generator::clearStaleCMakeCache(const fs::path& projectPath, const 
         Out::warning("  Previous: %s", cachedHomeDir.c_str());
         Out::warning("  Current: %s", projectPath.string().c_str());
 
-        fs::remove_all(buildPath, ec);
-        fs::create_directories(buildPath, ec);
+        return cleanBuildDirectory(buildPath);
     }
+    return true;
 }
 
 bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator) {
-    clearStaleCMakeCache(projectPath, buildPath);
+    if (!clearStaleCMakeCache(projectPath, buildPath)) {
+        return false;
+    }
 
     // Detect kit change: if the compiler/generator selection changed since the
     // last configure, the build tree must be wiped (CMake does not support
@@ -156,9 +193,9 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
             f.close();
             if (prevKit != currentKit) {
                 Out::warning("Compiler kit changed. Cleaning build directory...");
-                std::error_code ec;
-                fs::remove_all(buildPath, ec);
-                fs::create_directories(buildPath, ec);
+                if (!cleanBuildDirectory(buildPath)) {
+                    return false;
+                }
             }
         } else if (fs::exists(cacheFile)) {
             std::ifstream cache(cacheFile);
@@ -199,9 +236,38 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
 
             if (kitChanged) {
                 Out::warning("Compiler kit changed. Cleaning build directory...");
-                std::error_code ec;
-                fs::remove_all(buildPath, ec);
-                fs::create_directories(buildPath, ec);
+                if (!cleanBuildDirectory(buildPath)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    // Safety net: even when the kit bookkeeping above is out of sync (e.g. a
+    // previous configure left a cache the marker does not describe), a
+    // generator recorded in the cache that differs from the one we are about to
+    // request is fatal to CMake ("Does not match the generator used
+    // previously"). Force a clean so the configure can actually proceed.
+    if (!generator.empty()) {
+        fs::path cacheFile = buildPath / "CMakeCache.txt";
+        std::ifstream cache(cacheFile);
+        if (cache.is_open()) {
+            const std::string genPrefix = "CMAKE_GENERATOR:INTERNAL=";
+            std::string line;
+            std::string cachedGenerator;
+            while (std::getline(cache, line)) {
+                if (line.compare(0, genPrefix.size(), genPrefix) == 0) {
+                    cachedGenerator = line.substr(genPrefix.size());
+                    break;
+                }
+            }
+            cache.close();
+            if (!cachedGenerator.empty() && cachedGenerator != generator) {
+                Out::warning("CMake generator changed (%s -> %s). Cleaning build directory...",
+                    cachedGenerator.c_str(), generator.c_str());
+                if (!cleanBuildDirectory(buildPath)) {
+                    return false;
+                }
             }
         }
     }
