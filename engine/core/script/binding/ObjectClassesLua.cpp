@@ -358,6 +358,11 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("shadowsBillboard", &Mesh::isShadowsBillboard, &Mesh::setShadowsBillboard)
         .addProperty("transparent", &Mesh::isTransparent, &Mesh::setTransparent)
         .addProperty("autoTransparency", &Mesh::isAutoTransparency, &Mesh::setAutoTransparency)
+        .addFunction("setAsMirror",
+            luabridge::overload<>(&Mesh::setAsMirror),
+            luabridge::overload<Vector3>(&Mesh::setAsMirror))
+        .addFunction("removeMirror", &Mesh::removeMirror)
+        .addFunction("isMirror", &Mesh::isMirror)
         .addFunction("createInstancedMesh", &Mesh::createInstancedMesh)
         .addFunction("removeInstancedMesh", &Mesh::removeInstancedMesh)
         .addFunction("hasInstancedMesh", &Mesh::hasInstancedMesh)

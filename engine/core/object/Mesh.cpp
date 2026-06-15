@@ -5,6 +5,7 @@
 #include "Mesh.h"
 #include "render/ObjectRender.h"
 #include "util/Color.h"
+#include "component/MirrorComponent.h"
 #include "subsystem/RenderSystem.h"
 #include "subsystem/MeshSystem.h"
 
@@ -312,6 +313,34 @@ bool Mesh::isAutoTransparency() const{
     MeshComponent& mesh = getComponent<MeshComponent>();
 
     return mesh.autoTransparency;
+}
+
+void Mesh::setAsMirror(){
+    // default normal +Z matches a Wall surface; flip for differently-oriented meshes
+    setAsMirror(Vector3(0, 0, 1));
+}
+
+void Mesh::setAsMirror(Vector3 normal){
+    // turn this (flat) mesh into a planar reflection surface. The engine creates and
+    // drives the reflection camera internally and feeds it to the base texture.
+    MirrorComponent* mirror = scene->findComponent<MirrorComponent>(entity);
+    if (mirror){
+        mirror->normal = normal;
+    }else{
+        MirrorComponent mirrorComp;
+        mirrorComp.normal = normal;
+        addComponent<MirrorComponent>(mirrorComp);
+    }
+}
+
+void Mesh::removeMirror(){
+    if (scene->findComponent<MirrorComponent>(entity)){
+        removeComponent<MirrorComponent>();
+    }
+}
+
+bool Mesh::isMirror() const{
+    return scene->findComponent<MirrorComponent>(entity) != NULL;
 }
 
 

@@ -3789,6 +3789,9 @@ void RenderSystem::draw(){
 void RenderSystem::onComponentAdded(Entity entity, ComponentId componentId) {
     if (componentId == scene->getComponentId<LightComponent>()) {
         needReloadMeshes();
+    } else if (componentId == scene->getComponentId<MirrorComponent>()) {
+        // a mirror enables the inverted-culling pipeline on meshes; reload so it bakes
+        needReloadMeshes();
     }
 }
 
@@ -3816,11 +3819,35 @@ void RenderSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
         CameraComponent& camera = scene->getComponent<CameraComponent>(entity);
         destroyCamera(camera, true);
     } else if (componentId == scene->getComponentId<MirrorComponent>()) {
-        // destroy the internal reflection camera owned by this mirror
         MirrorComponent& mirror = scene->getComponent<MirrorComponent>(entity);
+
+        Framebuffer* reflectionFb = nullptr;
+        if (mirror.reflectionCamera != NULL_ENTITY && scene->isEntityCreated(mirror.reflectionCamera)){
+            if (CameraComponent* refCam = scene->findComponent<CameraComponent>(mirror.reflectionCamera)){
+                reflectionFb = refCam->framebuffer;
+            }
+        }
+
+        // The mirror bound the reflection camera's framebuffer as the mesh base texture.
+        // Clear that binding before destroying the camera, otherwise the mesh would keep
+        // a dangling pointer to the deleted framebuffer and dereference it on reload.
+        if (reflectionFb){
+            MeshComponent* mesh = scene->findComponent<MeshComponent>(entity);
+            if (mesh && mesh->numSubmeshes > 0){
+                Texture& baseTex = mesh->submeshes[0].material.baseColorTexture;
+                if (baseTex.getFramebuffer() == reflectionFb){
+                    baseTex = Texture();
+                }
+            }
+        }
+
+        // destroy the internal reflection camera owned by this mirror
         if (mirror.reflectionCamera != NULL_ENTITY && scene->isEntityCreated(mirror.reflectionCamera)){
             scene->destroyEntity(mirror.reflectionCamera);
         }
+
+        // reload meshes so the surface drops the projective-mirror shader variant and
+        // other meshes drop the now-unused inverted-culling pipeline
         needReloadMeshes();
     }
 }

@@ -84,6 +84,11 @@ namespace doriax{
         void setAutoTransparency(bool autoTransparency);
         bool isAutoTransparency() const;
 
+        void setAsMirror();
+        void setAsMirror(Vector3 normal);
+        void removeMirror();
+        bool isMirror() const;
+
         void createInstancedMesh();
         void removeInstancedMesh();
         bool hasInstancedMesh() const;
