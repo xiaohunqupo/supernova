@@ -2406,7 +2406,14 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
     }
 
     if (signature.test(registry->getComponentId<MeshComponent>())) {
-        const bool isModel = signature.test(registry->getComponentId<ModelComponent>());
+        // Only treat the mesh as model-backed (and skip encoding its buffers and
+        // embedded textures) when the ModelComponent has a source file that will
+        // regenerate them at runtime. An empty filename loads no geometry, so the
+        // mesh data must still be encoded to remain visible.
+        bool isModel = false;
+        if (signature.test(registry->getComponentId<ModelComponent>())) {
+            isModel = !registry->getComponent<ModelComponent>(entity).filename.empty();
+        }
         MeshComponent mesh = registry->getComponent<MeshComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::MeshComponent, true)] = encodeMeshComponent(mesh, !isModel, !isModel);
     }

@@ -740,9 +740,14 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
         }
     }
 
-    // Skip inlining raw buffer/index data for model-backed meshes; the model
-    // loader will repopulate the buffers at runtime from the source file.
-    const bool hasModel = scene->findComponent<ModelComponent>(entity);
+    // Skip inlining raw buffer/index data only for meshes backed by a model
+    // file; the model loader will repopulate the buffers at runtime from the
+    // source file. A ModelComponent with an empty filename loads no geometry,
+    // so the mesh data must still be serialized to remain visible.
+    bool hasModel = false;
+    if (scene->findComponent<ModelComponent>(entity)) {
+        hasModel = !scene->getComponent<ModelComponent>(entity).filename.empty();
+    }
 
     if (!hasModel && mesh.buffer.getSize() > 0){
         code << ind << "mesh.buffer.clearAll();\n";
