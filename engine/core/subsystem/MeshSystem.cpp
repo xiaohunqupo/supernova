@@ -2862,23 +2862,34 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             }
         }
 
-        if (!skipEntities && skeletonRoot >= 0) {
-            model.bonesNameMapping.clear();
-            model.bonesIdMapping.clear();
+        if (skeletonRoot >= 0) {
+            if (!skipEntities) {
+                model.bonesNameMapping.clear();
+                model.bonesIdMapping.clear();
 
-            model.skeleton = generateSketetalStructure(entity, model, skeletonRoot, skinIndex);
+                model.skeleton = generateSketetalStructure(entity, model, skeletonRoot, skinIndex);
 
-            if (model.skeleton != NULL_ENTITY) {
-                if (skin.joints.size() > MAX_BONES){
-                    Log::error("Cannot create skinning bigger than %i", MAX_BONES);
-                    if (asyncLoad) {
-                        ResourceProgress::failBuild(buildId);
+                if (model.skeleton != NULL_ENTITY) {
+                    if (skin.joints.size() > MAX_BONES){
+                        Log::error("Cannot create skinning bigger than %i", MAX_BONES);
+                        if (asyncLoad) {
+                            ResourceProgress::failBuild(buildId);
+                        }
+                        return false;
                     }
-                    return false;
+                    scene->addEntityChild(entity, model.skeleton, false);
                 }
-                scene->addEntityChild(entity, model.skeleton, false);
+            }
 
-                // Populate bonesMatrix for bind pose before the first render frame
+            // Repopulate bonesMatrix before the first render frame. loadGLTF reset
+            // every bonesMatrix to identity above, so RenderSystem must recompute
+            // the skinning matrices: flag the model transform (so its
+            // inverseDerivedTransform is refreshed) and every bone transform for
+            // update. This also covers reopening a saved project (skipEntities),
+            // where the skeleton already exists from the deserialized scene; without
+            // it the skinning is left stale and the mesh renders invisible until it
+            // is moved or the game is played and stopped.
+            if (model.skeleton != NULL_ENTITY) {
                 transform.needUpdate = true;
                 for (const auto& boneEntry : model.bonesIdMapping) {
                     Transform* boneTransform = scene->findComponent<Transform>(boneEntry.second);
