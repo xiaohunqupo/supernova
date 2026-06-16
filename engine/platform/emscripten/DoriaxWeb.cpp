@@ -359,14 +359,14 @@ EM_BOOL DoriaxWeb::key_callback(int eventType, const EmscriptenKeyboardEvent *e,
     if ((!strcmp(key,"Tab"))||(*key=='\t')) skey=1;
     if ((!strcmp(key,"Backspace"))||(*key=='\b')) skey=2;
     if ((!strcmp(key,"Enter"))||(*key=='\r')) skey=4;
-    if ((!strcmp(key,"Escape"))||(*key=='\e')) skey=8;
+    if ((!strcmp(key,"Escape"))||(*key=='\x1b')) skey=8;
 
     if (eventType == EMSCRIPTEN_EVENT_KEYDOWN){
         doriax::Engine::systemKeyDown(code, e->repeat, modifiers);
         if (skey==1) doriax::Engine::systemCharInput('\t');
         if (skey==2) doriax::Engine::systemCharInput('\b');
         if (skey==4) doriax::Engine::systemCharInput('\r');
-        if (skey==8) doriax::Engine::systemCharInput('\e');
+        if (skey==8) doriax::Engine::systemCharInput('\x1b');
 
     }else if (eventType == EMSCRIPTEN_EVENT_KEYUP){
         doriax::Engine::systemKeyUp(code, e->repeat, modifiers);

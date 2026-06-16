@@ -945,7 +945,7 @@ bool UISystem::handleTextEditCharInput(TextEditComponent& textedit, TextComponen
         return false;
     }
 
-    if (codepoint == '\e'){
+    if (codepoint == '\x1b'){
         ui.focused = false;
         ui.onLostFocus.call();
         textedit.needUpdateTextEdit = true;

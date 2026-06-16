@@ -711,7 +711,7 @@ void NativeEngine::handleGameActivityInput(){
                 if (keyEvent->keyCode == AKEYCODE_ENTER)
                     doriax::Engine::systemCharInput('\r');
                 if (keyEvent->keyCode == AKEYCODE_ESCAPE)
-                    doriax::Engine::systemCharInput('\e');
+                    doriax::Engine::systemCharInput('\x1b');
                 if (keyEvent->keyCode == AKEYCODE_BACK)
                     doriax::Engine::systemCharInput('\b');
 

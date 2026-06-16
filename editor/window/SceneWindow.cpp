@@ -581,7 +581,7 @@ void editor::SceneWindow::forwardPlayKeyboardInput(ImGuiIO& io, int mods){
     forwardKey(ImGuiKey_Backspace, D_KEY_BACKSPACE, L'\b');
     forwardKey(ImGuiKey_Enter, D_KEY_ENTER, L'\r', false);
     forwardKey(ImGuiKey_KeypadEnter, D_KEY_KP_ENTER, L'\r', false);
-    forwardKey(ImGuiKey_Escape, D_KEY_ESCAPE, L'\e', false);
+    forwardKey(ImGuiKey_Escape, D_KEY_ESCAPE, L'\x1b', false);
     forwardKey(ImGuiKey_Space, D_KEY_SPACE);
     forwardKey(ImGuiKey_LeftArrow, D_KEY_LEFT);
     forwardKey(ImGuiKey_RightArrow, D_KEY_RIGHT);
