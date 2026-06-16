@@ -29,7 +29,10 @@ bool ShaderRender::createShader(ShaderData& shaderData){
 
         bool ret = backend.createShader(this->shaderData);
 
-        SystemRender::scheduleCleanup(ShaderRender::cleanupShader, &(this->shaderData));
+        // Release the source via the command stream so it runs after MAKE_SHADER.
+        // A frame-counted scheduleCleanup() could fire before the shader is built,
+        // leaving an empty source (GL_SHADER_COMPILATION_FAILED) on the async path.
+        SystemRender::addQueueCommand(ShaderRender::cleanupShader, &(this->shaderData));
         
         return ret;
     }else{
