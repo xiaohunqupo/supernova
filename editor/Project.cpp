@@ -2438,6 +2438,11 @@ bool editor::Project::createTempProject(std::string projectName, bool deleteIfEx
         projectPath = std::filesystem::temp_directory_path() / projectName;
         fs::path projectFile = projectPath / "project.yaml";
 
+        // Set the project name so libName (used for the generated CMake target
+        // and project()) is populated. Without this a freshly created temp
+        // project has an empty name, producing an invalid CMakeLists.txt.
+        setName(projectName);
+
         if (deleteIfExists && fs::exists(projectPath)) {
             fs::remove_all(projectPath);
         }
@@ -2611,6 +2616,13 @@ bool editor::Project::loadProject(const std::filesystem::path path, bool updateL
         projectPath = path;
 
         Stream::decodeProject(this, projectNode);
+
+        // Guarantee a non-empty name: project.yaml files without a "name" field
+        // (older or hand-authored projects) would otherwise leave libName empty
+        // and generate an invalid CMakeLists.txt. Fall back to the folder name.
+        if (getName().empty()) {
+            setName(path.filename().string());
+        }
 
         // Create a default scene if no scenes were loaded
         if (scenes.empty()) {

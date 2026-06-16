@@ -200,8 +200,11 @@ std::string editor::Generator::msvcEnvPrefix(const std::string& generator) {
     if (generator == "Ninja") {
         std::string vcvars = findVcvarsall();
         if (!vcvars.empty()) {
-            // Suppress the vcvars banner; keep it scoped to this command only.
-            return "call \"" + vcvars + "\" x64 >nul && ";
+            // Do NOT suppress vcvars output: when it cannot find the Windows SDK
+            // it prints "[ERROR:...]" diagnostics that are essential for
+            // troubleshooting missing '*.lib' link failures. The banner is a
+            // few harmless lines on success.
+            return "call \"" + vcvars + "\" x64 && ";
         }
         Out::warning("Could not locate the Visual Studio environment (vcvarsall.bat). If linking fails with missing '*.lib' files, run the editor from a Developer Command Prompt or install the Windows SDK with Visual Studio.");
     }
