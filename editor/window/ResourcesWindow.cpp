@@ -6,6 +6,11 @@
 #include "resources/icons/file-icon_png.h"
 #include "resources/icons/entity-icon_png.h"
 #include "resources/icons/scene-icon_png.h"
+#include "resources/icons/source-icon_png.h"
+#include "resources/icons/header-icon_png.h"
+#include "resources/icons/lua-icon_png.h"
+#include "resources/icons/audio-icon_png.h"
+#include "resources/icons/font-icon_png.h"
 
 #include "command/type/CopyFileCmd.h"
 #include "command/type/CreateMaterialFileCmd.h"
@@ -244,6 +249,16 @@ ImU32 editor::ResourcesWindow::fileSeparatorColor(const FileEntry& fe) const{
             return ImGui::GetColorU32(ImVec4(0.30f, 0.85f, 0.30f, 1.0f));
         case FileType::MODEL:
             return ImGui::GetColorU32(ImVec4(0.80f, 0.40f, 0.40f, 1.0f));
+        case FileType::SOURCE:
+            return ImGui::GetColorU32(ImVec4(0.17f, 0.42f, 0.75f, 1.0f));
+        case FileType::HEADER:
+            return ImGui::GetColorU32(ImVec4(0.49f, 0.25f, 0.75f, 1.0f));
+        case FileType::LUA:
+            return ImGui::GetColorU32(ImVec4(0.17f, 0.18f, 0.45f, 1.0f));
+        case FileType::AUDIO:
+            return ImGui::GetColorU32(ImVec4(0.12f, 0.62f, 0.39f, 1.0f));
+        case FileType::FONT:
+            return ImGui::GetColorU32(ImVec4(0.84f, 0.27f, 0.31f, 1.0f));
         case FileType::NONE:
         default:
             return ImGui::GetColorU32(ImVec4(0.50f, 0.50f, 0.50f, 1.0f));
@@ -1059,6 +1074,11 @@ void editor::ResourcesWindow::scanDirectory(const fs::path& path) {
     intptr_t fileIconH = (intptr_t)fileIcon.getRender()->getGLHandler();
     intptr_t sceneIconH = (intptr_t)sceneIcon.getRender()->getGLHandler();
     intptr_t entityIconH = (intptr_t)entityIcon.getRender()->getGLHandler();
+    intptr_t sourceIconH = (intptr_t)sourceIcon.getRender()->getGLHandler();
+    intptr_t headerIconH = (intptr_t)headerIcon.getRender()->getGLHandler();
+    intptr_t luaIconH = (intptr_t)luaIcon.getRender()->getGLHandler();
+    intptr_t audioIconH = (intptr_t)audioIcon.getRender()->getGLHandler();
+    intptr_t fontIconH = (intptr_t)fontIcon.getRender()->getGLHandler();
 
     files.clear();
 
@@ -1100,6 +1120,21 @@ void editor::ResourcesWindow::scanDirectory(const fs::path& path) {
                 fileEntry.icon = entityIconH;
             }else if (Util::isModelFile(fileEntry.extension)){
                 fileEntry.type = FileType::MODEL;
+            }else if (Util::isLuaFile(fileEntry.extension)){
+                fileEntry.type = FileType::LUA;
+                fileEntry.icon = luaIconH;
+            }else if (Util::isHeaderFile(fileEntry.extension)){
+                fileEntry.type = FileType::HEADER;
+                fileEntry.icon = headerIconH;
+            }else if (Util::isSourceFile(fileEntry.extension)){
+                fileEntry.type = FileType::SOURCE;
+                fileEntry.icon = sourceIconH;
+            }else if (Util::isAudioFile(fileEntry.extension)){
+                fileEntry.type = FileType::AUDIO;
+                fileEntry.icon = audioIconH;
+            }else if (Util::isFontFile(fileEntry.extension)){
+                fileEntry.type = FileType::FONT;
+                fileEntry.icon = fontIconH;
             }
 
             if (fileEntry.type == FileType::IMAGE || fileEntry.type == FileType::MATERIAL || fileEntry.type == FileType::MODEL) {
@@ -1847,6 +1882,26 @@ void editor::ResourcesWindow::show() {
         data.loadTextureFromMemory(entity_icon_png, entity_icon_png_len);
         entityIcon.setData("editor:resources:entity_icon", data);
         entityIcon.load();
+
+        data.loadTextureFromMemory(source_icon_png, source_icon_png_len);
+        sourceIcon.setData("editor:resources:source_icon", data);
+        sourceIcon.load();
+
+        data.loadTextureFromMemory(header_icon_png, header_icon_png_len);
+        headerIcon.setData("editor:resources:header_icon", data);
+        headerIcon.load();
+
+        data.loadTextureFromMemory(lua_icon_png, lua_icon_png_len);
+        luaIcon.setData("editor:resources:lua_icon", data);
+        luaIcon.load();
+
+        data.loadTextureFromMemory(audio_icon_png, audio_icon_png_len);
+        audioIcon.setData("editor:resources:audio_icon", data);
+        audioIcon.load();
+
+        data.loadTextureFromMemory(font_icon_png, font_icon_png_len);
+        fontIcon.setData("editor:resources:font_icon", data);
+        fontIcon.load();
 
         scanDirectory(project->getProjectPath().string());
 

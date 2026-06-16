@@ -146,6 +146,45 @@ namespace doriax::editor{
             return scriptExtensions.find(ext) != scriptExtensions.end();
         }
 
+        inline static bool isLuaFile(const std::string& path) {
+             static const std::unordered_set<std::string> luaExtensions = {
+                ".lua"
+            };
+
+            std::string ext = std::filesystem::path(path).extension().string();
+            if (ext.empty() && !path.empty() && path[0] == '.') {
+                ext = path;
+            }
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            return luaExtensions.find(ext) != luaExtensions.end();
+        }
+
+        inline static bool isHeaderFile(const std::string& path) {
+             static const std::unordered_set<std::string> headerExtensions = {
+                ".h", ".hh", ".hpp", ".hxx"
+            };
+
+            std::string ext = std::filesystem::path(path).extension().string();
+            if (ext.empty() && !path.empty() && path[0] == '.') {
+                ext = path;
+            }
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            return headerExtensions.find(ext) != headerExtensions.end();
+        }
+
+        inline static bool isSourceFile(const std::string& path) {
+             static const std::unordered_set<std::string> sourceExtensions = {
+                ".cpp", ".cc", ".cxx"
+            };
+
+            std::string ext = std::filesystem::path(path).extension().string();
+            if (ext.empty() && !path.empty() && path[0] == '.') {
+                ext = path;
+            }
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            return sourceExtensions.find(ext) != sourceExtensions.end();
+        }
+
         inline static std::vector<std::string> getStringsFromPayload(const ImGuiPayload* payload){
             const char* data = static_cast<const char*>(payload->Data);
             size_t dataSize = payload->DataSize;

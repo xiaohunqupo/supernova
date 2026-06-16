@@ -29,7 +29,12 @@ namespace doriax::editor {
         MATERIAL,
         SCENE,
         BUNDLE,
-        MODEL
+        MODEL,
+        SOURCE,
+        HEADER,
+        LUA,
+        AUDIO,
+        FONT
     };
 
     struct FileEntry {
@@ -83,6 +88,11 @@ namespace doriax::editor {
         Texture fileIcon;
         Texture sceneIcon;
         Texture entityIcon;
+        Texture sourceIcon;
+        Texture headerIcon;
+        Texture luaIcon;
+        Texture audioIcon;
+        Texture fontIcon;
         // Bounded cache of GPU thumbnail textures; must stay well below the
         // sokol image/sampler pool sizes (2048), which are shared with scenes
         static constexpr size_t MAX_THUMBNAIL_TEXTURES = 512;
