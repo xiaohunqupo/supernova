@@ -45,6 +45,12 @@ void Scene::init(){
     globalIllumColor = Vector3(1.0, 1.0, 1.0);
     globalIllumIntensity = 0.1;
 
+    ssaoEnabled = false;
+    ssaoRadius = 0.5;
+    ssaoIntensity = 1.0;
+    ssaoBias = 0.025;
+    ssaoDebug = false;
+
     uiEventState = UIEventState::NOT_SET;
 }
 
@@ -169,6 +175,50 @@ void Scene::setShadowsPCF(bool shadowsPCF){
 
 bool Scene::isShadowsPCF() const{
     return this->shadowsPCF;
+}
+
+void Scene::setSSAOEnabled(bool ssaoEnabled){
+    if (this->ssaoEnabled != ssaoEnabled){
+        this->ssaoEnabled = ssaoEnabled;
+        // toggling SSAO changes the mesh shader variant (USE_SSAO), so recompile
+        getSystem<RenderSystem>()->needReloadMeshes();
+    }
+}
+
+bool Scene::isSSAOEnabled() const{
+    return this->ssaoEnabled;
+}
+
+void Scene::setSSAORadius(float radius){
+    this->ssaoRadius = radius;
+}
+
+float Scene::getSSAORadius() const{
+    return this->ssaoRadius;
+}
+
+void Scene::setSSAOIntensity(float intensity){
+    this->ssaoIntensity = intensity;
+}
+
+float Scene::getSSAOIntensity() const{
+    return this->ssaoIntensity;
+}
+
+void Scene::setSSAOBias(float bias){
+    this->ssaoBias = bias;
+}
+
+float Scene::getSSAOBias() const{
+    return this->ssaoBias;
+}
+
+void Scene::setSSAODebug(bool debug){
+    this->ssaoDebug = debug;
+}
+
+bool Scene::isSSAODebug() const{
+    return this->ssaoDebug;
 }
 
 void Scene::setLightState(LightState state){

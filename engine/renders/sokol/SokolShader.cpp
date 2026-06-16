@@ -271,6 +271,22 @@ bool SokolShader::createShader(ShaderData& shaderData){
         }
     }
 
+    // A sokol shader-desc validation panic on texture/sampler pairs is almost
+    // always a bind-slot overflow; name the offending shader so it is actionable
+    // instead of an opaque VALIDATION_FAILED.
+    {
+        int smpCount = 0, pairCount = 0;
+        for (const auto& st : shaderData.stages){
+            smpCount += (int)st.samplers.size();
+            pairCount += (int)st.textureSamplerPairs.size();
+        }
+        const char* nm = shaderData.stages.empty() ? "?" : shaderData.stages[0].name.c_str();
+        if (smpCount > SG_MAX_SAMPLER_BINDSLOTS)
+            Log::error("Shader '%s' uses %d samplers but the limit is %d", nm, smpCount, SG_MAX_SAMPLER_BINDSLOTS);
+        if (pairCount > SG_MAX_TEXTURE_SAMPLER_PAIRS)
+            Log::error("Shader '%s' uses %d texture-sampler pairs but the limit is %d", nm, pairCount, SG_MAX_TEXTURE_SAMPLER_PAIRS);
+    }
+
     if (Engine::isAsyncThread()){
         shader = SokolCmdQueue::add_command_make_shader(shader_desc);
     }else{

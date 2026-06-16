@@ -1514,9 +1514,11 @@ std::filesystem::path editor::App::getUserCacheBaseDir() {
 }
 
 std::filesystem::path editor::App::getUserShaderCacheDir(){
-    // v4: mirror (USE_MIRROR) variants changed the u_fs_mirror block guard;
-    // bump so stale cached .sdat for those variants are rebuilt
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v4";
+    // Bump this version on any shader source change to invalidate stale cached
+    // .sdat (the cache is keyed by shaderType+properties, not source content).
+    // v4: mirror (USE_MIRROR) variants changed the u_fs_mirror block guard.
+    // v5: SSAO (mesh.frag USE_SSAO + viewportInfo, new ssao/ssao_blur shaders).
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v5";
 }
 
 void editor::App::pushTabNotificationStyle(){

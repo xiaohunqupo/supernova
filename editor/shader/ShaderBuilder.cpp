@@ -256,6 +256,7 @@ void editor::ShaderBuilder::addMeshPropertyDefinitions(std::vector<shadercompile
     if (prop & (1 << 18)) defs.push_back({"HAS_INSTANCING", "1"});            // 'Ist'
     if (prop & (1 << 19)) defs.push_back({"USE_IBL", "1"});                   // 'Ibl'
     if (prop & (1 << 20)) defs.push_back({"USE_MIRROR", "1"});                // 'Mir'
+    if (prop & (1 << 21)) defs.push_back({"USE_SSAO", "1"});                  // 'Sao'
 }
 
 void editor::ShaderBuilder::addDepthMeshPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {
@@ -402,6 +403,12 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }else if (shaderType == ShaderType::SKYBOX){
         args.vert_file = "sky.vert";
         args.frag_file = "sky.frag";
+    }else if (shaderType == ShaderType::SSAO){
+        args.vert_file = "fullscreen.vert";
+        args.frag_file = "ssao.frag";
+    }else if (shaderType == ShaderType::SSAO_BLUR){
+        args.vert_file = "fullscreen.vert";
+        args.frag_file = "ssao_blur.frag";
     }else{
         return false;
     }
@@ -415,6 +422,9 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }
     if (shaderType == ShaderType::DEPTH){
         args.defines.push_back({"MAX_BONES", "70"});
+    }
+    if (shaderType == ShaderType::SSAO){
+        args.defines.push_back({"SSAO_KERNEL_SIZE", "32"});
     }
 
     return true;

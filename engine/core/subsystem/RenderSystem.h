@@ -39,6 +39,7 @@ namespace doriax{
 		Vector4 cameraDir;
 		Vector4 globalIllum; //global illumination
 		Vector4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
+		Vector4 viewportInfo; //1.0/viewportSize.xy in .xy (used by USE_SSAO)
 	} fs_lighting_t;
 
 	typedef struct fs_fog_t {
@@ -59,6 +60,18 @@ namespace doriax{
 		Matrix4 modelMatrix;
 	    Matrix4 lightSpaceMatrix;
 	} vs_depth_t;
+
+	typedef struct fs_ssao_t {
+		Matrix4 projection;
+		Matrix4 invProjection;
+		Vector4 kernel[SSAO_KERNEL_SIZE];
+		Vector4 params;     // radius.x, bias.y, intensity.z
+		Vector4 noiseScale; // screenSize/noiseSize in .xy
+	} fs_ssao_t;
+
+	typedef struct fs_ssao_blur_t {
+		Vector4 texelSize; // 1.0/textureSize in .xy
+	} fs_ssao_blur_t;
 
 	typedef struct vs_points_params_t {
 		Matrix4 mvpMatrix;
@@ -119,6 +132,27 @@ namespace doriax{
 		fs_shadows_t fs_shadows;
 		fs_fog_t fs_fog;
 
+		// SSAO: per-frame fullscreen passes for the main camera. The depth pre-pass
+		// renders camera-space packed depth, then the ssao + blur fullscreen passes
+		// produce an AO texture sampled by lit meshes (USE_SSAO).
+		bool ssaoLoaded;
+		unsigned int ssaoWidth;
+		unsigned int ssaoHeight;
+		Framebuffer ssaoDepthFramebuffer; // color = packed depth, depth = z-test
+		Framebuffer ssaoFramebuffer;      // raw AO
+		Framebuffer ssaoBlurFramebuffer;  // blurred AO (sampled by meshes)
+		CameraRender ssaoPassRender;      // drives the offscreen SSAO passes
+		ObjectRender ssaoRender;          // fullscreen ssao.frag draw
+		ObjectRender ssaoBlurRender;      // fullscreen ssao_blur.frag draw
+		TextureRender ssaoNoiseTexture;
+		std::shared_ptr<ShaderRender> ssaoShader;
+		std::shared_ptr<ShaderRender> ssaoBlurShader;
+		fs_ssao_t fs_ssao; // kernel filled once in loadSSAO; matrices/params per frame
+		fs_ssao_blur_t fs_ssao_blur;
+		int ssaoSlotParams;
+		int ssaoBlurSlotParams;
+		TextureRender* currentSSAOTexture; // AO bound to meshes this camera (or empty white)
+
 		static void changeLoaded(void* data);
 		static void changeDestroy(void* data);
 
@@ -156,8 +190,14 @@ namespace doriax{
 	protected:
 
 		bool drawMesh(MeshComponent& mesh, Transform& transform, CameraComponent& camera, Transform& camTransform, bool renderToTexture, InstancedMeshComponent* instmesh, TerrainComponent* terrain, int terrainView = 0);
-		bool drawMeshDepth(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_depth_t vsDepthParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain);
+		bool drawMeshDepth(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_depth_t vsDepthParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain, bool forSSAO = false);
 		void destroyMesh(Entity entity, MeshComponent& mesh);
+
+		// SSAO
+		void loadSSAO();
+		void destroySSAO();
+		bool ensureSSAOFramebuffers(unsigned int width, unsigned int height);
+		void renderSSAO(CameraComponent& camera);
 
 		bool drawUI(UIComponent& ui, Transform& transform, bool renderToTexture);
 		void destroyUI(Entity entity, UIComponent& ui);

@@ -74,7 +74,13 @@ uniform u_fs_pbrParams {
         vec4 cameraDir; //camera backward axis.xyz
         vec4 globalIllum; //globalColor.xyz and globalIntensity.w
         vec4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
+        vec4 viewportInfo; //1.0/viewportSize.xy in .xy
     } lighting;
+#endif
+
+#ifdef USE_SSAO
+    uniform texture2D u_ssaoTexture;
+    uniform sampler u_ssao_smp;
 #endif
 
 #ifdef USE_IBL
@@ -283,6 +289,23 @@ void main() {
             f_diffuse = mix(f_diffuse, f_diffuse * ao, occlusionStrength);
             // apply ambient occlusion too all lighting that is not punctual
             f_specular = mix(f_specular, f_specular * ao, occlusionStrength);
+        #endif
+
+        #ifdef USE_SSAO
+            // Screen-space AO modulates only the ambient/indirect term (computed
+            // above); the direct punctual lighting added below is unaffected.
+            // The AO buffer is in logical orientation, so flip Y when the color pass
+            // renders flipped (GL offscreen, viewportInfo.w=1) to line it up here.
+            vec2 ssaoUV = gl_FragCoord.xy * lighting.viewportInfo.xy;
+            if (lighting.viewportInfo.w > 0.5) ssaoUV.y = 1.0 - ssaoUV.y;
+            float screenAO = texture(sampler2D(u_ssaoTexture, u_ssao_smp), ssaoUV).r;
+            // debug: visualize the raw AO buffer (viewportInfo.z = 1)
+            if (lighting.viewportInfo.z > 0.5){
+                g_finalColor = vec4(vec3(screenAO), 1.0);
+                return;
+            }
+            f_diffuse *= screenAO;
+            f_specular *= screenAO;
         #endif
 
         // Apply light sources

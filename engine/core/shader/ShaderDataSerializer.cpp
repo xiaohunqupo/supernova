@@ -15,6 +15,9 @@
 namespace doriax {
 
 constexpr uint32_t SDAT_MAGIC = 0x54414453; // 'S''D''A''T' little-endian
+// Serialization format version of the .sdat blob. Bump only when the on-disk
+// layout changes. To invalidate caches after a shader *source* change, bump the
+// cache directory version in App::getUserShaderCacheDir() instead.
 constexpr uint32_t SDAT_VERSION = 1;
 
 // Sanity limits to guard against malformed files

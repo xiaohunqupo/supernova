@@ -42,6 +42,12 @@ namespace doriax{
         Vector3 globalIllumColor;
         float globalIllumIntensity;
 
+        bool ssaoEnabled;
+        float ssaoRadius;
+        float ssaoIntensity;
+        float ssaoBias;
+        bool ssaoDebug;
+
         UIEventState uiEventState;
 
         std::vector<std::pair<std::string, std::shared_ptr<SubSystem>>> systems;
@@ -100,6 +106,21 @@ namespace doriax{
 
         void setShadowsPCF(bool shadowsPCF);
         bool isShadowsPCF() const;
+
+        void setSSAOEnabled(bool ssaoEnabled);
+        bool isSSAOEnabled() const;
+
+        void setSSAORadius(float radius);
+        float getSSAORadius() const;
+
+        void setSSAOIntensity(float intensity);
+        float getSSAOIntensity() const;
+
+        void setSSAOBias(float bias);
+        float getSSAOBias() const;
+
+        void setSSAODebug(bool debug);
+        bool isSSAODebug() const;
 
         void setLightState(LightState state);
         LightState getLightState() const;

@@ -203,6 +203,31 @@ namespace doriax::editor{
                     return scene->getLightState();
                 }
             }
+            else if (propertyName == "ssao_enabled") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    return scene->isSSAOEnabled();
+                }
+            }
+            else if (propertyName == "ssao_radius") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getSSAORadius();
+                }
+            }
+            else if (propertyName == "ssao_intensity") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getSSAOIntensity();
+                }
+            }
+            else if (propertyName == "ssao_bias") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getSSAOBias();
+                }
+            }
+            else if (propertyName == "ssao_debug") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    return scene->isSSAODebug();
+                }
+            }
 
             // Return default value if property not found
             if constexpr (std::is_same_v<T, Vector4>) return Vector4(0.0, 0.0, 0.0, 1.0);
@@ -240,6 +265,31 @@ namespace doriax::editor{
             else if (propertyName == "light_state") {
                 if constexpr (std::is_same_v<T, LightState>) {
                     scene->setLightState(value);
+                }
+            }
+            else if (propertyName == "ssao_enabled") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    scene->setSSAOEnabled(value);
+                }
+            }
+            else if (propertyName == "ssao_radius") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setSSAORadius(value);
+                }
+            }
+            else if (propertyName == "ssao_intensity") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setSSAOIntensity(value);
+                }
+            }
+            else if (propertyName == "ssao_bias") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setSSAOBias(value);
+                }
+            }
+            else if (propertyName == "ssao_debug") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    scene->setSSAODebug(value);
                 }
             }
         }

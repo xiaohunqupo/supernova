@@ -45,7 +45,9 @@ namespace doriax{
         MESH,
         SKYBOX,
         DEPTH,
-        UI
+        UI,
+        SSAO,       // fullscreen screen-space ambient occlusion pass
+        SSAO_BLUR   // fullscreen depth-aware blur of the SSAO result
     };
 
     enum class AttributeType{
@@ -118,7 +120,9 @@ namespace doriax{
         VS_MORPHTARGET,
         DEPTH_VS_MORPHTARGET,
         TERRAIN_VS_PARAMS,
-        DEPTH_TERRAIN_VS_PARAMS
+        DEPTH_TERRAIN_VS_PARAMS,
+        SSAO_FS_PARAMS,
+        SSAO_BLUR_FS_PARAMS
     };
 
     enum class StorageBufferType{
@@ -150,7 +154,9 @@ namespace doriax{
         TERRAINDETAIL_RED,
         TERRAINDETAIL_GREEN,
         TERRAINDETAIL_BLUE,
-        DEPTHTEXTURE
+        DEPTHTEXTURE,
+        SSAOTEXTURE,
+        NOISETEXTURE
     };
 
     enum class TextureType {

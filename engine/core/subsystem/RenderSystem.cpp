@@ -21,6 +21,8 @@
 #include "math/AABB.h"
 #include <memory>
 #include <cmath>
+#include <random>
+#include <cstdint>
 
 using namespace doriax;
 
@@ -40,6 +42,13 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<Transform>());
 
     this->scene = scene;
+
+    ssaoLoaded = false;
+    ssaoWidth = 0;
+    ssaoHeight = 0;
+    ssaoSlotParams = -1;
+    ssaoBlurSlotParams = -1;
+    currentSSAOTexture = NULL;
 }
 
 RenderSystem::~RenderSystem(){
@@ -65,6 +74,8 @@ void RenderSystem::destroy(){
     //emptyNormal.destroyTexture();
 
     emptyTexturesCreated = false;
+
+    destroySSAO();
 
     auto skys = scene->getComponentArray<SkyComponent>();
     if (skys->size() > 0){
@@ -325,6 +336,17 @@ void RenderSystem::processLights(int numLights, CameraComponent& camera, Transfo
             fs_lighting.envColor = Vector4(linColor.x, linColor.y, linColor.z, Angle::defaultToRad(sky.rotation));
         }
     }
+
+    // inverse viewport size, used by USE_SSAO to convert gl_FragCoord to a screen UV.
+    // .z = SSAO debug flag (output raw AO); .w = rendering-flipped flag (the AO buffer
+    // is in logical orientation, so flip Y on sample when the color pass is flipped).
+    float vpW = Engine::getViewRect().getWidth();
+    float vpH = Engine::getViewRect().getHeight();
+    fs_lighting.viewportInfo = Vector4(
+        (vpW > 0.0f) ? 1.0f / vpW : 0.0f,
+        (vpH > 0.0f) ? 1.0f / vpH : 0.0f,
+        scene->isSSAODebug() ? 1.0f : 0.0f,
+        isRenderingFlipped(camera) ? 1.0f : 0.0f);
 
     // Setting intensity of other lights to zero
     for (int i = numLights; i < MAX_LIGHTS; i++){
@@ -843,14 +865,23 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             p_unlit = true;
         }
 
+        // screen-space AO only modulates ambient/indirect light, so it is only
+        // compiled into lit submeshes (those with punctual and/or IBL ambient).
+        // Terrain is excluded: its lit shader is already near the 16-sampler limit
+        // (material + 7 shadow + 2 IBL + terrain detail maps), so the extra AO
+        // sampler would overflow SG_MAX_SAMPLER_BINDSLOTS. (Terrain also lacks
+        // HAS_TERRAIN in the SSAO depth pre-pass, so its AO would be unreliable.)
+        bool p_ssao = scene->isSSAOEnabled() && !p_unlit && (p_punctual || p_ibl) && !terrain;
+
         mesh.submeshes[i].shaderProperties = ShaderPool::getMeshProperties(
                         p_unlit, p_hasTexture1, false, p_punctual,
                         p_receiveShadows, p_shadowsPCF, p_hasNormal, p_hasNormalMap,
                         p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
-                        (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror);
+                        (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao);
         mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties);
-        if (hasShadows && mesh.castShadows){
+        // the depth shader feeds both shadow maps (casters) and the SSAO depth pre-pass
+        if ((hasShadows && mesh.castShadows) || scene->isSSAOEnabled()){
             mesh.submeshes[i].depthShaderProperties = ShaderPool::getDepthMeshProperties(
                 mesh.submeshes[i].textureShadow, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, 
                 mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent, false, (instmesh)?true:false);
@@ -975,7 +1006,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         }
 
         //----------Start depth shader---------------
-        if (hasShadows && mesh.castShadows){
+        if ((hasShadows && mesh.castShadows) || scene->isSSAOEnabled()){
             ObjectRender& depthRender = mesh.submeshes[i].depthRender;
 
             depthRender.beginLoad(mesh.submeshes[i].primitiveType);
@@ -1087,6 +1118,17 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
     mesh.needReload = false;
     mesh.needUpdateAABB = true;
     mesh.loadCalled = true;
+
+    // A reload recreates the terrain's per-view CDLOD node buffers empty; force a
+    // re-selection next frame (the main-camera cut at view 0 is otherwise only
+    // re-run on camera/transform movement), so the terrain doesn't vanish until
+    // the camera moves after a settings change such as toggling SSAO.
+    if (terrain){
+        if (Transform* terrainTransform = scene->findComponent<Transform>(entity)){
+            terrainTransform->needUpdate = true;
+        }
+    }
+
     SystemRender::addQueueCommand(&changeLoaded, new check_load_t{scene, entity});
 
     return true;
@@ -1189,10 +1231,17 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             bool submeshLit = !(mesh.submeshes[i].shaderProperties & (1u << 0));
 
             if (submeshLit){
-                render.applyUniformBlock(mesh.submeshes[i].slotFSLighting, sizeof(float) * (16 * MAX_LIGHTS + 16), &fs_lighting);
+                render.applyUniformBlock(mesh.submeshes[i].slotFSLighting, sizeof(float) * (16 * MAX_LIGHTS + 20), &fs_lighting);
                 if (hasShadows && mesh.receiveShadows){
                     render.applyUniformBlock(mesh.submeshes[i].slotVSShadows, sizeof(float) * (20 * MAX_SHADOWSMAP), &vs_shadows);
                     render.applyUniformBlock(mesh.submeshes[i].slotFSShadows, sizeof(float) * (4 * (MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP)), &fs_shadows);
+                }
+                // USE_SSAO (property bit 21): bind the screen-space AO texture for
+                // this view (blurred AO for the main camera, empty white otherwise)
+                if (mesh.submeshes[i].shaderProperties & (1u << 21)){
+                    ShaderData& ssaoShaderData = mesh.submeshes[i].shader.get()->shaderData;
+                    render.addTexture(ssaoShaderData.getTextureIndex(TextureShaderType::SSAOTEXTURE), ShaderStageType::FRAGMENT,
+                                      currentSSAOTexture ? currentSSAOTexture : &emptyWhite);
                 }
             }
 
@@ -1234,8 +1283,9 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
     return true;
 }
 
-bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_depth_t vsDepthParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
-    if (mesh.loaded && mesh.castShadows){
+bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_depth_t vsDepthParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain, bool forSSAO){
+    // shadow passes only draw casters; the SSAO depth pre-pass draws every opaque mesh
+    if (mesh.loaded && (mesh.castShadows || forSSAO)){
 
         if (mesh.worldAABB != AABB::ZERO && !isInsideCamera(cameraFar, frustumPlanes, mesh.worldAABB)) {
             return false;
@@ -1288,6 +1338,213 @@ bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, con
     return true;
 }
 
+void RenderSystem::loadSSAO(){
+    if (ssaoLoaded)
+        return;
+
+    // the SSAO fullscreen shaders may still be building (async in the editor)
+    ssaoShader = ShaderPool::get(ShaderType::SSAO, 0);
+    ssaoBlurShader = ShaderPool::get(ShaderType::SSAO_BLUR, 0);
+    if (!ssaoShader || !ssaoShader->isCreated() || !ssaoBlurShader || !ssaoBlurShader->isCreated())
+        return;
+
+    // hemisphere sample kernel, weighted toward the origin (more near-field samples).
+    // It is constant, so write it straight into the uniform block once here.
+    std::mt19937 rng(1337);
+    std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+    std::uniform_real_distribution<float> distm11(-1.0f, 1.0f);
+
+    for (int i = 0; i < SSAO_KERNEL_SIZE; i++){
+        Vector3 sample(distm11(rng), distm11(rng), dist01(rng)); // +Z hemisphere
+        sample.normalize();
+        sample *= dist01(rng);
+        float scale = (float)i / (float)SSAO_KERNEL_SIZE;
+        scale = 0.1f + (scale * scale) * (1.0f - 0.1f); // lerp(0.1, 1.0, scale^2)
+        sample *= scale;
+        fs_ssao.kernel[i] = Vector4(sample.x, sample.y, sample.z, 0.0f);
+    }
+
+    // 4x4 rotation-noise texture: random vectors in the tangent XY plane (z=0).
+    // Pixel layout matches the empty textures: 0xAABBGGRR in memory.
+    const int noiseDim = 4;
+    uint32_t noisePixels[noiseDim * noiseDim];
+    for (int i = 0; i < noiseDim * noiseDim; i++){
+        uint8_t r = (uint8_t)((distm11(rng) * 0.5f + 0.5f) * 255.0f);
+        uint8_t g = (uint8_t)((distm11(rng) * 0.5f + 0.5f) * 255.0f);
+        noisePixels[i] = (0xFFu << 24) | (0x80u << 16) | ((uint32_t)g << 8) | (uint32_t)r;
+    }
+
+    void* ndata[6]; size_t nsize[6];
+    ndata[0] = (void*)noisePixels; nsize[0] = noiseDim * noiseDim * 4;
+    ssaoNoiseTexture.createTexture(
+            "ssao|noise", noiseDim, noiseDim, ColorFormat::RGBA, TextureType::TEXTURE_2D, 1, ndata, nsize,
+            TextureFilter::NEAREST, TextureFilter::NEAREST, TextureWrap::REPEAT, TextureWrap::REPEAT);
+
+    // fullscreen ssao pass (vertexless: no attributes added)
+    ssaoRender.beginLoad(PrimitiveType::TRIANGLES);
+    ssaoRender.setShader(ssaoShader.get());
+    ssaoSlotParams = ssaoShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::SSAO_FS_PARAMS);
+    if (!ssaoRender.endLoad(PIP_RTT, false, CullingMode::BACK, WindingOrder::CCW))
+        return;
+
+    // fullscreen blur pass
+    ssaoBlurRender.beginLoad(PrimitiveType::TRIANGLES);
+    ssaoBlurRender.setShader(ssaoBlurShader.get());
+    ssaoBlurSlotParams = ssaoBlurShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::SSAO_BLUR_FS_PARAMS);
+    if (!ssaoBlurRender.endLoad(PIP_RTT, false, CullingMode::BACK, WindingOrder::CCW))
+        return;
+
+    ssaoLoaded = true;
+}
+
+void RenderSystem::destroySSAO(){
+    if (ssaoLoaded){
+        ssaoRender.destroy();
+        ssaoBlurRender.destroy();
+        ssaoNoiseTexture.destroyTexture();
+    }
+    if (ssaoShader){
+        ssaoShader.reset();
+        ShaderPool::remove(ShaderType::SSAO, 0);
+    }
+    if (ssaoBlurShader){
+        ssaoBlurShader.reset();
+        ShaderPool::remove(ShaderType::SSAO_BLUR, 0);
+    }
+
+    ssaoDepthFramebuffer.destroy();
+    ssaoFramebuffer.destroy();
+    ssaoBlurFramebuffer.destroy();
+
+    ssaoWidth = 0;
+    ssaoHeight = 0;
+    ssaoSlotParams = -1;
+    ssaoBlurSlotParams = -1;
+    ssaoLoaded = false;
+    currentSSAOTexture = NULL;
+}
+
+bool RenderSystem::ensureSSAOFramebuffers(unsigned int width, unsigned int height){
+    if (width == 0 || height == 0)
+        return false;
+
+    if (ssaoDepthFramebuffer.isCreated() && ssaoWidth == width && ssaoHeight == height)
+        return true;
+
+    ssaoDepthFramebuffer.destroy();
+    ssaoFramebuffer.destroy();
+    ssaoBlurFramebuffer.destroy();
+
+    // depth pre-pass target: packed depth in color, sampled point-exact
+    ssaoDepthFramebuffer.setWidth(width);
+    ssaoDepthFramebuffer.setHeight(height);
+    ssaoDepthFramebuffer.setMinFilter(TextureFilter::NEAREST);
+    ssaoDepthFramebuffer.setMagFilter(TextureFilter::NEAREST);
+    ssaoDepthFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    ssaoDepthFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    ssaoDepthFramebuffer.create();
+
+    ssaoFramebuffer.setWidth(width);
+    ssaoFramebuffer.setHeight(height);
+    ssaoFramebuffer.setMinFilter(TextureFilter::NEAREST);
+    ssaoFramebuffer.setMagFilter(TextureFilter::NEAREST);
+    ssaoFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    ssaoFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    ssaoFramebuffer.create();
+
+    // blurred AO is sampled bilinearly by the lit meshes
+    ssaoBlurFramebuffer.setWidth(width);
+    ssaoBlurFramebuffer.setHeight(height);
+    ssaoBlurFramebuffer.setMinFilter(TextureFilter::LINEAR);
+    ssaoBlurFramebuffer.setMagFilter(TextureFilter::LINEAR);
+    ssaoBlurFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    ssaoBlurFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    ssaoBlurFramebuffer.create();
+
+    ssaoWidth = width;
+    ssaoHeight = height;
+
+    return ssaoDepthFramebuffer.isCreated() && ssaoFramebuffer.isCreated() && ssaoBlurFramebuffer.isCreated();
+}
+
+void RenderSystem::renderSSAO(CameraComponent& camera){
+    loadSSAO();
+    if (!ssaoLoaded)
+        return;
+
+    unsigned int w = (unsigned int)Engine::getViewRect().getWidth();
+    unsigned int h = (unsigned int)Engine::getViewRect().getHeight();
+    if (!ensureSSAOFramebuffers(w, h))
+        return;
+
+    // Use the logical (un-flipped) matrices for the pre-pass. We must NOT bake the
+    // main pass's flipY here: flipY reverses triangle winding, but PIP_DEPTH does
+    // not compensate (only PIP_RTT reverses winding on GL), so a flipped VP would
+    // cull front faces and capture the back faces. Instead the depth/AO buffers
+    // stay in logical orientation and mesh.frag flips Y when sampling (it knows via
+    // lighting.viewportInfo.w whether the color pass is rendering flipped).
+    Matrix4 renderVP = camera.viewProjectionMatrix;
+    Matrix4 renderProj = camera.projectionMatrix;
+
+    // --- 1. depth pre-pass: camera-space packed depth for all opaque meshes ---
+    ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0)); // background -> depth ~1.0
+    ssaoPassRender.startRenderPass(&ssaoDepthFramebuffer.getRender());
+
+    auto transforms = scene->getComponentArray<Transform>();
+    for (int i = 0; i < transforms->size(); i++){
+        Transform& transform = transforms->getComponentFromIndex(i);
+        Entity entity = transforms->getEntity(i);
+        Signature signature = scene->getSignature(entity);
+
+        if (!signature.test(scene->getComponentId<MeshComponent>()))
+            continue;
+
+        MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
+        if (!transform.visible || mesh.transparent)
+            continue;
+
+        InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(entity);
+        TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
+
+        vs_depth_t params = {transform.modelMatrix, renderVP};
+        drawMeshDepth(mesh, camera.farClip, camera.frustumPlanes, params, instmesh, terrain, true);
+    }
+    ssaoPassRender.endRenderPass();
+
+    // --- 2. ssao pass (kernel was filled once in loadSSAO) ---
+    fs_ssao.projection = renderProj;
+    fs_ssao.invProjection = renderProj.inverse();
+    fs_ssao.params = Vector4(scene->getSSAORadius(), scene->getSSAOBias(), scene->getSSAOIntensity(), 0.0);
+    // xy = noise tiling (4x4), zw = inverse depth-texture size (neighbour taps for normals)
+    fs_ssao.noiseScale = Vector4((float)w / 4.0f, (float)h / 4.0f, 1.0f / (float)w, 1.0f / (float)h);
+
+    ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+    ssaoPassRender.startRenderPass(&ssaoFramebuffer.getRender());
+    if (ssaoRender.beginDraw(PIP_RTT)){
+        ShaderData& sd = ssaoShader.get()->shaderData;
+        ssaoRender.addTexture(sd.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, &ssaoDepthFramebuffer.getRender().getColorTexture());
+        ssaoRender.addTexture(sd.getTextureIndex(TextureShaderType::NOISETEXTURE), ShaderStageType::FRAGMENT, &ssaoNoiseTexture);
+        ssaoRender.applyUniformBlock(ssaoSlotParams, sizeof(fs_ssao_t), &fs_ssao);
+        ssaoRender.draw(3, 1);
+    }
+    ssaoPassRender.endRenderPass();
+
+    // --- 3. blur pass ---
+    fs_ssao_blur.texelSize = Vector4(1.0f / (float)w, 1.0f / (float)h, 0.0, 0.0);
+
+    ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+    ssaoPassRender.startRenderPass(&ssaoBlurFramebuffer.getRender());
+    if (ssaoBlurRender.beginDraw(PIP_RTT)){
+        ShaderData& bd = ssaoBlurShader.get()->shaderData;
+        ssaoBlurRender.addTexture(bd.getTextureIndex(TextureShaderType::SSAOTEXTURE), ShaderStageType::FRAGMENT, &ssaoFramebuffer.getRender().getColorTexture());
+        ssaoBlurRender.applyUniformBlock(ssaoBlurSlotParams, sizeof(fs_ssao_blur_t), &fs_ssao_blur);
+        ssaoBlurRender.draw(3, 1);
+    }
+    ssaoPassRender.endRenderPass();
+
+    currentSSAOTexture = &ssaoBlurFramebuffer.getRender().getColorTexture();
+}
+
 void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
     InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(entity);
     TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
@@ -1304,11 +1561,10 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
                 submesh.shader.reset();
                 ShaderPool::remove(ShaderType::MESH, submesh.shaderProperties);
             }
-            if (hasShadows && mesh.castShadows){
-                if (submesh.depthShader){
-                    submesh.depthShader.reset();
-                    ShaderPool::remove(ShaderType::DEPTH, submesh.depthShaderProperties);
-                }
+            // depth shader may have been loaded for shadows and/or SSAO
+            if (submesh.depthShader){
+                submesh.depthShader.reset();
+                ShaderPool::remove(ShaderType::DEPTH, submesh.depthShaderProperties);
             }
 
             //Destroy texture
@@ -3614,6 +3870,14 @@ void RenderSystem::draw(){
         if (!isMainCamera){
             terrainViewCounter++;
             terrainView = (terrainViewCounter < MAX_TERRAIN_VIEWS) ? terrainViewCounter : 0;
+        }
+
+        // Screen-space AO is produced once for the main camera (depth pre-pass +
+        // ssao + blur) before its color pass. Other cameras sample empty white
+        // (AO = 1) so their USE_SSAO meshes are unaffected.
+        currentSSAOTexture = &emptyWhite;
+        if (isMainCamera && scene->isSSAOEnabled()){
+            renderSSAO(camera);
         }
 
         if (Engine::getMainScene() == scene || camera.renderToTexture){

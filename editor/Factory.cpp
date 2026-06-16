@@ -2141,6 +2141,10 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setGlobalIllumination(" << formatFloat(scene->getGlobalIlluminationIntensity()) << ");\n";
     out << ind2 << "scene->setGlobalIllumination(" << formatVector3(scene->getGlobalIlluminationColor()) << ");\n";
     out << ind2 << "scene->setLightState(" << formatLightState(scene->getLightState()) << ");\n";
+    out << ind2 << "scene->setSSAOEnabled(" << formatBool(scene->isSSAOEnabled()) << ");\n";
+    out << ind2 << "scene->setSSAORadius(" << formatFloat(scene->getSSAORadius()) << ");\n";
+    out << ind2 << "scene->setSSAOIntensity(" << formatFloat(scene->getSSAOIntensity()) << ");\n";
+    out << ind2 << "scene->setSSAOBias(" << formatFloat(scene->getSSAOBias()) << ");\n";
     out << ind2 << "scene->setEnableUIEvents(" << formatUIEventState(scene->getEnableUIEvents()) << ");\n";
     out << ind << "}\n";
 

@@ -1784,6 +1784,10 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["lightState"] = lightStateToString(scene->getLightState());
     sceneNode["globalIlluminationIntensity"] = scene->getGlobalIlluminationIntensity();
     sceneNode["globalIlluminationColor"] = encodeVector3(scene->getGlobalIlluminationColor());
+    sceneNode["ssaoEnabled"] = scene->isSSAOEnabled();
+    sceneNode["ssaoRadius"] = scene->getSSAORadius();
+    sceneNode["ssaoIntensity"] = scene->getSSAOIntensity();
+    sceneNode["ssaoBias"] = scene->getSSAOBias();
     sceneNode["enableUIEvents"] = uiEventStateToString(scene->getEnableUIEvents());
 
     return sceneNode;
@@ -1815,6 +1819,19 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
         scene->setGlobalIllumination(node["globalIlluminationIntensity"].as<float>());
     } else if (node["globalIlluminationColor"]) {
         scene->setGlobalIllumination(decodeVector3(node["globalIlluminationColor"]));
+    }
+
+    if (node["ssaoEnabled"]) {
+        scene->setSSAOEnabled(node["ssaoEnabled"].as<bool>());
+    }
+    if (node["ssaoRadius"]) {
+        scene->setSSAORadius(node["ssaoRadius"].as<float>());
+    }
+    if (node["ssaoIntensity"]) {
+        scene->setSSAOIntensity(node["ssaoIntensity"].as<float>());
+    }
+    if (node["ssaoBias"]) {
+        scene->setSSAOBias(node["ssaoBias"].as<float>());
     }
 
     if (node["enableUIEvents"]) {
