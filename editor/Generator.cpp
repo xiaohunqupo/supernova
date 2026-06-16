@@ -1031,12 +1031,11 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "    target_compile_options(" + libName + " PRIVATE /W4 /EHsc /wd4251 /wd4275)\n";
     cmakeContent += "else()\n";
     cmakeContent += "    target_compile_options(" + libName + " PRIVATE -Wall -Wextra -fPIC)\n";
-    cmakeContent += "    # Error on unresolved symbols at link time. '-z defs' is a GNU/Unix ld\n";
-    cmakeContent += "    # feature that MinGW's ld.exe does not recognize, so on Windows use\n";
-    cmakeContent += "    # --no-undefined alone (which MinGW supports and means the same thing).\n";
+    cmakeContent += "    # Error on unresolved symbols at link time. Apple ld does this by default;\n";
+    cmakeContent += "    # GNU ld needs '-z defs --no-undefined' and MinGW only understands '--no-undefined'.\n";
     cmakeContent += "    if(WIN32)\n";
     cmakeContent += "        target_link_options(" + libName + " PRIVATE -Wl,--no-undefined)\n";
-    cmakeContent += "    else()\n";
+    cmakeContent += "    elseif(NOT APPLE)\n";
     cmakeContent += "        target_link_options(" + libName + " PRIVATE -Wl,-z,defs,--no-undefined)\n";
     cmakeContent += "    endif()\n";
     cmakeContent += "endif()\n\n";

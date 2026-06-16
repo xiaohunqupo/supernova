@@ -66,6 +66,8 @@ bool editor::Conector::connect(const fs::path& buildPath, std::string libName){
     std::string libPath = libName;
     #ifdef _WIN32
         libPath = libPath + ".dll";
+    #elif defined(__APPLE__)
+        libPath = libPath + ".dylib";
     #else
         libPath = libPath + ".so";
     #endif
