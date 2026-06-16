@@ -387,8 +387,17 @@ void ProjectSettingsWindow::drawSettings() {
                 const auto& kit = m_availableKits[i];
                 if (!kit.available) {
                     ImGui::BeginDisabled();
-                    ImGui::Selectable((kit.displayName + " (" + kit.unavailableReason + ")").c_str(), false);
+                    ImGui::Selectable((kit.displayName + "  (unavailable)").c_str(), false);
                     ImGui::EndDisabled();
+                    // Disabled items don't register hover by default; AllowWhenDisabled
+                    // lets us show a tooltip explaining why the kit can't be used.
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::BeginTooltip();
+                        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+                        ImGui::TextUnformatted(kit.unavailableReason.c_str());
+                        ImGui::PopTextWrapPos();
+                        ImGui::EndTooltip();
+                    }
                     continue;
                 }
                 isSelected = (m_cmakeKitIndex == static_cast<int>(i + 1));
@@ -403,7 +412,11 @@ void ProjectSettingsWindow::drawSettings() {
         }
         if (m_cmakeKitIndex > 0) {
             const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
-            ImGui::TextDisabled("C: %s  CXX: %s", kit.cCompiler.c_str(), kit.cxxCompiler.c_str());
+            // MSVC kits carry no explicit compiler path (CMake selects cl.exe itself),
+            // so only show the paths when a kit actually specifies them.
+            if (!kit.cCompiler.empty() || !kit.cxxCompiler.empty()) {
+                ImGui::TextDisabled("C: %s  CXX: %s", kit.cCompiler.c_str(), kit.cxxCompiler.c_str());
+            }
         }
     }
 

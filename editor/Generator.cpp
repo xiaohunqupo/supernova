@@ -51,7 +51,7 @@ namespace {
     std::string vsInstallationPath() {
         std::string vswhere = findVswherePath();
         if (vswhere.empty()) return "";
-        FILE* pipe = _popen(("\"" + vswhere + "\" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>nul").c_str(), "r");
+        FILE* pipe = _popen(("\"" + vswhere + "\" -products * -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>nul").c_str(), "r");
         if (!pipe) return "";
         std::string result;
         char buffer[512];
@@ -906,6 +906,13 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "option(DORIAX_EDITOR_PLUGIN \"Build as Doriax Editor plugin\" OFF)\n";
     cmakeContent += "if(DORIAX_EDITOR_PLUGIN)\n";
     cmakeContent += "    add_compile_definitions(DORIAX_EDITOR_PLUGIN)\n";
+    cmakeContent += "    # The editor links its own engine build, which is compiled as a shared\n";
+    cmakeContent += "    # library with editor-specific data layouts. The plugin must match both:\n";
+    cmakeContent += "    #  - DORIAX_SHARED makes DORIAX_API resolve to __declspec(dllimport) so\n";
+    cmakeContent += "    #    static members such as Engine::onUpdate link against the import lib on MSVC.\n";
+    cmakeContent += "    #  - DORIAX_EDITOR keeps HybridArray (and other editor-only layouts)\n";
+    cmakeContent += "    #    ABI-compatible across the DLL boundary.\n";
+    cmakeContent += "    add_compile_definitions(DORIAX_SHARED DORIAX_EDITOR)\n";
     cmakeContent += "endif()\n\n";
 
     cmakeContent += getPlatformCMakeConfig() + "\n";
@@ -969,8 +976,10 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "# libdoriax is searched in DORIAX_LIB_DIR; by default it points to the Doriax editor executable directory.\n";
     cmakeContent += "if(NOT DEFINED DORIAX_LIB_DIR OR DORIAX_LIB_DIR STREQUAL \"\")\n";
     cmakeContent += "    set(DORIAX_LIB_DIR \"" + exePath.generic_string() + "\")\n";
-    cmakeContent += "    # Must be the same as the editor's library to not ODR violation / ABI mismatch\n";
-    cmakeContent += "    add_compile_definitions(DORIAX_EDITOR)\n";
+    cmakeContent += "    # Default target is the editor's own engine build (shared, editor layouts).\n";
+    cmakeContent += "    # Match its macros so symbols link (DORIAX_SHARED -> dllimport on MSVC) and\n";
+    cmakeContent += "    # data layouts stay ABI-compatible (DORIAX_EDITOR), avoiding ODR/ABI mismatch.\n";
+    cmakeContent += "    add_compile_definitions(DORIAX_SHARED DORIAX_EDITOR)\n";
     cmakeContent += "endif()\n\n";
 
     cmakeContent += "# Find doriax library in specified location\n";
@@ -981,10 +990,21 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "target_link_libraries(" + libName + " PRIVATE ${DORIAX_LIB} ${PLATFORM_LIBS})\n\n";
     cmakeContent += "# Set compile options based on compiler and platform\n";
     cmakeContent += "if(MSVC)\n";
-    cmakeContent += "    target_compile_options(" + libName + " PRIVATE /W4 /EHsc)\n";
+    cmakeContent += "    # C4251/C4275: exported engine classes (DORIAX_API -> dllimport) expose STL\n";
+    cmakeContent += "    # members (std::vector, std::string, FunctionSubscribe, ...). This is safe\n";
+    cmakeContent += "    # here because the engine DLL and this plugin use the same dynamic CRT/STL,\n";
+    cmakeContent += "    # so suppress the dll-interface warnings that would otherwise flood the build.\n";
+    cmakeContent += "    target_compile_options(" + libName + " PRIVATE /W4 /EHsc /wd4251 /wd4275)\n";
     cmakeContent += "else()\n";
     cmakeContent += "    target_compile_options(" + libName + " PRIVATE -Wall -Wextra -fPIC)\n";
-    cmakeContent += "    target_link_options(" + libName + " PRIVATE -Wl,-z,defs,--no-undefined)\n"; // no undefined symbols
+    cmakeContent += "    # Error on unresolved symbols at link time. '-z defs' is a GNU/Unix ld\n";
+    cmakeContent += "    # feature that MinGW's ld.exe does not recognize, so on Windows use\n";
+    cmakeContent += "    # --no-undefined alone (which MinGW supports and means the same thing).\n";
+    cmakeContent += "    if(WIN32)\n";
+    cmakeContent += "        target_link_options(" + libName + " PRIVATE -Wl,--no-undefined)\n";
+    cmakeContent += "    else()\n";
+    cmakeContent += "        target_link_options(" + libName + " PRIVATE -Wl,-z,defs,--no-undefined)\n";
+    cmakeContent += "    endif()\n";
     cmakeContent += "endif()\n\n";
     cmakeContent += "# Set properties for the shared library\n";
     cmakeContent += "set_target_properties(" + libName + " PROPERTIES\n";
@@ -1634,6 +1654,33 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
         return result;
     };
 
+#ifdef _WIN32
+    // The editor and the engine library it links (doriax.lib/.dll) are built with a
+    // single C++ toolchain. A plugin compiled for a different C++ ABI cannot link
+    // against that library, and would crash even if it did: MSVC and MinGW/GNU
+    // disagree on name mangling, class layout, RTTI, exception handling and STL
+    // types. Flag kits whose ABI does not match this editor's build so they cannot
+    // be selected (otherwise the mismatch surfaces only as a cryptic wall of
+    // "undefined reference" at link time). This is a Windows-only concern; other
+    // platforms have a single system C++ ABI.
+    enum class CxxAbi { MSVC, GNU };
+#if defined(__MINGW32__)
+    const CxxAbi editorAbi = CxxAbi::GNU;
+    const char* editorAbiName = "MinGW/GNU";
+#else
+    const CxxAbi editorAbi = CxxAbi::MSVC;
+    const char* editorAbiName = "MSVC";
+#endif
+    auto enforceAbi = [&](CMakeKit& kit, CxxAbi kitAbi, const char* kitAbiName) {
+        if (kitAbi != editorAbi) {
+            kit.available = false;
+            kit.unavailableReason = std::string("incompatible C++ ABI (kit is ") + kitAbiName
+                + ", this editor is " + editorAbiName + "): build plugins with the editor's "
+                "toolchain, or rebuild the editor with this compiler";
+        }
+    };
+#endif
+
     // --- GCC ---
     {
         std::string cxxPath = findCompiler("g++");
@@ -1649,6 +1696,7 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
             if (!machine.empty()) kit.displayName += " " + machine;
 #ifdef _WIN32
             kit.generator = "MinGW Makefiles";
+            enforceAbi(kit, CxxAbi::GNU, "MinGW/GNU");
 #endif
             kits.push_back(kit);
         }
@@ -1699,6 +1747,13 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
                     kit.unavailableReason = "Ninja at '" + ninjaPath + "' failed to run; reinstall from https://ninja-build.org";
                 }
             }
+            // ABI follows the target triple: MinGW triples are GNU ABI; everything
+            // else (e.g. x86_64-pc-windows-msvc) is MSVC ABI and can link an
+            // MSVC-built engine. This is why Clang, unlike GCC, can target either.
+            {
+                CxxAbi clangAbi = (machine.find("mingw") != std::string::npos) ? CxxAbi::GNU : CxxAbi::MSVC;
+                enforceAbi(kit, clangAbi, (clangAbi == CxxAbi::GNU) ? "MinGW/GNU" : "MSVC");
+            }
 #endif
             kits.push_back(kit);
         }
@@ -1707,27 +1762,23 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
 #ifdef _WIN32
     // --- MSVC ---
     {
-        std::string clPath = findCompiler("cl");
-        if (!clPath.empty()) {
-            // cl.exe is on PATH (e.g. launched from Developer Command Prompt)
+        std::string vswhere = findVswherePath();
+        std::string vsName;
+        if (!vswhere.empty()) {
+            vsName = runCmd("\"" + vswhere + "\" -products * -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property displayName");
+        }
+        // cl.exe on PATH (e.g. a Developer Command Prompt) also signals MSVC is
+        // available even if vswhere cannot be located.
+        bool clOnPath = !findCompiler("cl").empty();
+        if (!vsName.empty() || clOnPath) {
             CMakeKit kit;
-            kit.cxxCompiler = clPath;
-            kit.cCompiler = clPath;
-            kit.displayName = "MSVC";
+            kit.displayName = vsName.empty() ? "MSVC" : vsName;
+            // Leave compiler and generator empty: CMake selects the MSVC toolchain
+            // (cl.exe) on its own. Passing an explicit CMAKE_CXX_COMPILER with no
+            // generator would be rejected by configureCMake's guard, since the
+            // Visual Studio generator ignores it (MSBuild always drives cl.exe).
+            enforceAbi(kit, CxxAbi::MSVC, "MSVC");
             kits.push_back(kit);
-        } else {
-            // cl.exe not on PATH; detect Visual Studio via vswhere
-            std::string vswhere = findVswherePath();
-            if (!vswhere.empty()) {
-                std::string vsName = runCmd("\"" + vswhere + "\" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property displayName");
-                if (!vsName.empty()) {
-                    CMakeKit kit;
-                    kit.displayName = vsName;
-                    // Empty compiler/generator: CMake auto-detects the VS
-                    // generator and locates cl.exe internally.
-                    kits.push_back(kit);
-                }
-            }
         }
     }
 #endif
