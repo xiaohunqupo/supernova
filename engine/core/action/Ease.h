@@ -66,8 +66,8 @@ namespace doriax {
         Ease(): EaseFunction(std::function<float(float)>(Ease::linear)){
         }
 
-        explicit Ease(EaseType functionType): Ease(){
-            setType(functionType);
+        explicit Ease(EaseType type): Ease(){
+            setType(type);
         }
 
         Ease(std::function<float(float)> function): EaseFunction(function){
@@ -101,8 +101,8 @@ namespace doriax {
             return *this;
         }
 
-        Ease& operator = (EaseType functionType){
-            setType(functionType);
+        Ease& operator = (EaseType type){
+            setType(type);
 
             return *this;
         }
@@ -123,17 +123,17 @@ namespace doriax {
             return getType();
         }
 
-        void setType(EaseType functionType){
-            this->functionType = functionType;
+        void setType(EaseType type){
+            this->functionType = type;
 
-            if (functionType != EaseType::CUSTOM){
+            if (type != EaseType::CUSTOM){
                 EaseFunction::clear();
-                EaseFunction::add("cFunction", getFunction(functionType));
+                EaseFunction::add("cFunction", getFunction(type));
             }
         }
 
-        void setFunctionType(EaseType functionType){
-            setType(functionType);
+        void setFunctionType(EaseType type){
+            setType(type);
         }
 
         void setFunction(std::function<float(float)> function){

@@ -28,8 +28,8 @@ namespace doriax{
             this->scene = scene;
         }
 
-        virtual void setPaused(bool paused) {
-            this->paused = paused;
+        virtual void setPaused(bool value) {
+            this->paused = value;
         }
 
         virtual bool isPaused() const {
