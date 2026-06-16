@@ -352,9 +352,17 @@ set(DORIAX_EDITOR_INSTALL_TARGETS doriax-editor)
 # Windows GUI-subsystem executables do not behave like normal CLI programs
 # when launched from cmd.exe/PowerShell. Provide a console-subsystem twin for
 # automation while keeping Unix-like platforms on a single editor binary.
+#
+# EXCLUDE_FROM_ALL keeps it out of the default ("all") build, so local and IDE
+# builds only produce doriax-editor. Release builds compile it explicitly by
+# name (`cmake --build --target doriax-editor-cmd`, see
+# .github/workflows/cmake.yml); the install rule below still installs it because
+# CI builds it before installing.
 if(WIN32)
     add_executable(
         doriax-editor-cmd
+
+        EXCLUDE_FROM_ALL
 
         ${DORIAX_EDITOR_SOURCES}
     )
