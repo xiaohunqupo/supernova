@@ -35,6 +35,51 @@ namespace {
     constexpr std::chrono::milliseconds kKillGracePeriod{100};
 
 #ifdef _WIN32
+    // Run "cmd.exe /c <command>" and capture its output WITHOUT flashing a console
+    // window. The editor is a GUI app with no console of its own, so _popen() and
+    // system() each briefly pop up a cmd.exe window; CreateProcess with
+    // CREATE_NO_WINDOW avoids that flicker. Returns the captured output (stdout, plus
+    // stderr unless the command redirects it) with trailing whitespace trimmed.
+    std::string runCaptureNoWindow(const std::string& command) {
+        SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
+        HANDLE hRead = nullptr, hWrite = nullptr;
+        if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return "";
+        SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+        STARTUPINFOA si{};
+        si.cb = sizeof(si);
+        si.dwFlags = STARTF_USESTDHANDLES;
+        si.hStdOutput = hWrite;
+        si.hStdError = hWrite;
+
+        PROCESS_INFORMATION pi{};
+        std::string cmdLine = "cmd.exe /c " + command;
+        if (!CreateProcessA(nullptr, cmdLine.data(), nullptr, nullptr, TRUE,
+                            CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(hRead);
+            CloseHandle(hWrite);
+            return "";
+        }
+        CloseHandle(hWrite);
+
+        std::string result;
+        char buffer[4096];
+        DWORD bytesRead = 0;
+        // Read until the child closes its end of the pipe (i.e. exits); reading
+        // concurrently avoids a deadlock if output exceeds the pipe buffer.
+        while (ReadFile(hRead, buffer, sizeof(buffer), &bytesRead, nullptr) && bytesRead > 0) {
+            result.append(buffer, bytesRead);
+        }
+        CloseHandle(hRead);
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+
+        while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' '))
+            result.pop_back();
+        return result;
+    }
+
     std::string findVswherePath() {
         auto tryEnv = [](const char* envVar) -> std::string {
             const char* pf = std::getenv(envVar);
@@ -51,18 +96,7 @@ namespace {
     std::string vsInstallationPath() {
         std::string vswhere = findVswherePath();
         if (vswhere.empty()) return "";
-        FILE* pipe = _popen(("\"" + vswhere + "\" -products * -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>nul").c_str(), "r");
-        if (!pipe) return "";
-        std::string result;
-        char buffer[512];
-        while (fgets(buffer, sizeof(buffer), pipe)) {
-            result += buffer;
-        }
-        _pclose(pipe);
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' ')) {
-            result.pop_back();
-        }
-        return result;
+        return runCaptureNoWindow("\"" + vswhere + "\" -products * -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>nul");
     }
 
     bool hasVSWithCppTools() {
@@ -1621,24 +1655,20 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
 
     auto runCmd = [](const std::string& cmd) -> std::string {
 #ifdef _WIN32
-        FILE* pipe = _popen((cmd + " 2>nul").c_str(), "r");
+        return runCaptureNoWindow(cmd + " 2>nul");
 #else
         FILE* pipe = popen((cmd + " 2>/dev/null").c_str(), "r");
-#endif
         if (!pipe) return "";
         std::string result;
         char buffer[256];
         while (fgets(buffer, sizeof(buffer), pipe)) {
             result += buffer;
         }
-#ifdef _WIN32
-        _pclose(pipe);
-#else
         pclose(pipe);
-#endif
         while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' '))
             result.pop_back();
         return result;
+#endif
     };
 
     auto findCompiler = [&runCmd](const std::string& compiler) -> std::string {
@@ -1791,8 +1821,9 @@ std::string editor::Generator::checkBuildTools() {
 
 #ifdef _WIN32
     auto commandExists = [](const char* cmd) -> bool {
-        std::string check = std::string("where ") + cmd + " >nul 2>nul";
-        return system(check.c_str()) == 0;
+        // `where` prints the path when found, nothing when not. Use the no-window
+        // runner so this probe doesn't flash a cmd.exe window.
+        return !runCaptureNoWindow(std::string("where ") + cmd + " 2>nul").empty();
     };
 #else
     auto commandExists = [](const char* cmd) -> bool {
