@@ -20,6 +20,7 @@ namespace doriax{
         SokolShader backend;
         //***
         ShaderData shaderData; //For reflection info
+        bool loading = false; //Deferred MAKE_SHADER in flight; blocks re-entrant createShader()
 
         ShaderRender();
         ShaderRender(const ShaderRender& rhs);

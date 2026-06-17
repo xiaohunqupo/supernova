@@ -11,12 +11,13 @@ using namespace doriax;
 
 ShaderRender::ShaderRender(){ }
 
-ShaderRender::ShaderRender(const ShaderRender& rhs) : backend(rhs.backend), shaderData(rhs.shaderData) { }
+ShaderRender::ShaderRender(const ShaderRender& rhs) : backend(rhs.backend), shaderData(rhs.shaderData), loading(rhs.loading) { }
 
-ShaderRender& ShaderRender::operator=(const ShaderRender& rhs) { 
+ShaderRender& ShaderRender::operator=(const ShaderRender& rhs) {
     backend = rhs.backend;
     shaderData = rhs.shaderData;
-    return *this; 
+    loading = rhs.loading;
+    return *this;
 }
 
 ShaderRender::~ShaderRender(){
@@ -24,16 +25,19 @@ ShaderRender::~ShaderRender(){
 }
 
 bool ShaderRender::createShader(ShaderData& shaderData){
-    if (Engine::isViewLoaded() && !isCreated()) {
+    // Skip while a deferred create is in flight: re-assigning shaderData would
+    // free the source the queued sg_shader_desc points into and corrupt the build.
+    if (Engine::isViewLoaded() && !isCreated() && !loading) {
         this->shaderData = shaderData;
+
+        loading = true;
 
         bool ret = backend.createShader(this->shaderData);
 
-        // Release the source via the command stream so it runs after MAKE_SHADER.
-        // A frame-counted scheduleCleanup() could fire before the shader is built,
-        // leaving an empty source (GL_SHADER_COMPILATION_FAILED) on the async path.
-        SystemRender::addQueueCommand(ShaderRender::cleanupShader, &(this->shaderData));
-        
+        // Via the command stream so cleanup runs after MAKE_SHADER (a frame-counted
+        // scheduleCleanup could fire before the build -> empty source on async path).
+        SystemRender::addQueueCommand(ShaderRender::cleanupShader, this);
+
         return ret;
     }else{
         return false;
@@ -49,6 +53,7 @@ bool ShaderRender::isCreated(){
 }
 
 void ShaderRender::cleanupShader(void* data){
-    //Keep only reflection info
-    static_cast<ShaderData*>(data)->releaseSourceData();
+    ShaderRender* self = static_cast<ShaderRender*>(data);
+    self->shaderData.releaseSourceData(); //Keep only reflection info
+    self->loading = false; //Build executed; allow retry on failure
 }
