@@ -133,7 +133,7 @@ namespace doriax::editor{
         void closeWindow();
 
     public:
-        void processMainThreadTasks();
+        void processMainThreadTasks() override;
 
     public:
 
@@ -163,31 +163,31 @@ namespace doriax::editor{
         void engineViewDestroyed();
         void engineShutdown();
 
-        void addNewSceneToDock(uint32_t sceneId);
+        void addNewSceneToDock(uint32_t sceneId) override;
         void addNewCodeWindowToDock(fs::path path);
-        void clearSceneWindowState(uint32_t sceneId);
-        void prepareForProjectSwitch();
+        void clearSceneWindowState(uint32_t sceneId) override;
+        void prepareForProjectSwitch() override;
 
         void handleExternalDrop(const std::vector<std::string>& paths);
         void handleExternalDragEnter();
         void handleExternalDragLeave();
 
-        void resetLastActivatedScene();
+        void resetLastActivatedScene() override;
         bool shouldSyncEngineApi() const override;
-        void updateResourcesPath();
+        void updateResourcesPath() override;
         void requestDockspaceRebuild();
         void updateWindowTitle(const std::string& projectName) override;
         void stopTransientPreviews() override;
         void saveAllCodeEditors() override;
 
-        void registerAlert(std::string title, std::string message);
-        void registerConfirmAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr);
-        void registerThreeButtonAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr, std::function<void()> onCancel = nullptr);
-        void registerSaveSceneDialog(uint32_t sceneId, std::function<void()> callback = nullptr);
-        void registerProjectSaveDialog(std::function<void()> callback = nullptr);
+        void registerAlert(std::string title, std::string message) override;
+        void registerConfirmAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr) override;
+        void registerThreeButtonAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr, std::function<void()> onCancel = nullptr) override;
+        void registerSaveSceneDialog(uint32_t sceneId, std::function<void()> callback = nullptr) override;
+        void registerProjectSaveDialog(std::function<void()> callback = nullptr) override;
 
         // Thread-safe: schedules a task to run on the main/GL thread during the next frame.
-        void enqueueMainThreadTask(std::function<void()> task);
+        void enqueueMainThreadTask(std::function<void()> task) override;
 
         static std::filesystem::path getUserCacheBaseDir();
         static std::filesystem::path getUserShaderCacheDir();
@@ -207,8 +207,8 @@ namespace doriax::editor{
         Project* getProject();
         const Project* getProject() const;
 
-        Properties* getPropertiesWindow() const;
-        CodeEditor* getCodeEditor() const;
+        Properties* getPropertiesWindow() const override;
+        CodeEditor* getCodeEditor() const override;
         ResourcesWindow* getResourcesWindow() const;
         AnimationWindow* getAnimationWindow() const;
         TerrainEditWindow* getTerrainEditWindow() const;

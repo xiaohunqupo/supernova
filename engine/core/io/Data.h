@@ -35,12 +35,12 @@ namespace doriax {
 
         virtual ~Data();
 
-        virtual int eof();
-        virtual unsigned int read(unsigned char *aDst, unsigned int aBytes);
-        virtual unsigned int write(unsigned char *aSrc, unsigned int aBytes);
-        virtual unsigned int length();
-        virtual void seek(int aOffset);
-        virtual unsigned int pos();
+        virtual int eof() override;
+        virtual unsigned int read(unsigned char *aDst, unsigned int aBytes) override;
+        virtual unsigned int write(unsigned char *aSrc, unsigned int aBytes) override;
+        virtual unsigned int length() override;
+        virtual void seek(int aOffset) override;
+        virtual unsigned int pos() override;
         virtual unsigned char * getMemPtr();
 
         unsigned int open(unsigned char *aData, unsigned int aDataLength, bool aCopy=false, bool aTakeOwnership=true);

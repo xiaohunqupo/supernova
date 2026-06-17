@@ -9,23 +9,23 @@ public:
 
     DoriaxSokol();
 
-    virtual int getScreenWidth();
-    virtual int getScreenHeight();
+    virtual int getScreenWidth() override;
+    virtual int getScreenHeight() override;
 
-    virtual sg_environment getSokolEnvironment();
-    virtual sg_swapchain getSokolSwapchain();
+    virtual sg_environment getSokolEnvironment() override;
+    virtual sg_swapchain getSokolSwapchain() override;
 
-    virtual bool isFullscreen();
-    virtual void requestFullscreen();
-    virtual void exitFullscreen();
+    virtual bool isFullscreen() override;
+    virtual void requestFullscreen() override;
+    virtual void exitFullscreen() override;
 
-    virtual void setMouseCursor(doriax::CursorType type);
-    virtual void setShowCursor(bool showCursor);
+    virtual void setMouseCursor(doriax::CursorType type) override;
+    virtual void setShowCursor(bool showCursor) override;
 
-    virtual std::string getAssetPath();
-    virtual std::string getUserDataPath();
-    virtual std::string getLuaPath();
-    
+    virtual std::string getAssetPath() override;
+    virtual std::string getUserDataPath() override;
+    virtual std::string getLuaPath() override;
+
 };
 
 #endif /* DoriaxSokol_h */

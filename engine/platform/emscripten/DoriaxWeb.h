@@ -45,34 +45,34 @@ public:
     static int init(int argc, char **argv);
     static void changeCanvasSize(int width, int height);
 
-    virtual int getScreenWidth();
-    virtual int getScreenHeight();
+    virtual int getScreenWidth() override;
+    virtual int getScreenHeight() override;
 
-    virtual int getSampleCount();
+    virtual int getSampleCount() override;
 
-    virtual bool isFullscreen();
-    virtual void requestFullscreen();
-    virtual void exitFullscreen();
+    virtual bool isFullscreen() override;
+    virtual void requestFullscreen() override;
+    virtual void exitFullscreen() override;
 
-    virtual void setMouseCursor(doriax::CursorType type);
-    virtual void setShowCursor(bool showCursor);
+    virtual void setMouseCursor(doriax::CursorType type) override;
+    virtual void setShowCursor(bool showCursor) override;
 
-    virtual std::string getUserDataPath();
+    virtual std::string getUserDataPath() override;
 
-    virtual bool syncFileSystem();
+    virtual bool syncFileSystem() override;
 
-    virtual std::string getStringForKey(const char *key, const std::string& defaultValue);
-    virtual void setStringForKey(const char* key, const std::string& value);
-    virtual void removeKey(const char *key);
+    virtual std::string getStringForKey(const char *key, const std::string& defaultValue) override;
+    virtual void setStringForKey(const char* key, const std::string& value) override;
+    virtual void removeKey(const char *key) override;
 
-    virtual void initializeCrazyGamesSDK();
-    virtual void showCrazyGamesAd(const std::string& type);
-    virtual void happytimeCrazyGames();
-    virtual void gameplayStartCrazyGames();
-    virtual void gameplayStopCrazyGames();
-    virtual void loadingStartCrazyGames();
-    virtual void loadingStopCrazyGames();
-    
+    virtual void initializeCrazyGamesSDK() override;
+    virtual void showCrazyGamesAd(const std::string& type) override;
+    virtual void happytimeCrazyGames() override;
+    virtual void gameplayStartCrazyGames() override;
+    virtual void gameplayStopCrazyGames() override;
+    virtual void loadingStartCrazyGames() override;
+    virtual void loadingStopCrazyGames() override;
+
 };
 
 

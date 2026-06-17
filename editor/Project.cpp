@@ -1102,6 +1102,8 @@ Entity editor::Project::createDefaultCamera(SceneType type, Scene* scene) const 
         case SceneType::SCENE_2D:
             camera.type = CameraType::CAMERA_ORTHO;
             break;
+        default:
+            break;
     }
 
     Transform& cameratransform = scene->getComponent<Transform>(defaultCamera);
@@ -5766,6 +5768,7 @@ void editor::Project::registerBundleManager() {
     uint32_t bundleId = 0;
     for (const auto& [bundlePath, bundle] : entityBundles) {
         bundleId++;
+        fs::path capturableBundlePath = bundlePath;
         fs::path noExt = bundlePath;
         noExt.replace_extension();
         std::string bundleName = noExt.generic_string();
@@ -5784,20 +5787,20 @@ void editor::Project::registerBundleManager() {
 
         BundleManager::registerBundle(bundleId, bundleName,
             // Factory: create bundle instance via importEntityBundle
-            [this, bundlePath, bundleName, hasTopLevelTransform](Scene* scene, Entity root) {
+            [this, capturableBundlePath, bundleName, hasTopLevelTransform](Scene* scene, Entity root) {
                 SceneProject* sceneProject = findSceneProjectByScene(scene);
                 if (!sceneProject) return;
 
                 // Set up root entity (matching createEntityBundle pattern)
-                std::string rootName = bundlePath.stem().string();
+                std::string rootName = capturableBundlePath.stem().string();
                 if (rootName.empty()) {
                     rootName = "Bundle";
                 }
                 scene->setEntityName(root, ProjectUtils::makeUniqueEntityName(scene, sceneProject->entities, rootName));
 
                 BundleComponent bundleComp;
-                bundleComp.name = bundlePath.stem().string();
-                bundleComp.path = bundlePath.string();
+                bundleComp.name = capturableBundlePath.stem().string();
+                bundleComp.path = capturableBundlePath.string();
                 scene->addComponent<BundleComponent>(root, bundleComp);
 
                 if (hasTopLevelTransform) {
@@ -5806,14 +5809,14 @@ void editor::Project::registerBundleManager() {
 
                 sceneProject->entities.push_back(root);
 
-                importEntityBundle(sceneProject, &sceneProject->entities, bundlePath, root, false);
+                importEntityBundle(sceneProject, &sceneProject->entities, capturableBundlePath, root, false);
             },
             // Destroyer: remove bundle instance via unimportEntityBundle
-            [this, bundlePath](Scene* scene, Entity root) -> bool {
+            [this, capturableBundlePath](Scene* scene, Entity root) -> bool {
                 SceneProject* sceneProject = findSceneProjectByScene(scene);
                 if (!sceneProject) return false;
 
-                EntityBundle* bundle = getEntityBundle(bundlePath);
+                EntityBundle* bundle = getEntityBundle(capturableBundlePath);
                 if (!bundle) return false;
 
                 auto sceneIt = bundle->instances.find(sceneProject->id);
@@ -5826,7 +5829,7 @@ void editor::Project::registerBundleManager() {
                             members.push_back(m.localEntity);
                         }
                         bool wasModified = sceneProject->isModified;
-                        bool result = unimportEntityBundle(sceneProject->id, bundlePath, root, members);
+                        bool result = unimportEntityBundle(sceneProject->id, capturableBundlePath, root, members);
                         sceneProject->isModified = wasModified;
                         return result;
                     }

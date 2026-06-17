@@ -17,7 +17,7 @@ private:
     static int windowPosX;
     static int windowPosY;
     static int windowWidth;
-    static int windowHeight;  
+    static int windowHeight;
 
     static int screenWidth;
     static int screenHeight;
@@ -36,22 +36,22 @@ public:
 
     static int init(int argc, char **argv);
 
-    virtual int getScreenWidth();
-    virtual int getScreenHeight();
+    virtual int getScreenWidth() override;
+    virtual int getScreenHeight() override;
 
-    virtual int getSampleCount();
+    virtual int getSampleCount() override;
 
-    virtual bool isFullscreen();
-    virtual void requestFullscreen();
-    virtual void exitFullscreen();
+    virtual bool isFullscreen() override;
+    virtual void requestFullscreen() override;
+    virtual void exitFullscreen() override;
 
-    virtual void setMouseCursor(doriax::CursorType type);
-    virtual void setShowCursor(bool showCursor);
+    virtual void setMouseCursor(doriax::CursorType type) override;
+    virtual void setShowCursor(bool showCursor) override;
 
-    virtual std::string getAssetPath();
-    virtual std::string getUserDataPath();
-    virtual std::string getLuaPath();
-    
+    virtual std::string getAssetPath() override;
+    virtual std::string getUserDataPath() override;
+    virtual std::string getLuaPath() override;
+
 };
 
 
