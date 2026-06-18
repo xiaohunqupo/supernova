@@ -1788,6 +1788,12 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["ssaoRadius"] = scene->getSSAORadius();
     sceneNode["ssaoIntensity"] = scene->getSSAOIntensity();
     sceneNode["ssaoBias"] = scene->getSSAOBias();
+    sceneNode["ssrEnabled"] = scene->isSSREnabled();
+    sceneNode["ssrMaxDistance"] = scene->getSSRMaxDistance();
+    sceneNode["ssrThickness"] = scene->getSSRThickness();
+    sceneNode["ssrMaxSteps"] = scene->getSSRMaxSteps();
+    sceneNode["ssrIntensity"] = scene->getSSRIntensity();
+    sceneNode["ssrBlur"] = scene->getSSRBlur();
     sceneNode["enableUIEvents"] = uiEventStateToString(scene->getEnableUIEvents());
 
     return sceneNode;
@@ -1832,6 +1838,24 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
     }
     if (node["ssaoBias"]) {
         scene->setSSAOBias(node["ssaoBias"].as<float>());
+    }
+    if (node["ssrEnabled"]) {
+        scene->setSSREnabled(node["ssrEnabled"].as<bool>());
+    }
+    if (node["ssrMaxDistance"]) {
+        scene->setSSRMaxDistance(node["ssrMaxDistance"].as<float>());
+    }
+    if (node["ssrThickness"]) {
+        scene->setSSRThickness(node["ssrThickness"].as<float>());
+    }
+    if (node["ssrMaxSteps"]) {
+        scene->setSSRMaxSteps(node["ssrMaxSteps"].as<int>());
+    }
+    if (node["ssrIntensity"]) {
+        scene->setSSRIntensity(node["ssrIntensity"].as<float>());
+    }
+    if (node["ssrBlur"]) {
+        scene->setSSRBlur(node["ssrBlur"].as<float>());
     }
 
     if (node["enableUIEvents"]) {

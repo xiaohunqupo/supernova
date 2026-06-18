@@ -269,6 +269,18 @@ void editor::ShaderBuilder::addDepthMeshPropertyDefinitions(std::vector<shaderco
     if (prop & (1 << 6))  defs.push_back({"HAS_INSTANCING", "1"});    // 'Ist'
 }
 
+void editor::ShaderBuilder::addGBufferMeshPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {
+    if (prop & (1 << 0))  defs.push_back({"HAS_BASECOLOR_TEXTURE", "1"});         // 'Bct'
+    if (prop & (1 << 1))  defs.push_back({"HAS_NORMALS", "1"});                   // 'Nor'
+    if (prop & (1 << 2))  defs.push_back({"HAS_SKINNING", "1"});                  // 'Ski'
+    if (prop & (1 << 3))  defs.push_back({"HAS_MORPHTARGET", "1"});               // 'Mta'
+    if (prop & (1 << 4))  defs.push_back({"HAS_MORPHNORMAL", "1"});               // 'Mnr'
+    if (prop & (1 << 5))  defs.push_back({"HAS_MORPHTANGENT", "1"});              // 'Mtg'
+    if (prop & (1 << 6))  defs.push_back({"HAS_TERRAIN", "1"});                   // 'Ter'
+    if (prop & (1 << 7))  defs.push_back({"HAS_INSTANCING", "1"});                // 'Ist'
+    if (prop & (1 << 8))  defs.push_back({"HAS_METALLICROUGHNESS_TEXTURE", "1"}); // 'Mrt'
+}
+
 void editor::ShaderBuilder::addUIPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {
     if (prop & (1 << 0))  defs.push_back({"HAS_TEXTURE", "1"});              // 'Tex'
     if (prop & (1 << 1))  defs.push_back({"HAS_FONTATLAS_TEXTURE", "1"});    // 'Ftx'
@@ -388,6 +400,10 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
         args.vert_file = "depth.vert";
         args.frag_file = "depth.frag";
         addDepthMeshPropertyDefinitions(args.defines, properties);
+    }else if (shaderType == ShaderType::GBUFFER){
+        args.vert_file = "gbuffer.vert";
+        args.frag_file = "gbuffer.frag";
+        addGBufferMeshPropertyDefinitions(args.defines, properties);
     }else if (shaderType == ShaderType::UI){
         args.vert_file = "ui.vert";
         args.frag_file = "ui.frag";
@@ -409,6 +425,15 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }else if (shaderType == ShaderType::SSAO_BLUR){
         args.vert_file = "fullscreen.vert";
         args.frag_file = "ssao_blur.frag";
+    }else if (shaderType == ShaderType::SSR){
+        args.vert_file = "fullscreen.vert";
+        args.frag_file = "ssr.frag";
+    }else if (shaderType == ShaderType::SSR_BLUR){
+        args.vert_file = "fullscreen.vert";
+        args.frag_file = "ssr_blur.frag";
+    }else if (shaderType == ShaderType::COMPOSITE){
+        args.vert_file = "fullscreen.vert";
+        args.frag_file = "composite.frag";
     }else{
         return false;
     }
@@ -423,8 +448,20 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     if (shaderType == ShaderType::DEPTH){
         args.defines.push_back({"MAX_BONES", "70"});
     }
+    if (shaderType == ShaderType::GBUFFER){
+        args.defines.push_back({"MAX_BONES", "70"});
+        // suppresses the terrain texture-coordinate varyings in the shared includes
+        // (the G-buffer fragment does not consume them); mirrors depth.vert
+        args.defines.push_back({"DEPTH_SHADER", "1"});
+    }
     if (shaderType == ShaderType::SSAO){
         args.defines.push_back({"SSAO_KERNEL_SIZE", "32"});
+    }
+    if (shaderType == ShaderType::SSR){
+        args.defines.push_back({"SSR_MAX_STEPS", "128"});
+    }
+    if (shaderType == ShaderType::SSR_BLUR){
+        args.defines.push_back({"SSR_BLUR_TAPS", "6"});
     }
 
     return true;

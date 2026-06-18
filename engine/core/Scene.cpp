@@ -51,6 +51,14 @@ void Scene::init(){
     ssaoBias = 0.025;
     ssaoDebug = false;
 
+    ssrEnabled = false;
+    ssrMaxDistance = 8.0;
+    ssrThickness = 0.5;
+    ssrMaxSteps = 48;
+    ssrIntensity = 1.0;
+    ssrBlur = 0.0;
+    ssrDebugMode = 0;
+
     uiEventState = UIEventState::NOT_SET;
 }
 
@@ -219,6 +227,66 @@ void Scene::setSSAODebug(bool debug){
 
 bool Scene::isSSAODebug() const{
     return this->ssaoDebug;
+}
+
+void Scene::setSSREnabled(bool ssrEnabled){
+    if (this->ssrEnabled != ssrEnabled){
+        this->ssrEnabled = ssrEnabled;
+        // SSR requires the depth pre-pass, so meshes must (re)build their depth shader
+        getSystem<RenderSystem>()->needReloadMeshes();
+    }
+}
+
+bool Scene::isSSREnabled() const{
+    return this->ssrEnabled;
+}
+
+void Scene::setSSRMaxDistance(float maxDistance){
+    this->ssrMaxDistance = maxDistance;
+}
+
+float Scene::getSSRMaxDistance() const{
+    return this->ssrMaxDistance;
+}
+
+void Scene::setSSRThickness(float thickness){
+    this->ssrThickness = thickness;
+}
+
+float Scene::getSSRThickness() const{
+    return this->ssrThickness;
+}
+
+void Scene::setSSRMaxSteps(int maxSteps){
+    this->ssrMaxSteps = maxSteps;
+}
+
+int Scene::getSSRMaxSteps() const{
+    return this->ssrMaxSteps;
+}
+
+void Scene::setSSRIntensity(float intensity){
+    this->ssrIntensity = intensity;
+}
+
+float Scene::getSSRIntensity() const{
+    return this->ssrIntensity;
+}
+
+void Scene::setSSRBlur(float blur){
+    this->ssrBlur = blur;
+}
+
+float Scene::getSSRBlur() const{
+    return this->ssrBlur;
+}
+
+void Scene::setSSRDebugMode(int mode){
+    this->ssrDebugMode = mode;
+}
+
+int Scene::getSSRDebugMode() const{
+    return this->ssrDebugMode;
 }
 
 void Scene::setLightState(LightState state){

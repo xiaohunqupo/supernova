@@ -2145,6 +2145,12 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setSSAORadius(" << formatFloat(scene->getSSAORadius()) << ");\n";
     out << ind2 << "scene->setSSAOIntensity(" << formatFloat(scene->getSSAOIntensity()) << ");\n";
     out << ind2 << "scene->setSSAOBias(" << formatFloat(scene->getSSAOBias()) << ");\n";
+    out << ind2 << "scene->setSSREnabled(" << formatBool(scene->isSSREnabled()) << ");\n";
+    out << ind2 << "scene->setSSRMaxDistance(" << formatFloat(scene->getSSRMaxDistance()) << ");\n";
+    out << ind2 << "scene->setSSRThickness(" << formatFloat(scene->getSSRThickness()) << ");\n";
+    out << ind2 << "scene->setSSRMaxSteps(" << scene->getSSRMaxSteps() << ");\n";
+    out << ind2 << "scene->setSSRIntensity(" << formatFloat(scene->getSSRIntensity()) << ");\n";
+    out << ind2 << "scene->setSSRBlur(" << formatFloat(scene->getSSRBlur()) << ");\n";
     out << ind2 << "scene->setEnableUIEvents(" << formatUIEventState(scene->getEnableUIEvents()) << ");\n";
     out << ind << "}\n";
 

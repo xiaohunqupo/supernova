@@ -1518,7 +1518,9 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     // .sdat (the cache is keyed by shaderType+properties, not source content).
     // v4: mirror (USE_MIRROR) variants changed the u_fs_mirror block guard.
     // v5: SSAO (mesh.frag USE_SSAO + viewportInfo, new ssao/ssao_blur shaders).
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v5";
+    // v6: SSR (G-buffer geometry pass + ssr/ssr_blur/composite fullscreen shaders;
+    //     energy-conserving SSR-over-IBL, glossy roughness blur, debug modes).
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v6";
 }
 
 void editor::App::pushTabNotificationStyle(){

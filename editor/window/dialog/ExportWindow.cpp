@@ -391,9 +391,9 @@ void ExportWindow::drawAddShaderDialog() {
 
     if (ImGui::BeginPopupModal("Add Shader##AddShaderModal", &m_addShaderOpen, flags)) {
         // Shader type combo
-        const char* typeNames[] = { "Points", "Lines", "Mesh", "Skybox", "Depth", "UI" };
-        ShaderType typeValues[] = { ShaderType::POINTS, ShaderType::LINES, ShaderType::MESH, ShaderType::SKYBOX, ShaderType::DEPTH, ShaderType::UI };
-        int typeCount = 6;
+        const char* typeNames[] = { "Points", "Lines", "Mesh", "Skybox", "Depth", "GBuffer", "UI" };
+        ShaderType typeValues[] = { ShaderType::POINTS, ShaderType::LINES, ShaderType::MESH, ShaderType::SKYBOX, ShaderType::DEPTH, ShaderType::GBUFFER, ShaderType::UI };
+        int typeCount = 7;
 
         ImGui::Text("Type");
         ImGui::SameLine();

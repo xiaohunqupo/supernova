@@ -20,6 +20,10 @@ namespace doriax{
             TextureWrap wrapU;
             TextureWrap wrapV;
 
+            // when > 1 the framebuffer is created as a 2D multi render target (MRT)
+            int numColorAttachments;
+            ColorFormat colorFormats[SokolFramebuffer::MAX_COLOR_ATTACHMENTS];
+
             unsigned long version; // increment every creation
 
         public:
@@ -35,6 +39,10 @@ namespace doriax{
 
             FramebufferRender& getRender();
             unsigned long getVersion();
+
+            // configure multiple color attachments; formats may be null (defaults to RGBA)
+            void setColorAttachments(int count, const ColorFormat* formats = nullptr);
+            int getNumColorAttachments() const;
 
             void setWidth(unsigned int width);
             unsigned int getWidth() const;

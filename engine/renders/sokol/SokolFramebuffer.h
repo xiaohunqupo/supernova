@@ -14,12 +14,19 @@
 namespace doriax{
     class SokolFramebuffer{
 
+    public:
+        static const int MAX_COLOR_ATTACHMENTS = 4;
+
     private:
-        sg_view colorAttachmentViews[6];
+        // [attachment][face]; only 2D framebuffers use MRT (single face), cube
+        // framebuffers use a single color attachment across 6 faces.
+        sg_view colorAttachmentViews[MAX_COLOR_ATTACHMENTS][6];
         sg_view depthAttachmentView;
 
-        TextureRender colorTexture;
+        TextureRender colorTexture[MAX_COLOR_ATTACHMENTS];
         TextureRender depthTexture;
+
+        int numColorAttachments;
 
     public:
         SokolFramebuffer();
@@ -27,10 +34,16 @@ namespace doriax{
         SokolFramebuffer& operator=(const SokolFramebuffer& rhs);
 
         bool createFramebuffer(TextureType textureType, int width, int height, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV, bool shadowMap);
+        // Multi render target variant (2D only). formats[i] selects the pixel format
+        // for color attachment i; pass numColor==1 for the regular single-target case.
+        bool createFramebufferMRT(int width, int height, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV, int numColor, const ColorFormat* formats);
         void destroyFramebuffer();
         bool isCreated();
 
+        int getNumColorAttachments() const;
+
         TextureRender& getColorTexture();
+        TextureRender& getColorTexture(int index);
         TextureRender& getDepthTexture();
 
         const void* getD3D11HandlerColorRTV() const;

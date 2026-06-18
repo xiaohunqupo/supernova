@@ -16,6 +16,10 @@ Framebuffer::Framebuffer(){
     this->magFilter = TextureFilter::LINEAR;
     this->wrapU = TextureWrap::REPEAT;
     this->wrapV = TextureWrap::REPEAT;
+    this->numColorAttachments = 1;
+    for (int i = 0; i < SokolFramebuffer::MAX_COLOR_ATTACHMENTS; i++){
+        this->colorFormats[i] = ColorFormat::RGBA;
+    }
     this->version = 0;
 }
 
@@ -31,6 +35,10 @@ Framebuffer::Framebuffer(const Framebuffer& rhs){
     this->magFilter = rhs.magFilter;
     this->wrapU = rhs.wrapU;
     this->wrapV = rhs.wrapV;
+    this->numColorAttachments = rhs.numColorAttachments;
+    for (int i = 0; i < SokolFramebuffer::MAX_COLOR_ATTACHMENTS; i++){
+        this->colorFormats[i] = rhs.colorFormats[i];
+    }
     this->version = rhs.version;
 }
 
@@ -42,13 +50,34 @@ Framebuffer& Framebuffer::operator=(const Framebuffer& rhs){
     this->magFilter = rhs.magFilter;
     this->wrapU = rhs.wrapU;
     this->wrapV = rhs.wrapV;
+    this->numColorAttachments = rhs.numColorAttachments;
+    for (int i = 0; i < SokolFramebuffer::MAX_COLOR_ATTACHMENTS; i++){
+        this->colorFormats[i] = rhs.colorFormats[i];
+    }
     this->version = rhs.version;
     return *this;
 }
 
 void Framebuffer::create(){
-    render.createFramebuffer(TextureType::TEXTURE_2D, width, height, minFilter, magFilter, wrapU, wrapV, false);
+    if (numColorAttachments > 1){
+        render.createFramebufferMRT(width, height, minFilter, magFilter, wrapU, wrapV, numColorAttachments, colorFormats);
+    }else{
+        render.createFramebuffer(TextureType::TEXTURE_2D, width, height, minFilter, magFilter, wrapU, wrapV, false);
+    }
     version++;
+}
+
+void Framebuffer::setColorAttachments(int count, const ColorFormat* formats){
+    if (count < 1) count = 1;
+    if (count > SokolFramebuffer::MAX_COLOR_ATTACHMENTS) count = SokolFramebuffer::MAX_COLOR_ATTACHMENTS;
+    this->numColorAttachments = count;
+    for (int i = 0; i < SokolFramebuffer::MAX_COLOR_ATTACHMENTS; i++){
+        this->colorFormats[i] = (formats && i < count) ? formats[i] : ColorFormat::RGBA;
+    }
+}
+
+int Framebuffer::getNumColorAttachments() const{
+    return this->numColorAttachments;
 }
 
 void Framebuffer::destroy(){

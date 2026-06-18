@@ -10,28 +10,37 @@
 using namespace doriax;
 
 SokolFramebuffer::SokolFramebuffer(){
-    for (int i = 0; i < 6; i++){
-        colorAttachmentViews[i].id = SG_INVALID_ID;
+    for (int a = 0; a < MAX_COLOR_ATTACHMENTS; a++){
+        for (int i = 0; i < 6; i++){
+            colorAttachmentViews[a][i].id = SG_INVALID_ID;
+        }
     }
     depthAttachmentView.id = SG_INVALID_ID;
+    numColorAttachments = 1;
 }
 
 SokolFramebuffer::SokolFramebuffer(const SokolFramebuffer& rhs){
-    for (int i = 0; i < 6; i++){
-        colorAttachmentViews[i] = rhs.colorAttachmentViews[i];
+    for (int a = 0; a < MAX_COLOR_ATTACHMENTS; a++){
+        for (int i = 0; i < 6; i++){
+            colorAttachmentViews[a][i] = rhs.colorAttachmentViews[a][i];
+        }
+        colorTexture[a] = rhs.colorTexture[a];
     }
     depthAttachmentView = rhs.depthAttachmentView;
-    colorTexture = rhs.colorTexture;
     depthTexture = rhs.depthTexture;
+    numColorAttachments = rhs.numColorAttachments;
 }
 
 SokolFramebuffer& SokolFramebuffer::operator=(const SokolFramebuffer& rhs){
-    for (int i = 0; i < 6; i++){
-        colorAttachmentViews[i] = rhs.colorAttachmentViews[i];
+    for (int a = 0; a < MAX_COLOR_ATTACHMENTS; a++){
+        for (int i = 0; i < 6; i++){
+            colorAttachmentViews[a][i] = rhs.colorAttachmentViews[a][i];
+        }
+        colorTexture[a] = rhs.colorTexture[a];
     }
     depthAttachmentView = rhs.depthAttachmentView;
-    colorTexture = rhs.colorTexture;
     depthTexture = rhs.depthTexture;
+    numColorAttachments = rhs.numColorAttachments;
 
     return *this;
 }
@@ -44,7 +53,9 @@ bool SokolFramebuffer::createFramebuffer(TextureType textureType, int width, int
 
     destroyFramebuffer();
 
-    bool colorCreated = colorTexture.createFramebufferTexture(textureType, false, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
+    numColorAttachments = 1;
+
+    bool colorCreated = colorTexture[0].createFramebufferTexture(textureType, false, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
     bool depthCreated = depthTexture.createFramebufferTexture(TextureType::TEXTURE_2D, true, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
 
     if (!colorCreated || !depthCreated) {
@@ -56,14 +67,14 @@ bool SokolFramebuffer::createFramebuffer(TextureType textureType, int width, int
 
     for (int i = 0; i < faces; i++){
         sg_view_desc color_view_desc = {0};
-        color_view_desc.color_attachment.image = colorTexture.backend.get();
+        color_view_desc.color_attachment.image = colorTexture[0].backend.get();
         color_view_desc.color_attachment.slice = i;
         color_view_desc.label = "framebuffer-color-attachment-view";
 
         if (Engine::isAsyncThread()){
-            colorAttachmentViews[i] = SokolCmdQueue::add_command_make_view(color_view_desc);
+            colorAttachmentViews[0][i] = SokolCmdQueue::add_command_make_view(color_view_desc);
         }else{
-            colorAttachmentViews[i] = sg_make_view(color_view_desc);
+            colorAttachmentViews[0][i] = sg_make_view(color_view_desc);
         }
     }
 
@@ -85,17 +96,73 @@ bool SokolFramebuffer::createFramebuffer(TextureType textureType, int width, int
     return created;
 }
 
+bool SokolFramebuffer::createFramebufferMRT(int width, int height, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV, int numColor, const ColorFormat* formats){
+    if (numColor < 1 || numColor > MAX_COLOR_ATTACHMENTS){
+        Log::error("Framebuffer MRT color attachment count must be 1..%d", MAX_COLOR_ATTACHMENTS);
+        return false;
+    }
+
+    destroyFramebuffer();
+
+    numColorAttachments = numColor;
+
+    bool depthCreated = depthTexture.createFramebufferTexture(TextureType::TEXTURE_2D, true, false, width, height, minFilter, magFilter, wrapU, wrapV);
+    if (!depthCreated){
+        destroyFramebuffer();
+        return false;
+    }
+
+    for (int a = 0; a < numColorAttachments; a++){
+        ColorFormat fmt = formats ? formats[a] : ColorFormat::RGBA;
+        bool colorCreated = colorTexture[a].createFramebufferTexture(TextureType::TEXTURE_2D, false, false, width, height, minFilter, magFilter, wrapU, wrapV, fmt);
+        if (!colorCreated){
+            destroyFramebuffer();
+            return false;
+        }
+
+        sg_view_desc color_view_desc = {0};
+        color_view_desc.color_attachment.image = colorTexture[a].backend.get();
+        color_view_desc.color_attachment.slice = 0;
+        color_view_desc.label = "framebuffer-mrt-color-attachment-view";
+
+        if (Engine::isAsyncThread()){
+            colorAttachmentViews[a][0] = SokolCmdQueue::add_command_make_view(color_view_desc);
+        }else{
+            colorAttachmentViews[a][0] = sg_make_view(color_view_desc);
+        }
+    }
+
+    sg_view_desc depth_view_desc = {0};
+    depth_view_desc.depth_stencil_attachment.image = depthTexture.backend.get();
+    depth_view_desc.label = "framebuffer-mrt-depth-attachment-view";
+
+    if (Engine::isAsyncThread()){
+        depthAttachmentView = SokolCmdQueue::add_command_make_view(depth_view_desc);
+    }else{
+        depthAttachmentView = sg_make_view(depth_view_desc);
+    }
+
+    bool created = isCreated();
+    if (!created) {
+        destroyFramebuffer();
+    }
+
+    return created;
+}
+
 void SokolFramebuffer::destroyFramebuffer(){
     if (sg_isvalid()){
-        for (int i = 0; i < 6; i++){
-            if (colorAttachmentViews[i].id == SG_INVALID_ID) {
-                continue;
-            }
+        for (int a = 0; a < MAX_COLOR_ATTACHMENTS; a++){
+            for (int i = 0; i < 6; i++){
+                if (colorAttachmentViews[a][i].id == SG_INVALID_ID) {
+                    continue;
+                }
 
-            if (Engine::isAsyncThread()){
-                SokolCmdQueue::add_command_destroy_view(colorAttachmentViews[i]);
-            }else{
-                sg_destroy_view(colorAttachmentViews[i]);
+                if (Engine::isAsyncThread()){
+                    SokolCmdQueue::add_command_destroy_view(colorAttachmentViews[a][i]);
+                }else{
+                    sg_destroy_view(colorAttachmentViews[a][i]);
+                }
             }
         }
 
@@ -108,13 +175,18 @@ void SokolFramebuffer::destroyFramebuffer(){
         }
     }
 
-    colorTexture.destroyTexture();
+    for (int a = 0; a < MAX_COLOR_ATTACHMENTS; a++){
+        colorTexture[a].destroyTexture();
+    }
     depthTexture.destroyTexture();
 
-    for (int i = 0; i < 6; i++){
-        colorAttachmentViews[i].id = SG_INVALID_ID;
+    for (int a = 0; a < MAX_COLOR_ATTACHMENTS; a++){
+        for (int i = 0; i < 6; i++){
+            colorAttachmentViews[a][i].id = SG_INVALID_ID;
+        }
     }
     depthAttachmentView.id = SG_INVALID_ID;
+    numColorAttachments = 1;
 }
 
 bool SokolFramebuffer::isCreated(){
@@ -123,14 +195,16 @@ bool SokolFramebuffer::isCreated(){
     }
 
     bool hasAttachment = false;
-    for (int i = 0; i < 6; i++) {
-        if (colorAttachmentViews[i].id == SG_INVALID_ID) {
-            continue;
-        }
+    for (int a = 0; a < MAX_COLOR_ATTACHMENTS; a++){
+        for (int i = 0; i < 6; i++) {
+            if (colorAttachmentViews[a][i].id == SG_INVALID_ID) {
+                continue;
+            }
 
-        hasAttachment = true;
-        if (sg_query_view_state(colorAttachmentViews[i]) != SG_RESOURCESTATE_VALID) {
-            return false;
+            hasAttachment = true;
+            if (sg_query_view_state(colorAttachmentViews[a][i]) != SG_RESOURCESTATE_VALID) {
+                return false;
+            }
         }
     }
 
@@ -143,8 +217,19 @@ bool SokolFramebuffer::isCreated(){
     return hasAttachment;
 }
 
+int SokolFramebuffer::getNumColorAttachments() const{
+    return numColorAttachments;
+}
+
 TextureRender& SokolFramebuffer::getColorTexture(){
-    return colorTexture;
+    return colorTexture[0];
+}
+
+TextureRender& SokolFramebuffer::getColorTexture(int index){
+    if (index < 0 || index >= MAX_COLOR_ATTACHMENTS){
+        index = 0;
+    }
+    return colorTexture[index];
 }
 
 TextureRender& SokolFramebuffer::getDepthTexture(){
@@ -152,8 +237,8 @@ TextureRender& SokolFramebuffer::getDepthTexture(){
 }
 
 const void* SokolFramebuffer::getD3D11HandlerColorRTV() const{
-    if (colorAttachmentViews[0].id != SG_INVALID_ID && sg_isvalid()){
-        sg_d3d11_view_info info = sg_d3d11_query_view_info(colorAttachmentViews[0]);
+    if (colorAttachmentViews[0][0].id != SG_INVALID_ID && sg_isvalid()){
+        sg_d3d11_view_info info = sg_d3d11_query_view_info(colorAttachmentViews[0][0]);
 
         return info.rtv;
     }
@@ -174,7 +259,14 @@ const void* SokolFramebuffer::getD3D11HandlerDSV() const{
 sg_attachments SokolFramebuffer::get(size_t face){
     sg_attachments attachments = {};
 
-    attachments.colors[0] = colorAttachmentViews[face];
+    if (numColorAttachments > 1){
+        // MRT framebuffers are 2D (single face); bind every color attachment.
+        for (int a = 0; a < numColorAttachments; a++){
+            attachments.colors[a] = colorAttachmentViews[a][0];
+        }
+    }else{
+        attachments.colors[0] = colorAttachmentViews[0][face];
+    }
     attachments.depth_stencil = depthAttachmentView;
 
     return attachments;

@@ -22,10 +22,14 @@ namespace doriax{
         virtual ~FramebufferRender();
 
         bool createFramebuffer(TextureType textureType, int width, int height, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV, bool shadowMap);
+        bool createFramebufferMRT(int width, int height, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV, int numColor, const ColorFormat* formats);
         void destroyFramebuffer();
         bool isCreated();
 
+        int getNumColorAttachments() const;
+
         TextureRender& getColorTexture();
+        TextureRender& getColorAttachmentTexture(int index);
         TextureRender& getDepthTexture();
 
         const void* getD3D11HandlerColorRTV() const;

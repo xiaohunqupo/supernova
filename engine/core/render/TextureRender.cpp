@@ -42,10 +42,11 @@ bool TextureRender::createTextureCubeWithMips(
 }
 
 bool TextureRender::createFramebufferTexture(
-                TextureType type, bool depth, bool shadowMap, int width, int height, 
-                TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV){
+                TextureType type, bool depth, bool shadowMap, int width, int height,
+                TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV,
+                ColorFormat colorFormat){
     if (Engine::isViewLoaded() && !isCreated())
-        return backend.createFramebufferTexture(type, depth, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV);
+        return backend.createFramebufferTexture(type, depth, shadowMap, width, height, minFilter, magFilter, wrapU, wrapV, colorFormat);
     else
         return false;
 }

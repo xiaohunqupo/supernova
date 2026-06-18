@@ -1473,6 +1473,9 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
                 for (unsigned int s = 0; s < mesh.numSubmeshes; ++s) {
                     keys.insert(ShaderPool::getShaderKey(ShaderType::MESH, mesh.submeshes[s].shaderProperties));
                     keys.insert(ShaderPool::getShaderKey(ShaderType::DEPTH, mesh.submeshes[s].depthShaderProperties));
+                    if (mesh.submeshes[s].gbufferShader) {
+                        keys.insert(ShaderPool::getShaderKey(ShaderType::GBUFFER, mesh.submeshes[s].gbufferShaderProperties));
+                    }
                 }
             }
         }

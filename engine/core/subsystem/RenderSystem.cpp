@@ -49,6 +49,13 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     ssaoSlotParams = -1;
     ssaoBlurSlotParams = -1;
     currentSSAOTexture = NULL;
+
+    ssrLoaded = false;
+    ssrWidth = 0;
+    ssrHeight = 0;
+    ssrSlotParams = -1;
+    ssrBlurSlotParams = -1;
+    compositeSlotParams = -1;
 }
 
 RenderSystem::~RenderSystem(){
@@ -76,6 +83,7 @@ void RenderSystem::destroy(){
     emptyTexturesCreated = false;
 
     destroySSAO();
+    destroySSR();
 
     auto skys = scene->getComponentArray<SkyComponent>();
     if (skys->size() > 0){
@@ -621,6 +629,30 @@ bool RenderSystem::loadDepthTexture(Material& material, ShaderData& shaderData, 
     return true;
 }
 
+bool RenderSystem::loadGBufferTextures(Material& material, ShaderData& shaderData, ObjectRender& render){
+    // base color (albedo + alpha cutout); bound only when the gbuffer variant declares it
+    std::pair<int, int> slotBase = shaderData.getTextureIndex(TextureShaderType::BASECOLOR);
+    if (slotBase.first != -1){
+        TextureRender* t = material.baseColorTexture.getRender(&emptyWhite);
+        if (!t || !t->isCreated()){
+            return false;
+        }
+        render.addTexture(slotBase, ShaderStageType::FRAGMENT, t);
+    }
+
+    // metallic-roughness (per-pixel roughness/metallic)
+    std::pair<int, int> slotMR = shaderData.getTextureIndex(TextureShaderType::METALLICROUGHNESS);
+    if (slotMR.first != -1){
+        TextureRender* t = material.metallicRoughnessTexture.getRender(&emptyWhite);
+        if (!t || !t->isCreated()){
+            return false;
+        }
+        render.addTexture(slotMR, ShaderStageType::FRAGMENT, t);
+    }
+
+    return true;
+}
+
 bool RenderSystem::loadTerrainTextures(TerrainComponent& terrain, ObjectRender& render, ShaderData& shaderData){
     TextureRender* textureRender = NULL;
     std::pair<int, int> slotTex(-1, -1);
@@ -760,6 +792,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         ObjectRender& render = mesh.submeshes[i].render;
 
+        mesh.submeshes[i].hasNormal = false;
         mesh.submeshes[i].hasNormalMap = false;
         mesh.submeshes[i].hasTangent = false;
         mesh.submeshes[i].hasVertexColor4 = false;
@@ -776,6 +809,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                 for (auto const &attr : buf.second->getAttributes()) {
                     if (attr.first == AttributeType::TEXCOORD1){
                         mesh.submeshes[i].hasTexCoord1 = true;
+                    }
+                    if (attr.first == AttributeType::NORMAL){
+                        mesh.submeshes[i].hasNormal = true;
                     }
                     if (attr.first == AttributeType::TANGENT){
                         mesh.submeshes[i].hasTangent = true;
@@ -801,6 +837,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         for (auto const& attr : mesh.submeshes[i].attributes){
             if (attr.first == AttributeType::TEXCOORD1){
                 mesh.submeshes[i].hasTexCoord1 = true;
+            }
+            if (attr.first == AttributeType::NORMAL){
+                mesh.submeshes[i].hasNormal = true;
             }
             if (attr.first == AttributeType::TANGENT){
                 mesh.submeshes[i].hasTangent = true;
@@ -865,6 +904,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             p_unlit = true;
         }
 
+        // remember whether this submesh's lit shader applies IBL specular, so the SSR
+        // G-buffer can flag those pixels for the energy-conserving composite
+        mesh.submeshes[i].hasIBL = p_ibl;
+
         // screen-space AO only modulates ambient/indirect light, so it is only
         // compiled into lit submeshes (those with punctual and/or IBL ambient).
         // Terrain is excluded: its lit shader is already near the 16-sampler limit
@@ -880,13 +923,27 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
                         (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao);
         mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties);
-        // the depth shader feeds both shadow maps (casters) and the SSAO depth pre-pass
+        // the depth shader feeds shadow maps (casters) and the SSAO depth pre-pass
+        // (SSR uses its own G-buffer shader, built below)
         if ((hasShadows && mesh.castShadows) || scene->isSSAOEnabled()){
             mesh.submeshes[i].depthShaderProperties = ShaderPool::getDepthMeshProperties(
-                mesh.submeshes[i].textureShadow, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, 
+                mesh.submeshes[i].textureShadow, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget,
                 mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent, false, (instmesh)?true:false);
             mesh.submeshes[i].depthShader = ShaderPool::get(ShaderType::DEPTH, mesh.submeshes[i].depthShaderProperties);
             if (!mesh.submeshes[i].depthShader->isCreated())
+                return false;
+        }
+        // the G-buffer shader feeds the SSR geometry pass (MRT: packed depth + view-space
+        // normal/roughness/metallic). Built only when SSR is enabled (it needs normals).
+        if (scene->isSSREnabled()){
+            bool gbufferHasBaseColorTex = !mesh.submeshes[i].material.baseColorTexture.empty();
+            bool gbufferHasMRTex = !mesh.submeshes[i].material.metallicRoughnessTexture.empty();
+            mesh.submeshes[i].gbufferShaderProperties = ShaderPool::getGBufferMeshProperties(
+                gbufferHasBaseColorTex, mesh.submeshes[i].hasNormal, mesh.submeshes[i].hasSkinning,
+                mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
+                (terrain)?true:false, (instmesh)?true:false, gbufferHasMRTex);
+            mesh.submeshes[i].gbufferShader = ShaderPool::get(ShaderType::GBUFFER, mesh.submeshes[i].gbufferShaderProperties);
+            if (!mesh.submeshes[i].gbufferShader->isCreated())
                 return false;
         }
         if (!mesh.submeshes[i].shader->isCreated())
@@ -953,6 +1010,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         mesh.submeshes[i].needUpdateTexture = false;
         mesh.submeshes[i].needUpdateDepthTexture = false;
+        mesh.submeshes[i].needUpdateGBufferTexture = false;
 
         if (mesh.autoTransparency && !mesh.transparent){
             if (mesh.submeshes[i].material.baseColorTexture.isTransparent() || mesh.submeshes[i].material.baseColorFactor.w != 1.0){
@@ -1113,6 +1171,111 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             }
         }
         //----------End depth shader---------------
+
+        //----------Start G-buffer shader---------------
+        if (scene->isSSREnabled()){
+            ObjectRender& gbufferRender = mesh.submeshes[i].gbufferRender;
+
+            gbufferRender.beginLoad(mesh.submeshes[i].primitiveType);
+
+            gbufferRender.setShader(mesh.submeshes[i].gbufferShader.get());
+            ShaderData& gbufferShaderData = mesh.submeshes[i].gbufferShader.get()->shaderData;
+
+            mesh.submeshes[i].slotVSGBufferParams = gbufferShaderData.getUniformBlockIndex(UniformBlockType::GBUFFER_VS_PARAMS);
+            mesh.submeshes[i].slotFSGBufferMaterial = gbufferShaderData.getUniformBlockIndex(UniformBlockType::GBUFFER_FS_MATERIAL);
+
+            if (mesh.submeshes[i].hasSkinning){
+                mesh.submeshes[i].slotVSGBufferSkinning = gbufferShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_VS_SKINNING);
+            }
+            if (mesh.submeshes[i].hasMorphTarget){
+                mesh.submeshes[i].slotVSGBufferMorphTarget = gbufferShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_VS_MORPHTARGET);
+            }
+
+            if (!loadGBufferTextures(mesh.submeshes[i].material, gbufferShaderData, gbufferRender)){
+                return false;
+            }
+
+            if (terrain){
+                mesh.submeshes[i].slotVSGBufferTerrain = gbufferShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_TERRAIN_VS_PARAMS);
+
+                for (auto const &attr : terrain->views[0].nodesbuffer[i].getAttributes()) {
+                    gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), terrain->views[0].nodesbuffer[i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->views[0].nodesbuffer[i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                }
+            }
+
+            unsigned int gbufferIndexCount = 0;
+            for (auto const& buf : buffers){
+                if (buf.second->isRenderAttributes()) {
+                    if (buf.second->getType() == BufferType::INDEX_BUFFER){
+                        gbufferIndexCount = buf.second->getCount();
+                        Attribute indexattr = buf.second->getAttributes()[AttributeType::INDEX];
+                        gbufferRender.setIndex(buf.second->getRender(), indexattr.getDataType(), indexattr.getOffset());
+                    }else{
+                        for (auto const &attr : buf.second->getAttributes()){
+                            if (attr.first == AttributeType::POSITION || attr.first == AttributeType::TEXCOORD1 || attr.first == AttributeType::NORMAL){
+                                gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), buf.second->getRender(), attr.second.getElements(), attr.second.getDataType(), buf.second->getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                            }
+                            if (mesh.submeshes[i].hasSkinning){
+                                if (attr.first == AttributeType::BONEIDS || attr.first == AttributeType::BONEWEIGHTS){
+                                    gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), buf.second->getRender(), attr.second.getElements(), attr.second.getDataType(), buf.second->getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                                }
+                            }
+                            if (mesh.submeshes[i].hasMorphTarget){
+                                if (attr.first == AttributeType::MORPHTARGET0 || attr.first == AttributeType::MORPHTARGET1 ||
+                                    attr.first == AttributeType::MORPHTARGET2 || attr.first == AttributeType::MORPHTARGET3 ||
+                                    attr.first == AttributeType::MORPHTARGET4 || attr.first == AttributeType::MORPHTARGET5 ||
+                                    attr.first == AttributeType::MORPHTARGET6 || attr.first == AttributeType::MORPHTARGET7 ||
+                                    attr.first == AttributeType::MORPHNORMAL0 || attr.first == AttributeType::MORPHNORMAL1 ||
+                                    attr.first == AttributeType::MORPHNORMAL2 || attr.first == AttributeType::MORPHNORMAL3 ||
+                                    attr.first == AttributeType::MORPHTANGENT0 || attr.first == AttributeType::MORPHTANGENT1){
+                                    gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), buf.second->getRender(), attr.second.getElements(), attr.second.getDataType(), buf.second->getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (auto const& attr : mesh.submeshes[i].attributes){
+                if (bufferNameToRender.count(attr.second.getBufferName())){
+                    if (attr.first == AttributeType::INDEX){
+                        gbufferRender.setIndex(bufferNameToRender[attr.second.getBufferName()], attr.second.getDataType(), attr.second.getOffset());
+                    }else if (attr.first == AttributeType::POSITION || attr.first == AttributeType::TEXCOORD1 || attr.first == AttributeType::NORMAL){
+                        gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), bufferNameToRender[attr.second.getBufferName()], attr.second.getElements(), attr.second.getDataType(), bufferStride[attr.second.getBufferName()], attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                    }
+                    if (mesh.submeshes[i].hasSkinning){
+                        if (attr.first == AttributeType::BONEIDS || attr.first == AttributeType::BONEWEIGHTS){
+                            gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), bufferNameToRender[attr.second.getBufferName()], attr.second.getElements(), attr.second.getDataType(), bufferStride[attr.second.getBufferName()], attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                        }
+                    }
+                    if (mesh.submeshes[i].hasMorphTarget){
+                        if (attr.first == AttributeType::MORPHTARGET0 || attr.first == AttributeType::MORPHTARGET1 ||
+                            attr.first == AttributeType::MORPHTARGET2 || attr.first == AttributeType::MORPHTARGET3 ||
+                            attr.first == AttributeType::MORPHTARGET4 || attr.first == AttributeType::MORPHTARGET5 ||
+                            attr.first == AttributeType::MORPHTARGET6 || attr.first == AttributeType::MORPHTARGET7 ||
+                            attr.first == AttributeType::MORPHNORMAL0 || attr.first == AttributeType::MORPHNORMAL1 ||
+                            attr.first == AttributeType::MORPHNORMAL2 || attr.first == AttributeType::MORPHNORMAL3 ||
+                            attr.first == AttributeType::MORPHTANGENT0 || attr.first == AttributeType::MORPHTANGENT1){
+                            gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), bufferNameToRender[attr.second.getBufferName()], attr.second.getElements(), attr.second.getDataType(), bufferStride[attr.second.getBufferName()], attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                        }
+                    }
+                }
+            }
+
+            if (instmesh){
+                for (auto const &attr : instmesh->buffer.getAttributes()) {
+                    gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), instmesh->buffer.getRender(), attr.second.getElements(), attr.second.getDataType(), instmesh->buffer.getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+                }
+            }
+
+            CullingMode gbufferCullingMode = mesh.cullingMode;
+            bool gbufferFaceCulling = (mesh.submeshes[i].textureShadow)? false : mesh.submeshes[i].faceCulling;
+
+            if (!gbufferRender.endLoad(PIP_GBUFFER, gbufferFaceCulling, gbufferCullingMode, mesh.windingOrder)){
+                return false;
+            }
+        }
+        //----------End G-buffer shader---------------
     }
 
     mesh.needReload = false;
@@ -1467,7 +1630,7 @@ bool RenderSystem::ensureSSAOFramebuffers(unsigned int width, unsigned int heigh
     return ssaoDepthFramebuffer.isCreated() && ssaoFramebuffer.isCreated() && ssaoBlurFramebuffer.isCreated();
 }
 
-void RenderSystem::renderSSAO(CameraComponent& camera){
+void RenderSystem::renderSSAO(CameraComponent& camera, TextureRender* sharedDepth){
     loadSSAO();
     if (!ssaoLoaded)
         return;
@@ -1477,16 +1640,63 @@ void RenderSystem::renderSSAO(CameraComponent& camera){
     if (!ensureSSAOFramebuffers(w, h))
         return;
 
-    // Use the logical (un-flipped) matrices for the pre-pass. We must NOT bake the
-    // main pass's flipY here: flipY reverses triangle winding, but PIP_DEPTH does
-    // not compensate (only PIP_RTT reverses winding on GL), so a flipped VP would
-    // cull front faces and capture the back faces. Instead the depth/AO buffers
-    // stay in logical orientation and mesh.frag flips Y when sampling (it knows via
-    // lighting.viewportInfo.w whether the color pass is rendering flipped).
-    Matrix4 renderVP = camera.viewProjectionMatrix;
     Matrix4 renderProj = camera.projectionMatrix;
 
-    // --- 1. depth pre-pass: camera-space packed depth for all opaque meshes ---
+    // --- 1. depth + normal source: reuse the SSR G-buffer (packed depth in color[0],
+    // view-space normal in color[1]) when available, otherwise run the SSAO depth
+    // pre-pass and reconstruct the normal from the depth gradient in the shader ---
+    bool useGBufferNormal = (sharedDepth != nullptr);
+    TextureRender* depthTexture = sharedDepth;
+    TextureRender* normalTexture; // G-buffer normal when shared, else an unused placeholder
+    if (!depthTexture){
+        renderDepthPrePass(camera);
+        depthTexture = &ssaoDepthFramebuffer.getRender().getColorTexture();
+        normalTexture = depthTexture; // placeholder binding; not sampled (params.w = 0)
+    }else{
+        normalTexture = &gbufferFramebuffer.getRender().getColorAttachmentTexture(1);
+    }
+
+    // --- 2. ssao pass (kernel was filled once in loadSSAO) ---
+    fs_ssao.projection = renderProj;
+    fs_ssao.invProjection = renderProj.inverse();
+    fs_ssao.params = Vector4(scene->getSSAORadius(), scene->getSSAOBias(), scene->getSSAOIntensity(), useGBufferNormal ? 1.0f : 0.0f);
+    // xy = noise tiling (4x4), zw = inverse depth-texture size (neighbour taps for normals)
+    fs_ssao.noiseScale = Vector4((float)w / 4.0f, (float)h / 4.0f, 1.0f / (float)w, 1.0f / (float)h);
+
+    ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+    ssaoPassRender.startRenderPass(&ssaoFramebuffer.getRender());
+    if (ssaoRender.beginDraw(PIP_RTT)){
+        ShaderData& sd = ssaoShader.get()->shaderData;
+        ssaoRender.addTexture(sd.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, depthTexture);
+        ssaoRender.addTexture(sd.getTextureIndex(TextureShaderType::GBUFFERTEXTURE), ShaderStageType::FRAGMENT, normalTexture);
+        ssaoRender.addTexture(sd.getTextureIndex(TextureShaderType::NOISETEXTURE), ShaderStageType::FRAGMENT, &ssaoNoiseTexture);
+        ssaoRender.applyUniformBlock(ssaoSlotParams, sizeof(fs_ssao_t), &fs_ssao);
+        ssaoRender.draw(3, 1);
+    }
+    ssaoPassRender.endRenderPass();
+
+    // --- 3. blur pass ---
+    fs_ssao_blur.texelSize = Vector4(1.0f / (float)w, 1.0f / (float)h, 0.0, 0.0);
+
+    ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+    ssaoPassRender.startRenderPass(&ssaoBlurFramebuffer.getRender());
+    if (ssaoBlurRender.beginDraw(PIP_RTT)){
+        ShaderData& bd = ssaoBlurShader.get()->shaderData;
+        ssaoBlurRender.addTexture(bd.getTextureIndex(TextureShaderType::SSAOTEXTURE), ShaderStageType::FRAGMENT, &ssaoFramebuffer.getRender().getColorTexture());
+        ssaoBlurRender.applyUniformBlock(ssaoBlurSlotParams, sizeof(fs_ssao_blur_t), &fs_ssao_blur);
+        ssaoBlurRender.draw(3, 1);
+    }
+    ssaoPassRender.endRenderPass();
+
+    currentSSAOTexture = &ssaoBlurFramebuffer.getRender().getColorTexture();
+}
+
+void RenderSystem::renderDepthPrePass(CameraComponent& camera){
+    // Logical (un-flipped) matrices: flipY reverses winding but PIP_DEPTH does not
+    // compensate (only PIP_RTT reverses winding on GL). The depth buffer therefore
+    // stays in logical orientation; SSAO/SSR consumers flip Y on GL when sampling.
+    Matrix4 renderVP = camera.viewProjectionMatrix;
+
     ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0)); // background -> depth ~1.0
     ssaoPassRender.startRenderPass(&ssaoDepthFramebuffer.getRender());
 
@@ -1510,39 +1720,350 @@ void RenderSystem::renderSSAO(CameraComponent& camera){
         drawMeshDepth(mesh, camera.farClip, camera.frustumPlanes, params, instmesh, terrain, true);
     }
     ssaoPassRender.endRenderPass();
+}
 
-    // --- 2. ssao pass (kernel was filled once in loadSSAO) ---
-    fs_ssao.projection = renderProj;
-    fs_ssao.invProjection = renderProj.inverse();
-    fs_ssao.params = Vector4(scene->getSSAORadius(), scene->getSSAOBias(), scene->getSSAOIntensity(), 0.0);
-    // xy = noise tiling (4x4), zw = inverse depth-texture size (neighbour taps for normals)
-    fs_ssao.noiseScale = Vector4((float)w / 4.0f, (float)h / 4.0f, 1.0f / (float)w, 1.0f / (float)h);
+bool RenderSystem::ensureGBufferFramebuffer(unsigned int width, unsigned int height){
+    if (width == 0 || height == 0)
+        return false;
 
-    ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
-    ssaoPassRender.startRenderPass(&ssaoFramebuffer.getRender());
-    if (ssaoRender.beginDraw(PIP_RTT)){
-        ShaderData& sd = ssaoShader.get()->shaderData;
-        ssaoRender.addTexture(sd.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, &ssaoDepthFramebuffer.getRender().getColorTexture());
-        ssaoRender.addTexture(sd.getTextureIndex(TextureShaderType::NOISETEXTURE), ShaderStageType::FRAGMENT, &ssaoNoiseTexture);
-        ssaoRender.applyUniformBlock(ssaoSlotParams, sizeof(fs_ssao_t), &fs_ssao);
-        ssaoRender.draw(3, 1);
+    if (gbufferFramebuffer.isCreated() && gbufferFramebuffer.getWidth() == width && gbufferFramebuffer.getHeight() == height)
+        return true;
+
+    gbufferFramebuffer.destroy();
+
+    // MRT: color[0] = packed depth (point-sampled like the depth pre-pass),
+    //      color[1] = view-space normal (oct .rg) + roughness (.b) + metallic (.a),
+    //      color[2] = linear base color (.rgb) + hasIBL flag (.a)
+    ColorFormat formats[3] = { ColorFormat::RGBA, ColorFormat::RGBA, ColorFormat::RGBA };
+    gbufferFramebuffer.setColorAttachments(3, formats);
+    gbufferFramebuffer.setWidth(width);
+    gbufferFramebuffer.setHeight(height);
+    gbufferFramebuffer.setMinFilter(TextureFilter::NEAREST);
+    gbufferFramebuffer.setMagFilter(TextureFilter::NEAREST);
+    gbufferFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    gbufferFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    gbufferFramebuffer.create();
+
+    return gbufferFramebuffer.isCreated();
+}
+
+bool RenderSystem::drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_gbuffer_t vsGBufferParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
+    if (!mesh.loaded)
+        return true;
+
+    if (mesh.worldAABB != AABB::ZERO && !isInsideCamera(cameraFar, frustumPlanes, mesh.worldAABB)) {
+        return false;
     }
-    ssaoPassRender.endRenderPass();
 
-    // --- 3. blur pass ---
-    fs_ssao_blur.texelSize = Vector4(1.0f / (float)w, 1.0f / (float)h, 0.0, 0.0);
+    for (int i = 0; i < mesh.numSubmeshes; i++){
+        // the G-buffer shader/render only exist when SSR was enabled at load time; a
+        // mesh loaded before SSR was toggled on is skipped until it reloads
+        if (!mesh.submeshes[i].gbufferShader)
+            continue;
 
-    ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
-    ssaoPassRender.startRenderPass(&ssaoBlurFramebuffer.getRender());
-    if (ssaoBlurRender.beginDraw(PIP_RTT)){
-        ShaderData& bd = ssaoBlurShader.get()->shaderData;
-        ssaoBlurRender.addTexture(bd.getTextureIndex(TextureShaderType::SSAOTEXTURE), ShaderStageType::FRAGMENT, &ssaoFramebuffer.getRender().getColorTexture());
-        ssaoBlurRender.applyUniformBlock(ssaoBlurSlotParams, sizeof(fs_ssao_blur_t), &fs_ssao_blur);
-        ssaoBlurRender.draw(3, 1);
+        ObjectRender& gbufferRender = mesh.submeshes[i].gbufferRender;
+
+        if (mesh.submeshes[i].needUpdateGBufferTexture){
+            ShaderData& gbufferShaderData = mesh.submeshes[i].gbufferShader.get()->shaderData;
+            if (loadGBufferTextures(mesh.submeshes[i].material, gbufferShaderData, mesh.submeshes[i].gbufferRender)){
+                mesh.submeshes[i].needUpdateGBufferTexture = false;
+            }
+        }
+
+        if (!gbufferRender.beginDraw(PIP_GBUFFER)){
+            mesh.needReload = true;
+            return false;
+        }
+
+        unsigned int instanceCount = 1;
+        if (instmesh){
+            instanceCount = instmesh->numVisible;
+        }
+
+        gbufferRender.applyUniformBlock(mesh.submeshes[i].slotVSGBufferParams, sizeof(vs_gbuffer_t), &vsGBufferParams);
+
+        fs_gbuffer_material_t mat;
+        mat.params = Vector4(mesh.submeshes[i].material.roughnessFactor, mesh.submeshes[i].material.metallicFactor, mesh.submeshes[i].hasIBL ? 1.0f : 0.0f, mesh.submeshes[i].textureShadow ? 1.0f : 0.0f);
+        mat.baseColorFactor = mesh.submeshes[i].material.baseColorFactor;
+        gbufferRender.applyUniformBlock(mesh.submeshes[i].slotFSGBufferMaterial, sizeof(fs_gbuffer_material_t), &mat);
+
+        if (mesh.submeshes[i].hasSkinning){
+            gbufferRender.applyUniformBlock(mesh.submeshes[i].slotVSGBufferSkinning, sizeof(float) * 16 * MAX_BONES + (sizeof(float) * 4), &mesh.bonesMatrix);
+        }
+        if (mesh.submeshes[i].hasMorphTarget){
+            if (!mesh.submeshes[i].hasMorphNormal && !mesh.submeshes[i].hasMorphTangent){
+                gbufferRender.applyUniformBlock(mesh.submeshes[i].slotVSGBufferMorphTarget, sizeof(float) * MAX_MORPHTARGETS, &mesh.morphWeights);
+            }else{
+                gbufferRender.applyUniformBlock(mesh.submeshes[i].slotVSGBufferMorphTarget, sizeof(float) * MAX_MORPHTARGETS / 2, &mesh.morphWeights);
+            }
+        }
+
+        if (terrain){
+            terrain->eyePos = terrain->views[0].nodesEyePos;
+            gbufferRender.applyUniformBlock(mesh.submeshes[i].slotVSGBufferTerrain, sizeof(float) * 8, &(terrain->eyePos));
+        }
+
+        gbufferRender.draw(mesh.submeshes[i].vertexCount, instanceCount);
     }
-    ssaoPassRender.endRenderPass();
 
-    currentSSAOTexture = &ssaoBlurFramebuffer.getRender().getColorTexture();
+    return true;
+}
+
+void RenderSystem::renderGBufferPass(CameraComponent& camera){
+    // Same logical orientation as renderDepthPrePass: PIP_GBUFFER (like PIP_DEPTH)
+    // does not reverse winding on GL, so color[0] depth matches the depth pre-pass
+    // and SSR's existing Y-flip logic applies unchanged. color[1] carries the
+    // view-space normal (octahedral) + roughness + metallic at the same texel layout.
+    Matrix4 renderVP = camera.viewProjectionMatrix;
+    Matrix4 viewMatrix = camera.viewMatrix;
+
+    gbufferPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0)); // color[0] background -> depth ~1.0
+    gbufferPassRender.startRenderPass(&gbufferFramebuffer.getRender());
+
+    auto transforms = scene->getComponentArray<Transform>();
+    for (int i = 0; i < transforms->size(); i++){
+        Transform& transform = transforms->getComponentFromIndex(i);
+        Entity entity = transforms->getEntity(i);
+        Signature signature = scene->getSignature(entity);
+
+        if (!signature.test(scene->getComponentId<MeshComponent>()))
+            continue;
+
+        MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
+        if (!transform.visible || mesh.transparent)
+            continue;
+
+        InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(entity);
+        TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
+
+        // view-space normal matrix = transpose(inverse(view * model))
+        Matrix4 viewModel = viewMatrix * transform.modelMatrix;
+        Matrix4 normalMatrix = viewModel.inverse().transpose();
+
+        vs_gbuffer_t params = {transform.modelMatrix, renderVP, normalMatrix};
+        drawMeshGBuffer(mesh, camera.farClip, camera.frustumPlanes, params, instmesh, terrain);
+    }
+    gbufferPassRender.endRenderPass();
+}
+
+void RenderSystem::loadSSR(){
+    if (ssrLoaded)
+        return;
+
+    // fullscreen SSR shaders may still be building (async in the editor)
+    ssrShader = ShaderPool::get(ShaderType::SSR, 0);
+    ssrBlurShader = ShaderPool::get(ShaderType::SSR_BLUR, 0);
+    compositeShader = ShaderPool::get(ShaderType::COMPOSITE, 0);
+    if (!ssrShader || !ssrShader->isCreated() || !ssrBlurShader || !ssrBlurShader->isCreated() || !compositeShader || !compositeShader->isCreated())
+        return;
+
+    // fullscreen ssr pass (vertexless: no attributes added)
+    ssrRender.beginLoad(PrimitiveType::TRIANGLES);
+    ssrRender.setShader(ssrShader.get());
+    ssrSlotParams = ssrShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::SSR_FS_PARAMS);
+    if (!ssrRender.endLoad(PIP_RTT, false, CullingMode::BACK, WindingOrder::CCW))
+        return;
+
+    // fullscreen glossy blur pass
+    ssrBlurRender.beginLoad(PrimitiveType::TRIANGLES);
+    ssrBlurRender.setShader(ssrBlurShader.get());
+    ssrBlurSlotParams = ssrBlurShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::SSR_BLUR_FS_PARAMS);
+    if (!ssrBlurRender.endLoad(PIP_RTT, false, CullingMode::BACK, WindingOrder::CCW))
+        return;
+
+    // composite targets either an offscreen framebuffer (PIP_RTT) or the swapchain
+    // (PIP_DEFAULT), so build both pipeline variants.
+    compositeRender.beginLoad(PrimitiveType::TRIANGLES);
+    compositeRender.setShader(compositeShader.get());
+    compositeSlotParams = compositeShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::COMPOSITE_FS_PARAMS);
+    if (!compositeRender.endLoad(PIP_RTT | PIP_DEFAULT, false, CullingMode::BACK, WindingOrder::CCW))
+        return;
+
+    ssrLoaded = true;
+}
+
+void RenderSystem::destroySSR(){
+    if (ssrLoaded){
+        ssrRender.destroy();
+        ssrBlurRender.destroy();
+        compositeRender.destroy();
+    }
+    if (ssrShader){
+        ssrShader.reset();
+        ShaderPool::remove(ShaderType::SSR, 0);
+    }
+    if (ssrBlurShader){
+        ssrBlurShader.reset();
+        ShaderPool::remove(ShaderType::SSR_BLUR, 0);
+    }
+    if (compositeShader){
+        compositeShader.reset();
+        ShaderPool::remove(ShaderType::COMPOSITE, 0);
+    }
+
+    gbufferFramebuffer.destroy();
+    sceneColorFramebuffer.destroy();
+    ssrFramebuffer.destroy();
+    ssrBlurFramebuffer.destroy();
+
+    ssrWidth = 0;
+    ssrHeight = 0;
+    ssrSlotParams = -1;
+    ssrBlurSlotParams = -1;
+    compositeSlotParams = -1;
+    ssrLoaded = false;
+}
+
+bool RenderSystem::ensureSSRFramebuffers(unsigned int width, unsigned int height){
+    if (width == 0 || height == 0)
+        return false;
+
+    if (sceneColorFramebuffer.isCreated() && ssrWidth == width && ssrHeight == height)
+        return true;
+
+    sceneColorFramebuffer.destroy();
+    ssrFramebuffer.destroy();
+    ssrBlurFramebuffer.destroy();
+
+    // offscreen opaque scene color (sampled bilinearly by ssr.frag); has a depth
+    // attachment so the redirected main color pass can depth-test normally.
+    sceneColorFramebuffer.setWidth(width);
+    sceneColorFramebuffer.setHeight(height);
+    sceneColorFramebuffer.setMinFilter(TextureFilter::LINEAR);
+    sceneColorFramebuffer.setMagFilter(TextureFilter::LINEAR);
+    sceneColorFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    sceneColorFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    sceneColorFramebuffer.create();
+
+    // reflection color + mask
+    ssrFramebuffer.setWidth(width);
+    ssrFramebuffer.setHeight(height);
+    ssrFramebuffer.setMinFilter(TextureFilter::LINEAR);
+    ssrFramebuffer.setMagFilter(TextureFilter::LINEAR);
+    ssrFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    ssrFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    ssrFramebuffer.create();
+
+    // glossy-blurred reflection (sampled by the composite when blur > 0)
+    ssrBlurFramebuffer.setWidth(width);
+    ssrBlurFramebuffer.setHeight(height);
+    ssrBlurFramebuffer.setMinFilter(TextureFilter::LINEAR);
+    ssrBlurFramebuffer.setMagFilter(TextureFilter::LINEAR);
+    ssrBlurFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    ssrBlurFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    ssrBlurFramebuffer.create();
+
+    ssrWidth = width;
+    ssrHeight = height;
+
+    return sceneColorFramebuffer.isCreated() && ssrFramebuffer.isCreated() && ssrBlurFramebuffer.isCreated();
+}
+
+void RenderSystem::renderSSR(CameraComponent& camera, FramebufferRender* destination){
+    unsigned int w = ssrWidth;
+    unsigned int h = ssrHeight;
+    if (w == 0 || h == 0)
+        return;
+
+    // The depth buffer is in logical orientation; the offscreen scene color was
+    // rendered with the same flip the destination would have used. On GL (with a
+    // framebuffer destination) the two differ by a Y flip; the same flag also makes
+    // the composite store an upright image. isRenderingFlipped captures exactly this
+    // (true only on GL when targeting a framebuffer, which SSR requires).
+    float flipGL = isRenderingFlipped(camera) ? 1.0f : 0.0f;
+    Matrix4 renderProj = camera.projectionMatrix;
+
+    // --- 1. ssr pass: march the depth buffer, sample offscreen scene color ---
+    fs_ssr.projection = renderProj;
+    fs_ssr.invProjection = renderProj.inverse();
+    fs_ssr.params = Vector4(scene->getSSRMaxDistance(), scene->getSSRThickness(), scene->getSSRIntensity(), (float)scene->getSSRMaxSteps());
+    // misc.w = glossy-blur amount, used only to scale the march jitter (0 => sharp, no jitter)
+    fs_ssr.misc = Vector4(1.0f / (float)w, 1.0f / (float)h, flipGL, scene->getSSRBlur());
+
+    ssrPassRender.setClearColor(Vector4(0.0, 0.0, 0.0, 0.0));
+    ssrPassRender.startRenderPass(&ssrFramebuffer.getRender());
+    if (ssrRender.beginDraw(PIP_RTT)){
+        ShaderData& sd = ssrShader.get()->shaderData;
+        ssrRender.addTexture(sd.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, &gbufferFramebuffer.getRender().getColorAttachmentTexture(0));
+        ssrRender.addTexture(sd.getTextureIndex(TextureShaderType::GBUFFERTEXTURE), ShaderStageType::FRAGMENT, &gbufferFramebuffer.getRender().getColorAttachmentTexture(1));
+        ssrRender.addTexture(sd.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, &sceneColorFramebuffer.getRender().getColorTexture());
+        ssrRender.applyUniformBlock(ssrSlotParams, sizeof(fs_ssr_t), &fs_ssr);
+        ssrRender.draw(3, 1);
+    }
+    ssrPassRender.endRenderPass();
+
+    // --- 2. optional glossy blur pass (premultiplied) ---
+    // ssrBlur in [0..1] maps to a pixel spread radius; 0 keeps sharp mirror
+    // reflections and skips the pass entirely. The blur ramps smoothly with the
+    // radius (the shader scales its tap offsets by it), so there is no hard step.
+    const float ssrBlurMaxRadius = 24.0f;
+    float blurRadius = scene->getSSRBlur() * ssrBlurMaxRadius;
+    TextureRender* reflectionTexture = &ssrFramebuffer.getRender().getColorTexture();
+    if (scene->getSSRBlur() > 0.001f && scene->getSSRDebugMode() == 0){
+        // blurRadius is the MAX radius (full roughness); the blur shader scales it
+        // per-pixel by the G-buffer roughness. w = flip (gbuffer is in depth space).
+        fs_ssr_blur.params = Vector4(1.0f / (float)w, 1.0f / (float)h, blurRadius, flipGL);
+
+        ssrPassRender.setClearColor(Vector4(0.0, 0.0, 0.0, 0.0));
+        ssrPassRender.startRenderPass(&ssrBlurFramebuffer.getRender());
+        if (ssrBlurRender.beginDraw(PIP_RTT)){
+            ShaderData& bd = ssrBlurShader.get()->shaderData;
+            ssrBlurRender.addTexture(bd.getTextureIndex(TextureShaderType::SSRTEXTURE), ShaderStageType::FRAGMENT, &ssrFramebuffer.getRender().getColorTexture());
+            ssrBlurRender.addTexture(bd.getTextureIndex(TextureShaderType::GBUFFERTEXTURE), ShaderStageType::FRAGMENT, &gbufferFramebuffer.getRender().getColorAttachmentTexture(1));
+            ssrBlurRender.applyUniformBlock(ssrBlurSlotParams, sizeof(fs_ssr_blur_t), &fs_ssr_blur);
+            ssrBlurRender.draw(3, 1);
+        }
+        ssrPassRender.endRenderPass();
+
+        reflectionTexture = &ssrBlurFramebuffer.getRender().getColorTexture();
+    }
+
+    // --- 3. composite pass: energy-conserving SSR-over-IBL -> real destination ---
+    // The composite recomputes the IBL specular term per pixel (for surfaces flagged
+    // hasIBL in the G-buffer) and replaces it with the SSR reflection, so the env
+    // reflection already in the scene is not double-counted.
+    fs_composite.invProjection = renderProj.inverse();
+    fs_composite.invView = camera.viewMatrix.inverse();
+    fs_composite.params = Vector4(scene->getSSRIntensity(), flipGL, (float)scene->getSSRDebugMode(), 0.0f);
+
+    // environment color/rotation, matching mesh.frag's lighting.envColor; the prefiltered
+    // GGX map comes from the sky (fall back to a black cube when there is no IBL sky)
+    fs_composite.envColor = Vector4(0.0, 0.0, 0.0, 0.0);
+    TextureRender* prefilteredTexture = &emptyCubeBlack;
+    {
+        auto skys = scene->getComponentArray<SkyComponent>();
+        if (skys->size() > 0){
+            SkyComponent& sky = skys->getComponentFromIndex(0);
+            if (sky.prefilteredMap){
+                prefilteredTexture = sky.prefilteredMap.get();
+                Vector3 linColor = Color::sRGBToLinear(Vector3(sky.color.x, sky.color.y, sky.color.z));
+                fs_composite.envColor = Vector4(linColor.x, linColor.y, linColor.z, Angle::defaultToRad(sky.rotation));
+            }
+        }
+    }
+
+    ssrPassRender.setClearColor(scene->getBackgroundColor());
+    PipelineType compositePip;
+    if (destination){
+        ssrPassRender.startRenderPass(destination);
+        compositePip = PIP_RTT;
+    }else{
+        ssrPassRender.startRenderPass();
+        ssrPassRender.applyViewport(Engine::getViewRect());
+        compositePip = PIP_DEFAULT;
+    }
+    if (compositeRender.beginDraw(compositePip)){
+        ShaderData& cd = compositeShader.get()->shaderData;
+        compositeRender.addTexture(cd.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, &sceneColorFramebuffer.getRender().getColorTexture());
+        compositeRender.addTexture(cd.getTextureIndex(TextureShaderType::SSRTEXTURE), ShaderStageType::FRAGMENT, reflectionTexture);
+        compositeRender.addTexture(cd.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, &gbufferFramebuffer.getRender().getColorAttachmentTexture(0));
+        compositeRender.addTexture(cd.getTextureIndex(TextureShaderType::GBUFFERTEXTURE), ShaderStageType::FRAGMENT, &gbufferFramebuffer.getRender().getColorAttachmentTexture(1));
+        compositeRender.addTexture(cd.getTextureIndex(TextureShaderType::GBUFFERALBEDOTEXTURE), ShaderStageType::FRAGMENT, &gbufferFramebuffer.getRender().getColorAttachmentTexture(2));
+        compositeRender.addTexture(cd.getTextureIndex(TextureShaderType::PREFILTEREDMAP), ShaderStageType::FRAGMENT, prefilteredTexture);
+        compositeRender.applyUniformBlock(compositeSlotParams, sizeof(fs_composite_t), &fs_composite);
+        compositeRender.draw(3, 1);
+    }
+    ssrPassRender.endRenderPass();
 }
 
 void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
@@ -1565,6 +2086,11 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
             if (submesh.depthShader){
                 submesh.depthShader.reset();
                 ShaderPool::remove(ShaderType::DEPTH, submesh.depthShaderProperties);
+            }
+            // G-buffer shader may have been loaded for SSR
+            if (submesh.gbufferShader){
+                submesh.gbufferShader.reset();
+                ShaderPool::remove(ShaderType::GBUFFER, submesh.gbufferShaderProperties);
             }
 
             //Destroy texture
@@ -1604,6 +2130,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
         //Destroy render
         submesh.render.destroy();
         submesh.depthRender.destroy();
+        submesh.gbufferRender.destroy();
 
         //Shaders uniforms
         submesh.slotVSParams = -1;
@@ -1620,6 +2147,12 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
         submesh.slotVSDepthSkinning = -1;
         submesh.slotVSDepthMorphTarget = -1;
         submesh.slotVSDepthTerrain = -1;
+
+        submesh.slotVSGBufferParams = -1;
+        submesh.slotFSGBufferMaterial = -1;
+        submesh.slotVSGBufferSkinning = -1;
+        submesh.slotVSGBufferMorphTarget = -1;
+        submesh.slotVSGBufferTerrain = -1;
     }
 
     //Destroy buffer
@@ -3591,6 +4124,9 @@ void RenderSystem::update(double dt){
                     if (mesh.submeshes[s].textureShadow){
                         mesh.submeshes[s].needUpdateDepthTexture = true;
                     }
+                    if (mesh.submeshes[s].gbufferShader){
+                        mesh.submeshes[s].needUpdateGBufferTexture = true;
+                    }
                     if (checkPBRTextures(mesh.submeshes[s].material, mesh.receiveLights)){
                         if (!(mesh.submeshes[s].shaderProperties & (1 << 1)) && !(mesh.submeshes[s].shaderProperties & (1 << 2))){ // not 'Uv1' and not 'Uv2'
                             mesh.needReload = true;
@@ -3872,12 +4408,33 @@ void RenderSystem::draw(){
             terrainView = (terrainViewCounter < MAX_TERRAIN_VIEWS) ? terrainViewCounter : 0;
         }
 
-        // Screen-space AO is produced once for the main camera (depth pre-pass +
-        // ssao + blur) before its color pass. Other cameras sample empty white
-        // (AO = 1) so their USE_SSAO meshes are unaffected.
+        // Screen-space reflections (main camera only). The G-buffer geometry pass runs
+        // FIRST so SSAO can share its depth (a single geometry pre-pass feeds both
+        // effects). Further below the opaque color pass is redirected into an offscreen
+        // buffer, then renderSSR() marches the G-buffer and composites reflections to the
+        // real destination. SSR requires a framebuffer destination (editor / render-to-
+        // texture / engine framebuffer): the meshes then already render flipped via
+        // PIP_RTT into the offscreen, which the orientation math relies on.
+        bool useSSR = false;
+        FramebufferRender* ssrDestination = nullptr;
+        if (isMainCamera && scene->isSSREnabled() && (Engine::getFramebuffer() || camera.renderToTexture)){
+            loadSSR();
+            unsigned int sw = (unsigned int)Engine::getViewRect().getWidth();
+            unsigned int sh = (unsigned int)Engine::getViewRect().getHeight();
+            if (ssrLoaded && ensureSSRFramebuffers(sw, sh) && ensureGBufferFramebuffer(sw, sh)){
+                renderGBufferPass(camera);
+                useSSR = true;
+            }
+        }
+
+        // Screen-space AO is produced once for the main camera before its color pass.
+        // When SSR is active its G-buffer already holds the camera depth (color[0]), so
+        // SSAO reuses it instead of running a second geometry pre-pass. Other cameras
+        // sample empty white (AO = 1) so their USE_SSAO meshes are unaffected.
         currentSSAOTexture = &emptyWhite;
         if (isMainCamera && scene->isSSAOEnabled()){
-            renderSSAO(camera);
+            TextureRender* sharedDepth = useSSR ? &gbufferFramebuffer.getRender().getColorAttachmentTexture(0) : nullptr;
+            renderSSAO(camera, sharedDepth);
         }
 
         if (Engine::getMainScene() == scene || camera.renderToTexture){
@@ -3888,8 +4445,24 @@ void RenderSystem::draw(){
             // and hide the main scene when reused as a layer.
             camera.render.setLoadActionLoad();
         }
-        
-        if (!camera.renderToTexture){
+
+        if (useSSR){
+            // capture the real destination for the composite pass, then redirect the
+            // scene into the offscreen color buffer
+            if (camera.renderToTexture){
+                if (!camera.framebuffer->isCreated()){
+                    camera.framebuffer->create();
+                }
+                ssrDestination = &camera.framebuffer->getRender();
+            }else{
+                if (!Engine::getFramebuffer()->isCreated()){
+                    Engine::getFramebuffer()->create();
+                }
+                ssrDestination = &Engine::getFramebuffer()->getRender();
+            }
+            camera.render.startRenderPass(&sceneColorFramebuffer.getRender());
+            camera.render.applyViewport(Rect(0, 0, (float)ssrWidth, (float)ssrHeight));
+        }else if (!camera.renderToTexture){
             if (Engine::getFramebuffer()){
                 if (!Engine::getFramebuffer()->isCreated()){
                     Engine::getFramebuffer()->create();
@@ -4062,6 +4635,12 @@ void RenderSystem::draw(){
         }
 
         camera.render.endRenderPass();
+
+        // SSR: march the offscreen scene color and composite reflections into the
+        // real destination (the swapchain or the captured framebuffer).
+        if (useSSR){
+            renderSSR(camera, ssrDestination);
+        }
 
     }
 

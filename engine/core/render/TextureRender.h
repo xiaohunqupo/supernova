@@ -36,8 +36,9 @@ namespace doriax {
                 TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV);
 
         bool createFramebufferTexture(
-                TextureType type, bool depth, bool shadowMap, int width, int height, 
-                TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV);
+                TextureType type, bool depth, bool shadowMap, int width, int height,
+                TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV,
+                ColorFormat colorFormat = ColorFormat::RGBA);
 
         void destroyTexture();
 

@@ -60,6 +60,7 @@ namespace doriax{
                         bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
                         bool terrain, bool instanced, bool ibl, bool mirror, bool ssao = false);
         static uint32_t getDepthMeshProperties(bool texture, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent, bool terrain, bool instanced);
+        static uint32_t getGBufferMeshProperties(bool baseColorTexture, bool normals, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent, bool terrain, bool instanced, bool metallicRoughnessTexture);
         static uint32_t getUIProperties(bool texture, bool fontAtlasTexture, bool vertexColorVec3, bool vertexColorVec4);
         static uint32_t getPointsProperties(bool texture, bool vertexColorVec3, bool vertexColorVec4, bool textureRect);
         static uint32_t getLinesProperties(bool vertexColorVec3, bool vertexColorVec4);

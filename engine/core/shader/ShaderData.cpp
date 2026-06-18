@@ -168,6 +168,10 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_fs_skyParams";
     }else if (type == UniformBlockType::DEPTH_VS_PARAMS){
         ustr = "u_vs_depthParams";
+    }else if (type == UniformBlockType::GBUFFER_VS_PARAMS){
+        ustr = "u_vs_gbufferParams";
+    }else if (type == UniformBlockType::GBUFFER_FS_MATERIAL){
+        ustr = "u_fs_gbufferMaterial";
     }else if (type == UniformBlockType::UI_VS_PARAMS){
         ustr = "u_vs_uiParams";
     }else if (type == UniformBlockType::UI_FS_PARAMS){
@@ -194,6 +198,12 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_fs_ssaoParams";
     }else if (type == UniformBlockType::SSAO_BLUR_FS_PARAMS){
         ustr = "u_fs_ssaoBlurParams";
+    }else if (type == UniformBlockType::SSR_FS_PARAMS){
+        ustr = "u_fs_ssrParams";
+    }else if (type == UniformBlockType::SSR_BLUR_FS_PARAMS){
+        ustr = "u_fs_ssrBlurParams";
+    }else if (type == UniformBlockType::COMPOSITE_FS_PARAMS){
+        ustr = "u_fs_compositeParams";
     }
 
     if (ustr.empty()){
@@ -292,6 +302,14 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_ssaoTexture";
     }else if (type == TextureShaderType::NOISETEXTURE){
         texstr = "u_noiseTexture";
+    }else if (type == TextureShaderType::SCENECOLORTEXTURE){
+        texstr = "u_sceneColorTexture";
+    }else if (type == TextureShaderType::SSRTEXTURE){
+        texstr = "u_ssrTexture";
+    }else if (type == TextureShaderType::GBUFFERTEXTURE){
+        texstr = "u_gbufferTexture";
+    }else if (type == TextureShaderType::GBUFFERALBEDOTEXTURE){
+        texstr = "u_albedoTexture";
     }
 
     if (texstr.empty()){

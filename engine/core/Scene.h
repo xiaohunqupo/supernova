@@ -48,6 +48,14 @@ namespace doriax{
         float ssaoBias;
         bool ssaoDebug;
 
+        bool ssrEnabled;
+        float ssrMaxDistance;   // max ray length in view-space units
+        float ssrThickness;     // depth-compare tolerance (view-space units)
+        int ssrMaxSteps;        // linear march sample count
+        float ssrIntensity;     // reflection strength multiplier
+        float ssrBlur;          // glossy blur amount [0..1] (0 = sharp/mirror)
+        int ssrDebugMode;       // 0=off,1=reflection,2=normal,3=roughness,4=metallic,5=albedo,6=IBL specular
+
         UIEventState uiEventState;
 
         std::vector<std::pair<std::string, std::shared_ptr<SubSystem>>> systems;
@@ -121,6 +129,27 @@ namespace doriax{
 
         void setSSAODebug(bool debug);
         bool isSSAODebug() const;
+
+        void setSSREnabled(bool ssrEnabled);
+        bool isSSREnabled() const;
+
+        void setSSRMaxDistance(float maxDistance);
+        float getSSRMaxDistance() const;
+
+        void setSSRThickness(float thickness);
+        float getSSRThickness() const;
+
+        void setSSRMaxSteps(int maxSteps);
+        int getSSRMaxSteps() const;
+
+        void setSSRIntensity(float intensity);
+        float getSSRIntensity() const;
+
+        void setSSRBlur(float blur);
+        float getSSRBlur() const;
+
+        void setSSRDebugMode(int mode);
+        int getSSRDebugMode() const;
 
         void setLightState(LightState state);
         LightState getLightState() const;

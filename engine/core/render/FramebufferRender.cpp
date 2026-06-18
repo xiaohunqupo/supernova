@@ -27,6 +27,13 @@ bool FramebufferRender::createFramebuffer(TextureType textureType, int width, in
         return false;
 }
 
+bool FramebufferRender::createFramebufferMRT(int width, int height, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV, int numColor, const ColorFormat* formats){
+    if (Engine::isViewLoaded() && !isCreated())
+        return backend.createFramebufferMRT(width, height, minFilter, magFilter, wrapU, wrapV, numColor, formats);
+    else
+        return false;
+}
+
 void FramebufferRender::destroyFramebuffer(){
     backend.destroyFramebuffer();
 }
@@ -37,6 +44,14 @@ bool FramebufferRender::isCreated(){
 
 TextureRender& FramebufferRender::getColorTexture(){
     return backend.getColorTexture();
+}
+
+TextureRender& FramebufferRender::getColorAttachmentTexture(int index){
+    return backend.getColorTexture(index);
+}
+
+int FramebufferRender::getNumColorAttachments() const{
+    return backend.getNumColorAttachments();
 }
 
 TextureRender& FramebufferRender::getDepthTexture(){

@@ -228,12 +228,48 @@ namespace doriax::editor{
                     return scene->isSSAODebug();
                 }
             }
+            else if (propertyName == "ssr_enabled") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    return scene->isSSREnabled();
+                }
+            }
+            else if (propertyName == "ssr_max_distance") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getSSRMaxDistance();
+                }
+            }
+            else if (propertyName == "ssr_thickness") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getSSRThickness();
+                }
+            }
+            else if (propertyName == "ssr_intensity") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getSSRIntensity();
+                }
+            }
+            else if (propertyName == "ssr_blur") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getSSRBlur();
+                }
+            }
+            else if (propertyName == "ssr_max_steps") {
+                if constexpr (std::is_same_v<T, int>) {
+                    return scene->getSSRMaxSteps();
+                }
+            }
+            else if (propertyName == "ssr_debug_mode") {
+                if constexpr (std::is_same_v<T, int>) {
+                    return scene->getSSRDebugMode();
+                }
+            }
 
             // Return default value if property not found
             if constexpr (std::is_same_v<T, Vector4>) return Vector4(0.0, 0.0, 0.0, 1.0);
             if constexpr (std::is_same_v<T, Vector3>) return Vector3(1.0, 1.0, 1.0);
             if constexpr (std::is_same_v<T, bool>) return false;
             if constexpr (std::is_same_v<T, float>) return 0.0f;
+            if constexpr (std::is_same_v<T, int>) return 0;
             if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
             // Add other types as needed
         }
@@ -290,6 +326,41 @@ namespace doriax::editor{
             else if (propertyName == "ssao_debug") {
                 if constexpr (std::is_same_v<T, bool>) {
                     scene->setSSAODebug(value);
+                }
+            }
+            else if (propertyName == "ssr_enabled") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    scene->setSSREnabled(value);
+                }
+            }
+            else if (propertyName == "ssr_max_distance") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setSSRMaxDistance(value);
+                }
+            }
+            else if (propertyName == "ssr_thickness") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setSSRThickness(value);
+                }
+            }
+            else if (propertyName == "ssr_intensity") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setSSRIntensity(value);
+                }
+            }
+            else if (propertyName == "ssr_blur") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setSSRBlur(value);
+                }
+            }
+            else if (propertyName == "ssr_max_steps") {
+                if constexpr (std::is_same_v<T, int>) {
+                    scene->setSSRMaxSteps(value);
+                }
+            }
+            else if (propertyName == "ssr_debug_mode") {
+                if constexpr (std::is_same_v<T, int>) {
+                    scene->setSSRDebugMode(value);
                 }
             }
         }

@@ -1,9 +1,10 @@
 #version 450
 
 // Screen-space ambient occlusion (hemisphere kernel, depth-source).
-// Reconstructs view-space position and normal from the camera depth pre-pass
-// (packed NDC depth in u_depthTexture) and accumulates occlusion over a
-// randomly-rotated hemisphere kernel. Output: AO factor in [0,1] (1 = unoccluded).
+// Reconstructs the view-space position from the packed NDC depth (u_depthTexture)
+// and accumulates occlusion over a randomly-rotated hemisphere kernel. The surface
+// normal comes from the SSR G-buffer when available (params.w), otherwise it is
+// reconstructed from the depth gradient. Output: AO factor in [0,1] (1 = unoccluded).
 
 #ifndef SSAO_KERNEL_SIZE
 #define SSAO_KERNEL_SIZE 32
@@ -16,16 +17,19 @@ uniform texture2D u_depthTexture;
 uniform sampler u_depth_smp;
 uniform texture2D u_noiseTexture;
 uniform sampler u_noise_smp;
+uniform texture2D u_gbufferTexture;   // SSR G-buffer view-space normal (oct .rg); used when params.w > 0.5
+uniform sampler u_gbuffer_smp;
 
 uniform u_fs_ssaoParams {
     mat4 projection;
     mat4 invProjection;
     vec4 kernel[SSAO_KERNEL_SIZE];
-    vec4 params;     // x = radius, y = bias, z = intensity(power), w = unused
+    vec4 params;     // x = radius, y = bias, z = intensity(power), w = use G-buffer normal
     vec4 noiseScale; // xy = screenSize / noiseSize (tile the noise); zw = 1/depthTextureSize
 } ssao;
 
 #include "includes/depth_util.glsl"
+#include "includes/octahedral.glsl"
 
 vec3 reconstructViewPos(vec2 uv, float depth01){
     vec3 ndc = vec3(uv * 2.0 - 1.0, depth01 * 2.0 - 1.0);
@@ -47,22 +51,29 @@ void main(){
 
     vec3 P = reconstructViewPos(v_texcoord, depth01);
 
-    // View-space normal reconstructed from depth. Naive cross(dFdx,dFdy) produces
-    // garbage normals at silhouettes (the derivative straddles a depth jump) which
-    // shows up as dark AO halos along edges. Instead tap the 4 neighbours and build
-    // the gradient from whichever side is closer in depth, never crossing an edge.
-    vec2 texel = ssao.noiseScale.zw;
-    float dl = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord - vec2(texel.x, 0.0)));
-    float dr = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord + vec2(texel.x, 0.0)));
-    float dd = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord - vec2(0.0, texel.y)));
-    float du = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord + vec2(0.0, texel.y)));
-    vec3 Pl = reconstructViewPos(v_texcoord - vec2(texel.x, 0.0), dl);
-    vec3 Pr = reconstructViewPos(v_texcoord + vec2(texel.x, 0.0), dr);
-    vec3 Pd = reconstructViewPos(v_texcoord - vec2(0.0, texel.y), dd);
-    vec3 Pu = reconstructViewPos(v_texcoord + vec2(0.0, texel.y), du);
-    vec3 dpdx = (abs(Pr.z - P.z) < abs(P.z - Pl.z)) ? (Pr - P) : (P - Pl);
-    vec3 dpdy = (abs(Pu.z - P.z) < abs(P.z - Pd.z)) ? (Pu - P) : (P - Pd);
-    vec3 n = normalize(cross(dpdx, dpdy));
+    vec3 n;
+    if (ssao.params.w > 0.5){
+        // real geometric view-space normal from the SSR G-buffer (same buffer/space
+        // as the depth above), avoiding depth-gradient reconstruction artifacts
+        n = octDecode(texture(sampler2D(u_gbufferTexture, u_gbuffer_smp), v_texcoord).rg);
+    }else{
+        // View-space normal reconstructed from depth. Naive cross(dFdx,dFdy) produces
+        // garbage normals at silhouettes (the derivative straddles a depth jump) which
+        // shows up as dark AO halos along edges. Instead tap the 4 neighbours and build
+        // the gradient from whichever side is closer in depth, never crossing an edge.
+        vec2 texel = ssao.noiseScale.zw;
+        float dl = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord - vec2(texel.x, 0.0)));
+        float dr = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord + vec2(texel.x, 0.0)));
+        float dd = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord - vec2(0.0, texel.y)));
+        float du = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), v_texcoord + vec2(0.0, texel.y)));
+        vec3 Pl = reconstructViewPos(v_texcoord - vec2(texel.x, 0.0), dl);
+        vec3 Pr = reconstructViewPos(v_texcoord + vec2(texel.x, 0.0), dr);
+        vec3 Pd = reconstructViewPos(v_texcoord - vec2(0.0, texel.y), dd);
+        vec3 Pu = reconstructViewPos(v_texcoord + vec2(0.0, texel.y), du);
+        vec3 dpdx = (abs(Pr.z - P.z) < abs(P.z - Pl.z)) ? (Pr - P) : (P - Pl);
+        vec3 dpdy = (abs(Pu.z - P.z) < abs(P.z - Pd.z)) ? (Pu - P) : (P - Pd);
+        n = normalize(cross(dpdx, dpdy));
+    }
     if (dot(n, P) > 0.0) n = -n; // orient toward the camera
 
     // per-pixel random rotation, tiled across the screen

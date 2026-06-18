@@ -11433,6 +11433,39 @@ void editor::Properties::show(){
 
                     ImGui::EndTable();
                 }
+
+                ImGui::SeparatorText("Reflections (SSR)");
+
+                if (ImGui::BeginTable("scene_ssr_settings_table", 2, tableFlags)) {
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Max Distance").x);
+                    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                    drawScenePropertyRow<bool>(sceneProject, "ssr_enabled", "Enabled", ScenePropertyInputType::Checkbox);
+
+                    if (doriax::editor::Catalog::getSceneProperty<bool>(sceneProject->scene, "ssr_enabled")) {
+                        drawScenePropertyRow<float>(sceneProject, "ssr_max_distance", "Max Distance", ScenePropertyInputType::SliderFloat, 1.0f, 50.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssr_thickness", "Thickness", ScenePropertyInputType::SliderFloat, 0.05f, 4.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssr_intensity", "Intensity", ScenePropertyInputType::SliderFloat, 0.0f, 2.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssr_blur", "Glossy Blur", ScenePropertyInputType::SliderFloat, 0.0f, 1.0f);
+
+                        // Debug View: visualize the SSR G-buffer channels (centralized in the composite)
+                        {
+                            const char* ssrDebugNames[] = { "Off", "Reflection", "Normal", "Roughness", "Metallic", "Albedo", "IBL Specular" };
+                            int debugMode = doriax::editor::Catalog::getSceneProperty<int>(sceneProject->scene, "ssr_debug_mode");
+                            ImGui::TableNextRow();
+                            ImGui::TableSetColumnIndex(0);
+                            ImGui::Text("Debug View");
+                            ImGui::TableSetColumnIndex(1);
+                            ImGui::SetNextItemWidth(-1);
+                            if (ImGui::Combo("##ssr_debug_mode", &debugMode, ssrDebugNames, IM_ARRAYSIZE(ssrDebugNames))) {
+                                Command* cmd = new ScenePropertyCmd<int>(sceneProject, "ssr_debug_mode", debugMode);
+                                CommandHandle::get(sceneProject->id)->addCommand(cmd);
+                            }
+                        }
+                    }
+
+                    ImGui::EndTable();
+                }
             }
         }
 

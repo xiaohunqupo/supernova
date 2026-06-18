@@ -30,12 +30,15 @@ namespace doriax{
 
         ObjectRender render;
         ObjectRender depthRender;
+        ObjectRender gbufferRender;
 
         std::shared_ptr<ShaderRender> shader;
         std::shared_ptr<ShaderRender> depthShader;
+        std::shared_ptr<ShaderRender> gbufferShader;
 
         uint32_t shaderProperties = 0;
         uint32_t depthShaderProperties = 0;
+        uint32_t gbufferShaderProperties = 0;
 
         int slotVSParams = -1;
         int slotFSParams = -1;
@@ -54,6 +57,12 @@ namespace doriax{
         int slotVSDepthMorphTarget = -1;
         int slotVSDepthTerrain = -1;
 
+        int slotVSGBufferParams = -1;
+        int slotFSGBufferMaterial = -1;
+        int slotVSGBufferSkinning = -1;
+        int slotVSGBufferMorphTarget = -1;
+        int slotVSGBufferTerrain = -1;
+
         Rect textureRect = Rect(0.0, 0.0, 1.0, 1.0);
 
         PrimitiveType primitiveType = PrimitiveType::TRIANGLES;
@@ -61,8 +70,10 @@ namespace doriax{
 
         bool faceCulling = true;
         bool textureShadow = false;
-        
+
         bool hasTexCoord1 = false;
+        bool hasNormal = false;
+        bool hasIBL = false;
         bool hasNormalMap = false;
         bool hasTangent = false;
         bool hasVertexColor4 = false;
@@ -74,6 +85,7 @@ namespace doriax{
 
         bool needUpdateTexture = false;
         bool needUpdateDepthTexture = false;
+        bool needUpdateGBufferTexture = false;
 
         bool generated = false;
     };

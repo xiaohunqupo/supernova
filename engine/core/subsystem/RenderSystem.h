@@ -61,6 +61,17 @@ namespace doriax{
 	    Matrix4 lightSpaceMatrix;
 	} vs_depth_t;
 
+	typedef struct vs_gbuffer_t {
+		Matrix4 modelMatrix;
+		Matrix4 viewProjectionMatrix;
+		Matrix4 normalMatrix;       // view-space normal matrix: transpose(inverse(view*model))
+	} vs_gbuffer_t;
+
+	typedef struct fs_gbuffer_material_t {
+		Vector4 params;             // x = roughness, y = metallic, z = hasIBL, w = unused
+		Vector4 baseColorFactor;
+	} fs_gbuffer_material_t;
+
 	typedef struct fs_ssao_t {
 		Matrix4 projection;
 		Matrix4 invProjection;
@@ -72,6 +83,24 @@ namespace doriax{
 	typedef struct fs_ssao_blur_t {
 		Vector4 texelSize; // 1.0/textureSize in .xy
 	} fs_ssao_blur_t;
+
+	typedef struct fs_ssr_t {
+		Matrix4 projection;
+		Matrix4 invProjection;
+		Vector4 params; // x=maxDistance, y=thickness, z=intensity, w=maxSteps
+		Vector4 misc;   // xy=1/depthTextureSize, z=flip scene-color Y (GL), w=glossy-blur amount
+	} fs_ssr_t;
+
+	typedef struct fs_ssr_blur_t {
+		Vector4 params; // xy=1/textureSize, z=max radius(pixels), w=flip gbuffer Y (GL)
+	} fs_ssr_blur_t;
+
+	typedef struct fs_composite_t {
+		Matrix4 invProjection;
+		Matrix4 invView;
+		Vector4 params;   // x=intensity, y=flip gbuffer Y (GL), z=debug, w=unused
+		Vector4 envColor; // rgb = env color (linear), w = env rotation (radians)
+	} fs_composite_t;
 
 	typedef struct vs_points_params_t {
 		Matrix4 mvpMatrix;
@@ -153,6 +182,32 @@ namespace doriax{
 		int ssaoBlurSlotParams;
 		TextureRender* currentSSAOTexture; // AO bound to meshes this camera (or empty white)
 
+		// SSR: per-frame fullscreen passes for the main camera. The opaque color pass
+		// renders into sceneColorFramebuffer, the ssr pass marches the depth pre-pass
+		// and samples that color, then the composite pass blends reflections into the
+		// real render target.
+		bool ssrLoaded;
+		unsigned int ssrWidth;
+		unsigned int ssrHeight;
+		Framebuffer gbufferFramebuffer;    // MRT: color[0] packed depth, color[1] view-space normal/roughness/metallic
+		Framebuffer sceneColorFramebuffer; // offscreen opaque scene color (top-left)
+		Framebuffer ssrFramebuffer;        // reflection color + mask (logical orientation)
+		Framebuffer ssrBlurFramebuffer;    // glossy-blurred reflection
+		CameraRender gbufferPassRender;    // drives the MRT G-buffer geometry pass
+		CameraRender ssrPassRender;        // drives the offscreen ssr + composite passes
+		ObjectRender ssrRender;            // fullscreen ssr.frag draw
+		ObjectRender ssrBlurRender;        // fullscreen ssr_blur.frag draw
+		ObjectRender compositeRender;      // fullscreen composite.frag draw
+		std::shared_ptr<ShaderRender> ssrShader;
+		std::shared_ptr<ShaderRender> ssrBlurShader;
+		std::shared_ptr<ShaderRender> compositeShader;
+		fs_ssr_t fs_ssr;
+		fs_ssr_blur_t fs_ssr_blur;
+		fs_composite_t fs_composite;
+		int ssrSlotParams;
+		int ssrBlurSlotParams;
+		int compositeSlotParams;
+
 		static void changeLoaded(void* data);
 		static void changeDestroy(void* data);
 
@@ -177,6 +232,7 @@ namespace doriax{
 		bool loadPBRTextures(Material& material, ShaderData& shaderData, ObjectRender& render, bool receiveLights);
 		void loadShadowTextures(ShaderData& shaderData, ObjectRender& render, bool receiveLights, bool receiveShadow);
 		bool loadDepthTexture(Material& material, ShaderData& shaderData, ObjectRender& render);
+		bool loadGBufferTextures(Material& material, ShaderData& shaderData, ObjectRender& render);
 		bool loadTerrainTextures(TerrainComponent& terrain, ObjectRender& render, ShaderData& shaderData);
 		Rect getScissorRect(UILayoutComponent& layout, ImageComponent& img, Transform& transform, CameraComponent& camera);
 
@@ -197,7 +253,21 @@ namespace doriax{
 		void loadSSAO();
 		void destroySSAO();
 		bool ensureSSAOFramebuffers(unsigned int width, unsigned int height);
-		void renderSSAO(CameraComponent& camera);
+		// sharedDepth != null reuses an existing packed-depth texture (the SSR G-buffer),
+		// skipping the SSAO depth pre-pass; null runs the pre-pass
+		void renderSSAO(CameraComponent& camera, TextureRender* sharedDepth = nullptr);
+
+		// SSR
+		void loadSSR();
+		void destroySSR();
+		bool ensureSSRFramebuffers(unsigned int width, unsigned int height);
+		void renderDepthPrePass(CameraComponent& camera); // shared depth for SSAO/SSR
+		// G-buffer geometry pass for SSR: MRT packed depth + view-space normal/roughness/metallic
+		bool ensureGBufferFramebuffer(unsigned int width, unsigned int height);
+		void renderGBufferPass(CameraComponent& camera);
+		bool drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_gbuffer_t vsGBufferParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain);
+		// destination == nullptr renders the composite to the swapchain (backbuffer)
+		void renderSSR(CameraComponent& camera, FramebufferRender* destination);
 
 		bool drawUI(UIComponent& ui, Transform& transform, bool renderToTexture);
 		void destroyUI(Entity entity, UIComponent& ui);

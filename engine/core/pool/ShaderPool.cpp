@@ -69,6 +69,18 @@ bool ShaderPool::parseShaderTypeToken(const std::string& typeToken, ShaderType& 
         shaderType = ShaderType::SSAO_BLUR;
         return true;
     }
+    if (typeToken == "ssr") {
+        shaderType = ShaderType::SSR;
+        return true;
+    }
+    if (typeToken == "ssrblur") {
+        shaderType = ShaderType::SSR_BLUR;
+        return true;
+    }
+    if (typeToken == "composite") {
+        shaderType = ShaderType::COMPOSITE;
+        return true;
+    }
 
     return false;
 }
@@ -249,12 +261,16 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
     switch (shaderType) {
         case ShaderType::MESH:   return lowerCase ? "mesh"   : "Mesh";
         case ShaderType::DEPTH:  return lowerCase ? "depth"  : "Depth";
+        case ShaderType::GBUFFER: return lowerCase ? "gbuffer" : "GBuffer";
         case ShaderType::SKYBOX: return lowerCase ? "sky"    : "Skybox";
         case ShaderType::UI:     return lowerCase ? "ui"     : "UI";
         case ShaderType::POINTS: return lowerCase ? "points" : "Points";
         case ShaderType::LINES:  return lowerCase ? "lines"  : "Lines";
         case ShaderType::SSAO:   return lowerCase ? "ssao"   : "SSAO";
         case ShaderType::SSAO_BLUR: return lowerCase ? "ssaoblur" : "SSAO Blur";
+        case ShaderType::SSR:    return lowerCase ? "ssr"    : "SSR";
+        case ShaderType::SSR_BLUR: return lowerCase ? "ssrblur" : "SSR Blur";
+        case ShaderType::COMPOSITE: return lowerCase ? "composite" : "Composite";
         default:                 return lowerCase ? "unknown": "Unknown";
     }
 }
@@ -263,12 +279,16 @@ int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
     switch (shaderType) {
         case ShaderType::MESH:   return 22;
         case ShaderType::DEPTH:  return 7;
+        case ShaderType::GBUFFER: return 9;
         case ShaderType::UI:     return 4;
         case ShaderType::POINTS: return 4;
         case ShaderType::LINES:  return 2;
         case ShaderType::SKYBOX: return 0;
         case ShaderType::SSAO:   return 0;
         case ShaderType::SSAO_BLUR: return 0;
+        case ShaderType::SSR:    return 0;
+        case ShaderType::SSR_BLUR: return 0;
+        case ShaderType::COMPOSITE: return 0;
         default:                 return 0;
     }
 }
@@ -308,6 +328,18 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 4: return shortName ? "Mtg" : "Morph Tangent";
             case 5: return shortName ? "Ter" : "Terrain";
             case 6: return shortName ? "Ist" : "Instancing";
+        }
+    } else if (shaderType == ShaderType::GBUFFER) {
+        switch (bit) {
+            case 0: return shortName ? "Bct" : "Base Color Texture";
+            case 1: return shortName ? "Nor" : "Normals";
+            case 2: return shortName ? "Ski" : "Skinning";
+            case 3: return shortName ? "Mta" : "Morph Target";
+            case 4: return shortName ? "Mnr" : "Morph Normal";
+            case 5: return shortName ? "Mtg" : "Morph Tangent";
+            case 6: return shortName ? "Ter" : "Terrain";
+            case 7: return shortName ? "Ist" : "Instancing";
+            case 8: return shortName ? "Mrt" : "MetalRough Texture";
         }
     } else if (shaderType == ShaderType::UI) {
         switch (bit) {
@@ -472,6 +504,22 @@ uint32_t ShaderPool::getDepthMeshProperties(bool texture, bool skinning, bool mo
     prop |= morphTangent     ? (1 <<  4) : 0;
     prop |= terrain          ? (1 <<  5) : 0;
     prop |= instanced        ? (1 <<  6) : 0;
+
+    return prop;
+}
+
+uint32_t ShaderPool::getGBufferMeshProperties(bool baseColorTexture, bool normals, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent, bool terrain, bool instanced, bool metallicRoughnessTexture){
+    uint32_t prop = 0;
+
+    prop |= baseColorTexture        ? (1 <<  0) : 0;
+    prop |= normals                 ? (1 <<  1) : 0;
+    prop |= skinning                ? (1 <<  2) : 0;
+    prop |= morphTarget             ? (1 <<  3) : 0;
+    prop |= morphNormal             ? (1 <<  4) : 0;
+    prop |= morphTangent            ? (1 <<  5) : 0;
+    prop |= terrain                 ? (1 <<  6) : 0;
+    prop |= instanced               ? (1 <<  7) : 0;
+    prop |= metallicRoughnessTexture ? (1 << 8) : 0;
 
     return prop;
 }

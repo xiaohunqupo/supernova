@@ -45,9 +45,13 @@ namespace doriax{
         MESH,
         SKYBOX,
         DEPTH,
+        GBUFFER,    // mesh geometry pass: MRT packed depth + view-space normal/roughness/metallic (SSR)
         UI,
         SSAO,       // fullscreen screen-space ambient occlusion pass
-        SSAO_BLUR   // fullscreen depth-aware blur of the SSAO result
+        SSAO_BLUR,  // fullscreen depth-aware blur of the SSAO result
+        SSR,        // fullscreen screen-space reflections pass
+        SSR_BLUR,   // fullscreen premultiplied blur of the SSR result (glossy)
+        COMPOSITE   // fullscreen composite of scene color + SSR reflections
     };
 
     enum class AttributeType{
@@ -110,6 +114,8 @@ namespace doriax{
         SKY_VS_PARAMS,
         SKY_FS_PARAMS,
         DEPTH_VS_PARAMS,
+        GBUFFER_VS_PARAMS,
+        GBUFFER_FS_MATERIAL,
         SPRITE_VS_PARAMS,
         UI_VS_PARAMS,
         UI_FS_PARAMS,
@@ -122,7 +128,10 @@ namespace doriax{
         TERRAIN_VS_PARAMS,
         DEPTH_TERRAIN_VS_PARAMS,
         SSAO_FS_PARAMS,
-        SSAO_BLUR_FS_PARAMS
+        SSAO_BLUR_FS_PARAMS,
+        SSR_FS_PARAMS,
+        SSR_BLUR_FS_PARAMS,
+        COMPOSITE_FS_PARAMS
     };
 
     enum class StorageBufferType{
@@ -156,7 +165,11 @@ namespace doriax{
         TERRAINDETAIL_BLUE,
         DEPTHTEXTURE,
         SSAOTEXTURE,
-        NOISETEXTURE
+        NOISETEXTURE,
+        SCENECOLORTEXTURE,
+        SSRTEXTURE,
+        GBUFFERTEXTURE,      // view-space normal (rg, octahedral) + roughness (b) + metallic (a)
+        GBUFFERALBEDOTEXTURE // linear base color (rgb) + hasIBL flag (a)
     };
 
     enum class TextureType {
@@ -203,7 +216,8 @@ namespace doriax{
         PIP_DEFAULT     = 1 << 0,
         PIP_RTT         = 1 << 1,
         PIP_DEPTH       = 1 << 2,
-        PIP_RTT_INVERT  = 1 << 3  // render-to-texture with reversed winding (planar reflection)
+        PIP_RTT_INVERT  = 1 << 3, // render-to-texture with reversed winding (planar reflection)
+        PIP_GBUFFER     = 1 << 4  // geometry pass with 2 color attachments (packed depth + normal/roughness)
     };
 
     //-------Start shader definition--------
