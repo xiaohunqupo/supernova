@@ -86,6 +86,12 @@ namespace doriax::editor{
         // default dock slot even when the ini has a saved position for them.
         bool forceDockTabs = false;
 
+        // captureTabOrder() mirrors the live tab order into project.tabs every
+        // frame; these debounce persisting that to project.yaml until the user
+        // stops dragging (a reorder triggers no save on its own otherwise).
+        bool tabsOrderDirty = false;
+        double tabsOrderChangeTime = 0.0;
+
         // Backing buffer for ImGui's io.IniFilename (must outlive ImGui).
         std::string layoutIniPath;
 
@@ -125,6 +131,8 @@ namespace doriax::editor{
         void buildDefaultLayout();
         void dockProjectTabs();
         void dockTabWindow(const std::string& windowName);
+        void captureTabOrder();
+        std::string tabWindowName(const TabEntry& tab) const;
         ImGuiID getCentralDockId();
         void kewtStyleTheme();
         void processNextSaveDialog();

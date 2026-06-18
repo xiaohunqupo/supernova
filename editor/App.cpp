@@ -24,6 +24,8 @@
 
 #include <filesystem>
 #include <cstdlib>
+#include <algorithm>
+#include <limits>
 
 #if defined(_WIN32)
   #include <windows.h>
@@ -728,6 +730,83 @@ void editor::App::dockProjectTabs(){
             addNewSceneToDock(sceneProject.id);
         }
     }
+
+    // Make the saved tab list authoritative for tab ordering. Scene window ids
+    // (###Scene<id>) are reassigned on every load, so the per-window DockOrder
+    // ImGui keeps in its ini can't be matched back to a scene. Stamp a sequential
+    // DockOrder onto each tab's window settings from project.tabs order so the
+    // shared central node restores its tabs in the order the user left them
+    // (captured live by captureTabOrder()). ImGui copies this onto the window's
+    // DockOrder when it is created, and tabs appearing on the same frame are
+    // sorted by it.
+    short dockOrder = 0;
+    for (const auto& tab : project.getTabs()) {
+        const std::string windowName = tabWindowName(tab);
+        if (windowName.empty()) continue;
+        ImGuiID windowId = ImHashStr(windowName.c_str());
+        ImGuiWindowSettings* settings = ImGui::FindWindowSettingsByID(windowId);
+        if (!settings) settings = ImGui::CreateNewWindowSettings(windowName.c_str());
+        settings->DockOrder = dockOrder++;
+    }
+}
+
+std::string editor::App::tabWindowName(const TabEntry& tab) const {
+    if (tab.type == TabType::SCENE) {
+        for (const auto& sceneProject : project.getScenes()) {
+            if (sceneProject.opened && sceneProject.filepath.string() == tab.filepath) {
+                return "###Scene" + std::to_string(sceneProject.id);
+            }
+        }
+        return {};
+    }
+    // CodeEditor docks its windows as "###<relative-filepath>" (see getWindowTitle()).
+    return "###" + tab.filepath;
+}
+
+void editor::App::captureTabOrder() {
+    // Mirror the live ImGui tab order back into project.tabs so a user's
+    // drag-reordering of scene/code tabs survives a save and the next launch.
+    // ImGui keeps each window's visual position in its DockNode as DockOrder;
+    // we reorder the (filepath-keyed, stable) tab list to match. Reordering a
+    // tab triggers no save on its own, so we persist the change ourselves,
+    // debounced until the user stops dragging.
+    std::vector<TabEntry>& tabs = project.getTabs();
+    if (tabs.size() >= 2) {
+        struct OrderedTab { TabEntry entry; int order; };
+        std::vector<OrderedTab> ordered;
+        ordered.reserve(tabs.size());
+        for (const TabEntry& tab : tabs) {
+            ImGuiWindow* window = ImGui::FindWindowByName(tabWindowName(tab).c_str());
+            // Windows that aren't currently docked (DockOrder < 0) or not yet
+            // instantiated keep their relative position via the stable sort.
+            int order = (window && window->DockOrder >= 0) ? window->DockOrder
+                                                           : std::numeric_limits<int>::max();
+            ordered.push_back({tab, order});
+        }
+
+        std::stable_sort(ordered.begin(), ordered.end(),
+            [](const OrderedTab& a, const OrderedTab& b){ return a.order < b.order; });
+
+        bool changed = false;
+        for (size_t i = 0; i < tabs.size(); ++i) {
+            if (tabs[i].type != ordered[i].entry.type || tabs[i].filepath != ordered[i].entry.filepath) {
+                tabs[i] = ordered[i].entry;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            tabsOrderDirty = true;
+            tabsOrderChangeTime = ImGui::GetTime();
+        }
+    }
+
+    // Persist a short moment after the last reorder so a drag results in one
+    // write rather than one per frame while the tab slides past its neighbours.
+    if (tabsOrderDirty && ImGui::GetTime() - tabsOrderChangeTime > 0.75) {
+        project.saveProjectFile();
+        tabsOrderDirty = false;
+    }
 }
 
 void editor::App::dockTabWindow(const std::string& windowName){
@@ -1055,6 +1134,10 @@ void editor::App::show(){
     sceneWindow->show();
 
     loadingWindow->show();
+
+    // Keep the persisted tab list in sync with the live tab order so a user's
+    // drag-reordering of scene/code tabs is saved (and restored on next launch).
+    captureTabOrder();
 }
 
 void editor::App::engineInit(int argc, char** argv) {
@@ -1784,6 +1867,13 @@ void editor::App::exit() {
 }
 
 void editor::App::closeWindow(){
+    // Flush a still-pending tab reorder (debounced in captureTabOrder()) so it
+    // isn't lost when quitting right after dragging a tab.
+    if (tabsOrderDirty){
+        project.saveProjectFile();
+        tabsOrderDirty = false;
+    }
+
     // Stop all playing scenes before shutdown to properly cleanup script instances
     for (auto& sceneProject : project.getScenes()) {
         if (sceneProject.playState == ScenePlayState::PLAYING || 
