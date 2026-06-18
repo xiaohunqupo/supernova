@@ -1,6 +1,7 @@
 #include "ProjectSettingsWindow.h"
 #include "util/FileDialogs.h"
 #include "Backend.h"
+#include "AppSettings.h"
 #include "window/Widgets.h"
 #include "external/IconsFontAwesome6.h"
 
@@ -445,8 +446,11 @@ void ProjectSettingsWindow::drawSettings() {
         if (m_cmakeKitIndex > 0) {
             const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
             m_project->setCMakeKit(kit.cCompiler, kit.cxxCompiler, kit.generator);
+            // Remember the explicit choice so new (temp) projects inherit it.
+            AppSettings::setLastCMakeKit(kit.cCompiler, kit.cxxCompiler, kit.generator);
         } else {
             m_project->setCMakeKit("", "", "");
+            AppSettings::setLastCMakeKit("", "", "");
         }
         m_isOpen = false;
         ImGui::CloseCurrentPopup();

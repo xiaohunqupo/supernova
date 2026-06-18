@@ -82,6 +82,10 @@ namespace doriax::editor {
         // (vcvars) so non-Visual-Studio generators such as Ninja can find the
         // Windows SDK and CRT libraries. Returns "" when not needed / not found.
         std::string msvcEnvPrefix(const std::string& generator);
+        // Resolve a "Default" (all-empty) compiler selection to the best
+        // ABI-compatible detected kit so it respects the same ABI check as the
+        // Project Settings dropdown. No-op on non-Windows. Modifies in place.
+        void resolveDefaultKit(std::string& cCompiler, std::string& cxxCompiler, std::string& generator);
         bool runCommand(const std::string& command, const fs::path& workingDir);
         bool clearStaleCMakeCache(const fs::path& projectPath, const fs::path& buildPath);
         // Remove CMake's cached configuration so the next configure starts clean.

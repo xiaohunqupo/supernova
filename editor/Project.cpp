@@ -2448,6 +2448,21 @@ bool editor::Project::createTempProject(std::string projectName, bool deleteIfEx
         // project has an empty name, producing an invalid CMakeLists.txt.
         setName(projectName);
 
+        // Inherit the compiler chosen in a previous session so new temp projects
+        // don't silently fall back to the Default toolchain every time. Drop a
+        // stale compiler path that no longer exists on disk.
+        {
+            std::string cc = AppSettings::getLastCMakeCCompiler();
+            std::string cxx = AppSettings::getLastCMakeCxxCompiler();
+            std::string gen = AppSettings::getLastCMakeGenerator();
+            if (!cxx.empty() && !fs::exists(cxx)) {
+                cc.clear(); cxx.clear(); gen.clear();
+            }
+            if (!cc.empty() || !cxx.empty() || !gen.empty()) {
+                setCMakeKit(cc, cxx, gen);
+            }
+        }
+
         if (deleteIfExists && fs::exists(projectPath)) {
             fs::remove_all(projectPath);
         }

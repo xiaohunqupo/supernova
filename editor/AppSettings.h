@@ -15,6 +15,12 @@ private:
     // Recent projects list (max 10)
     static std::vector<std::filesystem::path> recentProjects;
     static std::filesystem::path lastProjectPath;
+
+    // Last compiler kit chosen in Project Settings, so new (temp) projects
+    // inherit it instead of silently defaulting each time.
+    static std::string lastCMakeCCompiler;
+    static std::string lastCMakeCxxCompiler;
+    static std::string lastCMakeGenerator;
     
     // Window settings
     static int windowWidth;
@@ -47,6 +53,12 @@ public:
     static std::vector<std::filesystem::path> getRecentProjects();
     static void addToRecentProjects(const std::filesystem::path& path, bool needSave = true);
     static void clearRecentProjects();
+
+    // Last compiler kit (empty strings = Default toolchain)
+    static std::string getLastCMakeCCompiler();
+    static std::string getLastCMakeCxxCompiler();
+    static std::string getLastCMakeGenerator();
+    static void setLastCMakeKit(const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator);
     
     // Window settings
     static int getWindowWidth();

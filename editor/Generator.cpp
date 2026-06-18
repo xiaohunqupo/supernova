@@ -247,6 +247,50 @@ std::string editor::Generator::msvcEnvPrefix(const std::string& generator) {
     return "";
 }
 
+void editor::Generator::resolveDefaultKit(std::string& cCompiler, std::string& cxxCompiler, std::string& generator) {
+    // Only a "Default" selection (everything empty) is resolved; an explicit kit
+    // is left untouched.
+    if (!cCompiler.empty() || !cxxCompiler.empty() || !generator.empty()) {
+        return;
+    }
+
+    // Windows-only: a bare cmake lets CMake auto-detect a toolchain that may not
+    // match the editor's C++ ABI (e.g. a MinGW editor would get MSVC and fail to
+    // link). Resolve Default to the best ABI-compatible detected kit so it obeys
+    // the same ABI check as the Project Settings dropdown. Other platforms have a
+    // single C++ ABI, so CMake's auto-detection is always safe and left alone.
+    bool resolveDefault = false;
+#ifdef _WIN32
+    resolveDefault = true;
+#endif
+    if (!resolveDefault) {
+        return;
+    }
+
+    std::vector<CMakeKit> kits = detectAvailableKits();
+    const CMakeKit* chosen = nullptr;
+    for (const auto& k : kits) {
+        if (!k.available) continue;
+        // Prefer the editor's native toolchain: the kit that needs no explicit
+        // compiler or generator (CMake drives it directly, i.e. MSVC on an MSVC
+        // editor). Otherwise fall back to the first available (already
+        // ABI-filtered) kit.
+        if (k.cCompiler.empty() && k.cxxCompiler.empty() && k.generator.empty()) {
+            chosen = &k;
+            break;
+        }
+        if (!chosen) chosen = &k;
+    }
+    if (chosen) {
+        cCompiler = chosen->cCompiler;
+        cxxCompiler = chosen->cxxCompiler;
+        generator = chosen->generator;
+        if (!chosen->displayName.empty()) {
+            Out::info("Default compiler resolved to: %s", chosen->displayName.c_str());
+        }
+    }
+}
+
 bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator) {
     if (!clearStaleCMakeCache(projectPath, buildPath)) {
         return false;
@@ -1876,7 +1920,13 @@ void editor::Generator::build(const fs::path projectPath, const fs::path project
 
             std::string configType = "Debug";
 
-            if (!configureCMake(projectPath, buildPath, configType, cCompiler, cxxCompiler, generator)) {
+            // Resolve a "Default" selection to a concrete ABI-compatible kit once,
+            // so configure and the build step (which both need the generator, e.g.
+            // for the vcvars prefix) agree on the same toolchain.
+            std::string cc = cCompiler, cxx = cxxCompiler, gen = generator;
+            resolveDefaultKit(cc, cxx, gen);
+
+            if (!configureCMake(projectPath, buildPath, configType, cc, cxx, gen)) {
                 if (cancelRequested.load(std::memory_order_relaxed)) {
                     Out::warning("Build configuration cancelled.");
                 } else {
@@ -1886,7 +1936,7 @@ void editor::Generator::build(const fs::path projectPath, const fs::path project
                 return;
             }
 
-            if (!buildProject(projectPath, buildPath, configType, generator)) {
+            if (!buildProject(projectPath, buildPath, configType, gen)) {
                 if (cancelRequested.load(std::memory_order_relaxed)) {
                     Out::warning("Build cancelled.");
                 } else {

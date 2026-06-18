@@ -10,6 +10,9 @@ std::filesystem::path AppSettings::configFilePath;
 YAML::Node AppSettings::settingsData;
 std::vector<std::filesystem::path> AppSettings::recentProjects;
 std::filesystem::path AppSettings::lastProjectPath;
+std::string AppSettings::lastCMakeCCompiler;
+std::string AppSettings::lastCMakeCxxCompiler;
+std::string AppSettings::lastCMakeGenerator;
 int AppSettings::windowWidth = 1280;
 int AppSettings::windowHeight = 720;
 bool AppSettings::isMaximized = false;
@@ -62,6 +65,14 @@ bool AppSettings::loadSettings() {
             }
         }
         
+        // Load last compiler kit
+        if (settingsData["cmake_kit"]) {
+            auto kitNode = settingsData["cmake_kit"];
+            if (kitNode["c_compiler"]) lastCMakeCCompiler = kitNode["c_compiler"].as<std::string>();
+            if (kitNode["cxx_compiler"]) lastCMakeCxxCompiler = kitNode["cxx_compiler"].as<std::string>();
+            if (kitNode["generator"]) lastCMakeGenerator = kitNode["generator"].as<std::string>();
+        }
+
         // Load recent projects
         recentProjects.clear();
         if (settingsData["recent_projects"]) {
@@ -135,6 +146,17 @@ bool AppSettings::saveSettings() {
             recentProjectsNode.push_back(path.string());
         }
         settingsData["recent_projects"] = recentProjectsNode;
+
+        // Last compiler kit
+        if (!lastCMakeCCompiler.empty() || !lastCMakeCxxCompiler.empty() || !lastCMakeGenerator.empty()) {
+            YAML::Node kitNode;
+            kitNode["c_compiler"] = lastCMakeCCompiler;
+            kitNode["cxx_compiler"] = lastCMakeCxxCompiler;
+            kitNode["generator"] = lastCMakeGenerator;
+            settingsData["cmake_kit"] = kitNode;
+        } else {
+            settingsData.remove("cmake_kit");
+        }
         
         // Window settings
         YAML::Node windowNode;
@@ -177,6 +199,25 @@ void AppSettings::setLastProjectPath(const std::filesystem::path& path) {
     // Also add to recent projects
     addToRecentProjects(path, false);
 
+    saveSettings();
+}
+
+std::string AppSettings::getLastCMakeCCompiler() {
+    return lastCMakeCCompiler;
+}
+
+std::string AppSettings::getLastCMakeCxxCompiler() {
+    return lastCMakeCxxCompiler;
+}
+
+std::string AppSettings::getLastCMakeGenerator() {
+    return lastCMakeGenerator;
+}
+
+void AppSettings::setLastCMakeKit(const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator) {
+    lastCMakeCCompiler = cCompiler;
+    lastCMakeCxxCompiler = cxxCompiler;
+    lastCMakeGenerator = generator;
     saveSettings();
 }
 
