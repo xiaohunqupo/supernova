@@ -837,7 +837,7 @@ bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelC
     const std::string name = getBufferName(bufferViewIndex, model);
 
     if (std::find(loadedBuffers.begin(), loadedBuffers.end(), name) == loadedBuffers.end() && bufferView.target != 0) {
-        if (mesh.numExternalBuffers >= mesh.eBuffers.size()){
+        if (!mesh.eBuffers.validIndex(static_cast<int>(mesh.numExternalBuffers))){
             Log::error("External buffer limit reached for GLTF model");
             return false;
         }
@@ -2485,7 +2485,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     }
 
     mesh.numSubmeshes = totalSubmeshes;
-    if (mesh.numSubmeshes > static_cast<unsigned int>(mesh.submeshes.size())) {
+    if (mesh.numSubmeshes > 0 && !mesh.submeshes.validIndex(static_cast<int>(mesh.numSubmeshes) - 1)) {
         Log::error("Model %s has more submeshes than the maximum allowed (%i)", filename.c_str(), mesh.submeshes.size());
         mesh.numSubmeshes = static_cast<unsigned int>(mesh.submeshes.size());
     }
@@ -3222,9 +3222,9 @@ bool MeshSystem::loadOBJ(Entity entity, const std::string filename, bool asyncLo
 
     }
 
-    if (mesh.numSubmeshes > mesh.submeshes.size()){
+    if (mesh.numSubmeshes > 0 && !mesh.submeshes.validIndex(static_cast<int>(mesh.numSubmeshes) - 1)){
         Log::error("Model %s has more submeshes than the maximum allowed (%i)", filename.c_str(), mesh.submeshes.size());
-        mesh.numSubmeshes = mesh.submeshes.size();
+        mesh.numSubmeshes = static_cast<unsigned int>(mesh.submeshes.size());
     }
 
     if (asyncLoad) {
