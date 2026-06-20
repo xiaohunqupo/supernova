@@ -1349,7 +1349,7 @@ Entity MeshSystem::generateSketetalStructure(Entity entity, ModelComponent& mode
 
     // User pool (not System): model-generated entities must not draw from the capped [1..1000]
     // System range. They stay out of serialization via the editor's entity list, like mesh nodes.
-    bone = scene->createUserEntity();
+    bone = scene->createEntity();
     if (bone == NULL_ENTITY) {
         return NULL_ENTITY;
     }
@@ -2831,7 +2831,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 meshEntity = existing->second; // reuse deserialized child (skipEntities reload)
             }
             if (meshEntity == NULL_ENTITY) {
-                meshEntity = scene->createUserEntity();
+                meshEntity = scene->createEntity();
                 if (meshEntity == NULL_ENTITY) {
                     continue;
                 }
