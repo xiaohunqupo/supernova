@@ -1147,6 +1147,60 @@ int MeshSystem::convertGLTFByteIndicesToShort(const tinygltf::Accessor& indexAcc
     return static_cast<int>(model.gltfModel->bufferViews.size()) - 1;
 }
 
+int MeshSystem::bakeGLTFTransformedAttribute(const tinygltf::Accessor& accessor, const Matrix4& matrix, const Matrix3& normalMatrix, bool isNormal, ModelComponent& model){
+    // Bakes a node's world transform into a copy of a POSITION/NORMAL attribute, into a synthetic
+    // tightly-packed FLOAT VEC3 buffer/view. Used only for flattened previews so a multi-node model
+    // shows its layout without per-node entities. Caller must reserve buffers/bufferViews up-front.
+    if (!model.gltfModel || !isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
+        return -1;
+    }
+    if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT || accessor.type != TINYGLTF_TYPE_VEC3) {
+        return -1; // only float vec3 positions/normals are baked
+    }
+
+    const tinygltf::BufferView& srcView = model.gltfModel->bufferViews[accessor.bufferView];
+    if (!isValidGLTFIndex(srcView.buffer, model.gltfModel->buffers)) {
+        return -1;
+    }
+    const std::vector<unsigned char>& srcData = model.gltfModel->buffers[srcView.buffer].data;
+
+    const size_t count = accessor.count;
+    const int stride = accessor.ByteStride(srcView);
+    if (count == 0 || stride < static_cast<int>(3 * sizeof(float))) {
+        return -1;
+    }
+    const size_t base = srcView.byteOffset + accessor.byteOffset;
+    if (base + (count - 1) * static_cast<size_t>(stride) + 3 * sizeof(float) > srcData.size()) {
+        Log::error("GLTF baked attribute range out of bounds");
+        return -1;
+    }
+
+    tinygltf::Buffer newBuffer;
+    newBuffer.data.resize(count * 3 * sizeof(float));
+    float* dst = reinterpret_cast<float*>(newBuffer.data.data());
+    for (size_t i = 0; i < count; i++) {
+        const float* src = reinterpret_cast<const float*>(srcData.data() + base + i * static_cast<size_t>(stride));
+        Vector3 v(src[0], src[1], src[2]);
+        Vector3 r = isNormal ? (normalMatrix * v).normalized() : (matrix * v);
+        dst[i * 3 + 0] = r.x;
+        dst[i * 3 + 1] = r.y;
+        dst[i * 3 + 2] = r.z;
+    }
+    model.gltfModel->buffers.push_back(std::move(newBuffer));
+    const int newBufferIndex = static_cast<int>(model.gltfModel->buffers.size()) - 1;
+
+    tinygltf::BufferView newView;
+    newView.buffer = newBufferIndex;
+    newView.byteOffset = 0;
+    newView.byteLength = count * 3 * sizeof(float);
+    newView.byteStride = 0; // tightly packed
+    newView.target = 34962; // GL_ARRAY_BUFFER
+    newView.name = "baked_attr_synth";
+    model.gltfModel->bufferViews.push_back(std::move(newView));
+
+    return static_cast<int>(model.gltfModel->bufferViews.size()) - 1;
+}
+
 bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName, GLTFLoadMetrics* metrics){
     texture = Texture();
 
@@ -2778,7 +2832,12 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     // the hierarchy there corrupts the registry's component maps.
     bool useChildEntities = (meshNodes.size() > 1) && !anyNodeSkinned && !Engine::isAsyncThread();
 
-    if (meshNodes.size() > 1 && !useChildEntities) {
+    // Off-thread preview of a multi-node model can't build child entities, so instead bake each
+    // node's world transform into its (flattened) vertices. This keeps the preview laid out correctly
+    // without touching the ECS. Not used for the real scene load (it builds child entities).
+    bool bakingFlatten = (meshNodes.size() > 1) && !anyNodeSkinned && !useChildEntities;
+
+    if (meshNodes.size() > 1 && !useChildEntities && !bakingFlatten) {
         Log::warn("GLTF model (%s) has %zu mesh nodes but is skinned; loading them as submeshes on one entity. Per-node transforms are ignored",
                   filename.c_str(), meshNodes.size());
     }
@@ -2800,9 +2859,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
     Matrix4 matrix = getGLTFMeshGlobalMatrix(transformNode, model, nodesParent);
 
-    // In the child-entity path the scene-root transform is baked into each child's global matrix,
-    // so the root entity keeps its drag/identity transform to avoid applying it twice.
-    if (changeRootTransform && !useChildEntities) {
+    // In the child-entity path (and the baked-flatten preview) node transforms live on the children /
+    // baked vertices, so the root entity keeps its drag/identity transform to avoid applying it twice.
+    if (changeRootTransform && !useChildEntities && !bakingFlatten) {
         bool hasDefaultPosition = (transform.position == Vector3::ZERO);
         bool hasDefaultRotation = (transform.rotation == Quaternion::IDENTITY);
         bool hasDefaultScale    = (transform.scale    == Vector3::UNIT_SCALE);
@@ -2862,8 +2921,12 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
         loadedBuffers.clear();
         if (model.gltfModel) {
-            model.gltfModel->buffers.reserve(model.gltfModel->buffers.size() + mesh.numSubmeshes);
-            model.gltfModel->bufferViews.reserve(model.gltfModel->bufferViews.size() + mesh.numSubmeshes);
+            // One synthetic view per primitive for byte-index expansion, plus two more (position +
+            // normal) when baking node transforms for a preview. Reserve so appends never reallocate
+            // and invalidate the non-owning external-buffer pointers.
+            const size_t synthPerSubmesh = bakingFlatten ? 3 : 1;
+            model.gltfModel->buffers.reserve(model.gltfModel->buffers.size() + mesh.numSubmeshes * synthPerSubmesh);
+            model.gltfModel->bufferViews.reserve(model.gltfModel->bufferViews.size() + mesh.numSubmeshes * synthPerSubmesh);
         }
     }
 
@@ -2881,6 +2944,15 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
 
         tinygltf::Mesh& gltfmesh = model.gltfModel->meshes[gltfMeshIndex];
+
+        // For the baked-flatten preview, precompute this node's world matrix (for positions) and its
+        // normal matrix (inverse-transpose of the linear part) to bake into the vertices below.
+        Matrix4 nodeBakeMatrix;
+        Matrix3 nodeBakeNormalMatrix;
+        if (bakingFlatten) {
+            nodeBakeMatrix = getGLTFMeshGlobalMatrix(nodeIdx, model, nodesParent);
+            nodeBakeNormalMatrix = nodeBakeMatrix.linear().inverse(1e-6f).transpose();
+        }
 
         // Select the MeshComponent this node's primitives load into: the root entity for the
         // single-node/skinned path, or a per-node child entity (created or reused) otherwise.
@@ -3086,10 +3158,23 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     continue;
                 }
 
+                // Baked-flatten preview: redirect POSITION/NORMAL to a synthetic buffer with the
+                // node's world transform baked in (tightly packed), so the flat mesh is laid out.
+                int attrBufferView = accessor.bufferView;
+                size_t attrByteOffset = accessor.byteOffset;
                 int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
-                const std::string bufferName = getBufferName(accessor.bufferView, model);
+                if (bakingFlatten && (attrib.first == "POSITION" || attrib.first == "NORMAL")) {
+                    int baked = bakeGLTFTransformedAttribute(accessor, nodeBakeMatrix, nodeBakeNormalMatrix,
+                                                             attrib.first == "NORMAL", model);
+                    if (baked >= 0) {
+                        attrBufferView = baked;
+                        attrByteOffset = 0;
+                        byteStride = static_cast<int>(3 * sizeof(float));
+                    }
+                }
+                const std::string bufferName = getBufferName(attrBufferView, model);
 
-                loadGLTFBuffer(accessor.bufferView, mesh, model, byteStride, loadedBuffers, &loadMetrics);
+                loadGLTFBuffer(attrBufferView, mesh, model, byteStride, loadedBuffers, &loadMetrics);
 
                 int elements = (accessor.type != TINYGLTF_TYPE_SCALAR) ? accessor.type : 1;
 
@@ -3175,7 +3260,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                             mesh.eBuffers[b].setRenderAttributes(false);
                     }
                     addSubmeshAttribute(mesh.submeshes[i], bufferName, attType, elements, dataType,
-                        accessor.count, accessor.byteOffset, attributeNormalized);
+                        accessor.count, attrByteOffset, attributeNormalized);
                 } else if (attrib.first != "TEXCOORD_1") {
                     Log::warn("Model attribute unused: %s", attrib.first.c_str());
                 }
