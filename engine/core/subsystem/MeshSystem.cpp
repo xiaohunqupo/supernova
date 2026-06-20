@@ -35,6 +35,9 @@
 
 using namespace doriax;
 
+// Toggle the verbose [ModelLoad] timing/metrics diagnostics. Set to 0 to silence them.
+#define VERBOSE_MODEL_LOAD 1
+
 namespace {
 
 using ModelLoadClock = std::chrono::steady_clock;
@@ -44,12 +47,16 @@ double modelLoadElapsedMs(ModelLoadClock::time_point start) {
 }
 
 void modelLoadPrintf(const char* format, ...) {
+#if VERBOSE_MODEL_LOAD
     char buffer[512];
     va_list args;
     va_start(args, format);
     std::vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     Log::verbose("[ModelLoad] %s", buffer);
+#else
+    (void)format;
+#endif
 }
 
 class GLTFLoadTrace {

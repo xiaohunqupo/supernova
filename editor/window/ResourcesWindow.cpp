@@ -46,6 +46,15 @@
 
 using namespace doriax;
 
+// Toggle the verbose [Thumbnail] timing diagnostics. Set to 0 to silence them (and skip evaluating
+// the log arguments).
+#define VERBOSE_THUMBNAIL 1
+#if VERBOSE_THUMBNAIL
+    #define THUMBNAIL_LOG(...) Log::verbose(__VA_ARGS__)
+#else
+    #define THUMBNAIL_LOG(...) ((void)0)
+#endif
+
 editor::FileType editor::ResourcesWindow::classifyThumbnailFileType(const fs::path& filePath) {
     const std::string extension = filePath.extension().string();
 
@@ -215,14 +224,14 @@ void editor::ResourcesWindow::processModelThumbnails() {
     if (hasPendingModelRender && !Engine::isSceneRunning(modelRender.getScene())) {
         std::lock_guard<std::mutex> lock(modelRenderMutex);
 
-        const double renderWaitMs = std::chrono::duration<double, std::milli>(
+        [[maybe_unused]] const double renderWaitMs = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - pendingModelRenderStarted).count();
 
         fs::path thumbnailPath = project->getThumbnailPath(pendingModelPath);
         fs::create_directories(thumbnailPath.parent_path());
 
         Framebuffer* framebuffer = modelRender.getFramebuffer();
-        Log::verbose("[Thumbnail] preview render finished for '%s' after %.1f ms; framebuffer=%ux%u; saving '%s'",
+        THUMBNAIL_LOG("[Thumbnail] preview render finished for '%s' after %.1f ms; framebuffer=%ux%u; saving '%s'",
                      pendingModelPath.string().c_str(), renderWaitMs,
                      framebuffer ? framebuffer->getWidth() : 0,
                      framebuffer ? framebuffer->getHeight() : 0,
@@ -253,7 +262,7 @@ void editor::ResourcesWindow::processModelThumbnails() {
                     Log::warn("Failed to save model thumbnail '%s' after %.1f ms: %s",
                               thumbnailPath.string().c_str(), saveMs, ec.message().c_str());
                 } else {
-                    Log::verbose("[Thumbnail] saved model thumbnail '%s' (%ju bytes) in %.1f ms",
+                    THUMBNAIL_LOG("[Thumbnail] saved model thumbnail '%s' (%ju bytes) in %.1f ms",
                                  thumbnailPath.string().c_str(), static_cast<uintmax_t>(outputBytes), saveMs);
                 }
                 {
@@ -268,7 +277,7 @@ void editor::ResourcesWindow::processModelThumbnails() {
         // copy. Release this large preview scene now so its GPU buffers don't
         // overlap with the model being loaded into the user's scene.
         modelRender.clearScene();
-        Log::verbose("[Thumbnail] released model preview scene after framebuffer readback");
+        THUMBNAIL_LOG("[Thumbnail] released model preview scene after framebuffer readback");
 
         hasPendingModelRender = false;
 
@@ -1500,7 +1509,7 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
     std::error_code ec;
     if (!fs::exists(filePath, ec) || ec) {
         if (type == FileType::MODEL) {
-            Log::verbose("[Thumbnail] model request rejected; file does not exist: '%s' (%s)",
+            THUMBNAIL_LOG("[Thumbnail] model request rejected; file does not exist: '%s' (%s)",
                          filePath.string().c_str(), ec ? ec.message().c_str() : "not found");
         }
         return;
@@ -1525,7 +1534,7 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
         auto thumbTime = fs::last_write_time(thumbnailPath, thumbTimeEc);
         if (!imageTimeEc && !thumbTimeEc && thumbTime >= imageTime) {
             if (type == FileType::MODEL) {
-                Log::verbose("[Thumbnail] using up-to-date model thumbnail '%s'", thumbnailPath.string().c_str());
+                THUMBNAIL_LOG("[Thumbnail] using up-to-date model thumbnail '%s'", thumbnailPath.string().c_str());
             }
             // Thumbnail is up-to-date, queue it for loading
             std::lock_guard<std::mutex> lock(completedThumbnailMutex);
@@ -1540,7 +1549,7 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
         }
         thumbnailQueue.push(thumbFile);
         if (type == FileType::MODEL) {
-            Log::verbose("[Thumbnail] queued model '%s' (queue depth %zu, force=%s)",
+            THUMBNAIL_LOG("[Thumbnail] queued model '%s' (queue depth %zu, force=%s)",
                          normalizedPath.string().c_str(), thumbnailQueue.size(), forceRegenerate ? "yes" : "no");
         }
     }
@@ -1677,8 +1686,8 @@ void editor::ResourcesWindow::thumbnailWorker() {
 
         } else if (thumbFile.type == FileType::MODEL) {
             try {
-                const auto thumbnailStarted = std::chrono::steady_clock::now();
-                Log::verbose("[Thumbnail] BEGIN model preview '%s'", thumbFile.path.string().c_str());
+                [[maybe_unused]] const auto thumbnailStarted = std::chrono::steady_clock::now();
+                THUMBNAIL_LOG("[Thumbnail] BEGIN model preview '%s'", thumbFile.path.string().c_str());
                 // Run the load under the async-thread flag: building the multi-node child-entity
                 // hierarchy mutates the ECS, which is only safe on the main thread, so off-thread the
                 // loader flattens into one mesh instead (per-node transforms are lost for the preview).
@@ -1697,7 +1706,7 @@ void editor::ResourcesWindow::thumbnailWorker() {
                         Engine::executeSceneOnce(modelRender.getScene());
                     }
 
-                    Log::verbose("[Thumbnail] preview scene submitted in %.1f ms; waiting for main-thread render",
+                    THUMBNAIL_LOG("[Thumbnail] preview scene submitted in %.1f ms; waiting for main-thread render",
                                  std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - thumbnailStarted).count());
 
                     {
