@@ -53,6 +53,9 @@ namespace doriax{
     public:
         static std::shared_ptr<std::array<TextureData,6>> get(const std::string& id);
         static std::shared_ptr<std::array<TextureData,6>> get(const std::string& id, std::array<TextureData,6> data);
+        // Inserts an already-built face array without copying it (used to hand pre-decoded model
+        // textures to the pool). No-op if the id is already cached with pixels. Main-thread only.
+        static void put(const std::string& id, std::shared_ptr<std::array<TextureData,6>> data);
 
         static TextureLoadResult loadFromFile(const std::string& id, const std::array<std::string, 6>& paths, size_t numFaces);
 

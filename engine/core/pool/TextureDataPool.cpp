@@ -60,6 +60,20 @@ std::shared_ptr<std::array<TextureData,6>> TextureDataPool::get(const std::strin
     return nullptr;
 }
 
+void TextureDataPool::put(const std::string& id, std::shared_ptr<std::array<TextureData,6>> data){
+    if (!data){
+        return;
+    }
+
+    auto& map = getMap();
+    auto it = map.find(id);
+    if (it != map.end() && hasTexturePixels(it->second, getTextureFaces(*it->second))){
+        return; // already cached with pixels; keep the existing entry
+    }
+
+    map[id] = std::move(data);
+}
+
 std::shared_ptr<std::array<TextureData,6>> TextureDataPool::get(const std::string& id, std::array<TextureData,6> data){
     auto& map = getMap();
     auto it = map.find(id);

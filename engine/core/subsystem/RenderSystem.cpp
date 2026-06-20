@@ -757,14 +757,41 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         mesh.vertexCount = mesh.buffer.getCount();
     }
 
-    if (allBuffersEmpty)
+    if (allBuffersEmpty) {
+        // Multi-node glTF models use their root entity only as a hierarchy
+        // container; renderable geometry lives in child MeshComponents. Treat
+        // that empty root as successfully loaded so one-time preview scenes can
+        // complete instead of waiting forever in RenderSystem::isAllLoaded().
+        ModelComponent* model = scene->findComponent<ModelComponent>(entity);
+        if (model && !model->meshNodesMapping.empty() && mesh.numSubmeshes == 0) {
+            mesh.needReload = false;
+            mesh.needUpdateAABB = true;
+            mesh.loadCalled = true;
+            SystemRender::addQueueCommand(&changeLoaded, new check_load_t{scene, entity});
+            Log::debug("Loaded empty model hierarchy root for entity %lu (%zu child mesh nodes)",
+                       entity, model->meshNodesMapping.size());
+            return true;
+        }
         return false;
+    }
 
     std::map<std::string, unsigned int> bufferStride;
 
+    std::vector<BufferRender*> buffersCreatedThisLoad;
     for (auto const& buf : buffers){
-        buf.second->getRender()->createBuffer(buf.second->getSize(), buf.second->getData(), buf.second->getType(), buf.second->getUsage());
-        bufferNameToRender[buf.first] = buf.second->getRender();
+        BufferRender* bufferRender = buf.second->getRender();
+        if (!bufferRender->isCreated()) {
+            if (!bufferRender->createBuffer(buf.second->getSize(), buf.second->getData(), buf.second->getType(), buf.second->getUsage())) {
+                Log::error("Cannot create GPU buffer '%s' (%zu bytes) for mesh entity %lu; resource pool may be exhausted",
+                           buf.first.c_str(), buf.second->getSize(), entity);
+                for (BufferRender* created : buffersCreatedThisLoad) {
+                    created->destroyBuffer();
+                }
+                return false;
+            }
+            buffersCreatedThisLoad.push_back(bufferRender);
+        }
+        bufferNameToRender[buf.first] = bufferRender;
         bufferStride[buf.first] = buf.second->getStride();
     }
 

@@ -31,6 +31,7 @@ namespace doriax{
 
     private:
         struct AsyncModelLoadResult;
+        struct GLTFLoadMetrics;
         typedef std::unordered_map<std::string, std::shared_future<std::shared_ptr<AsyncModelLoadResult>>> async_model_loads_t;
 
         static std::mutex& getAsyncModelMutex();
@@ -65,9 +66,9 @@ namespace doriax{
         static void applyDefaultGLTFMaterial(Material& material);
         static void applyDefaultObjMaterial(Submesh& submesh);
         void addSubmeshAttribute(Submesh& submesh, const std::string& bufferName, AttributeType attribute, unsigned int elements, AttributeDataType dataType, size_t size, size_t offset, bool normalized);
-        bool loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers);
+        bool loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers, GLTFLoadMetrics* metrics = nullptr);
         int convertGLTFByteIndicesToShort(const tinygltf::Accessor& indexAccessor, ModelComponent& model);
-        bool loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName);
+        bool loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName, GLTFLoadMetrics* metrics = nullptr);
         std::string getBufferName(int bufferViewIndex, ModelComponent& model);
         Matrix4 getGLTFNodeMatrix(int nodeIndex, ModelComponent& model);
         Matrix4 getGLTFMeshGlobalMatrix(int nodeIndex, ModelComponent& model, std::map<int, int>& nodesParent);
@@ -98,6 +99,10 @@ namespace doriax{
         void createTorus(MeshComponent& mesh, float radius=1, float ringRadius=0.5, unsigned int sides=36, unsigned int rings=16);
         bool loadGLTF(Entity entity, const std::string filename, bool asyncLoad=false, bool skipEntities=false, bool changeRootTransform=true);
         bool loadOBJ(Entity entity, const std::string filename, bool asyncLoad=false);
+
+        // Caps the resolution glTF images are decoded to on the CALLING thread (0 = full resolution).
+        // Used by the thumbnail worker so previews don't decode/upload full-size 4K maps.
+        static void setImageDecodeMaxDimension(int dimension);
 
         void createInstancedMesh(Entity entity);
         void removeInstancedMesh(Entity entity);

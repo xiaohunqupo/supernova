@@ -16,6 +16,7 @@
 #include <atomic>
 #include <unordered_map>
 #include <condition_variable>
+#include <chrono>
 
 #include "imgui.h"
 
@@ -156,6 +157,7 @@ namespace doriax::editor {
 
         fs::path pendingModelPath;
         bool hasPendingModelRender = false;
+        std::chrono::steady_clock::time_point pendingModelRenderStarted;
         std::mutex modelRenderMutex;
 
         ImU32 fileSeparatorColor(const FileEntry& fe) const;

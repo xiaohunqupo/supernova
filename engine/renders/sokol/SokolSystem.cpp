@@ -46,7 +46,10 @@ void sokol_log(const char* tag,                // e.g. 'sg'
 void SokolSystem::setup(){
     /* setup sokol_gfx */
     sg_desc desc = {0};
-    desc.buffer_pool_size = 1024; //default: 128
+    // A single imported glTF can expand into hundreds of per-node vertex/index
+    // buffers. Model previews briefly coexist with the scene model, so 1024
+    // slots is too small for large environments (the Victorian Room uses 808).
+    desc.buffer_pool_size = 4096; //default: 128
     desc.image_pool_size = 2048; //default: 128
     desc.sampler_pool_size = 2048; //default: 64
     desc.view_pool_size = 4096; //default: 256 (texture, storage-buffer and attachment views)
