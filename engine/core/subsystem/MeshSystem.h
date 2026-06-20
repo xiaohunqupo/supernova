@@ -23,7 +23,11 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace tinygltf { struct Accessor; }
+namespace tinygltf {
+    struct Accessor;
+    struct Image;
+    class Model;
+}
 
 namespace doriax{
 
@@ -35,6 +39,13 @@ namespace doriax{
 
         static std::mutex& getAsyncModelMutex();
         static async_model_loads_t& getPendingModelLoads();
+
+        static thread_local int imageDecodeMaxDimension;
+        static void decodeGLTFImage(tinygltf::Image& image, size_t index, int maxDimension);
+        template<typename Fn>
+        static void parallelForIndexed(size_t count, Fn&& fn);
+        static void decodeGLTFImagesParallel(tinygltf::Model& model, int maxDimension);
+        static std::shared_ptr<std::array<TextureData,6>> buildGLTFTextureFaces(tinygltf::Model& model, int textureIndex);
 
         bool createSprite(SpriteComponent& sprite, MeshComponent& mesh, CameraComponent& camera);
         bool createMeshPolygon(MeshPolygonComponent& polygon, MeshComponent& mesh);

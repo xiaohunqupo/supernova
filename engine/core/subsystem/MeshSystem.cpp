@@ -32,138 +32,6 @@
 
 using namespace doriax;
 
-namespace {
-
-// Max texture dimension to decode to, per thread. 0 means full resolution. The thumbnail worker
-// sets a small value (via MeshSystem::setImageDecodeMaxDimension) so previews don't decode and
-// upload full 4K maps for a 128px render.
-thread_local int g_imageDecodeMaxDimension = 0;
-
-// Decodes one image that SetImagesAsIs left still encoded in image.image.
-void decodeGLTFImage(tinygltf::Image& image, size_t index, int maxDimension) {
-    if (image.image.empty()) {
-        return; // no encoded bytes (e.g. external/unsupported image)
-    }
-
-    // Decode with tinygltf's own decoder (default RGBA8/16) so results match the serial path.
-    std::vector<unsigned char> encoded = std::move(image.image);
-    image.image.clear();
-    std::string err;
-    std::string warn;
-    if (!tinygltf::LoadImageData(&image, static_cast<int>(index), &err, &warn, 0, 0,
-                                 encoded.data(), static_cast<int>(encoded.size()), nullptr)) {
-        Log::error("Failed to decode GLTF image %zu: %s", index, err.c_str());
-        return;
-    }
-
-    // Downscale oversized maps for preview renders. Only 8-bit images are handled; 16-bit is rare
-    // and left full-size. The transient full-size buffer is freed when this returns.
-    if (maxDimension > 0 && image.bits == 8 && image.component >= 1 &&
-            (image.width > maxDimension || image.height > maxDimension)) {
-        const int comp = image.component;
-        const double scale = static_cast<double>(maxDimension) / std::max(image.width, image.height);
-        const int nw = std::max(1, static_cast<int>(std::lround(image.width * scale)));
-        const int nh = std::max(1, static_cast<int>(std::lround(image.height * scale)));
-        std::vector<unsigned char> resized(static_cast<size_t>(nw) * nh * comp);
-        const stbir_pixel_layout layout = (comp == 4) ? STBIR_RGBA : (comp == 3) ? STBIR_RGB :
-                                          (comp == 2) ? STBIR_RA : STBIR_1CHANNEL;
-        if (stbir_resize_uint8_linear(image.image.data(), image.width, image.height, 0,
-                                      resized.data(), nw, nh, 0, layout)) {
-            image.image = std::move(resized);
-            image.width = nw;
-            image.height = nh;
-        }
-    }
-}
-
-// Runs fn(0..count-1) across a few threads, pulling indices off a shared counter so heavy items
-// spread across workers instead of landing in one fixed range.
-//
-// NOTE: this deliberately uses std::async, not ThreadPoolManager. Background model parsing already
-// runs on a ThreadPoolManager worker, so enqueuing onto that bounded pool and blocking could
-// deadlock when several models load at once.
-template<typename Fn>
-void parallelForIndexed(size_t count, Fn&& fn) {
-    if (count == 0) {
-        return;
-    }
-
-    const unsigned int hw = std::thread::hardware_concurrency();
-    const size_t workers = std::max<size_t>(1, std::min<size_t>(count, hw ? hw : 4));
-
-    std::atomic<size_t> next{0};
-    auto worker = [&]() {
-        for (size_t i = next.fetch_add(1); i < count; i = next.fetch_add(1)) {
-            fn(i);
-        }
-    };
-
-    if (workers == 1) {
-        worker();
-        return;
-    }
-
-    std::vector<std::future<void>> futures;
-    for (size_t w = 1; w < workers; w++) {
-        futures.push_back(std::async(std::launch::async, worker));
-    }
-    worker(); // the calling thread participates too
-    for (auto& future : futures) {
-        future.get();
-    }
-}
-
-// glTF embedded images are decoded serially inside LoadBinaryFromFile, which dominates load time
-// for texture-heavy models. Instead the loader is put in "as is" mode (it stores the still-encoded
-// bytes), and this decodes them across a few threads afterwards.
-void decodeGLTFImagesParallel(tinygltf::Model& model, int maxDimension) {
-    parallelForIndexed(model.images.size(), [&model, maxDimension](size_t i) {
-        decodeGLTFImage(model.images[i], i, maxDimension);
-    });
-}
-
-// Copies one decoded glTF texture's pixels into a pooled face array (the malloc + memcpy that
-// otherwise stalls the main thread). Mirrors the ownership dance in loadGLTFTexture: build the
-// TextureData with dataOwned=false, then mark the stored copy owned so there is a single owner.
-std::shared_ptr<std::array<TextureData,6>> buildGLTFTextureFaces(tinygltf::Model& model, int textureIndex) {
-    if (textureIndex < 0 || static_cast<size_t>(textureIndex) >= model.textures.size()) {
-        return nullptr;
-    }
-    const tinygltf::Texture& tex = model.textures[textureIndex];
-    if (tex.source < 0 || static_cast<size_t>(tex.source) >= model.images.size()) {
-        return nullptr;
-    }
-    const tinygltf::Image& image = model.images[tex.source];
-    if (image.width <= 0 || image.height <= 0 || image.component <= 0 || image.image.empty()) {
-        return nullptr;
-    }
-    const size_t imageSize = static_cast<size_t>(image.component) * image.width * image.height;
-    if (image.image.size() < imageSize) {
-        return nullptr;
-    }
-    ColorFormat colorFormat;
-    if (image.component == 1) {
-        colorFormat = ColorFormat::RED;
-    } else if (image.component == 4) {
-        colorFormat = ColorFormat::RGBA;
-    } else {
-        return nullptr; // renders only support 8bpp and 32bpp
-    }
-
-    unsigned char* imageCopy = static_cast<unsigned char*>(std::malloc(imageSize));
-    if (!imageCopy) {
-        return nullptr;
-    }
-    std::memcpy(imageCopy, image.image.data(), imageSize);
-
-    auto faces = std::make_shared<std::array<TextureData,6>>();
-    faces->at(0) = TextureData(image.width, image.height, static_cast<unsigned int>(imageSize), colorFormat, image.component, imageCopy);
-    faces->at(0).setDataOwned(true); // single owner; copies above are shallow with dataOwned=false
-    return faces;
-}
-
-} // namespace
-
 struct MeshSystem::AsyncModelLoadResult {
     bool obj = false;
     bool success = false;
@@ -203,7 +71,7 @@ MeshSystem::~MeshSystem(){
 }
 
 void MeshSystem::setImageDecodeMaxDimension(int dimension){
-    g_imageDecodeMaxDimension = dimension;
+    imageDecodeMaxDimension = dimension;
 }
 
 void MeshSystem::applyDefaultGLTFMaterial(Material& material) {
@@ -829,6 +697,134 @@ void MeshSystem::cancelAsyncModelLoad(Entity entity, const std::string& filename
     if (erased){
         ResourceProgress::failBuild(buildId);
     }
+}
+
+// Max texture dimension to decode to, per thread. 0 means full resolution. The thumbnail worker
+// sets a small value (via MeshSystem::setImageDecodeMaxDimension) so previews don't decode and
+// upload full 4K maps for a 128px render.
+thread_local int MeshSystem::imageDecodeMaxDimension = 0;
+
+// Decodes one image that SetImagesAsIs left still encoded in image.image.
+void MeshSystem::decodeGLTFImage(tinygltf::Image& image, size_t index, int maxDimension) {
+    if (image.image.empty()) {
+        return; // no encoded bytes (e.g. external/unsupported image)
+    }
+
+    // Decode with tinygltf's own decoder (default RGBA8/16) so results match the serial path.
+    std::vector<unsigned char> encoded = std::move(image.image);
+    image.image.clear();
+    std::string err;
+    std::string warn;
+    if (!tinygltf::LoadImageData(&image, static_cast<int>(index), &err, &warn, 0, 0,
+                                 encoded.data(), static_cast<int>(encoded.size()), nullptr)) {
+        Log::error("Failed to decode GLTF image %zu: %s", index, err.c_str());
+        return;
+    }
+
+    // Downscale oversized maps for preview renders. Only 8-bit images are handled; 16-bit is rare
+    // and left full-size. The transient full-size buffer is freed when this returns.
+    if (maxDimension > 0 && image.bits == 8 && image.component >= 1 &&
+            (image.width > maxDimension || image.height > maxDimension)) {
+        const int comp = image.component;
+        const double scale = static_cast<double>(maxDimension) / std::max(image.width, image.height);
+        const int nw = std::max(1, static_cast<int>(std::lround(image.width * scale)));
+        const int nh = std::max(1, static_cast<int>(std::lround(image.height * scale)));
+        std::vector<unsigned char> resized(static_cast<size_t>(nw) * nh * comp);
+        const stbir_pixel_layout layout = (comp == 4) ? STBIR_RGBA : (comp == 3) ? STBIR_RGB :
+                                          (comp == 2) ? STBIR_RA : STBIR_1CHANNEL;
+        if (stbir_resize_uint8_linear(image.image.data(), image.width, image.height, 0,
+                                      resized.data(), nw, nh, 0, layout)) {
+            image.image = std::move(resized);
+            image.width = nw;
+            image.height = nh;
+        }
+    }
+}
+
+// Runs fn(0..count-1) across a few threads, pulling indices off a shared counter so heavy items
+// spread across workers instead of landing in one fixed range.
+//
+// NOTE: this deliberately uses std::async, not ThreadPoolManager. Background model parsing already
+// runs on a ThreadPoolManager worker, so enqueuing onto that bounded pool and blocking could
+// deadlock when several models load at once.
+template<typename Fn>
+void MeshSystem::parallelForIndexed(size_t count, Fn&& fn) {
+    if (count == 0) {
+        return;
+    }
+
+    const unsigned int hw = std::thread::hardware_concurrency();
+    const size_t workers = std::max<size_t>(1, std::min<size_t>(count, hw ? hw : 4));
+
+    std::atomic<size_t> next{0};
+    auto worker = [&]() {
+        for (size_t i = next.fetch_add(1); i < count; i = next.fetch_add(1)) {
+            fn(i);
+        }
+    };
+
+    if (workers == 1) {
+        worker();
+        return;
+    }
+
+    std::vector<std::future<void>> futures;
+    for (size_t w = 1; w < workers; w++) {
+        futures.push_back(std::async(std::launch::async, worker));
+    }
+    worker(); // the calling thread participates too
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+// glTF embedded images are decoded serially inside LoadBinaryFromFile, which dominates load time
+// for texture-heavy models. Instead the loader is put in "as is" mode (it stores the still-encoded
+// bytes), and this decodes them across a few threads afterwards.
+void MeshSystem::decodeGLTFImagesParallel(tinygltf::Model& model, int maxDimension) {
+    parallelForIndexed(model.images.size(), [&model, maxDimension](size_t i) {
+        decodeGLTFImage(model.images[i], i, maxDimension);
+    });
+}
+
+// Copies one decoded glTF texture's pixels into a pooled face array (the malloc + memcpy that
+// otherwise stalls the main thread). Mirrors the ownership dance in loadGLTFTexture: build the
+// TextureData with dataOwned=false, then mark the stored copy owned so there is a single owner.
+std::shared_ptr<std::array<TextureData,6>> MeshSystem::buildGLTFTextureFaces(tinygltf::Model& model, int textureIndex) {
+    if (textureIndex < 0 || static_cast<size_t>(textureIndex) >= model.textures.size()) {
+        return nullptr;
+    }
+    const tinygltf::Texture& tex = model.textures[textureIndex];
+    if (tex.source < 0 || static_cast<size_t>(tex.source) >= model.images.size()) {
+        return nullptr;
+    }
+    const tinygltf::Image& image = model.images[tex.source];
+    if (image.width <= 0 || image.height <= 0 || image.component <= 0 || image.image.empty()) {
+        return nullptr;
+    }
+    const size_t imageSize = static_cast<size_t>(image.component) * image.width * image.height;
+    if (image.image.size() < imageSize) {
+        return nullptr;
+    }
+    ColorFormat colorFormat;
+    if (image.component == 1) {
+        colorFormat = ColorFormat::RED;
+    } else if (image.component == 4) {
+        colorFormat = ColorFormat::RGBA;
+    } else {
+        return nullptr; // renders only support 8bpp and 32bpp
+    }
+
+    unsigned char* imageCopy = static_cast<unsigned char*>(std::malloc(imageSize));
+    if (!imageCopy) {
+        return nullptr;
+    }
+    std::memcpy(imageCopy, image.image.data(), imageSize);
+
+    auto faces = std::make_shared<std::array<TextureData,6>>();
+    faces->at(0) = TextureData(image.width, image.height, static_cast<unsigned int>(imageSize), colorFormat, image.component, imageCopy);
+    faces->at(0).setDataOwned(true); // single owner; copies above are shallow with dataOwned=false
+    return faces;
 }
 
 std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::loadModelFileOnWorker(const std::string& filename, bool obj, uint64_t buildId){
@@ -2656,7 +2652,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 return false;
             }
 
-            const int maxImageDim = g_imageDecodeMaxDimension;
+            const int maxImageDim = imageDecodeMaxDimension;
             decodeGLTFImagesParallel(*model.gltfModel, maxImageDim);
 
             // Only cache full-resolution parses. A downscaled preview decode must not be reused
