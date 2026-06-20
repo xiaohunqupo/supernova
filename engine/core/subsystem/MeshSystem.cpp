@@ -863,6 +863,51 @@ bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelC
     return false;
 }
 
+int MeshSystem::convertGLTFByteIndicesToShort(const tinygltf::Accessor& indexAccessor, ModelComponent& model){
+    // Sokol (and most modern backends) have no 8-bit index format, so 8-bit GLTF indices
+    // are expanded to 16-bit into a synthetic buffer/bufferView appended to the model.
+    // The model's buffers vector is reserved up-front by the caller so this append never
+    // reallocates and invalidates pointers already handed to external buffers.
+    if (!model.gltfModel || !isValidGLTFIndex(indexAccessor.bufferView, model.gltfModel->bufferViews)) {
+        return -1;
+    }
+
+    const tinygltf::BufferView& srcView = model.gltfModel->bufferViews[indexAccessor.bufferView];
+    if (!isValidGLTFIndex(srcView.buffer, model.gltfModel->buffers)) {
+        return -1;
+    }
+
+    const std::vector<unsigned char>& srcData = model.gltfModel->buffers[srcView.buffer].data;
+    const size_t srcOffset = srcView.byteOffset + indexAccessor.byteOffset;
+    const size_t count = indexAccessor.count;
+
+    // 8-bit indices are tightly packed (one byte each).
+    if (srcOffset > srcData.size() || count > srcData.size() - srcOffset) {
+        Log::error("GLTF byte index range out of bounds");
+        return -1;
+    }
+
+    tinygltf::Buffer newBuffer;
+    newBuffer.data.resize(count * sizeof(uint16_t));
+    uint16_t* dst = reinterpret_cast<uint16_t*>(newBuffer.data.data());
+    for (size_t k = 0; k < count; k++) {
+        dst[k] = static_cast<uint16_t>(srcData[srcOffset + k]);
+    }
+    model.gltfModel->buffers.push_back(std::move(newBuffer));
+    const int newBufferIndex = static_cast<int>(model.gltfModel->buffers.size()) - 1;
+
+    tinygltf::BufferView newView;
+    newView.buffer = newBufferIndex;
+    newView.byteOffset = 0;
+    newView.byteLength = count * sizeof(uint16_t);
+    newView.byteStride = 0;
+    newView.target = 34963; // GL_ELEMENT_ARRAY_BUFFER
+    newView.name = "byteindex_synth";
+    model.gltfModel->bufferViews.push_back(std::move(newView));
+
+    return static_cast<int>(model.gltfModel->bufferViews.size()) - 1;
+}
+
 bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName){
     texture = Texture();
 
@@ -1090,7 +1135,9 @@ Entity MeshSystem::generateSketetalStructure(Entity entity, ModelComponent& mode
 
     Entity bone;
 
-    bone = scene->createEntity();
+    // User pool (not System): model-generated entities must not draw from the capped [1..1000]
+    // System range. They stay out of serialization via the editor's entity list, like mesh nodes.
+    bone = scene->createUserEntity();
     if (bone == NULL_ENTITY) {
         return NULL_ENTITY;
     }
@@ -2422,8 +2469,17 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         return false;
     }
 
-    if (meshNodes.size() > 1) {
-        Log::warn("GLTF model (%s) has %zu mesh nodes. Loading them as submeshes on one entity model. Per-node transforms are ignored",
+    // Multi-node models spread their mesh nodes across child entities (each with its own Transform)
+    // so per-node placement survives save/load. Skinned models stay flattened on the root mesh,
+    // because the skeleton — not the node transforms — drives their vertices.
+    bool anyNodeSkinned = false;
+    for (int nodeIdx : meshNodes) {
+        if (model.gltfModel->nodes[nodeIdx].skin >= 0) { anyNodeSkinned = true; break; }
+    }
+    bool useChildEntities = (meshNodes.size() > 1) && !anyNodeSkinned;
+
+    if (meshNodes.size() > 1 && !useChildEntities) {
+        Log::warn("GLTF model (%s) has %zu mesh nodes but is skinned; loading them as submeshes on one entity. Per-node transforms are ignored",
                   filename.c_str(), meshNodes.size());
     }
 
@@ -2444,7 +2500,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
     Matrix4 matrix = getGLTFMeshGlobalMatrix(transformNode, model, nodesParent);
 
-    if (changeRootTransform) {
+    // In the child-entity path the scene-root transform is baked into each child's global matrix,
+    // so the root entity keeps its drag/identity transform to avoid applying it twice.
+    if (changeRootTransform && !useChildEntities) {
         bool hasDefaultPosition = (transform.position == Vector3::ZERO);
         bool hasDefaultRotation = (transform.rotation == Quaternion::IDENTITY);
         bool hasDefaultScale    = (transform.scale    == Vector3::UNIT_SCALE);
@@ -2467,7 +2525,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         ResourceProgress::updateProgress(buildId, 0.4f); // Transform processing done
     }
 
-    // Count total primitives across all mesh nodes to size the submesh array.
+    // Count total primitives to detect empty models early.
     unsigned int totalSubmeshes = 0;
     for (int nodeIdx : meshNodes) {
         int gltfMeshIndex = model.gltfModel->nodes[nodeIdx].mesh;
@@ -2484,15 +2542,28 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         return false;
     }
 
-    mesh.numSubmeshes = totalSubmeshes;
-    if (mesh.numSubmeshes > 0 && !mesh.submeshes.validIndex(static_cast<int>(mesh.numSubmeshes) - 1)) {
-        Log::error("Model %s has more submeshes than the maximum allowed (%i)", filename.c_str(), mesh.submeshes.size());
-        mesh.numSubmeshes = static_cast<unsigned int>(mesh.submeshes.size());
-    }
-
     model.morphNameMapping.clear();
 
-    unsigned int submeshIndex = 0;
+    if (useChildEntities) {
+        // Each node becomes its own child mesh; the root mesh stays an empty container (loadMesh
+        // skips it). numExternalBuffers was already zeroed at the top of loadGLTF.
+        mesh.numSubmeshes = 0;
+    } else {
+        // Flatten path: every node's primitives accumulate into the single root MeshComponent, so its
+        // submesh array is sized for the total up-front and the buffer dedup/reserve happens once.
+        mesh.numSubmeshes = totalSubmeshes;
+        if (!mesh.submeshes.validIndex(static_cast<int>(totalSubmeshes) - 1)) {
+            Log::error("Model %s has more submeshes than the maximum allowed (%i)", filename.c_str(), mesh.submeshes.size());
+            mesh.numSubmeshes = static_cast<unsigned int>(mesh.submeshes.size());
+        }
+        loadedBuffers.clear();
+        if (model.gltfModel) {
+            model.gltfModel->buffers.reserve(model.gltfModel->buffers.size() + mesh.numSubmeshes);
+            model.gltfModel->bufferViews.reserve(model.gltfModel->bufferViews.size() + mesh.numSubmeshes);
+        }
+    }
+
+    unsigned int submeshIndex = 0; // continuous across nodes for the flatten path
     for (int nodeIdx : meshNodes) {
         int gltfMeshIndex = model.gltfModel->nodes[nodeIdx].mesh;
         if (!isValidGLTFIndex(gltfMeshIndex, model.gltfModel->meshes)) {
@@ -2500,6 +2571,74 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
 
         tinygltf::Mesh& gltfmesh = model.gltfModel->meshes[gltfMeshIndex];
+
+        // Select the MeshComponent this node's primitives load into: the root entity for the
+        // single-node/skinned path, or a per-node child entity (created or reused) otherwise.
+        Entity meshEntity = entity;
+        if (useChildEntities) {
+            meshEntity = NULL_ENTITY;
+            auto existing = model.meshNodesMapping.find(nodeIdx);
+            if (existing != model.meshNodesMapping.end() &&
+                    scene->getSignature(existing->second).test(scene->getComponentId<MeshComponent>())) {
+                meshEntity = existing->second; // reuse deserialized child (skipEntities reload)
+            }
+            if (meshEntity == NULL_ENTITY) {
+                meshEntity = scene->createUserEntity();
+                if (meshEntity == NULL_ENTITY) {
+                    continue;
+                }
+                scene->addComponent<Transform>(meshEntity);
+                scene->addComponent<MeshComponent>(meshEntity);
+
+                const std::string& nodeName = model.gltfModel->nodes[nodeIdx].name;
+                scene->setEntityName(meshEntity, nodeName.empty() ? ("MeshNode " + std::to_string(nodeIdx)) : nodeName);
+
+                // Flat under the root: the child carries its full gltf-space global matrix as its
+                // local transform, so root.world * childGlobal reproduces the node's placement.
+                Transform& childTransform = scene->getComponent<Transform>(meshEntity);
+                Matrix4 nodeGlobal = getGLTFMeshGlobalMatrix(nodeIdx, model, nodesParent);
+                nodeGlobal.decompose(childTransform.position, childTransform.scale, childTransform.rotation);
+
+                scene->addEntityChild(entity, meshEntity, false);
+                model.meshNodesMapping[nodeIdx] = meshEntity;
+            }
+
+            // Refresh the world matrix (also on reuse from a reopened scene) so the child doesn't
+            // render at a stale transform until it is moved.
+            scene->getComponent<Transform>(meshEntity).needUpdate = true;
+        }
+
+        MeshComponent& mesh = scene->getComponent<MeshComponent>(meshEntity); // shadows root mesh
+
+        // Per-node fresh setup for the child path only. The flatten path keeps the root mesh's state
+        // set once before the loop so all nodes accumulate (a continuous submeshIndex, shared buffers).
+        if (useChildEntities) {
+            loadedBuffers.clear(); // dedup is per child MeshComponent
+            submeshIndex = 0;      // each child mesh starts at submesh 0
+
+            mesh.numExternalBuffers = 0;
+            mesh.normAdjustJoint = 1.0f;
+            mesh.normAdjustWeight = 1.0f;
+            for (int b = 0; b < MAX_BONES; b++) {
+                mesh.bonesMatrix[b].identity();
+            }
+
+            mesh.numSubmeshes = static_cast<unsigned int>(gltfmesh.primitives.size());
+            if (mesh.numSubmeshes > 0 && !mesh.submeshes.validIndex(static_cast<int>(mesh.numSubmeshes) - 1)) {
+                Log::error("Model %s has more submeshes than the maximum allowed (%i)", filename.c_str(), mesh.submeshes.size());
+                mesh.numSubmeshes = static_cast<unsigned int>(mesh.submeshes.size());
+            }
+
+            mesh.cullingMode = CullingMode::BACK;
+            mesh.windingOrder = (getGLTFMeshGlobalMatrix(nodeIdx, model, nodesParent).determinant() < 0.0) ? WindingOrder::CW : WindingOrder::CCW;
+
+            // 8-bit indices expand to 16-bit synthetic buffers/views (one per primitive at most).
+            // Reserve up-front so appends never reallocate and invalidate external-buffer pointers.
+            if (model.gltfModel) {
+                model.gltfModel->buffers.reserve(model.gltfModel->buffers.size() + mesh.numSubmeshes);
+                model.gltfModel->bufferViews.reserve(model.gltfModel->bufferViews.size() + mesh.numSubmeshes);
+            }
+        }
 
         for (size_t p = 0; p < gltfmesh.primitives.size(); p++) {
             if (submeshIndex >= mesh.numSubmeshes) {
@@ -2540,12 +2679,22 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 }
             }
 
-            //Not supported TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE
             AttributeDataType indexType;
+            int indexBufferView = indexAccessor.bufferView;
+            size_t indexByteOffset = indexAccessor.byteOffset;
             if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
                 indexType = AttributeDataType::UNSIGNED_SHORT;
             } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
                 indexType = AttributeDataType::UNSIGNED_INT;
+            } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+                // No 8-bit index format in the renderer: expand to 16-bit via a synthetic buffer view.
+                indexBufferView = convertGLTFByteIndicesToShort(indexAccessor, model);
+                if (!isValidGLTFIndex(indexBufferView, model.gltfModel->bufferViews)) {
+                    Log::error("Failed to convert 8-bit indices for primitive %u: %s", i, filename.c_str());
+                    continue;
+                }
+                indexType = AttributeDataType::UNSIGNED_SHORT;
+                indexByteOffset = 0;
             } else {
                 Log::error("Unknown index type %i", indexAccessor.componentType);
                 continue;
@@ -2611,9 +2760,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
             mesh.submeshes[i].faceCulling = mat ? !mat->doubleSided : true;
 
-            loadGLTFBuffer(indexAccessor.bufferView, mesh, model, indexStride, loadedBuffers);
-            addSubmeshAttribute(mesh.submeshes[i], getBufferName(indexAccessor.bufferView, model),
-                AttributeType::INDEX, 1, indexType, indexAccessor.count, indexAccessor.byteOffset, false);
+            loadGLTFBuffer(indexBufferView, mesh, model, indexStride, loadedBuffers);
+            addSubmeshAttribute(mesh.submeshes[i], getBufferName(indexBufferView, model),
+                AttributeType::INDEX, 1, indexType, indexAccessor.count, indexByteOffset, false);
 
             for (auto& attrib : primitive.attributes) {
                 if (!isValidGLTFIndex(attrib.second, model.gltfModel->accessors)) {
@@ -2822,11 +2971,21 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 }
             }
         }
+
+        // Child meshes finalize here (per-node submesh count + reverse + AABB). The flatten path uses
+        // a continuous submeshIndex across nodes and finalizes the root mesh once after the loop.
+        if (useChildEntities) {
+            mesh.numSubmeshes = submeshIndex; // reserved-but-skipped slots (invalid data) dropped
+            std::reverse(mesh.submeshes.data(), mesh.submeshes.data() + mesh.numSubmeshes);
+            calculateMeshAABB(mesh);
+            mesh.needReload = true;
+        }
     }
 
-    // Trim numSubmeshes to the slots that were actually written.
-    // Slots beyond submeshIndex were reserved but skipped due to invalid data.
-    mesh.numSubmeshes = submeshIndex;
+    if (!useChildEntities) {
+        // Flatten path: submeshIndex accumulated every node's primitives into the root mesh.
+        mesh.numSubmeshes = submeshIndex;
+    }
 
     if (asyncLoad) {
         ResourceProgress::updateProgress(buildId, 0.8f); // Submeshes processed
@@ -3117,12 +3276,18 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     }
     //END DEBUG
 */
-    std::reverse(mesh.submeshes.data(), mesh.submeshes.data() + mesh.numSubmeshes);
+    // Root-mesh finalization (single-node path only). In the child-entity path each child mesh was
+    // already finalized in the loop, the root mesh is an empty container, and adding child
+    // MeshComponents may have reallocated the component array — so the `mesh` reference captured
+    // before the loop must not be dereferenced here.
+    if (!useChildEntities) {
+        std::reverse(mesh.submeshes.data(), mesh.submeshes.data() + mesh.numSubmeshes);
 
-    calculateMeshAABB(mesh);
+        calculateMeshAABB(mesh);
 
-    if (mesh.loaded)
-        mesh.needReload = true;
+        if (mesh.loaded)
+            mesh.needReload = true;
+    }
 
     if (asyncLoad) {
         ResourceProgress::updateProgress(buildId, 1.0f); // Complete
@@ -3449,6 +3614,13 @@ void MeshSystem::clearAnimationMapping(ModelComponent& model){
     model.animations.clear();
 }
 
+void MeshSystem::clearMeshNodeMapping(ModelComponent& model){
+    for (auto const& node : model.meshNodesMapping){
+        scene->destroyEntity(node.second);
+    }
+    model.meshNodesMapping.clear();
+}
+
 void MeshSystem::destroyModel(ModelComponent& model){
     if (model.gltfModel){
         model.gltfModel.reset();
@@ -3593,7 +3765,7 @@ bool MeshSystem::createOrUpdateModel(Entity entity, ModelComponent& model, MeshC
             }
 
             std::string ext = FileData::getFilePathExtension(model.filename);
-            bool skipEntities = !model.filename.empty() && (!model.bonesIdMapping.empty() || !model.animations.empty());
+            bool skipEntities = !model.filename.empty() && (!model.bonesIdMapping.empty() || !model.animations.empty() || !model.meshNodesMapping.empty());
             bool asyncLoading = Engine::isAsyncLoading();
             bool ret = false;
             if (ext == "obj"){

@@ -53,6 +53,11 @@ std::vector<Entity> editor::ModelLoadCmd::collectModelDeleteRoots(const ModelCom
     }
 
     roots.insert(roots.end(), model.animations.begin(), model.animations.end());
+
+    // Mesh-node children are parented directly under the model root, so each is its own delete root.
+    for (const auto& node : model.meshNodesMapping) {
+        roots.push_back(node.second);
+    }
     return roots;
 }
 
@@ -157,6 +162,7 @@ bool editor::ModelLoadCmd::execute(){
     model.bonesIdMapping.clear();
     model.bonesNameMapping.clear();
     model.animations.clear();
+    model.meshNodesMapping.clear();
 
     if (tryLoad()){
         finalizeLoad();

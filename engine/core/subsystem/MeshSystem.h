@@ -23,6 +23,8 @@
 #include <mutex>
 #include <unordered_map>
 
+namespace tinygltf { struct Accessor; }
+
 namespace doriax{
 
     class DORIAX_API MeshSystem : public SubSystem {
@@ -64,6 +66,7 @@ namespace doriax{
         static void applyDefaultObjMaterial(Submesh& submesh);
         void addSubmeshAttribute(Submesh& submesh, const std::string& bufferName, AttributeType attribute, unsigned int elements, AttributeDataType dataType, size_t size, size_t offset, bool normalized);
         bool loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers);
+        int convertGLTFByteIndicesToShort(const tinygltf::Accessor& indexAccessor, ModelComponent& model);
         bool loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName);
         std::string getBufferName(int bufferViewIndex, ModelComponent& model);
         Matrix4 getGLTFNodeMatrix(int nodeIndex, ModelComponent& model);
@@ -102,6 +105,7 @@ namespace doriax{
 
         void clearBoneMapping(ModelComponent& model);
         void clearAnimationMapping(ModelComponent& model);
+        void clearMeshNodeMapping(ModelComponent& model);
         void destroyModel(ModelComponent& model);
 
         void resetModelToBindPose(ModelComponent& model);

@@ -1624,6 +1624,9 @@ void editor::ResourcesWindow::thumbnailWorker() {
 
         } else if (thumbFile.type == FileType::MODEL) {
             try {
+                // loadModel builds the model's entity hierarchy in this worker-owned preview scene;
+                // GPU work is deferred to the main thread by the AsyncThreadScope around the render
+                // (executeSceneOnce) below. ModelRender frames the whole child branch.
                 if (modelRender.loadModel(thumbFile.path.string())) {
                     modelRender.fixDarkMaterials();
                     modelRender.positionCameraForModel();

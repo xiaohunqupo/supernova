@@ -32,6 +32,7 @@ Model::~Model(){
 
         scene->getSystem<MeshSystem>()->clearBoneMapping(model);
         scene->getSystem<MeshSystem>()->clearAnimationMapping(model);
+        scene->getSystem<MeshSystem>()->clearMeshNodeMapping(model);
     }
 }
 
@@ -56,6 +57,7 @@ bool Model::loadOBJ(const std::string& filename){
     if (isEntityOwned()){
         scene->getSystem<MeshSystem>()->clearBoneMapping(model);
         scene->getSystem<MeshSystem>()->clearAnimationMapping(model);
+        scene->getSystem<MeshSystem>()->clearMeshNodeMapping(model);
     }
 
     bool ret = scene->getSystem<MeshSystem>()->loadOBJ(entity, filename);
@@ -74,6 +76,7 @@ bool Model::loadGLTF(const std::string& filename){
     if (isEntityOwned()){
         scene->getSystem<MeshSystem>()->clearBoneMapping(model);
         scene->getSystem<MeshSystem>()->clearAnimationMapping(model);
+        scene->getSystem<MeshSystem>()->clearMeshNodeMapping(model);
     }
 
     bool ret = scene->getSystem<MeshSystem>()->loadGLTF(entity, filename);

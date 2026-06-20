@@ -88,6 +88,9 @@ void editor::ProjectUtils::collectModelEntities(Scene* scene, const ModelCompone
     for (const auto& bone : model.bonesIdMapping){
         out.push_back(bone.second);
     }
+    for (const auto& node : model.meshNodesMapping){
+        out.push_back(node.second);
+    }
     for (const auto& anim : model.animations){
         out.push_back(anim);
         AnimationComponent* animComp = scene->findComponent<AnimationComponent>(anim);
@@ -133,6 +136,16 @@ Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
 
         for (const auto& bone : model.bonesIdMapping) {
             if (bone.second == entity) {
+                Transform* transform = scene->findComponent<Transform>(entity);
+                if (transform && transform->parent != NULL_ENTITY) {
+                    return transform->parent;
+                }
+                return modelEntity;
+            }
+        }
+
+        for (const auto& node : model.meshNodesMapping) {
+            if (node.second == entity) {
                 Transform* transform = scene->findComponent<Transform>(entity);
                 if (transform && transform->parent != NULL_ENTITY) {
                     return transform->parent;

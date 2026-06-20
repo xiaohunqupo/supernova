@@ -4196,6 +4196,17 @@ YAML::Node editor::Stream::encodeModelComponent(const ModelComponent& model) {
         node["bonesNameMapping"] = bonesNode;
     }
 
+    if (!model.meshNodesMapping.empty()) {
+        YAML::Node meshNodesNode;
+        for (const auto& meshNode : model.meshNodesMapping) {
+            YAML::Node n;
+            n["node"] = meshNode.first;
+            n["entity"] = static_cast<uint32_t>(meshNode.second);
+            meshNodesNode.push_back(n);
+        }
+        node["meshNodesMapping"] = meshNodesNode;
+    }
+
     return node;
 }
 
@@ -4232,6 +4243,15 @@ ModelComponent editor::Stream::decodeModelComponent(const YAML::Node& node, cons
             std::string name = boneNode["name"].as<std::string>();
             Entity boneEntity = static_cast<Entity>(boneNode["entity"].as<uint32_t>());
             model.bonesNameMapping[name] = boneEntity;
+        }
+    }
+
+    if (node["meshNodesMapping"]) {
+        model.meshNodesMapping.clear();
+        for (const auto& meshNode : node["meshNodesMapping"]) {
+            int nodeIdx = meshNode["node"].as<int>();
+            Entity nodeEntity = static_cast<Entity>(meshNode["entity"].as<uint32_t>());
+            model.meshNodesMapping[nodeIdx] = nodeEntity;
         }
     }
 
