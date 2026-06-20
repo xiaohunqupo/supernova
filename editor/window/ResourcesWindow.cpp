@@ -39,21 +39,11 @@
 #include <chrono>
 #include <mutex>
 #include <atomic>
-#include <cstdio>
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "stb_image_resize2.h"
 
 using namespace doriax;
-
-// Toggle the verbose [Thumbnail] timing diagnostics. Set to 0 to silence them (and skip evaluating
-// the log arguments).
-#define VERBOSE_THUMBNAIL 1
-#if VERBOSE_THUMBNAIL
-    #define THUMBNAIL_LOG(...) Log::verbose(__VA_ARGS__)
-#else
-    #define THUMBNAIL_LOG(...) ((void)0)
-#endif
 
 editor::FileType editor::ResourcesWindow::classifyThumbnailFileType(const fs::path& filePath) {
     const std::string extension = filePath.extension().string();
@@ -224,19 +214,10 @@ void editor::ResourcesWindow::processModelThumbnails() {
     if (hasPendingModelRender && !Engine::isSceneRunning(modelRender.getScene())) {
         std::lock_guard<std::mutex> lock(modelRenderMutex);
 
-        [[maybe_unused]] const double renderWaitMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - pendingModelRenderStarted).count();
-
         fs::path thumbnailPath = project->getThumbnailPath(pendingModelPath);
         fs::create_directories(thumbnailPath.parent_path());
 
         Framebuffer* framebuffer = modelRender.getFramebuffer();
-        THUMBNAIL_LOG("[Thumbnail] preview render finished for '%s' after %.1f ms; framebuffer=%ux%u; saving '%s'",
-                     pendingModelPath.string().c_str(), renderWaitMs,
-                     framebuffer ? framebuffer->getWidth() : 0,
-                     framebuffer ? framebuffer->getHeight() : 0,
-                     thumbnailPath.string().c_str());
-
         if (!framebuffer) {
             Log::warn("Thumbnail render produced no framebuffer for model: %s", pendingModelPath.string().c_str());
             {
@@ -250,20 +231,13 @@ void editor::ResourcesWindow::processModelThumbnails() {
 
         fs::path capturedPath = pendingModelPath;
         FileType capturedType = FileType::MODEL;
-        const auto saveStarted = std::chrono::steady_clock::now();
 
         GraphicUtils::saveFramebufferImage(framebuffer, thumbnailPath, false,
-            [this, capturedPath, capturedType, thumbnailPath, saveStarted]() {
+            [this, capturedPath, capturedType, thumbnailPath]() {
                 std::error_code ec;
-                const auto outputBytes = fs::file_size(thumbnailPath, ec);
-                const double saveMs = std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - saveStarted).count();
-                if (ec) {
-                    Log::warn("Failed to save model thumbnail '%s' after %.1f ms: %s",
-                              thumbnailPath.string().c_str(), saveMs, ec.message().c_str());
-                } else {
-                    THUMBNAIL_LOG("[Thumbnail] saved model thumbnail '%s' (%ju bytes) in %.1f ms",
-                                 thumbnailPath.string().c_str(), static_cast<uintmax_t>(outputBytes), saveMs);
+                if (!fs::exists(thumbnailPath, ec) || ec) {
+                    Log::warn("Failed to save model thumbnail '%s': %s",
+                              thumbnailPath.string().c_str(), ec ? ec.message().c_str() : "output file is missing");
                 }
                 {
                     std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
@@ -277,7 +251,6 @@ void editor::ResourcesWindow::processModelThumbnails() {
         // copy. Release this large preview scene now so its GPU buffers don't
         // overlap with the model being loaded into the user's scene.
         modelRender.clearScene();
-        THUMBNAIL_LOG("[Thumbnail] released model preview scene after framebuffer readback");
 
         hasPendingModelRender = false;
 
@@ -1508,10 +1481,6 @@ void editor::ResourcesWindow::pasteFiles(const fs::path& targetDirectory) {
 void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath, FileType type, bool forceRegenerate) {
     std::error_code ec;
     if (!fs::exists(filePath, ec) || ec) {
-        if (type == FileType::MODEL) {
-            THUMBNAIL_LOG("[Thumbnail] model request rejected; file does not exist: '%s' (%s)",
-                         filePath.string().c_str(), ec ? ec.message().c_str() : "not found");
-        }
         return;
     }
 
@@ -1533,9 +1502,6 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
         auto imageTime = fs::last_write_time(normalizedPath, imageTimeEc);
         auto thumbTime = fs::last_write_time(thumbnailPath, thumbTimeEc);
         if (!imageTimeEc && !thumbTimeEc && thumbTime >= imageTime) {
-            if (type == FileType::MODEL) {
-                THUMBNAIL_LOG("[Thumbnail] using up-to-date model thumbnail '%s'", thumbnailPath.string().c_str());
-            }
             // Thumbnail is up-to-date, queue it for loading
             std::lock_guard<std::mutex> lock(completedThumbnailMutex);
             completedThumbnailQueue.push(thumbFile);
@@ -1548,10 +1514,6 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
             return;
         }
         thumbnailQueue.push(thumbFile);
-        if (type == FileType::MODEL) {
-            THUMBNAIL_LOG("[Thumbnail] queued model '%s' (queue depth %zu, force=%s)",
-                         normalizedPath.string().c_str(), thumbnailQueue.size(), forceRegenerate ? "yes" : "no");
-        }
     }
     thumbnailCondition.notify_one();
 }
@@ -1686,8 +1648,6 @@ void editor::ResourcesWindow::thumbnailWorker() {
 
         } else if (thumbFile.type == FileType::MODEL) {
             try {
-                [[maybe_unused]] const auto thumbnailStarted = std::chrono::steady_clock::now();
-                THUMBNAIL_LOG("[Thumbnail] BEGIN model preview '%s'", thumbFile.path.string().c_str());
                 // Run the load under the async-thread flag: building the multi-node child-entity
                 // hierarchy mutates the ECS, which is only safe on the main thread, so off-thread the
                 // loader flattens into one mesh instead (per-node transforms are lost for the preview).
@@ -1706,13 +1666,9 @@ void editor::ResourcesWindow::thumbnailWorker() {
                         Engine::executeSceneOnce(modelRender.getScene());
                     }
 
-                    THUMBNAIL_LOG("[Thumbnail] preview scene submitted in %.1f ms; waiting for main-thread render",
-                                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - thumbnailStarted).count());
-
                     {
                         std::lock_guard<std::mutex> lock(modelRenderMutex);
                         pendingModelPath = thumbFile.path;
-                        pendingModelRenderStarted = std::chrono::steady_clock::now();
                         hasPendingModelRender = true;
                     }
                 } else {

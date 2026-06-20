@@ -15,10 +15,8 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cstdarg>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -26,7 +24,6 @@
 #include <limits>
 #include <sstream>
 #include <thread>
-#include <unordered_set>
 #include <utility>
 #include "tiny_obj_loader.h"
 #include "tiny_gltf.h"
@@ -35,68 +32,7 @@
 
 using namespace doriax;
 
-// Toggle the verbose [ModelLoad] timing/metrics diagnostics. Set to 0 to silence them.
-#define VERBOSE_MODEL_LOAD 1
-
 namespace {
-
-using ModelLoadClock = std::chrono::steady_clock;
-
-double modelLoadElapsedMs(ModelLoadClock::time_point start) {
-    return std::chrono::duration<double, std::milli>(ModelLoadClock::now() - start).count();
-}
-
-void modelLoadPrintf(const char* format, ...) {
-#if VERBOSE_MODEL_LOAD
-    char buffer[512];
-    va_list args;
-    va_start(args, format);
-    std::vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-    Log::verbose("[ModelLoad] %s", buffer);
-#else
-    (void)format;
-#endif
-}
-
-class GLTFLoadTrace {
-public:
-    explicit GLTFLoadTrace(const std::string& filename)
-        : filename(filename), started(ModelLoadClock::now()), checkpointTime(started) {
-        std::error_code ec;
-        const auto bytes = std::filesystem::file_size(filename, ec);
-        if (ec) {
-            modelLoadPrintf("BEGIN glTF '%s' (file size unavailable: %s)", filename.c_str(), ec.message().c_str());
-        } else {
-            modelLoadPrintf("BEGIN glTF '%s' (%.1f MiB)", filename.c_str(), static_cast<double>(bytes) / (1024.0 * 1024.0));
-        }
-    }
-
-    ~GLTFLoadTrace() {
-        if (!completed) {
-            modelLoadPrintf("FAILED/ABORTED glTF '%s' after %.1f ms", filename.c_str(), modelLoadElapsedMs(started));
-        }
-    }
-
-    void checkpoint(const char* phase) {
-        const auto now = ModelLoadClock::now();
-        const double phaseMs = std::chrono::duration<double, std::milli>(now - checkpointTime).count();
-        const double totalMs = std::chrono::duration<double, std::milli>(now - started).count();
-        modelLoadPrintf("PHASE %-24s %8.1f ms (total %8.1f ms)", phase, phaseMs, totalMs);
-        checkpointTime = now;
-    }
-
-    void finish() {
-        completed = true;
-        modelLoadPrintf("DONE glTF '%s' in %.1f ms", filename.c_str(), modelLoadElapsedMs(started));
-    }
-
-private:
-    std::string filename;
-    ModelLoadClock::time_point started;
-    ModelLoadClock::time_point checkpointTime;
-    bool completed = false;
-};
 
 // Max texture dimension to decode to, per thread. 0 means full resolution. The thumbnail worker
 // sets a small value (via MeshSystem::setImageDecodeMaxDimension) so previews don't decode and
@@ -239,17 +175,6 @@ struct MeshSystem::AsyncModelLoadResult {
     // Texture pixels copied on the worker thread (id -> pooled face array), handed to
     // TextureDataPool on the main thread so the heavy memcpy stays off it.
     std::vector<std::pair<std::string, std::shared_ptr<std::array<TextureData,6>>>> prebuiltTextures;
-};
-
-struct MeshSystem::GLTFLoadMetrics {
-    size_t textureCopyCalls = 0;
-    size_t textureReuseCalls = 0;
-    uint64_t textureCopyBytes = 0;
-    uint64_t textureReuseBytes = 0;
-    size_t bufferBindings = 0;
-    uint64_t bufferBindingBytes = 0;
-    uint64_t uniqueBufferBytes = 0;
-    std::unordered_set<int> bufferViewIndices;
 };
 
 std::mutex& MeshSystem::getAsyncModelMutex(){
@@ -920,8 +845,6 @@ std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::loadModelFileOnWor
             result->objModel = std::make_shared<ObjModelData>();
             result->success = tinyobj::LoadObj(&result->objModel->attrib, &result->objModel->shapes, &result->objModel->materials, &result->warn, &result->err, filename.c_str(), baseDir.c_str());
         }else{
-            const auto parseStarted = ModelLoadClock::now();
-            modelLoadPrintf("ASYNC parser BEGIN '%s'", filename.c_str());
             result->gltfModel = std::make_shared<tinygltf::Model>();
 
             tinygltf::TinyGLTF loader;
@@ -947,8 +870,6 @@ std::shared_ptr<MeshSystem::AsyncModelLoadResult> MeshSystem::loadModelFileOnWor
                     }
                 });
             }
-            modelLoadPrintf("ASYNC parser END '%s' in %.1f ms (success=%s)", filename.c_str(),
-                            modelLoadElapsedMs(parseStarted), result->success ? "yes" : "no");
         }
 
         if (!result->err.empty() || !result->success){
@@ -1054,7 +975,7 @@ void MeshSystem::addSubmeshAttribute(Submesh& submesh, const std::string& buffer
     submesh.attributes[attribute] = attData;
 }
 
-bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers, GLTFLoadMetrics* metrics){
+bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers){
     if (!model.gltfModel || !isValidGLTFIndex(bufferViewIndex, model.gltfModel->bufferViews)) {
         Log::error("Invalid GLTF buffer view index %i", bufferViewIndex);
         return false;
@@ -1094,14 +1015,6 @@ bool MeshSystem::loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelC
         mesh.eBuffers[mesh.numExternalBuffers].setRenderAttributes(false);
 
         mesh.numExternalBuffers++;
-
-        if (metrics) {
-            metrics->bufferBindings++;
-            metrics->bufferBindingBytes += bufferView.byteLength;
-            if (metrics->bufferViewIndices.insert(bufferViewIndex).second) {
-                metrics->uniqueBufferBytes += bufferView.byteLength;
-            }
-        }
 
         return true;
     }
@@ -1208,7 +1121,7 @@ int MeshSystem::bakeGLTFTransformedAttribute(const tinygltf::Accessor& accessor,
     return static_cast<int>(model.gltfModel->bufferViews.size()) - 1;
 }
 
-bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName, GLTFLoadMetrics* metrics){
+bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName){
     texture = Texture();
 
     if (textureIndex >= 0){
@@ -1251,10 +1164,6 @@ bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Textur
         const bool canReuse = existingData && existingData->at(0).getData() && existingData->at(0).getSize() >= imageSize;
         if (canReuse) {
             texture.setId(id);
-            if (metrics) {
-                metrics->textureReuseCalls++;
-                metrics->textureReuseBytes += imageSize;
-            }
         } else {
             unsigned char* imageCopy = static_cast<unsigned char*>(std::malloc(imageSize));
             if (!imageCopy) {
@@ -1265,15 +1174,6 @@ bool MeshSystem::loadGLTFTexture(int textureIndex, ModelComponent& model, Textur
             std::memcpy(imageCopy, image.image.data(), imageSize);
             TextureData textureData(image.width, image.height, imageSize, colorFormat, image.component, imageCopy);
 
-            if (metrics) {
-                metrics->textureCopyCalls++;
-                metrics->textureCopyBytes += imageSize;
-            }
-            if (imageSize >= 32ULL * 1024ULL * 1024ULL) {
-                modelLoadPrintf("large texture %d: %dx%d x %d = %.1f MiB decoded",
-                                textureIndex, image.width, image.height, image.component,
-                                static_cast<double>(imageSize) / (1024.0 * 1024.0));
-            }
             texture.setData(id, textureData);
 
             TextureData& pooledData = texture.getData();
@@ -2680,9 +2580,6 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
     }
 
-    GLTFLoadTrace loadTrace(filename);
-    GLTFLoadMetrics loadMetrics;
-
     MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
     ModelComponent& model = scene->getComponent<ModelComponent>(entity);
     Transform& transform = scene->getComponent<Transform>(entity);
@@ -2724,15 +2621,12 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             }
         }
         res = true;
-        loadTrace.checkpoint("async parse handoff");
     }else{
         // Try cache before hitting disk.
         auto cached = ModelPool::getGLTF(poolKey);
         if (cached){
             model.gltfModel = cached;
             res = true;
-            modelLoadPrintf("parsed model cache hit");
-            loadTrace.checkpoint("parsed cache lookup");
         }else{
             model.gltfModel = std::make_shared<tinygltf::Model>();
 
@@ -2743,10 +2637,8 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             std::string ext = FileData::getFilePathExtension(filename);
 
             if (ext.compare("glb") == 0) {
-                modelLoadPrintf("parsing binary glTF...");
                 res = loader.LoadBinaryFromFile(model.gltfModel.get(), &err, &warn, filename); // for binary glTF(.glb)
             }else{
-                modelLoadPrintf("parsing ASCII glTF...");
                 res = loader.LoadASCIIFromFile(model.gltfModel.get(), &err, &warn, filename);
             }
 
@@ -2772,27 +2664,8 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             if (maxImageDim == 0) {
                 ModelPool::addGLTF(poolKey, model.gltfModel);
             }
-            loadTrace.checkpoint("parse + image decode");
         }
     }
-
-    uint64_t decodedImageBytes = 0;
-    int largestImageWidth = 0;
-    int largestImageHeight = 0;
-    uint64_t largestImageBytes = 0;
-    for (const tinygltf::Image& image : model.gltfModel->images) {
-        decodedImageBytes += image.image.size();
-        if (image.image.size() > largestImageBytes) {
-            largestImageBytes = image.image.size();
-            largestImageWidth = image.width;
-            largestImageHeight = image.height;
-        }
-    }
-    modelLoadPrintf("parsed: %zu nodes, %zu meshes, %zu materials, %zu textures, %zu images; decoded image memory %.1f MiB (largest %dx%d, %.1f MiB)",
-                    model.gltfModel->nodes.size(), model.gltfModel->meshes.size(),
-                    model.gltfModel->materials.size(), model.gltfModel->textures.size(),
-                    model.gltfModel->images.size(), static_cast<double>(decodedImageBytes) / (1024.0 * 1024.0),
-                    largestImageWidth, largestImageHeight, static_cast<double>(largestImageBytes) / (1024.0 * 1024.0));
 
     // Build parent map and collect all nodes that own a mesh primitive.
     int meshNode    = -1; // first skinned mesh node — used for skeleton lookup
@@ -2900,10 +2773,6 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
     }
 
-    modelLoadPrintf("scene expansion: %zu mesh nodes, %u primitive instances, child entities=%s",
-                    meshNodes.size(), totalSubmeshes, useChildEntities ? "yes" : "no");
-    loadTrace.checkpoint("scene graph analysis");
-
     if (totalSubmeshes == 0) {
         Log::error("GLTF model has no mesh primitives: %s", filename.c_str());
         if (asyncLoad) {
@@ -2938,13 +2807,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
     }
 
     unsigned int submeshIndex = 0; // continuous across nodes for the flatten path
-    size_t meshNodeOrdinal = 0;
     for (int nodeIdx : meshNodes) {
-        const auto nodeStarted = ModelLoadClock::now();
-        const uint64_t textureBytesBeforeNode = loadMetrics.textureCopyBytes;
-        const uint64_t bufferBytesBeforeNode = loadMetrics.bufferBindingBytes;
-        meshNodeOrdinal++;
-
         int gltfMeshIndex = model.gltfModel->nodes[nodeIdx].mesh;
         if (!isValidGLTFIndex(gltfMeshIndex, model.gltfModel->meshes)) {
             continue;
@@ -3091,7 +2954,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
             if (mat) {
                 if (!loadGLTFTexture(mat->pbrMetallicRoughness.baseColorTexture.index, model,
-                        mesh.submeshes[i].material.baseColorTexture, filename + "|baseColorTexture", &loadMetrics))
+                        mesh.submeshes[i].material.baseColorTexture, filename + "|baseColorTexture"))
                     continue;
                 if (mat->pbrMetallicRoughness.baseColorTexture.texCoord != 0) {
                     Log::error("Not supported texcoord for %s, only one per submesh: %s", "baseColorTexture", filename.c_str());
@@ -3099,7 +2962,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 }
 
                 if (!loadGLTFTexture(mat->pbrMetallicRoughness.metallicRoughnessTexture.index, model,
-                        mesh.submeshes[i].material.metallicRoughnessTexture, filename + "|metallicRoughnessTexture", &loadMetrics))
+                        mesh.submeshes[i].material.metallicRoughnessTexture, filename + "|metallicRoughnessTexture"))
                     continue;
                 if (mat->pbrMetallicRoughness.metallicRoughnessTexture.texCoord != 0) {
                     Log::error("Not supported texcoord for %s, only one per submesh: %s", "metallicRoughnessTexture", filename.c_str());
@@ -3107,7 +2970,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 }
 
                 if (!loadGLTFTexture(mat->occlusionTexture.index, model,
-                        mesh.submeshes[i].material.occlusionTexture, filename + "|occlusionTexture", &loadMetrics))
+                        mesh.submeshes[i].material.occlusionTexture, filename + "|occlusionTexture"))
                     continue;
                 if (mat->occlusionTexture.texCoord != 0) {
                     Log::error("Not supported texcoord for %s, only one per submesh: %s", "occlusionTexture", filename.c_str());
@@ -3115,7 +2978,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 }
 
                 if (!loadGLTFTexture(mat->emissiveTexture.index, model,
-                        mesh.submeshes[i].material.emissiveTexture, filename + "|emissiveTexture", &loadMetrics))
+                        mesh.submeshes[i].material.emissiveTexture, filename + "|emissiveTexture"))
                     continue;
                 if (mat->emissiveTexture.texCoord != 0) {
                     Log::error("Not supported texcoord for %s, only one per submesh: %s", "emissiveTexture", filename.c_str());
@@ -3123,7 +2986,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 }
 
                 if (!loadGLTFTexture(mat->normalTexture.index, model,
-                        mesh.submeshes[i].material.normalTexture, filename + "|normalTexture", &loadMetrics))
+                        mesh.submeshes[i].material.normalTexture, filename + "|normalTexture"))
                     continue;
                 if (mat->normalTexture.texCoord != 0) {
                     Log::error("Not supported texcoord for %s, only one per submesh: %s", "normalTexture", filename.c_str());
@@ -3149,7 +3012,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
             mesh.submeshes[i].faceCulling = mat ? !mat->doubleSided : true;
 
-            loadGLTFBuffer(indexBufferView, mesh, model, indexStride, loadedBuffers, &loadMetrics);
+            loadGLTFBuffer(indexBufferView, mesh, model, indexStride, loadedBuffers);
             addSubmeshAttribute(mesh.submeshes[i], getBufferName(indexBufferView, model),
                 AttributeType::INDEX, 1, indexType, indexAccessor.count, indexByteOffset, false);
 
@@ -3181,7 +3044,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 }
                 const std::string bufferName = getBufferName(attrBufferView, model);
 
-                loadGLTFBuffer(attrBufferView, mesh, model, byteStride, loadedBuffers, &loadMetrics);
+                loadGLTFBuffer(attrBufferView, mesh, model, byteStride, loadedBuffers);
 
                 int elements = (accessor.type != TINYGLTF_TYPE_SCALAR) ? accessor.type : 1;
 
@@ -3296,7 +3159,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
                     const std::string bufferName = getBufferName(accessor.bufferView, model);
 
-                    loadGLTFBuffer(accessor.bufferView, mesh, model, byteStride, loadedBuffers, &loadMetrics);
+                    loadGLTFBuffer(accessor.bufferView, mesh, model, byteStride, loadedBuffers);
 
                     int elements = (accessor.type != TINYGLTF_TYPE_SCALAR) ? accessor.type : 1;
 
@@ -3383,21 +3246,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             mesh.needReload = true;
         }
 
-        const double nodeMs = modelLoadElapsedMs(nodeStarted);
-        if (nodeMs >= 50.0 || meshNodeOrdinal == 1 || meshNodeOrdinal == meshNodes.size() || meshNodeOrdinal % 10 == 0) {
-            modelLoadPrintf("mesh node %zu/%zu (node %d, mesh %d): %.1f ms, texture copies %.1f MiB, buffer bindings %.1f MiB",
-                            meshNodeOrdinal, meshNodes.size(), nodeIdx, gltfMeshIndex, nodeMs,
-                            static_cast<double>(loadMetrics.textureCopyBytes - textureBytesBeforeNode) / (1024.0 * 1024.0),
-                            static_cast<double>(loadMetrics.bufferBindingBytes - bufferBytesBeforeNode) / (1024.0 * 1024.0));
-        }
     }
-
-    modelLoadPrintf("mesh build totals: %zu texture copies / %.1f MiB; %zu pooled reuses / %.1f MiB avoided; %zu buffer bindings / %.1f MiB (unique %.1f MiB)",
-                    loadMetrics.textureCopyCalls, static_cast<double>(loadMetrics.textureCopyBytes) / (1024.0 * 1024.0),
-                    loadMetrics.textureReuseCalls, static_cast<double>(loadMetrics.textureReuseBytes) / (1024.0 * 1024.0),
-                    loadMetrics.bufferBindings, static_cast<double>(loadMetrics.bufferBindingBytes) / (1024.0 * 1024.0),
-                    static_cast<double>(loadMetrics.uniqueBufferBytes) / (1024.0 * 1024.0));
-    loadTrace.checkpoint("mesh/material expansion");
 
     if (!useChildEntities) {
         // Flatten path: submeshIndex accumulated every node's primitives into the root mesh.
@@ -3706,16 +3555,12 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             mesh.needReload = true;
     }
 
-    loadTrace.checkpoint("skeleton/animation/finalize");
-
     if (asyncLoad) {
         ResourceProgress::updateProgress(buildId, 1.0f); // Complete
         ResourceProgress::completeBuild(buildId);
     }
 
     model.loadedFilename = getModelFilenameKey(filename);
-
-    loadTrace.finish();
 
     return true;
 }

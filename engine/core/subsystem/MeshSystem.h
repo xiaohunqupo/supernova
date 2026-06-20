@@ -31,7 +31,6 @@ namespace doriax{
 
     private:
         struct AsyncModelLoadResult;
-        struct GLTFLoadMetrics;
         typedef std::unordered_map<std::string, std::shared_future<std::shared_ptr<AsyncModelLoadResult>>> async_model_loads_t;
 
         static std::mutex& getAsyncModelMutex();
@@ -66,10 +65,10 @@ namespace doriax{
         static void applyDefaultGLTFMaterial(Material& material);
         static void applyDefaultObjMaterial(Submesh& submesh);
         void addSubmeshAttribute(Submesh& submesh, const std::string& bufferName, AttributeType attribute, unsigned int elements, AttributeDataType dataType, size_t size, size_t offset, bool normalized);
-        bool loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers, GLTFLoadMetrics* metrics = nullptr);
+        bool loadGLTFBuffer(int bufferViewIndex, MeshComponent& mesh, ModelComponent& model, const int stride, std::vector<std::string>& loadedBuffers);
         int convertGLTFByteIndicesToShort(const tinygltf::Accessor& indexAccessor, ModelComponent& model);
         int bakeGLTFTransformedAttribute(const tinygltf::Accessor& accessor, const Matrix4& matrix, const Matrix3& normalMatrix, bool isNormal, ModelComponent& model);
-        bool loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName, GLTFLoadMetrics* metrics = nullptr);
+        bool loadGLTFTexture(int textureIndex, ModelComponent& model, Texture& texture, const std::string& textureName);
         std::string getBufferName(int bufferViewIndex, ModelComponent& model);
         Matrix4 getGLTFNodeMatrix(int nodeIndex, ModelComponent& model);
         Matrix4 getGLTFMeshGlobalMatrix(int nodeIndex, ModelComponent& model, std::map<int, int>& nodesParent);
