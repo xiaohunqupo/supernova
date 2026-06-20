@@ -442,6 +442,11 @@ RayReturn Ray::intersects(Scene* scene, RayFilter raytest, bool onlyStatic, uint
 
         b2WorldId world = scene->getSystem<PhysicsSystem>()->getWorld2D();
 
+        // The Box2D world is created lazily; with no 2D bodies in the scene there is nothing to hit.
+        if (!b2World_IsValid(world)){
+            return {false, 0, Vector3(0,0,0), Vector3(0,0,0), NULL_ENTITY, 0};
+        }
+
         float ptmScale = scene->getSystem<PhysicsSystem>()->getPointsToMeterScale2D();
 
         Vector3 end = origin + direction;

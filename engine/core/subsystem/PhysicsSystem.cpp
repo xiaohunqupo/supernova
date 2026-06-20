@@ -69,13 +69,10 @@ PhysicsSystem::PhysicsSystem(Scene* scene): SubSystem(scene){
     this->gravity = Vector3(0, -9.81f, 0);
     this->pointsToMeterScale2D = 64.0;
 
-    b2WorldDef worldDef = b2DefaultWorldDef();
-    worldDef.gravity = {this->gravity.x, this->gravity.y};
-    world2D = b2CreateWorld(&worldDef);
-
-    b2World_SetPreSolveCallback(world2D, Box2DAux::PreSolve, scene);
-    // TODO: could there be a performance issue by checking this often?
-    b2World_SetCustomFilterCallback(world2D, Box2DAux::CollisionFilter, scene);
+    // The Box2D world is created lazily (see ensureWorld2D): Box2D's global b2_worlds[] pool is
+    // capped at B2_MAX_WORLDS (128) and is not thread-safe. Editor preview/thumbnail/gizmo scenes
+    // (and pure-3D scenes) have no 2D bodies, so they must not consume a world slot.
+    world2D = b2_nullWorldId;
 
     // https://github.com/jrouwe/JoltPhysics/issues/244
     JPH::RegisterDefaultAllocator();
@@ -115,8 +112,29 @@ PhysicsSystem::PhysicsSystem(Scene* scene): SubSystem(scene){
     lock3DBodies = true;
 }
 
+void PhysicsSystem::ensureWorld2D(){
+    if (b2World_IsValid(world2D)){
+        return;
+    }
+
+    b2WorldDef worldDef = b2DefaultWorldDef();
+    worldDef.gravity = {this->gravity.x, this->gravity.y};
+    world2D = b2CreateWorld(&worldDef);
+
+    if (!b2World_IsValid(world2D)){
+        Log::error("Could not create Box2D world: the global world pool is exhausted");
+        return;
+    }
+
+    b2World_SetPreSolveCallback(world2D, Box2DAux::PreSolve, scene);
+    // TODO: could there be a performance issue by checking this often?
+    b2World_SetCustomFilterCallback(world2D, Box2DAux::CollisionFilter, scene);
+}
+
 PhysicsSystem::~PhysicsSystem(){
-    b2DestroyWorld(world2D);
+    if (b2World_IsValid(world2D)){
+        b2DestroyWorld(world2D);
+    }
     world2D = b2_nullWorldId;
 
     delete activationListener3D;
@@ -140,7 +158,9 @@ Vector3 PhysicsSystem::getGravity() const{
 void PhysicsSystem::setGravity(Vector3 gravity){
     if (this->gravity != gravity){
         this->gravity = gravity;
-        b2World_SetGravity(world2D, {gravity.x, gravity.y});
+        if (b2World_IsValid(world2D)){
+            b2World_SetGravity(world2D, {gravity.x, gravity.y});
+        }
         world3D.SetGravity(JPH::Vec3(gravity.x, gravity.y, gravity.z));
     }
 }
@@ -224,6 +244,11 @@ void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Bod
 }
 
 bool PhysicsSystem::loadJoint2D(Entity entity, Joint2DComponent& joint){
+    ensureWorld2D();
+    if (!b2World_IsValid(world2D)){
+        return false;
+    }
+
     if (b2Joint_IsValid(joint.joint)){
         destroyJoint2D(joint);
     }
@@ -956,6 +981,11 @@ b2BodyId PhysicsSystem::getBody(Entity entity){
 }
 
 bool PhysicsSystem::loadBody2D(Entity entity){
+    ensureWorld2D();
+    if (!b2World_IsValid(world2D)){
+        return false;
+    }
+
     Body2DComponent& body = scene->getComponent<Body2DComponent>(entity);
 
     if (!b2Body_IsValid(body.body) || body.needReloadBody){
@@ -2200,45 +2230,48 @@ void PhysicsSystem::fixedUpdate(double dt){
         }
     }
 
-    if (bodies2d->size() > 0){
-        int32_t subSteps = 4;
-        b2World_Step(world2D, fixedStep, subSteps);
-    }
+    // With no 2D bodies the world was never created (lazy): skip all Box2D stepping/events.
+    if (b2World_IsValid(world2D)){
+        if (bodies2d->size() > 0){
+            int32_t subSteps = 4;
+            b2World_Step(world2D, fixedStep, subSteps);
+        }
 
-    b2BodyEvents events = b2World_GetBodyEvents(world2D);
-    for (int i = 0; i < events.moveCount; ++i){
-        const b2BodyMoveEvent* event = events.moveEvents + i;
+        b2BodyEvents events = b2World_GetBodyEvents(world2D);
+        for (int i = 0; i < events.moveCount; ++i){
+            const b2BodyMoveEvent* event = events.moveEvents + i;
 
-        Entity entity = reinterpret_cast<uintptr_t>(event->userData);
-        Signature signature = scene->getSignature(entity);
+            Entity entity = reinterpret_cast<uintptr_t>(event->userData);
+            Signature signature = scene->getSignature(entity);
 
-        b2Transform bTransform = event->transform;
-        if (signature.test(scene->getComponentId<Transform>())){
-            Transform& transform = scene->getComponent<Transform>(entity);
+            b2Transform bTransform = event->transform;
+            if (signature.test(scene->getComponentId<Transform>())){
+                Transform& transform = scene->getComponent<Transform>(entity);
 
-            Vector3 nPosition = Vector3(bTransform.p.x * pointsToMeterScale2D, bTransform.p.y * pointsToMeterScale2D, transform.worldPosition.z);
-            Quaternion nRotation = Quaternion(Angle::radToDefault(b2Rot_GetAngle(bTransform.q)), Vector3(0, 0, 1));
+                Vector3 nPosition = Vector3(bTransform.p.x * pointsToMeterScale2D, bTransform.p.y * pointsToMeterScale2D, transform.worldPosition.z);
+                Quaternion nRotation = Quaternion(Angle::radToDefault(b2Rot_GetAngle(bTransform.q)), Vector3(0, 0, 1));
 
-            if (transform.parent != NULL_ENTITY){
-                Transform& transformParent = scene->getComponent<Transform>(transform.parent);
+                if (transform.parent != NULL_ENTITY){
+                    Transform& transformParent = scene->getComponent<Transform>(transform.parent);
 
-                nPosition = transformParent.modelMatrix.inverse() * nPosition;
-                nRotation = transformParent.worldRotation.inverse() * nRotation;
-            }
+                    nPosition = transformParent.modelMatrix.inverse() * nPosition;
+                    nRotation = transformParent.worldRotation.inverse() * nRotation;
+                }
 
-            if (transform.position != nPosition){
-                transform.position = nPosition;
-                transform.needUpdate = true;
-            }
+                if (transform.position != nPosition){
+                    transform.position = nPosition;
+                    transform.needUpdate = true;
+                }
 
-            if (transform.rotation != nRotation){
-                transform.rotation = nRotation;
-                transform.needUpdate = true;
+                if (transform.rotation != nRotation){
+                    transform.rotation = nRotation;
+                    transform.needUpdate = true;
+                }
             }
         }
-    }
 
-    Box2DAux::manageEvents(scene, world2D);
+        Box2DAux::manageEvents(scene, world2D);
+    }
 
     auto bodies3d = scene->getComponentArray<Body3DComponent>();
 

@@ -51,6 +51,7 @@ namespace doriax{
 		JPH::ObjectVsBroadPhaseLayerFilterMask* object_vs_broadphase_layer_filter;
 		JPH::ObjectLayerPairFilterMask* object_vs_object_layer_filter;
 
+		void ensureWorld2D();
 		void updateBody2DPosition(Signature signature, Entity entity, Body2DComponent& body);
 		void updateBody3DPosition(Signature signature, Entity entity, Body3DComponent& body);
 		bool loadJoint2D(Entity entity, Joint2DComponent& joint);
