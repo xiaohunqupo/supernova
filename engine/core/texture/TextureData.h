@@ -81,6 +81,9 @@ namespace doriax {
 
         int getMinNearestPowerOfTwo();
 
+        // number of bytes per channel for a given color format (2 for RED16, 1 otherwise)
+        static int getBytesPerChannel(ColorFormat format);
+
         // render callback clean function
         static void cleanupTexture(void* data);
     };

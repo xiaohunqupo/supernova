@@ -1540,6 +1540,7 @@ bool MeshSystem::raycastTerrainSurface(const Ray& ray, TerrainComponent& terrain
     int width = 0;
     int height = 0;
     int channels = 0;
+    int bytesPerChannel = 1;
 
     if (!terrain.heightMap.empty() && !terrain.heightMap.isFramebuffer()){
         terrain.heightMap.setReleaseDataAfterLoad(false);
@@ -1550,6 +1551,7 @@ bool MeshSystem::raycastTerrainSurface(const Ray& ray, TerrainComponent& terrain
             width = heightData.getWidth();
             height = heightData.getHeight();
             channels = heightData.getChannels();
+            bytesPerChannel = TextureData::getBytesPerChannel(heightData.getColorFormat());
         }
     }
 
@@ -1580,7 +1582,14 @@ bool MeshSystem::raycastTerrainSurface(const Ray& ray, TerrainComponent& terrain
         const float blendZ = texelZ - static_cast<float>(lowerZ);
 
         auto samplePixel = [&](int sampleX, int sampleZ){
-            const size_t index = (static_cast<size_t>(sampleZ) * static_cast<size_t>(width) + static_cast<size_t>(sampleX)) * static_cast<size_t>(channels);
+            const size_t texelIndex = static_cast<size_t>(sampleZ) * static_cast<size_t>(width) + static_cast<size_t>(sampleX);
+            const size_t index = texelIndex * static_cast<size_t>(channels) * static_cast<size_t>(bytesPerChannel);
+            if (bytesPerChannel >= 2){
+                // 16-bit little-endian (native unsigned short) heightmap sample
+                const unsigned int value = static_cast<unsigned int>(pixels[index]) |
+                                           (static_cast<unsigned int>(pixels[index + 1]) << 8);
+                return static_cast<float>(value) / 65535.0f;
+            }
             return pixels[index] / 255.0f;
         };
 
@@ -1717,8 +1726,24 @@ float MeshSystem::getTerrainHeight(TerrainComponent& terrain, float x, float y){
     int posX = floor(textureData.getWidth() * x / terrain.terrainSize);
     int posY = floor(textureData.getHeight() * y / terrain.terrainSize);
 
-    float val = terrain.maxHeight*(textureData.getColorComponent(posX,posY,0)/255.0f);
-    return val;
+    const unsigned char* pixels = static_cast<const unsigned char*>(textureData.getData());
+    if (!pixels){
+        return 0;
+    }
+    const int channels = textureData.getChannels();
+    const int bytesPerChannel = TextureData::getBytesPerChannel(textureData.getColorFormat());
+    const size_t index = (static_cast<size_t>(posY) * textureData.getWidth() + posX) * channels * bytesPerChannel;
+
+    float normalized;
+    if (bytesPerChannel >= 2){
+        // 16-bit little-endian (native unsigned short) heightmap sample
+        const unsigned int raw = static_cast<unsigned int>(pixels[index]) |
+                                 (static_cast<unsigned int>(pixels[index + 1]) << 8);
+        normalized = static_cast<float>(raw) / 65535.0f;
+    }else{
+        normalized = pixels[index] / 255.0f;
+    }
+    return terrain.maxHeight * normalized;
 }
 
 float MeshSystem::maxTerrainHeightArea(TerrainComponent& terrain, float x, float z, float w, float h) {

@@ -116,7 +116,17 @@ bool TextureData::loadTexture(Data* filedata) {
         color_format = ColorFormat::RGBA;
     }
 
-    data = stbi_load_from_memory((stbi_uc const *)filedata->getMemPtr(), filedata->length(), &width, &height, &channels, desired_channels);
+    // Single-channel 16-bit images (e.g. terrain heightmaps) are kept at full precision
+    // as RED16. Multi-channel images are still downconverted to 8-bit RGBA.
+    const bool is16Bit = desired_channels == 1 &&
+                         stbi_is_16_bit_from_memory((stbi_uc const *)filedata->getMemPtr(), filedata->length());
+
+    if (is16Bit){
+        color_format = ColorFormat::RED16;
+        data = stbi_load_16_from_memory((stbi_uc const *)filedata->getMemPtr(), filedata->length(), &width, &height, &channels, desired_channels);
+    }else{
+        data = stbi_load_from_memory((stbi_uc const *)filedata->getMemPtr(), filedata->length(), &width, &height, &channels, desired_channels);
+    }
 
     if (!data){
         Log::error("Error loading texture: %s", stbi_failure_reason());
@@ -125,8 +135,7 @@ bool TextureData::loadTexture(Data* filedata) {
 
     channels = desired_channels;
 
-    //Considering one byte per channel
-    size = width * height * channels; //in bytes
+    size = width * height * channels * (is16Bit ? 2 : 1); //in bytes
     //----- End std_image read texture
 
     originalWidth = width;
@@ -305,6 +314,10 @@ void TextureData::releaseImageData(){
         stbi_image_free(data);
         data = NULL;
     }
+}
+
+int TextureData::getBytesPerChannel(ColorFormat format){
+    return format == ColorFormat::RED16 ? 2 : 1;
 }
 
 int TextureData::getNearestPowerOfTwo(int size){

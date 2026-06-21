@@ -81,6 +81,7 @@ namespace doriax::editor{
         int heightReferenceWidth = 0;
         int heightReferenceHeight = 0;
         int heightReferenceChannels = 0;
+        int heightReferenceBytesPerChannel = 1;
         std::vector<unsigned char> heightReferencePixels;
     };
 
@@ -123,8 +124,11 @@ namespace doriax::editor{
         const char* getTerrainPropertyName(TerrainMapTarget target);
         int expectedChannels(TerrainMapTarget target);
         ColorFormat expectedFormat(TerrainMapTarget target);
+        int expectedBytesPerTexel(TerrainMapTarget target);
+        static float decodeHeightTexel(const unsigned char* pixels, size_t texelIndex, int channels, int bytesPerChannel);
+        static void encodeHeightTexel(unsigned char* pixels, size_t texelIndex, int bytesPerChannel, float value);
         unsigned char clampByte(float value);
-        bool writeTextureFile(Project* project, const std::string& relativePath, int width, int height, int channels, const std::vector<unsigned char>& pixels);
+        bool writeTextureFile(Project* project, const std::string& relativePath, int width, int height, int channels, int bytesPerChannel, const std::vector<unsigned char>& pixels);
         bool setFileBackedTextureData(Project* project, Texture& texture, const std::string& relativePath, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
         bool hasLoadedData(Texture& texture) const;
         bool isOwnedEditableTexturePath(const std::string& path, uint32_t sceneId, Entity entity, TerrainMapTarget target);
@@ -134,6 +138,7 @@ namespace doriax::editor{
         void showTerrainMapStatus(const TerrainMapInfo& info);
         std::vector<unsigned char> copyTexturePixels(TextureData& data);
         std::vector<unsigned char> convertTexturePixels(TextureData& data, TerrainMapTarget target);
+        std::vector<unsigned char> makeInitialMapPixels(TerrainMapTarget target, int width, int height);
         void setOwnedTextureData(Texture& texture, const std::string& id, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels);
         TerrainMapSnapshot captureSnapshot(Project* project, Texture& texture, bool forcePixels);
         bool snapshotsEqual(const TerrainMapSnapshot& a, const TerrainMapSnapshot& b);

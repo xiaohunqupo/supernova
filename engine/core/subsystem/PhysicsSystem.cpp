@@ -786,12 +786,25 @@ bool PhysicsSystem::createShape3DForIndex(Entity entity, Body3DComponent& body, 
         JPH::Vec3 terrainOffset = JPH::Vec3(-terrain->terrainSize / 2.0, 0.0f, -terrain->terrainSize / 2.0);
         JPH::Vec3 terrainScale = JPH::Vec3(terrain->terrainSize / samplesSize, terrain->maxHeight, terrain->terrainSize / samplesSize);
 
+        const unsigned char* heightPixels = static_cast<const unsigned char*>(textureData.getData());
+        const int heightChannels = textureData.getChannels();
+        const int heightBytesPerChannel = TextureData::getBytesPerChannel(textureData.getColorFormat());
+
         float* samples = new float[samplesSize * samplesSize];
         for (unsigned int x = 0; x < samplesSize; x++){
             for (unsigned int y = 0; y < samplesSize; y++){
                 int posX = floor(textureData.getWidth() * x / samplesSize);
                 int posY = floor(textureData.getHeight() * y / samplesSize);
-                float val = textureData.getColorComponent(posX, posY, 0) / 255.0f;
+                const size_t texelIndex = (static_cast<size_t>(posY) * textureData.getWidth() + posX);
+                const size_t index = texelIndex * static_cast<size_t>(heightChannels) * static_cast<size_t>(heightBytesPerChannel);
+                float val;
+                if (heightBytesPerChannel >= 2){
+                    const unsigned int raw = static_cast<unsigned int>(heightPixels[index]) |
+                                             (static_cast<unsigned int>(heightPixels[index + 1]) << 8);
+                    val = static_cast<float>(raw) / 65535.0f;
+                }else{
+                    val = heightPixels[index] / 255.0f;
+                }
                 samples[x + (y * samplesSize)] = val;
             }
         }

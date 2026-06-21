@@ -195,7 +195,8 @@ namespace doriax{
 
     enum class ColorFormat{
         RED,
-        RGBA
+        RGBA,
+        RED16 // single channel, 16-bit unsigned normalized (2 bytes/texel)
     };
 
     enum class TextureFilter{

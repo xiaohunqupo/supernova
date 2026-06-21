@@ -11,15 +11,160 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <limits>
 #include <system_error>
 #include <unordered_set>
+#include <vector>
 
 using namespace doriax;
 using namespace doriax::editor;
+
+// Public zlib (DEFLATE) compressor exposed by the stb_image_write implementation TU
+// (engine/libs/stb/stb_image_write.c). Reused here so we don't hand-roll a compressor.
+extern "C" unsigned char* stbi_zlib_compress(unsigned char* data, int data_len, int* out_len, int quality);
+
+namespace {
+    // stb_image_write cannot emit 16-bit PNGs, so this is a small self-contained encoder for
+    // single-channel 16-bit grayscale heightmaps. It applies adaptive PNG row filtering (so the
+    // smooth gradients in a heightmap compress well) and DEFLATEs the result via stb's own
+    // zlib compressor. stb_image's loader reads these back via stbi_load_16.
+
+    uint32_t png_crc32(const unsigned char* data, size_t len, uint32_t crc){
+        crc = ~crc;
+        for (size_t i = 0; i < len; i++){
+            crc ^= data[i];
+            for (int b = 0; b < 8; b++){
+                crc = (crc >> 1) ^ (0xEDB88320u & (~(crc & 1) + 1));
+            }
+        }
+        return ~crc;
+    }
+
+    void png_put_u32(std::vector<unsigned char>& out, uint32_t v){
+        out.push_back(static_cast<unsigned char>((v >> 24) & 0xFF));
+        out.push_back(static_cast<unsigned char>((v >> 16) & 0xFF));
+        out.push_back(static_cast<unsigned char>((v >> 8) & 0xFF));
+        out.push_back(static_cast<unsigned char>(v & 0xFF));
+    }
+
+    void png_write_chunk(std::vector<unsigned char>& out, const char tag[4], const unsigned char* data, size_t len){
+        png_put_u32(out, static_cast<uint32_t>(len));
+        const size_t typeStart = out.size();
+        out.insert(out.end(), tag, tag + 4);
+        if (len){
+            out.insert(out.end(), data, data + len);
+        }
+        const uint32_t crc = png_crc32(out.data() + typeStart, len + 4, 0);
+        png_put_u32(out, crc);
+    }
+
+    unsigned char png_paeth(int a, int b, int c){
+        const int p = a + b - c;
+        const int pa = std::abs(p - a);
+        const int pb = std::abs(p - b);
+        const int pc = std::abs(p - c);
+        if (pa <= pb && pa <= pc) return static_cast<unsigned char>(a);
+        return pb <= pc ? static_cast<unsigned char>(b) : static_cast<unsigned char>(c);
+    }
+
+    // pixels: width*height 16-bit samples, little-endian in memory (native unsigned short).
+    bool write_gray16_png(const char* path, int width, int height, const unsigned char* pixels){
+        const int bpp = 2; // bytes per pixel: 16-bit single channel
+        const size_t rowBytes = static_cast<size_t>(width) * bpp;
+
+        // Original (unfiltered) big-endian scanlines; PNG stores 16-bit samples big-endian.
+        std::vector<unsigned char> rows(static_cast<size_t>(height) * rowBytes);
+        for (int y = 0; y < height; y++){
+            const unsigned char* src = pixels + static_cast<size_t>(y) * rowBytes;
+            unsigned char* dst = rows.data() + static_cast<size_t>(y) * rowBytes;
+            for (int x = 0; x < width; x++){
+                dst[x * 2]     = src[x * 2 + 1]; // high byte first
+                dst[x * 2 + 1] = src[x * 2];
+            }
+        }
+
+        // Adaptive per-row filtering: pick, for each scanline, the filter that minimizes the
+        // sum of absolute (signed) bytes (the heuristic stb/libpng use). Output is the
+        // filter-type byte + filtered bytes per row, ready to DEFLATE.
+        std::vector<unsigned char> filtered;
+        filtered.reserve(static_cast<size_t>(height) * (1 + rowBytes));
+        std::vector<unsigned char> candidate(rowBytes);
+        std::vector<unsigned char> best(rowBytes);
+        for (int y = 0; y < height; y++){
+            const unsigned char* cur = rows.data() + static_cast<size_t>(y) * rowBytes;
+            const unsigned char* prior = y > 0 ? rows.data() + static_cast<size_t>(y - 1) * rowBytes : nullptr;
+
+            int bestType = 0;
+            long bestCost = -1;
+            for (int ft = 0; ft <= 4; ft++){
+                long cost = 0;
+                for (size_t i = 0; i < rowBytes; i++){
+                    const int raw = cur[i];
+                    const int a = i >= static_cast<size_t>(bpp) ? cur[i - bpp] : 0;       // left
+                    const int b = prior ? prior[i] : 0;                                   // up
+                    const int c = (prior && i >= static_cast<size_t>(bpp)) ? prior[i - bpp] : 0; // up-left
+                    int f;
+                    switch (ft){
+                        case 1:  f = raw - a; break;                          // Sub
+                        case 2:  f = raw - b; break;                          // Up
+                        case 3:  f = raw - ((a + b) >> 1); break;             // Average
+                        case 4:  f = raw - png_paeth(a, b, c); break;         // Paeth
+                        default: f = raw; break;                              // None
+                    }
+                    const unsigned char fb = static_cast<unsigned char>(f & 0xFF);
+                    candidate[i] = fb;
+                    cost += std::abs(static_cast<int>(static_cast<signed char>(fb)));
+                }
+                if (bestCost < 0 || cost < bestCost){
+                    bestCost = cost;
+                    bestType = ft;
+                    best.swap(candidate);
+                }
+            }
+
+            filtered.push_back(static_cast<unsigned char>(bestType));
+            filtered.insert(filtered.end(), best.begin(), best.end());
+        }
+
+        int zlen = 0;
+        unsigned char* zdata = stbi_zlib_compress(filtered.data(), static_cast<int>(filtered.size()), &zlen, 8);
+        if (!zdata){
+            return false;
+        }
+
+        std::vector<unsigned char> out;
+        const unsigned char sig[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+        out.insert(out.end(), sig, sig + 8);
+
+        std::vector<unsigned char> ihdr;
+        png_put_u32(ihdr, static_cast<uint32_t>(width));
+        png_put_u32(ihdr, static_cast<uint32_t>(height));
+        ihdr.push_back(16); // bit depth
+        ihdr.push_back(0);  // color type: grayscale
+        ihdr.push_back(0);  // compression
+        ihdr.push_back(0);  // filter
+        ihdr.push_back(0);  // interlace
+        png_write_chunk(out, "IHDR", ihdr.data(), ihdr.size());
+        png_write_chunk(out, "IDAT", zdata, static_cast<size_t>(zlen));
+        png_write_chunk(out, "IEND", nullptr, 0);
+
+        // stbi_zlib_compress allocates with stb's default allocator (malloc); free with free().
+        std::free(zdata);
+
+        FILE* f = std::fopen(path, "wb");
+        if (!f){
+            return false;
+        }
+        const size_t wrote = std::fwrite(out.data(), 1, out.size(), f);
+        std::fclose(f);
+        return wrote == out.size();
+    }
+}
 
 bool editor::TerrainEditWindow::loadTerrainTextureDataFromPath(Project* project, const std::string& path, TextureData& data){
     if (path.empty()){
@@ -148,15 +293,47 @@ int editor::TerrainEditWindow::expectedChannels(TerrainMapTarget target){
 }
 
 ColorFormat editor::TerrainEditWindow::expectedFormat(TerrainMapTarget target){
-    return target == TerrainMapTarget::HeightMap ? ColorFormat::RED : ColorFormat::RGBA;
+    // Heightmaps use 16-bit single channel (RED16) so large maxHeight values don't
+    // quantize into visible terraces; blend maps stay 8-bit RGBA.
+    return target == TerrainMapTarget::HeightMap ? ColorFormat::RED16 : ColorFormat::RGBA;
+}
+
+// bytes occupied by one texel for a terrain map target (heightmap is 16-bit, blend is 8-bit)
+int editor::TerrainEditWindow::expectedBytesPerTexel(TerrainMapTarget target){
+    return expectedChannels(target) * TextureData::getBytesPerChannel(expectedFormat(target));
+}
+
+// Decode a normalized [0,1] height from a raw pixel buffer, honoring 8- or 16-bit storage.
+// 16-bit samples are stored little-endian in memory (native unsigned short).
+float editor::TerrainEditWindow::decodeHeightTexel(const unsigned char* pixels, size_t texelIndex, int channels, int bytesPerChannel){
+    const size_t byteIndex = texelIndex * static_cast<size_t>(channels) * static_cast<size_t>(bytesPerChannel);
+    if (bytesPerChannel >= 2){
+        const unsigned int value = static_cast<unsigned int>(pixels[byteIndex]) |
+                                   (static_cast<unsigned int>(pixels[byteIndex + 1]) << 8);
+        return static_cast<float>(value) / 65535.0f;
+    }
+    return pixels[byteIndex] / 255.0f;
+}
+
+// Encode a normalized [0,1] height into a raw pixel buffer (single channel), 8- or 16-bit.
+void editor::TerrainEditWindow::encodeHeightTexel(unsigned char* pixels, size_t texelIndex, int bytesPerChannel, float value){
+    const float clamped = std::max(0.0f, std::min(1.0f, value));
+    if (bytesPerChannel >= 2){
+        const unsigned int quantized = static_cast<unsigned int>(std::lround(clamped * 65535.0f));
+        const size_t byteIndex = texelIndex * 2;
+        pixels[byteIndex] = static_cast<unsigned char>(quantized & 0xFF);
+        pixels[byteIndex + 1] = static_cast<unsigned char>((quantized >> 8) & 0xFF);
+    }else{
+        pixels[texelIndex] = static_cast<unsigned char>(std::lround(clamped * 255.0f));
+    }
 }
 
 unsigned char editor::TerrainEditWindow::clampByte(float value){
     return static_cast<unsigned char>(std::max(0.0f, std::min(255.0f, value)));
 }
 
-bool editor::TerrainEditWindow::writeTextureFile(Project* project, const std::string& relativePath, int width, int height, int channels, const std::vector<unsigned char>& pixels){
-    const size_t expectedSize = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels);
+bool editor::TerrainEditWindow::writeTextureFile(Project* project, const std::string& relativePath, int width, int height, int channels, int bytesPerChannel, const std::vector<unsigned char>& pixels){
+    const size_t expectedSize = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels) * static_cast<size_t>(bytesPerChannel);
     if (!project || project->getProjectPath().empty() || relativePath.empty() || width <= 0 || height <= 0 || channels <= 0 || pixels.size() < expectedSize){
         return false;
     }
@@ -173,7 +350,13 @@ bool editor::TerrainEditWindow::writeTextureFile(Project* project, const std::st
         return false;
     }
 
-    const int written = stbi_write_png(outputPath.string().c_str(), width, height, channels, pixels.data(), width * channels);
+    bool written;
+    if (bytesPerChannel >= 2){
+        // 16-bit single-channel grayscale heightmap (stb_image_write cannot emit these).
+        written = write_gray16_png(outputPath.string().c_str(), width, height, pixels.data());
+    }else{
+        written = stbi_write_png(outputPath.string().c_str(), width, height, channels, pixels.data(), width * channels) != 0;
+    }
     if (!written){
         Out::warning("Failed to write terrain texture: %s", outputPath.string().c_str());
         return false;
@@ -183,12 +366,13 @@ bool editor::TerrainEditWindow::writeTextureFile(Project* project, const std::st
 }
 
 bool editor::TerrainEditWindow::setFileBackedTextureData(Project* project, Texture& texture, const std::string& relativePath, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels){
-    const size_t expectedSize = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels);
+    const int bytesPerChannel = TextureData::getBytesPerChannel(format);
+    const size_t expectedSize = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels) * static_cast<size_t>(bytesPerChannel);
     if (width <= 0 || height <= 0 || channels <= 0 || pixels.size() < expectedSize){
         return false;
     }
 
-    if (!writeTextureFile(project, relativePath, width, height, channels, pixels)){
+    if (!writeTextureFile(project, relativePath, width, height, channels, bytesPerChannel, pixels)){
         return false;
     }
 
@@ -312,8 +496,10 @@ std::vector<unsigned char> editor::TerrainEditWindow::convertTexturePixels(Textu
     const int width = data.getWidth();
     const int height = data.getHeight();
     const int srcChannels = data.getChannels();
+    const int srcBytesPerChannel = TextureData::getBytesPerChannel(data.getColorFormat());
     const int dstChannels = expectedChannels(target);
-    std::vector<unsigned char> pixels(static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(dstChannels), 0);
+    const int dstBytesPerChannel = expectedBytesPerTexel(target) / dstChannels;
+    std::vector<unsigned char> pixels(static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(dstChannels) * static_cast<size_t>(dstBytesPerChannel), 0);
 
     if (!data.getData() || width <= 0 || height <= 0 || srcChannels <= 0){
         return pixels;
@@ -322,18 +508,22 @@ std::vector<unsigned char> editor::TerrainEditWindow::convertTexturePixels(Textu
     unsigned char* src = static_cast<unsigned char*>(data.getData());
     for (int y = 0; y < height; y++){
         for (int x = 0; x < width; x++){
-            const size_t srcIndex = (static_cast<size_t>(y) * width + x) * srcChannels;
-            const size_t dstIndex = (static_cast<size_t>(y) * width + x) * dstChannels;
+            const size_t texelIndex = static_cast<size_t>(y) * width + x;
             if (target == TerrainMapTarget::HeightMap){
-                pixels[dstIndex] = src[srcIndex];
+                // Decode the source height (8- or 16-bit, R channel) and re-encode at the
+                // destination precision. This upcasts legacy 8-bit heightmaps to 16-bit.
+                const float normalized = decodeHeightTexel(src, texelIndex, srcChannels, srcBytesPerChannel);
+                encodeHeightTexel(pixels.data(), texelIndex, dstBytesPerChannel, normalized);
             }else{
+                const size_t srcIndex = texelIndex * srcChannels * srcBytesPerChannel;
+                const size_t dstIndex = texelIndex * dstChannels;
                 auto srcComponent = [&](int channel){
-                    return src[srcIndex + std::min(channel, srcChannels - 1)];
+                    return src[srcIndex + std::min(channel, srcChannels - 1) * srcBytesPerChannel];
                 };
                 pixels[dstIndex + 0] = srcComponent(0);
                 pixels[dstIndex + 1] = srcComponent(1);
                 pixels[dstIndex + 2] = srcComponent(2);
-                pixels[dstIndex + 3] = srcChannels >= 4 ? src[srcIndex + 3] : 255;
+                pixels[dstIndex + 3] = srcChannels >= 4 ? src[srcIndex + 3 * srcBytesPerChannel] : 255;
             }
         }
     }
@@ -341,7 +531,7 @@ std::vector<unsigned char> editor::TerrainEditWindow::convertTexturePixels(Textu
 }
 
 void editor::TerrainEditWindow::setOwnedTextureData(Texture& texture, const std::string& id, int width, int height, ColorFormat format, int channels, const std::vector<unsigned char>& pixels){
-    const size_t size = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels);
+    const size_t size = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels) * static_cast<size_t>(TextureData::getBytesPerChannel(format));
     unsigned char* raw = static_cast<unsigned char*>(std::malloc(size));
     if (!raw){
         return;
@@ -491,6 +681,30 @@ void editor::TerrainEditWindow::cleanUnusedTerrainMaps(Project* project){
     }
 }
 
+// Builds the initial pixel buffer for a freshly created terrain map, honoring the target's
+// bit depth. Heightmaps optionally start at the middle (0.5) so they can be raised or lowered.
+std::vector<unsigned char> editor::TerrainEditWindow::makeInitialMapPixels(TerrainMapTarget target, int width, int height){
+    const int channels = expectedChannels(target);
+    const int bytesPerTexel = expectedBytesPerTexel(target);
+    const size_t texelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+    std::vector<unsigned char> pixels(texelCount * static_cast<size_t>(bytesPerTexel), 0);
+
+    if (target == TerrainMapTarget::HeightMap){
+        if (heightMapStartAtMiddle){
+            const int bytesPerChannel = bytesPerTexel / channels;
+            for (size_t i = 0; i < texelCount; i++){
+                encodeHeightTexel(pixels.data(), i, bytesPerChannel, 0.5f);
+            }
+        }
+    }else{
+        // Blend map: opaque alpha, no painted channels yet.
+        for (size_t i = 3; i < pixels.size(); i += 4){
+            pixels[i] = 255;
+        }
+    }
+    return pixels;
+}
+
 bool editor::TerrainEditWindow::ensureEditableMap(Project* project, SceneProject* sceneProject, Entity entity, TerrainMapTarget target, int resolution){
     TerrainComponent& terrain = sceneProject->scene->getComponent<TerrainComponent>(entity);
     Texture& texture = getTerrainTexture(terrain, target);
@@ -499,13 +713,7 @@ bool editor::TerrainEditWindow::ensureEditableMap(Project* project, SceneProject
 
     if (texture.empty()){
         const int safeResolution = std::max(2, resolution);
-        const unsigned char initialValue = target == TerrainMapTarget::HeightMap && heightMapStartAtMiddle ? 128 : 0;
-        std::vector<unsigned char> pixels(static_cast<size_t>(safeResolution) * safeResolution * channels, initialValue);
-        if (target == TerrainMapTarget::BlendMap){
-            for (size_t i = 3; i < pixels.size(); i += 4){
-                pixels[i] = 255;
-            }
-        }
+        std::vector<unsigned char> pixels = makeInitialMapPixels(target, safeResolution, safeResolution);
         const std::string path = makeEditableTexturePath(project, sceneProject->id, entity, target);
         if (!setFileBackedTextureData(project, texture, path, safeResolution, safeResolution, format, channels, pixels)){
             setOwnedTextureData(texture, makeEditableTextureId(sceneProject->id, entity, target), safeResolution, safeResolution, format, channels, pixels);
@@ -549,7 +757,10 @@ float editor::TerrainEditWindow::readHeight(TextureData& data, int x, int y){
     x = std::max(0, std::min(data.getWidth() - 1, x));
     y = std::max(0, std::min(data.getHeight() - 1, y));
     unsigned char* pixels = static_cast<unsigned char*>(data.getData());
-    return pixels[(static_cast<size_t>(y) * data.getWidth() + x) * data.getChannels()] / 255.0f;
+    const int channels = data.getChannels();
+    const int bytesPerChannel = TextureData::getBytesPerChannel(data.getColorFormat());
+    const size_t texelIndex = static_cast<size_t>(y) * data.getWidth() + x;
+    return decodeHeightTexel(pixels, texelIndex, channels, bytesPerChannel);
 }
 
 void editor::TerrainEditWindow::writeHeight(TextureData& data, int x, int y, float value){
@@ -558,7 +769,18 @@ void editor::TerrainEditWindow::writeHeight(TextureData& data, int x, int y, flo
         return;
     }
     const int channels = data.getChannels();
-    const size_t index = (static_cast<size_t>(y) * data.getWidth() + x) * channels;
+    const int bytesPerChannel = TextureData::getBytesPerChannel(data.getColorFormat());
+    const size_t texelIndex = static_cast<size_t>(y) * data.getWidth() + x;
+
+    if (bytesPerChannel >= 2){
+        // 16-bit single-channel heightmap.
+        encodeHeightTexel(pixels, texelIndex, bytesPerChannel, value);
+        return;
+    }
+
+    // Legacy 8-bit path (also covers replicated grayscale into RGB if a height map
+    // ever ends up multi-channel).
+    const size_t index = texelIndex * channels;
     unsigned char byteValue = clampByte(value * 255.0f);
     pixels[index] = byteValue;
     if (channels >= 3){
@@ -584,6 +806,7 @@ bool editor::TerrainEditWindow::raycastTerrainStrokeSurface(const Ray& localRay,
     int currentWidth = 0;
     int currentHeight = 0;
     int currentChannels = 0;
+    int currentBytesPerChannel = 1;
 
     if (!terrain.heightMap.empty() && hasLoadedData(terrain.heightMap)){
         TextureData& heightData = terrain.heightMap.getData();
@@ -591,9 +814,10 @@ bool editor::TerrainEditWindow::raycastTerrainStrokeSurface(const Ray& localRay,
         currentWidth = heightData.getWidth();
         currentHeight = heightData.getHeight();
         currentChannels = heightData.getChannels();
+        currentBytesPerChannel = TextureData::getBytesPerChannel(heightData.getColorFormat());
     }
 
-    auto sampleHeightPixels = [](const unsigned char* pixels, int width, int height, int channels, float terrainSize, float maxHeight, float localX, float localZ, float& sampledHeight){
+    auto sampleHeightPixels = [](const unsigned char* pixels, int width, int height, int channels, int bytesPerChannel, float terrainSize, float maxHeight, float localX, float localZ, float& sampledHeight){
         if (terrainSize <= std::numeric_limits<float>::epsilon()){
             return false;
         }
@@ -620,8 +844,8 @@ bool editor::TerrainEditWindow::raycastTerrainStrokeSurface(const Ray& localRay,
         const float blendZ = texelZ - static_cast<float>(lowerZ);
 
         auto samplePixel = [&](int sampleX, int sampleZ){
-            const size_t index = (static_cast<size_t>(sampleZ) * static_cast<size_t>(width) + static_cast<size_t>(sampleX)) * static_cast<size_t>(channels);
-            return pixels[index] / 255.0f;
+            const size_t texelIndex = static_cast<size_t>(sampleZ) * static_cast<size_t>(width) + static_cast<size_t>(sampleX);
+            return decodeHeightTexel(pixels, texelIndex, channels, bytesPerChannel);
         };
 
         const float height00 = samplePixel(lowerX, lowerZ);
@@ -635,7 +859,7 @@ bool editor::TerrainEditWindow::raycastTerrainStrokeSurface(const Ray& localRay,
     };
 
     auto sampleCurrentHeight = [&](float localX, float localZ, float& sampledHeight){
-        return sampleHeightPixels(currentPixels, currentWidth, currentHeight, currentChannels, terrain.terrainSize, terrain.maxHeight, localX, localZ, sampledHeight);
+        return sampleHeightPixels(currentPixels, currentWidth, currentHeight, currentChannels, currentBytesPerChannel, terrain.terrainSize, terrain.maxHeight, localX, localZ, sampledHeight);
     };
 
     auto sampleRaycastHeight = [&](float localX, float localZ, float& sampledHeight){
@@ -643,6 +867,7 @@ bool editor::TerrainEditWindow::raycastTerrainStrokeSurface(const Ray& localRay,
                                   activeStroke->heightReferenceWidth,
                                   activeStroke->heightReferenceHeight,
                                   activeStroke->heightReferenceChannels,
+                                  activeStroke->heightReferenceBytesPerChannel,
                                   activeStroke->heightReferenceTerrainSize,
                                   activeStroke->heightReferenceMaxHeight,
                                   localX,
@@ -768,6 +993,7 @@ void editor::TerrainEditWindow::captureStrokeHeightReference(TerrainComponent& t
     stroke.heightReferenceWidth = 0;
     stroke.heightReferenceHeight = 0;
     stroke.heightReferenceChannels = 0;
+    stroke.heightReferenceBytesPerChannel = 1;
 
     if (terrain.heightMap.empty() || !hasLoadedData(terrain.heightMap)){
         return;
@@ -786,6 +1012,7 @@ void editor::TerrainEditWindow::captureStrokeHeightReference(TerrainComponent& t
     stroke.heightReferenceWidth = heightData.getWidth();
     stroke.heightReferenceHeight = heightData.getHeight();
     stroke.heightReferenceChannels = heightData.getChannels();
+    stroke.heightReferenceBytesPerChannel = TextureData::getBytesPerChannel(heightData.getColorFormat());
     stroke.heightReferenceValid = true;
 }
 
@@ -1075,13 +1302,15 @@ bool editor::TerrainEditWindow::applyBrush(SceneProject* sceneProject, Entity en
                 }else if (brushMode == TerrainBrushMode::Flatten){
                     next = current + (flattenHeight - current) * weight;
                 }else if (brushMode == TerrainBrushMode::Smooth && !original.empty()){
+                    const int bytesPerChannel = TextureData::getBytesPerChannel(data.getColorFormat());
                     float sum = 0.0f;
                     int count = 0;
                     for (int oy = -1; oy <= 1; oy++){
                         for (int ox = -1; ox <= 1; ox++){
                             int sx = std::max(0, std::min(width - 1, x + ox));
                             int sy = std::max(0, std::min(height - 1, y + oy));
-                            sum += original[(static_cast<size_t>(sy) * width + sx) * channels] / 255.0f;
+                            const size_t texelIndex = static_cast<size_t>(sy) * width + sx;
+                            sum += decodeHeightTexel(original.data(), texelIndex, channels, bytesPerChannel);
                             count++;
                         }
                     }
@@ -1141,14 +1370,7 @@ bool editor::TerrainEditWindow::createMapForTarget(TerrainMapTarget target, int 
     after.channels = expectedChannels(target);
     after.width = std::max(2, width);
     after.height = std::max(2, height);
-    const unsigned char initialValue = target == TerrainMapTarget::HeightMap && heightMapStartAtMiddle ? 128 : 0;
-    after.pixels.assign(static_cast<size_t>(after.width) * after.height * after.channels, initialValue);
-
-    if (target == TerrainMapTarget::BlendMap){
-        for (size_t i = 3; i < after.pixels.size(); i += 4){
-            after.pixels[i] = 255;
-        }
-    }
+    after.pixels = makeInitialMapPixels(target, after.width, after.height);
 
     if (snapshotsEqual(before, after)){
         return false;
