@@ -32,6 +32,10 @@
 
 using namespace doriax;
 
+namespace {
+    thread_local int g_imageDecodeMaxDimension = 0;
+}
+
 struct MeshSystem::AsyncModelLoadResult {
     bool obj = false;
     bool success = false;
@@ -71,7 +75,7 @@ MeshSystem::~MeshSystem(){
 }
 
 void MeshSystem::setImageDecodeMaxDimension(int dimension){
-    imageDecodeMaxDimension = dimension;
+    g_imageDecodeMaxDimension = dimension;
 }
 
 void MeshSystem::applyDefaultGLTFMaterial(Material& material) {
@@ -698,11 +702,6 @@ void MeshSystem::cancelAsyncModelLoad(Entity entity, const std::string& filename
         ResourceProgress::failBuild(buildId);
     }
 }
-
-// Max texture dimension to decode to, per thread. 0 means full resolution. The thumbnail worker
-// sets a small value (via MeshSystem::setImageDecodeMaxDimension) so previews don't decode and
-// upload full 4K maps for a 128px render.
-thread_local int MeshSystem::imageDecodeMaxDimension = 0;
 
 // Decodes one image that SetImagesAsIs left still encoded in image.image.
 void MeshSystem::decodeGLTFImage(tinygltf::Image& image, size_t index, int maxDimension) {
@@ -2652,7 +2651,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 return false;
             }
 
-            const int maxImageDim = imageDecodeMaxDimension;
+            const int maxImageDim = g_imageDecodeMaxDimension;
             decodeGLTFImagesParallel(*model.gltfModel, maxImageDim);
 
             // Only cache full-resolution parses. A downscaled preview decode must not be reused

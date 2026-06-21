@@ -40,7 +40,6 @@ namespace doriax{
         static std::mutex& getAsyncModelMutex();
         static async_model_loads_t& getPendingModelLoads();
 
-        static thread_local int imageDecodeMaxDimension;
         static void decodeGLTFImage(tinygltf::Image& image, size_t index, int maxDimension);
         template<typename Fn>
         static void parallelForIndexed(size_t count, Fn&& fn);
