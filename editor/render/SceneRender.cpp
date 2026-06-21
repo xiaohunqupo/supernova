@@ -204,7 +204,47 @@ AABB editor::SceneRender::getEntitiesAABB(const std::vector<Entity>& entities){
     return aabb;
 }
 
-OBB editor::SceneRender::getOBB(Entity entity, bool local){
+// Transforms a local AABB into a world-space box using the FULL model matrix,
+// preserving shear. A node's world matrix can be sheared (e.g. a non-uniform
+// parent scale combined with the child's rotation), which a regular OBB cannot
+// represent: Matrix4*OBB decomposes the matrix and discards the shear, so the
+// resulting box is rotated/mis-sized relative to the rendered geometry.
+//
+// The engine OBB must stay orthonormal for SAT collision/enclose, so this is
+// kept editor-side: for the selection outline and gizmo bounds we want a box
+// that hugs the actual geometry, i.e. a parallelepiped. We map the half-extent
+// edge vectors through the linear part and store them as (normalized) axes plus
+// their lengths, so OBB::getCorner reproduces the transformed box exactly.
+OBB editor::SceneRender::transformAABBPreservingShear(const Matrix4& modelMatrix, const AABB& localAABB){
+    OBB local = localAABB.getOBB();
+    if (local.isNull() || local.isInfinite()){
+        return modelMatrix * local;
+    }
+
+    Vector3 he = local.getHalfExtents();
+    Matrix3 linear = modelMatrix.linear();
+
+    Vector3 edgeX = linear * Vector3(he.x, 0.0f, 0.0f);
+    Vector3 edgeY = linear * Vector3(0.0f, he.y, 0.0f);
+    Vector3 edgeZ = linear * Vector3(0.0f, 0.0f, he.z);
+
+    // Half-extents are the transformed edge lengths; a degenerate (zero-extent)
+    // axis must keep its 0 length so a flat box stays flat.
+    Vector3 halfExtents(edgeX.length(), edgeY.length(), edgeZ.length());
+
+    // A flat box leaves that axis direction undefined; substitute a valid
+    // orthogonal direction so the gizmo orientation stays well-defined. The
+    // zero half-extent above means it never affects the drawn corners.
+    if (halfExtents.x < 1e-6f) edgeX = edgeY.crossProduct(edgeZ);
+    if (halfExtents.y < 1e-6f) edgeY = edgeZ.crossProduct(edgeX);
+    if (halfExtents.z < 1e-6f) edgeZ = edgeX.crossProduct(edgeY);
+
+    OBB result(modelMatrix * local.getCenter(), halfExtents);
+    result.setAxes(edgeX, edgeY, edgeZ);
+    return result;
+}
+
+OBB editor::SceneRender::getOBB(Entity entity, bool local, bool visual){
     Signature signature = scene->getSignature(entity);
 
     Matrix4 modelMatrix;
@@ -217,7 +257,8 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
             if (local){
                 return mesh.aabb.getOBB();
             }else{
-                return modelMatrix * mesh.aabb.getOBB();
+                return visual ? transformAABBPreservingShear(modelMatrix, mesh.aabb)
+                              : modelMatrix * mesh.aabb.getOBB();
             }
         }else if (signature.test(scene->getComponentId<UIComponent>())){
             if (signature.test(scene->getComponentId<UILayoutComponent>())){
@@ -228,7 +269,8 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
                     if (local){
                         return aabb.getOBB();
                     }else{
-                        return modelMatrix * aabb.getOBB();
+                        return visual ? transformAABBPreservingShear(modelMatrix, aabb)
+                              : modelMatrix * aabb.getOBB();
                     }
                 }
             }
@@ -237,7 +279,8 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
             if (local){
                 return ui.aabb.getOBB();
             }else{
-                return modelMatrix * ui.aabb.getOBB();
+                return visual ? transformAABBPreservingShear(modelMatrix, ui.aabb)
+                              : modelMatrix * ui.aabb.getOBB();
             }
         }else if (signature.test(scene->getComponentId<UILayoutComponent>())){
             UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
@@ -247,7 +290,8 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
                 if (local){
                     return aabb.getOBB();
                 }else{
-                    return modelMatrix * aabb.getOBB();
+                    return visual ? transformAABBPreservingShear(modelMatrix, aabb)
+                              : modelMatrix * aabb.getOBB();
                 }
             }
         }else if (signature.test(scene->getComponentId<CameraComponent>())){
@@ -259,7 +303,8 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
                 if (local){
                     return aabb.getOBB();
                 }else{
-                    return modelMatrix * aabb.getOBB();
+                    return visual ? transformAABBPreservingShear(modelMatrix, aabb)
+                              : modelMatrix * aabb.getOBB();
                 }
             }
         }else if (signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())){
@@ -285,7 +330,8 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
             if (local){
                 return aabb.getOBB();
             }else{
-                return modelMatrix * aabb.getOBB();
+                return visual ? transformAABBPreservingShear(modelMatrix, aabb)
+                              : modelMatrix * aabb.getOBB();
             }
         }
 
@@ -299,10 +345,10 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local){
     return OBB(); // null OBB
 }
 
-OBB editor::SceneRender::getFamilyOBB(Entity entity, float offset){
+OBB editor::SceneRender::getFamilyOBB(Entity entity, float offset, bool visual){
     Signature signature = scene->getSignature(entity);
     if (!signature.test(scene->getComponentId<Transform>())) {
-        OBB entityOBB = getOBB(entity, false);
+        OBB entityOBB = getOBB(entity, false, visual);
         if (!entityOBB.isNull()) {
             entityOBB.setHalfExtents(entityOBB.getHalfExtents() + Vector3(offset));
         }
@@ -327,7 +373,7 @@ OBB editor::SceneRender::getFamilyOBB(Entity entity, float offset){
         entity = transforms->getEntity(i);
         parentList.push_back(entity);
 
-        OBB entityOBB = getOBB(entity, false);
+        OBB entityOBB = getOBB(entity, false, visual);
 
         if (!entityOBB.isNull()){
             entityOBB.setHalfExtents(entityOBB.getHalfExtents() + Vector3(offset));
@@ -446,7 +492,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
                 gizmoRotation = transform->worldRotation;
             }
 
-            selBB.push_back(getFamilyOBB(entity, selectionOffset));
+            selBB.push_back(getFamilyOBB(entity, selectionOffset, true));
 
             totalSelBB.enclose(getOBB(entity, false));
         }
@@ -505,7 +551,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
         // Override gizmo for selected tile within tilemap
         if (selectedTileIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedTileEntity
             && toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D){
-            OBB tileOBB = getTileOBB(selectedTileEntity, selectedTileIndex);
+            OBB tileOBB = getTileOBB(selectedTileEntity, selectedTileIndex, true);
             if (!tileOBB.isNull()){
                 Vector3 tileCenter = tileOBB.getCenter();
                 toolslayer.updateGizmo(camera, tileCenter, gizmoRotation, scale, tileOBB, mouseRay, mouseClicked, anchorData, anchorArea);
@@ -517,7 +563,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(selectedInstanceEntity);
             Transform* instTransform = scene->findComponent<Transform>(selectedInstanceEntity);
             if (instmesh && instTransform && selectedInstanceIndex < (int)instmesh->instances.size()){
-                OBB instOBB = getInstanceOBB(selectedInstanceEntity, selectedInstanceIndex);
+                OBB instOBB = getInstanceOBB(selectedInstanceEntity, selectedInstanceIndex, true);
                 if (!instOBB.isNull()){
                     const InstanceData& inst = instmesh->instances[selectedInstanceIndex];
                     Quaternion instWorldRotation = getInstanceWorldRotation(*instTransform, *instmesh, inst);
@@ -1355,7 +1401,7 @@ int editor::SceneRender::hitTestTile(Entity entity, float x, float y){
     return -1;
 }
 
-OBB editor::SceneRender::getTileOBB(Entity entity, int tileIndex){
+OBB editor::SceneRender::getTileOBB(Entity entity, int tileIndex, bool visual){
     if (!scene->getComponentArray<TilemapComponent>()->hasEntity(entity)) return OBB();
     if (!scene->getComponentArray<Transform>()->hasEntity(entity)) return OBB();
 
@@ -1368,7 +1414,8 @@ OBB editor::SceneRender::getTileOBB(Entity entity, int tileIndex){
     AABB tileAABB(tile.position.x, tile.position.y, 0,
                   tile.position.x + tile.width, tile.position.y + tile.height, 0);
 
-    return transform.modelMatrix * tileAABB.getOBB();
+    return visual ? transformAABBPreservingShear(transform.modelMatrix, tileAABB)
+                  : transform.modelMatrix * tileAABB.getOBB();
 }
 
 void editor::SceneRender::selectInstance(Entity entity, int instanceIndex){
@@ -1390,7 +1437,7 @@ Quaternion editor::SceneRender::getInstanceWorldRotation(const Transform& transf
     return transform.worldRotation * inst.rotation;
 }
 
-OBB editor::SceneRender::getInstanceOBB(Entity entity, int instanceIndex){
+OBB editor::SceneRender::getInstanceOBB(Entity entity, int instanceIndex, bool visual){
     if (!scene->getComponentArray<InstancedMeshComponent>()->hasEntity(entity)) return OBB();
     if (!scene->getComponentArray<MeshComponent>()->hasEntity(entity)) return OBB();
     if (!scene->getComponentArray<Transform>()->hasEntity(entity)) return OBB();
@@ -1417,7 +1464,8 @@ OBB editor::SceneRender::getInstanceOBB(Entity entity, int instanceIndex){
         localAABB = AABB(Vector3(-0.5f, -0.5f, -0.5f), Vector3(0.5f, 0.5f, 0.5f));
     }
 
-    return (transform.modelMatrix * instanceMatrix) * localAABB.getOBB();
+    return visual ? transformAABBPreservingShear(transform.modelMatrix * instanceMatrix, localAABB)
+                  : (transform.modelMatrix * instanceMatrix) * localAABB.getOBB();
 }
 
 int editor::SceneRender::hitTestInstance(Entity entity, float x, float y){

@@ -92,8 +92,13 @@ namespace doriax::editor{
         AABB getAABB(Entity entity, bool local);
         AABB getFamilyAABB(Entity entity, float offset);
 
-        OBB getOBB(Entity entity, bool local);
-        OBB getFamilyOBB(Entity entity, float offset);
+        // visual=true returns a shear-preserving box (parallelepiped) that hugs the
+        // rendered geometry, for the selection outline / gizmo handles only.
+        // visual=false (default) returns an orthonormal OBB, required by ray picking
+        // (Ray::intersects) and OBB::enclose, which assume orthonormal axes.
+        OBB getOBB(Entity entity, bool local, bool visual = false);
+        OBB getFamilyOBB(Entity entity, float offset, bool visual = false);
+        static OBB transformAABBPreservingShear(const Matrix4& modelMatrix, const AABB& localAABB);
         void updateTerrainBrushCursor();
         float snapRotationAngle(float angle, bool invertRotationSnap) const;
         static Vector3 getMatrixScale(const Matrix4& matrix);
@@ -176,7 +181,7 @@ namespace doriax::editor{
         void selectTile(Entity entity, int tileIndex);
         void clearTileSelection();
         int hitTestTile(Entity entity, float x, float y);
-        OBB getTileOBB(Entity entity, int tileIndex);
+        OBB getTileOBB(Entity entity, int tileIndex, bool visual = false);
 
         // Instance sub-selection
         int getSelectedInstanceIndex() const { return selectedInstanceIndex; }
@@ -184,7 +189,7 @@ namespace doriax::editor{
         void selectInstance(Entity entity, int instanceIndex);
         void clearInstanceSelection();
         int hitTestInstance(Entity entity, float x, float y);
-        OBB getInstanceOBB(Entity entity, int instanceIndex);
+        OBB getInstanceOBB(Entity entity, int instanceIndex, bool visual = false);
         Quaternion getInstanceWorldRotation(const Transform& transform, const InstancedMeshComponent& instmesh, const InstanceData& inst) const;
     };
 
