@@ -768,8 +768,6 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             mesh.needUpdateAABB = true;
             mesh.loadCalled = true;
             SystemRender::addQueueCommand(&changeLoaded, new check_load_t{scene, entity});
-            Log::debug("Loaded empty model hierarchy root for entity %lu (%zu child mesh nodes)",
-                       entity, model->meshNodesMapping.size());
             return true;
         }
         return false;
