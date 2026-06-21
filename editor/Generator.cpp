@@ -1918,7 +1918,17 @@ void editor::Generator::build(const fs::path projectPath, const fs::path project
         try {
             auto startTime = std::chrono::steady_clock::now();
 
+            // The compiled plugin is loaded into the running editor and shares its
+            // engine library, CRT and STL across the shared-library boundary, so it
+            // must use the same build configuration. On Windows especially, a Debug
+            // plugin (/MDd, _ITERATOR_DEBUG_LEVEL=2) loaded by a Release editor (/MD)
+            // has incompatible std::vector/std::string layouts and crashes the moment
+            // the editor calls into it. Match the editor's own configuration; _DEBUG
+            // is defined iff this editor was built against the debug CRT.
             std::string configType = "Debug";
+#if defined(_WIN32) && !defined(_DEBUG)
+            configType = "Release";
+#endif
 
             // Resolve a "Default" selection to a concrete ABI-compatible kit once,
             // so configure and the build step (which both need the generator, e.g.
