@@ -351,6 +351,7 @@ std::string editor::Stream::attributeTypeToString(AttributeType type) {
         case AttributeType::INDEX: return "index";
         case AttributeType::POSITION: return "position";
         case AttributeType::TEXCOORD1: return "texcoord1";
+        case AttributeType::TEXCOORD2: return "texcoord2";
         case AttributeType::NORMAL: return "normal";
         case AttributeType::TANGENT: return "tangent";
         case AttributeType::COLOR: return "color";
@@ -391,6 +392,7 @@ AttributeType editor::Stream::stringToAttributeType(const std::string& str) {
     if (str == "index") return AttributeType::INDEX;
     if (str == "position") return AttributeType::POSITION;
     if (str == "texcoord1") return AttributeType::TEXCOORD1;
+    if (str == "texcoord2") return AttributeType::TEXCOORD2;
     if (str == "normal") return AttributeType::NORMAL;
     if (str == "tangent") return AttributeType::TANGENT;
     if (str == "color") return AttributeType::COLOR;
@@ -1167,6 +1169,7 @@ YAML::Node editor::Stream::encodeSubmesh(const Submesh& submesh, bool embedTextu
 
     // Flags
     node["hasTexCoord1"] = submesh.hasTexCoord1;
+    node["hasTexCoord2"] = submesh.hasTexCoord2;
     node["hasNormalMap"] = submesh.hasNormalMap;
     node["hasTangent"] = submesh.hasTangent;
     node["hasVertexColor4"] = submesh.hasVertexColor4;
@@ -1194,6 +1197,7 @@ Submesh editor::Stream::decodeSubmesh(const YAML::Node& node, const Submesh* old
 
     // Flags
     submesh.hasTexCoord1 = node["hasTexCoord1"].as<bool>();
+    submesh.hasTexCoord2 = node["hasTexCoord2"].as<bool>();
     submesh.hasNormalMap = node["hasNormalMap"].as<bool>();
     submesh.hasTangent = node["hasTangent"].as<bool>();
     submesh.hasVertexColor4 = node["hasVertexColor4"].as<bool>();
@@ -2399,6 +2403,13 @@ YAML::Node editor::Stream::encodeMaterial(const Material& material, bool embedTe
         node["normalTexture"] = encodeTexture(material.normalTexture, embedTextureData);
     }
 
+    // Per-texture UV set (glTF texCoord): 0 = a_texcoord1, 1 = a_texcoord2
+    node["baseColorTexCoord"] = material.baseColorTexCoord;
+    node["metallicRoughnessTexCoord"] = material.metallicRoughnessTexCoord;
+    node["occlusionTexCoord"] = material.occlusionTexCoord;
+    node["emissiveTexCoord"] = material.emissiveTexCoord;
+    node["normalTexCoord"] = material.normalTexCoord;
+
     // Encode material name
     node["name"] = material.name;
 
@@ -2432,6 +2443,12 @@ Material editor::Stream::decodeMaterial(const YAML::Node& node) {
     if (node["normalTexture"]) {
         material.normalTexture = decodeTexture(node["normalTexture"]);
     }
+
+    material.baseColorTexCoord = node["baseColorTexCoord"].as<int>();
+    material.metallicRoughnessTexCoord = node["metallicRoughnessTexCoord"].as<int>();
+    material.occlusionTexCoord = node["occlusionTexCoord"].as<int>();
+    material.emissiveTexCoord = node["emissiveTexCoord"].as<int>();
+    material.normalTexCoord = node["normalTexCoord"].as<int>();
 
     material.name = node["name"].as<std::string>();
 

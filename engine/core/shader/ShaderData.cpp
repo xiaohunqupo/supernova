@@ -55,6 +55,8 @@ int ShaderData::getAttrIndex(AttributeType type){
         attrstr = "a_position";
     }else if (type == AttributeType::TEXCOORD1){
         attrstr = "a_texcoord1";
+    }else if (type == AttributeType::TEXCOORD2){
+        attrstr = "a_texcoord2";
     }else if (type == AttributeType::NORMAL){
         attrstr = "a_normal";
     }else if (type == AttributeType::TANGENT){
@@ -152,6 +154,8 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_vs_pbrParams";
     }else if (type == UniformBlockType::PBR_FS_PARAMS){
         ustr = "u_fs_pbrParams";
+    }else if (type == UniformBlockType::PBR_FS_TEXCOORDSETS){
+        ustr = "u_fs_texCoordSets";
     }else if (type == UniformBlockType::FS_LIGHTING){
         ustr = "u_fs_lighting";
     }else if (type == UniformBlockType::FS_FOG){

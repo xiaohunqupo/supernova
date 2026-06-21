@@ -2948,45 +2948,35 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             }
 
             if (mat) {
+                // glTF texCoord selects the UV set per texture. Only two sets are
+                // supported (a_texcoord1 / a_texcoord2); any higher index falls back
+                // to the second set (clamped to 1).
+                auto clampTexCoord = [](int texCoord) -> int { return (texCoord >= 1) ? 1 : 0; };
+
                 if (!loadGLTFTexture(mat->pbrMetallicRoughness.baseColorTexture.index, model,
                         mesh.submeshes[i].material.baseColorTexture, filename + "|baseColorTexture"))
                     continue;
-                if (mat->pbrMetallicRoughness.baseColorTexture.texCoord != 0) {
-                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "baseColorTexture", filename.c_str());
-                    continue;
-                }
+                mesh.submeshes[i].material.baseColorTexCoord = clampTexCoord(mat->pbrMetallicRoughness.baseColorTexture.texCoord);
 
                 if (!loadGLTFTexture(mat->pbrMetallicRoughness.metallicRoughnessTexture.index, model,
                         mesh.submeshes[i].material.metallicRoughnessTexture, filename + "|metallicRoughnessTexture"))
                     continue;
-                if (mat->pbrMetallicRoughness.metallicRoughnessTexture.texCoord != 0) {
-                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "metallicRoughnessTexture", filename.c_str());
-                    continue;
-                }
+                mesh.submeshes[i].material.metallicRoughnessTexCoord = clampTexCoord(mat->pbrMetallicRoughness.metallicRoughnessTexture.texCoord);
 
                 if (!loadGLTFTexture(mat->occlusionTexture.index, model,
                         mesh.submeshes[i].material.occlusionTexture, filename + "|occlusionTexture"))
                     continue;
-                if (mat->occlusionTexture.texCoord != 0) {
-                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "occlusionTexture", filename.c_str());
-                    continue;
-                }
+                mesh.submeshes[i].material.occlusionTexCoord = clampTexCoord(mat->occlusionTexture.texCoord);
 
                 if (!loadGLTFTexture(mat->emissiveTexture.index, model,
                         mesh.submeshes[i].material.emissiveTexture, filename + "|emissiveTexture"))
                     continue;
-                if (mat->emissiveTexture.texCoord != 0) {
-                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "emissiveTexture", filename.c_str());
-                    continue;
-                }
+                mesh.submeshes[i].material.emissiveTexCoord = clampTexCoord(mat->emissiveTexture.texCoord);
 
                 if (!loadGLTFTexture(mat->normalTexture.index, model,
                         mesh.submeshes[i].material.normalTexture, filename + "|normalTexture"))
                     continue;
-                if (mat->normalTexture.texCoord != 0) {
-                    Log::error("Not supported texcoord for %s, only one per submesh: %s", "normalTexture", filename.c_str());
-                    continue;
-                }
+                mesh.submeshes[i].material.normalTexCoord = clampTexCoord(mat->normalTexture.texCoord);
 
                 mesh.submeshes[i].material.baseColorFactor = Vector4(
                     mat->pbrMetallicRoughness.baseColorFactor[0],
@@ -3080,6 +3070,10 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     attType = AttributeType::TEXCOORD1;
                     foundAttrs = true;
                 }
+                if (attrib.first == "TEXCOORD_1") {
+                    attType = AttributeType::TEXCOORD2;
+                    foundAttrs = true;
+                }
                 if (attrib.first == "COLOR_0") {
                     if (elements == 4) {
                         attType = AttributeType::COLOR;
@@ -3126,7 +3120,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     }
                     addSubmeshAttribute(mesh.submeshes[i], bufferName, attType, elements, dataType,
                         accessor.count, attrByteOffset, attributeNormalized);
-                } else if (attrib.first != "TEXCOORD_1") {
+                } else if (attrib.first.rfind("TEXCOORD_", 0) != 0) {
+                    // only two UV sets are supported (TEXCOORD_0/_1); silently ignore
+                    // any higher TEXCOORD_n the model may carry
                     Log::warn("Model attribute unused: %s", attrib.first.c_str());
                 }
             }

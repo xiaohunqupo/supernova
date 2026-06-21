@@ -284,7 +284,7 @@ void main() {
             #endif
         #endif
 
-        #ifdef HAS_UV_SET1
+        #if defined(HAS_UV_SET1) || defined(HAS_UV_SET2)
             float ao = getOcclusionTexture().r;
             f_diffuse = mix(f_diffuse, f_diffuse * ao, occlusionStrength);
             // apply ambient occlusion too all lighting that is not punctual
@@ -371,7 +371,7 @@ void main() {
         #endif
 
         f_emissive = pbrParams.emissiveFactor;
-        #ifdef HAS_UV_SET1
+        #if defined(HAS_UV_SET1) || defined(HAS_UV_SET2)
             f_emissive *= sRGBToLinear(getEmissiveTexture().rgb);
         #endif
 

@@ -1603,7 +1603,8 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     // v5: SSAO (mesh.frag USE_SSAO + viewportInfo, new ssao/ssao_blur shaders).
     // v6: SSR (G-buffer geometry pass + ssr/ssr_blur/composite fullscreen shaders;
     //     energy-conserving SSR-over-IBL, glossy roughness blur, debug modes).
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v6";
+    // v7: second UV set (HAS_UV_SET2) — per-texture UV selection via u_fs_texCoordSets.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v7";
 }
 
 void editor::App::pushTabNotificationStyle(){

@@ -42,6 +42,7 @@ namespace doriax{
 
         int slotVSParams = -1;
         int slotFSParams = -1;
+        int slotFSTexCoordSets = -1;
         int slotFSLighting = -1;
         int slotFSFog = -1;
         int slotFSMirror = -1;
@@ -72,6 +73,7 @@ namespace doriax{
         bool textureShadow = false;
 
         bool hasTexCoord1 = false;
+        bool hasTexCoord2 = false;
         bool hasNormal = false;
         bool hasIBL = false;
         bool hasNormalMap = false;

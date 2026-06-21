@@ -26,6 +26,15 @@ namespace doriax{
         Texture occlusionTexture;
         Texture normalTexture;
 
+        // glTF texCoord index (UV set) each texture samples: 0 = primary (a_texcoord1),
+        // 1 = secondary (a_texcoord2). Only two sets are supported; higher indices are
+        // clamped to 1 on load. Not part of the shader UBO prefix; uploaded separately.
+        int baseColorTexCoord = 0;
+        int metallicRoughnessTexCoord = 0;
+        int occlusionTexCoord = 0;
+        int emissiveTexCoord = 0;
+        int normalTexCoord = 0;
+
         // material name or file
         std::string name = "";
 
@@ -39,6 +48,11 @@ namespace doriax{
                    metallicRoughnessTexture == other.metallicRoughnessTexture &&
                    occlusionTexture == other.occlusionTexture &&
                    normalTexture == other.normalTexture &&
+                   baseColorTexCoord == other.baseColorTexCoord &&
+                   metallicRoughnessTexCoord == other.metallicRoughnessTexCoord &&
+                   occlusionTexCoord == other.occlusionTexCoord &&
+                   emissiveTexCoord == other.emissiveTexCoord &&
+                   normalTexCoord == other.normalTexCoord &&
                    name == other.name;
         }
 

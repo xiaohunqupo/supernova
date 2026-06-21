@@ -835,6 +835,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                     if (attr.first == AttributeType::TEXCOORD1){
                         mesh.submeshes[i].hasTexCoord1 = true;
                     }
+                    if (attr.first == AttributeType::TEXCOORD2){
+                        mesh.submeshes[i].hasTexCoord2 = true;
+                    }
                     if (attr.first == AttributeType::NORMAL){
                         mesh.submeshes[i].hasNormal = true;
                     }
@@ -862,6 +865,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         for (auto const& attr : mesh.submeshes[i].attributes){
             if (attr.first == AttributeType::TEXCOORD1){
                 mesh.submeshes[i].hasTexCoord1 = true;
+            }
+            if (attr.first == AttributeType::TEXCOORD2){
+                mesh.submeshes[i].hasTexCoord2 = true;
             }
             if (attr.first == AttributeType::NORMAL){
                 mesh.submeshes[i].hasNormal = true;
@@ -895,6 +901,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         bool p_ibl = false;
         bool p_mirror = (scene->findComponent<MirrorComponent>(entity) != NULL);
         bool p_hasTexture1 = false;
+        bool p_hasTexture2 = false;
         bool p_hasNormalMap = false;
         bool p_hasNormal = false;
         bool p_hasTangent = false;
@@ -903,6 +910,11 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         if (mesh.submeshes[i].hasTexCoord1 && hasPBRTextures){
             p_hasTexture1 = true;
+        }
+        // second UV set: only when both UV attributes and PBR textures are present
+        // (never for terrain, which generates its UVs in the shader)
+        if (mesh.submeshes[i].hasTexCoord1 && mesh.submeshes[i].hasTexCoord2 && hasPBRTextures){
+            p_hasTexture2 = true;
         }
         if (terrain && (!terrain->blendMap.empty() || hasPBRTextures)){
             p_hasTexture1 = true;
@@ -942,7 +954,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         bool p_ssao = scene->isSSAOEnabled() && !p_unlit && (p_punctual || p_ibl) && !terrain;
 
         mesh.submeshes[i].shaderProperties = ShaderPool::getMeshProperties(
-                        p_unlit, p_hasTexture1, false, p_punctual,
+                        p_unlit, p_hasTexture1, p_hasTexture2, p_punctual,
                         p_receiveShadows, p_shadowsPCF, p_hasNormal, p_hasNormalMap,
                         p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
@@ -978,6 +990,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         mesh.submeshes[i].slotVSParams = shaderData.getUniformBlockIndex(UniformBlockType::PBR_VS_PARAMS);
         mesh.submeshes[i].slotFSParams = shaderData.getUniformBlockIndex(UniformBlockType::PBR_FS_PARAMS);
+        if (p_hasTexture2){
+            mesh.submeshes[i].slotFSTexCoordSets = shaderData.getUniformBlockIndex(UniformBlockType::PBR_FS_TEXCOORDSETS);
+        }
         if (hasFog){
             mesh.submeshes[i].slotFSFog = shaderData.getUniformBlockIndex(UniformBlockType::FS_FOG);
         }
@@ -1453,6 +1468,17 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
                 render.applyUniformBlock(mesh.submeshes[i].slotFSParams, sizeof(float) * 12, &mesh.submeshes[i].material);
             }else{
                 render.applyUniformBlock(mesh.submeshes[i].slotFSParams, sizeof(float) * 4, &mesh.submeshes[i].material);
+            }
+
+            if (mesh.submeshes[i].slotFSTexCoordSets != -1){
+                // per-texture UV set selector (0 = a_texcoord1, 1 = a_texcoord2):
+                // set0 = baseColor, metallicRoughness, occlusion, emissive; set1.x = normal
+                const Material& mat = mesh.submeshes[i].material;
+                int32_t texCoordSets[8] = {
+                    mat.baseColorTexCoord, mat.metallicRoughnessTexCoord, mat.occlusionTexCoord, mat.emissiveTexCoord,
+                    mat.normalTexCoord, 0, 0, 0
+                };
+                render.applyUniformBlock(mesh.submeshes[i].slotFSTexCoordSets, sizeof(texCoordSets), &texCoordSets);
             }
 
             if (terrain){
@@ -2160,6 +2186,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
         //Shaders uniforms
         submesh.slotVSParams = -1;
         submesh.slotFSParams = -1;
+        submesh.slotFSTexCoordSets = -1;
         submesh.slotFSLighting = -1;
         submesh.slotVSSprite = -1;
         submesh.slotVSShadows = -1;
