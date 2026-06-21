@@ -28,7 +28,7 @@
 #endif
 
 #ifndef MAX_SUBMESHES
-#define MAX_SUBMESHES 64
+#define MAX_SUBMESHES 16
 #endif
 
 #ifndef MAX_TILEMAP_TILESRECT

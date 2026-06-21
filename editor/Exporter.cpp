@@ -720,9 +720,57 @@ bool editor::Exporter::copyEngine() {
         return false;
     }
     cmakeContent.replace(appNamePos, defaultAppName.size(), patchedAppName);
+
+    // Inject per-project HybridArray capacities so the exported build sizes its
+    // fixed-capacity arrays to the larger of what the project actually uses and the
+    // engine defaults in core/Engine.h (big models grow past the defaults). Missing
+    // marker is non-fatal: the build simply falls back to those defaults.
+    const std::string maxValuesMarker = "# @DORIAX_SCENE_MAX_VALUES@";
+    const size_t maxValuesPos = cmakeContent.find(maxValuesMarker);
+    if (maxValuesPos != std::string::npos) {
+        cmakeContent.replace(maxValuesPos, maxValuesMarker.size(), buildSceneMaxValuesDefinitions());
+    } else {
+        Out::warning("Exported CMakeLists.txt is missing the SceneMaxValues marker; using engine default capacities");
+    }
+
     FileUtils::writeIfChanged(cmakeDst, cmakeContent);
 
     return true;
+}
+
+std::string editor::Exporter::buildSceneMaxValuesDefinitions() const {
+    // Aggregate the per-scene maxima into a single project-wide capacity for each
+    // HybridArray. SceneProject::maxValues is refreshed for every scene during
+    // loadAndSaveAllScenes(), which always runs before copyEngine().
+    SceneMaxValues agg;
+    for (const SceneProject& sceneProject : project->getScenes()) {
+        agg.maxSubmeshes        = std::max(agg.maxSubmeshes, sceneProject.maxValues.maxSubmeshes);
+        agg.maxTilemapTilesRect = std::max(agg.maxTilemapTilesRect, sceneProject.maxValues.maxTilemapTilesRect);
+        agg.maxTilemapTiles     = std::max(agg.maxTilemapTiles, sceneProject.maxValues.maxTilemapTiles);
+        agg.maxExternalBuffers  = std::max(agg.maxExternalBuffers, sceneProject.maxValues.maxExternalBuffers);
+        agg.maxSpriteFrames     = std::max(agg.maxSpriteFrames, sceneProject.maxValues.maxSpriteFrames);
+    }
+
+    // Floor each capacity at the engine default declared in core/Engine.h: growing past the
+    // default sizes big models correctly, while never shrinking below the known-safe baseline.
+    // This matters because the editor-time calc can undercount model-backed meshes (e.g.
+    // numExternalBuffers is regenerated at runtime, not serialized) and cannot see content
+    // created dynamically by scripts. Passing the macros themselves as the floor keeps these in
+    // lockstep with the engine defaults (string literals are not macro-expanded; the bare macro
+    // arguments are).
+    auto define = [&](const char* macro, unsigned int value, unsigned int engineDefault) {
+        return std::string("add_definitions(\"-D") + macro + "=" + std::to_string(std::max(value, engineDefault)) + "\")";
+    };
+
+    // First line reuses the marker's existing indentation; subsequent lines are
+    // indented to match the surrounding standalone setup block (4 spaces).
+    const std::string indent = "\n    ";
+    std::string out = define("MAX_SUBMESHES", agg.maxSubmeshes, MAX_SUBMESHES);
+    out += indent + define("MAX_TILEMAP_TILESRECT", agg.maxTilemapTilesRect, MAX_TILEMAP_TILESRECT);
+    out += indent + define("MAX_TILEMAP_TILES", agg.maxTilemapTiles, MAX_TILEMAP_TILES);
+    out += indent + define("MAX_SPRITE_FRAMES", agg.maxSpriteFrames, MAX_SPRITE_FRAMES);
+    out += indent + define("MAX_EXTERNAL_BUFFERS", agg.maxExternalBuffers, MAX_EXTERNAL_BUFFERS);
+    return out;
 }
 
 bool editor::Exporter::buildAndSaveShaders() {

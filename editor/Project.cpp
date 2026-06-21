@@ -1449,6 +1449,17 @@ void editor::Project::calculateSceneMaxValues(const SceneProject* sceneProject, 
         maxValues.maxSpriteFrames = std::max(maxValues.maxSpriteFrames, pointsComponent.numFramesRect);
     }
 
+    // SpriteAnimationComponent.frames / framesTime are also HybridArray<int, MAX_SPRITE_FRAMES>.
+    // Their counts are independent of (and can exceed) a sprite's numFramesRect (e.g. a ping-pong
+    // sequence reuses frame indices), and the generated component code writes them with unchecked
+    // operator[], so they must factor into MAX_SPRITE_FRAMES too.
+    auto spriteAnims = sceneProject->scene->getComponentArray<SpriteAnimationComponent>();
+    for (size_t i = 0; i < spriteAnims->size(); ++i) {
+        const SpriteAnimationComponent& spriteAnim = spriteAnims->getComponentFromIndex(i);
+        maxValues.maxSpriteFrames = std::max(maxValues.maxSpriteFrames, spriteAnim.framesSize);
+        maxValues.maxSpriteFrames = std::max(maxValues.maxSpriteFrames, spriteAnim.framesTimeSize);
+    }
+
     auto tilemaps = sceneProject->scene->getComponentArray<TilemapComponent>();
     for (size_t i = 0; i < tilemaps->size(); ++i) {
         const TilemapComponent& tilemap = tilemaps->getComponentFromIndex(i);

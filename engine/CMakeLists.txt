@@ -36,6 +36,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_definitions("-DDEFAULT_WINDOW_WIDTH=960")
     add_definitions("-DDEFAULT_WINDOW_HEIGHT=540")
 
+    # Per-project HybridArray capacities (SceneMaxValues) are injected here by the
+    # editor Exporter, replacing the marker below. When building manually (without
+    # the editor), the marker is left untouched and the engine defaults declared in
+    # core/Engine.h apply.
+    # @DORIAX_SCENE_MAX_VALUES@
+
     if(NOT GRAPHIC_BACKEND)
         if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
             set(GRAPHIC_BACKEND "gles3")

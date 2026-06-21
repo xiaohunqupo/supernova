@@ -78,6 +78,11 @@ namespace doriax::editor {
         bool copyEngine();
         bool buildAndSaveShaders();
 
+        // Aggregates SceneMaxValues across all project scenes and builds the
+        // add_definitions() block that sizes the engine's fixed-capacity
+        // HybridArrays (MAX_SUBMESHES, MAX_SPRITE_FRAMES, ...) for the export.
+        std::string buildSceneMaxValuesDefinitions() const;
+
         static void copyTree(const fs::path& src, const fs::path& dst, std::error_code& ec);
 
     public:
