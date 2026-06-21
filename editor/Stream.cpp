@@ -2438,6 +2438,45 @@ Material editor::Stream::decodeMaterial(const YAML::Node& node) {
     return material;
 }
 
+// A mesh whose geometry is regenerated from a model's source file on load must not
+// serialize its buffers/embedded textures (they are large and redundant). This holds
+// for an entity carrying the ModelComponent itself, and for the per-node child mesh
+// entities a multi-node model spreads its geometry across (tracked in meshNodesMapping).
+bool editor::Stream::isModelBackedMesh(const Entity entity, const EntityRegistry* registry, Signature signature) {
+    const auto modelId = registry->getComponentId<ModelComponent>();
+    const auto transformId = registry->getComponentId<Transform>();
+
+    if (signature.test(modelId) && !registry->getComponent<ModelComponent>(entity).filename.empty()) {
+        return true;
+    }
+    if (!signature.test(transformId)) {
+        return false;
+    }
+    // Walk up to the owning model: a child mesh is model-backed only if that model has a
+    // source file and lists this entity among its generated nodes (manually added child
+    // meshes are not in meshNodesMapping and must still serialize their geometry).
+    Entity ancestor = registry->getComponent<Transform>(entity).parent;
+    while (ancestor != NULL_ENTITY) {
+        Signature aSig = registry->getSignature(ancestor);
+        if (aSig.test(modelId)) {
+            const ModelComponent& model = registry->getComponent<ModelComponent>(ancestor);
+            if (!model.filename.empty()) {
+                for (const auto& [nodeIdx, mappedEntity] : model.meshNodesMapping) {
+                    if (mappedEntity == entity) {
+                        return true;
+                    }
+                }
+            }
+            return false; // owning model found, but this entity is not one of its meshes
+        }
+        if (!aSig.test(transformId)) {
+            break;
+        }
+        ancestor = registry->getComponent<Transform>(ancestor).parent;
+    }
+    return false;
+}
+
 YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityRegistry* registry, Signature signature) {
     YAML::Node compNode;
 
@@ -2448,15 +2487,14 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
 
     if (signature.test(registry->getComponentId<MeshComponent>())) {
         // Only treat the mesh as model-backed (and skip encoding its buffers and
-        // embedded textures) when the ModelComponent has a source file that will
-        // regenerate them at runtime. An empty filename loads no geometry, so the
-        // mesh data must still be encoded to remain visible.
-        bool isModel = false;
-        if (signature.test(registry->getComponentId<ModelComponent>())) {
-            isModel = !registry->getComponent<ModelComponent>(entity).filename.empty();
-        }
+        // embedded textures) when its geometry is regenerated from a model source file
+        // at runtime. This covers the ModelComponent root and the per-node child mesh
+        // entities a multi-node model spreads its geometry across. An empty filename (or
+        // a manually added mesh) loads no geometry, so the mesh data must still be
+        // encoded to remain visible.
+        bool isModel = isModelBackedMesh(entity, registry, signature);
         MeshComponent mesh = registry->getComponent<MeshComponent>(entity);
-        compNode[Catalog::getComponentName(ComponentType::MeshComponent, true)] = encodeMeshComponent(mesh, !isModel, !isModel);
+        compNode[Catalog::getComponentName(ComponentType::MeshComponent, true)] = encodeMeshComponent(mesh, !isModel, !isModel, !isModel);
     }
 
     if (signature.test(registry->getComponentId<UIComponent>())) {
@@ -3379,7 +3417,7 @@ Transform editor::Stream::decodeTransform(const YAML::Node& node, const Transfor
     return transform;
 }
 
-YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers, bool embedTextureData) {
+YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers, bool embedTextureData, bool encodeBones) {
     YAML::Node node;
 
     //node["loaded"] = mesh.loaded;
@@ -3407,12 +3445,17 @@ YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool e
     node["submeshes"] = submeshesNode;
     //node["numSubmeshes"] = mesh.numSubmeshes;
 
-    // Encode bones matrix array
-    YAML::Node bonesNode;
-    for(int i = 0; i < MAX_BONES; i++) {
-        bonesNode.push_back(encodeMatrix4(mesh.bonesMatrix[i]));
+    // Encode bones matrix array. For model-backed meshes this is skipped: the skeleton is
+    // regenerated from the model source on load and bonesMatrix is recomputed each frame, so
+    // persisting MAX_BONES matrices per mesh is pure waste (and the dominant YAML node cost
+    // for many-node models).
+    if (encodeBones) {
+        YAML::Node bonesNode;
+        for(int i = 0; i < MAX_BONES; i++) {
+            bonesNode.push_back(encodeMatrix4(mesh.bonesMatrix[i]));
+        }
+        node["bonesMatrix"] = bonesNode;
     }
-    node["bonesMatrix"] = bonesNode;
 
     node["normAdjustJoint"] = mesh.normAdjustJoint;
     node["normAdjustWeight"] = mesh.normAdjustWeight;

@@ -166,6 +166,11 @@ namespace doriax::editor {
         static YAML::Node encodeScriptProperty(const ScriptProperty& prop);
         static ScriptProperty decodeScriptProperty(const YAML::Node& node);
 
+        // True when a mesh's geometry is regenerated from a model's source file on load
+        // (the ModelComponent root or one of a multi-node model's generated child meshes),
+        // so its buffers/embedded textures/bones must not be serialized.
+        static bool isModelBackedMesh(const Entity entity, const EntityRegistry* registry, Signature signature);
+
     public:
         static YAML::Node encodeProject(Project* project);
         static void decodeProject(Project* project, const YAML::Node& node);
@@ -194,7 +199,7 @@ namespace doriax::editor {
         static YAML::Node encodeTransform(const Transform& transform);
         static Transform decodeTransform(const YAML::Node& node, const Transform* oldTransform = nullptr);
 
-        static YAML::Node encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers = true, bool embedTextureData = true);
+        static YAML::Node encodeMeshComponent(const MeshComponent& mesh, bool encodeBuffers = true, bool embedTextureData = true, bool encodeBones = true);
         static MeshComponent decodeMeshComponent(const YAML::Node& node, const MeshComponent* oldMesh = nullptr);
 
         static YAML::Node encodeUIComponent(const UIComponent& ui, bool embedTextureData = true);
