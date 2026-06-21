@@ -1747,7 +1747,12 @@ float MeshSystem::getTerrainHeight(TerrainComponent& terrain, float x, float y){
 }
 
 float MeshSystem::maxTerrainHeightArea(TerrainComponent& terrain, float x, float z, float w, float h) {
-    float maxVal = std::numeric_limits<float>::min();
+    // An empty area (e.g. a degenerate terrain with size 0) samples nothing; return 0 so the
+    // result stays consistent with minTerrainHeightArea and never inverts the node AABB.
+    if (w <= 0 || h <= 0) {
+        return 0.0f;
+    }
+    float maxVal = std::numeric_limits<float>::lowest();
     for(float i = x; i < x+w; i++)
         for(float j = z; j < z+h; j++){
             float newVal = getTerrainHeight(terrain, i,j);
@@ -1759,6 +1764,9 @@ float MeshSystem::maxTerrainHeightArea(TerrainComponent& terrain, float x, float
 }
 
 float MeshSystem::minTerrainHeightArea(TerrainComponent& terrain, float x, float z, float w, float h) {
+    if (w <= 0 || h <= 0) {
+        return 0.0f;
+    }
     float minVal = std::numeric_limits<float>::max();
     for(float i = x; i < x+w; i++)
         for(float j = z; j < z+h; j++){
@@ -1884,8 +1892,11 @@ bool MeshSystem::createTerrain(TerrainComponent& terrain, MeshComponent& mesh){
         }
     }
 
-    Vector3 min = Vector3(-(terrain.terrainSize / 2), 0, -(terrain.terrainSize / 2));
-    Vector3 max = Vector3((terrain.terrainSize / 2), terrain.maxHeight, (terrain.terrainSize / 2));
+    // Use abs/min-max so a degenerate (size 0) or inverted (negative size, negative maxHeight)
+    // terrain never produces an inverted AABB (min > max), which would trip AABB's assertion.
+    const float halfExtent = std::abs(terrain.terrainSize) * 0.5f;
+    Vector3 min = Vector3(-halfExtent, std::min(0.0f, terrain.maxHeight), -halfExtent);
+    Vector3 max = Vector3(halfExtent, std::max(0.0f, terrain.maxHeight), halfExtent);
 
     mesh.aabb = AABB(min, max);
 
