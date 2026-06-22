@@ -15,7 +15,7 @@ namespace {
     struct FastPropertyDescriptor {
         const char* name;
         PropertyType type;
-        int updateFlags;
+        uint64_t updateFlags;
         FastDefGetter getDef;
         FastRefGetter getRef;
     };
@@ -52,16 +52,16 @@ namespace {
     }
 
     template<typename Component, typename Member, Member Component::*MemberPtr>
-    constexpr FastPropertyDescriptor makeFastProperty(const char* name, PropertyType type, int updateFlags) {
+    constexpr FastPropertyDescriptor makeFastProperty(const char* name, PropertyType type, uint64_t updateFlags) {
         return {name, type, updateFlags, &getMemberDef<Component, Member, MemberPtr>, &getMemberRef<Component, Member, MemberPtr>};
     }
 
     template<typename Component, typename Member, Member Component::*MemberPtr>
-    constexpr FastPropertyDescriptor makeFastPropertyNoDefault(const char* name, PropertyType type, int updateFlags) {
+    constexpr FastPropertyDescriptor makeFastPropertyNoDefault(const char* name, PropertyType type, uint64_t updateFlags) {
         return {name, type, updateFlags, &nullPropertyPtr, &getMemberRef<Component, Member, MemberPtr>};
     }
 
-    constexpr FastPropertyDescriptor makeCustomProperty(const char* name, PropertyType type, int updateFlags, FastDefGetter getDef, FastRefGetter getRef) {
+    constexpr FastPropertyDescriptor makeCustomProperty(const char* name, PropertyType type, uint64_t updateFlags, FastDefGetter getDef, FastRefGetter getRef) {
         return {name, type, updateFlags, getDef, getRef};
     }
 
@@ -140,6 +140,7 @@ namespace {
     static const FastPropertyDescriptor kUIProperties[] = {
         makeFastProperty<UIComponent, Vector4, &UIComponent::color>("color", PropertyType::Vector4, UpdateFlags_None),
         makeFastProperty<UIComponent, Texture, &UIComponent::texture>("texture", PropertyType::Texture, UpdateFlags_UI_Texture),
+        makeFastProperty<UIComponent, std::string, &UIComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
     };
 
     static const FastPropertyDescriptor kUILayoutProperties[] = {
@@ -424,6 +425,7 @@ namespace {
         makeFastProperty<SkyComponent, Vector4, &SkyComponent::color>("color", PropertyType::Vector4, UpdateFlags_None),
         makeFastProperty<SkyComponent, float, &SkyComponent::rotation>("rotation", PropertyType::Float, UpdateFlags_Sky),
         makeFastProperty<SkyComponent, bool, &SkyComponent::visible>("visible", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<SkyComponent, std::string, &SkyComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
     };
 
     static const FastPropertyDescriptor kTextProperties[] = {
@@ -491,6 +493,7 @@ namespace {
         makeFastProperty<MeshComponent, bool, &MeshComponent::receiveShadows>("receiveShadows", PropertyType::Bool, UpdateFlags_Mesh_Reload),
         makeFastProperty<MeshComponent, bool, &MeshComponent::transparent>("transparent", PropertyType::Bool, UpdateFlags_Mesh_Reload),
         makeFastProperty<MeshComponent, bool, &MeshComponent::autoTransparency>("autoTransparency", PropertyType::Bool, UpdateFlags_Mesh_Reload),
+        makeFastProperty<MeshComponent, std::string, &MeshComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
         makeFastProperty<MeshComponent, unsigned int, &MeshComponent::numSubmeshes>("numSubmeshes", PropertyType::UInt, UpdateFlags_None),
     };
 
@@ -2358,6 +2361,7 @@ namespace {
         if (propertyName == "transparent") return {PropertyType::Bool, UpdateFlags_None, &def.transparent, &comp->transparent};
         if (propertyName == "autoTransparency") return {PropertyType::Bool, UpdateFlags_None, &def.autoTransparency, &comp->autoTransparency};
         if (propertyName == "texture") return {PropertyType::Texture, UpdateFlags_Points_Texture, &def.texture, &comp->texture};
+        if (propertyName == "customShader") return {PropertyType::String, UpdateFlags_Shader_Reload, &def.customShader, &comp->customShader};
 
         if (propertyName == "numFramesRect") {
             return {PropertyType::UInt, UpdateFlags_None, (void*)&def.numFramesRect, (void*)&comp->numFramesRect};
@@ -2439,6 +2443,7 @@ namespace {
         ps["transparent"] = {PropertyType::Bool, UpdateFlags_None, &def.transparent, comp ? &comp->transparent : nullptr};
         ps["autoTransparency"] = {PropertyType::Bool, UpdateFlags_None, &def.autoTransparency, comp ? &comp->autoTransparency : nullptr};
         ps["texture"] = {PropertyType::Texture, UpdateFlags_Points_Texture, &def.texture, comp ? &comp->texture : nullptr};
+        ps["customShader"] = {PropertyType::String, UpdateFlags_Shader_Reload, &def.customShader, comp ? &comp->customShader : nullptr};
 
         static std::vector<PointData> defPoints;
         ps["points"] = {PropertyType::Custom, UpdateFlags_Points, (void*)&defPoints, comp ? (void*)&comp->points : nullptr};
@@ -2473,6 +2478,7 @@ namespace {
         if (!comp) return PropertyData();
 
         if (propertyName == "maxLines") return {PropertyType::UInt, UpdateFlags_Lines_Reload, &def.maxLines, &comp->maxLines};
+        if (propertyName == "customShader") return {PropertyType::String, UpdateFlags_Shader_Reload, &def.customShader, &comp->customShader};
 
         if (propertyName == "lines") {
             static std::vector<LineData> defLines;
@@ -2517,6 +2523,7 @@ namespace {
         LinesComponent& def = getDefaultComponent<LinesComponent>();
 
         ps["maxLines"] = {PropertyType::UInt, UpdateFlags_Lines_Reload, &def.maxLines, comp ? &comp->maxLines : nullptr};
+        ps["customShader"] = {PropertyType::String, UpdateFlags_Shader_Reload, &def.customShader, comp ? &comp->customShader : nullptr};
 
         static std::vector<LineData> defLines;
         ps["lines"] = {PropertyType::Custom, UpdateFlags_Lines, (void*)&defLines, comp ? (void*)&comp->lines : nullptr};
@@ -3282,10 +3289,10 @@ std::map<std::string, editor::PropertyData> editor::Catalog::findEntityPropertie
     return ps;
 }
 
-int editor::Catalog::getChangedUpdateFlags(ComponentType compType, void* oldComp, void* newComp) {
+uint64_t editor::Catalog::getChangedUpdateFlags(ComponentType compType, void* oldComp, void* newComp) {
     if (!oldComp || !newComp) return 0;
 
-    int flags = 0;
+    uint64_t flags = 0;
 
     auto oldProps = Catalog::getProperties(compType, oldComp);
     auto newProps = Catalog::getProperties(compType, newComp);
@@ -3362,7 +3369,7 @@ int editor::Catalog::getChangedUpdateFlags(ComponentType compType, void* oldComp
     return flags;
 }
 
-int editor::Catalog::getComponentStructuralUpdateFlags(ComponentType compType) {
+uint64_t editor::Catalog::getComponentStructuralUpdateFlags(ComponentType compType) {
     switch (compType) {
         case ComponentType::LightComponent:
         case ComponentType::FogComponent:
@@ -3375,7 +3382,7 @@ int editor::Catalog::getComponentStructuralUpdateFlags(ComponentType compType) {
     }
 }
 
-void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int updateFlags){
+void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, uint64_t updateFlags){
     if (updateFlags & UpdateFlags_Transform){
         if (Transform* transform = registry->findComponent<Transform>(entity)){
             transform->needUpdate = true;
@@ -3449,6 +3456,15 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, int 
             if (updateFlags & UpdateFlags_Sky)
                 sky->needUpdateSky = true;
         }
+    }
+    if (updateFlags & UpdateFlags_Shader_Reload){
+        // Forked-shader assignment/reset: reload whichever renderable the entity has
+        // so it re-fetches its (possibly custom) shader from the pool.
+        if (MeshComponent* m = registry->findComponent<MeshComponent>(entity)) m->needReload = true;
+        if (UIComponent* u = registry->findComponent<UIComponent>(entity)) u->needReload = true;
+        if (PointsComponent* p = registry->findComponent<PointsComponent>(entity)) p->needReload = true;
+        if (LinesComponent* l = registry->findComponent<LinesComponent>(entity)) l->needReload = true;
+        if (SkyComponent* s = registry->findComponent<SkyComponent>(entity)) s->needReload = true;
     }
     if (updateFlags & UpdateFlags_Sprite){
         if (SpriteComponent* sprite = registry->findComponent<SpriteComponent>(entity)){

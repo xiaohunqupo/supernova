@@ -49,12 +49,13 @@ void ExportWindow::populateShaderList() {
 
             ShaderType type = ShaderPool::getShaderTypeFromKey(key);
             uint32_t props = ShaderPool::getPropertiesFromKey(key);
+            uint16_t customId = ShaderPool::getCustomIdFromKey(key);
 
             ShaderEntry entry;
             entry.key = key;
             entry.type = type;
             entry.properties = props;
-            entry.displayName = Exporter::getShaderDisplayName(type, props);
+            entry.displayName = Exporter::getShaderDisplayName(type, props, customId);
             m_shaderEntries.push_back(entry);
         }
     }

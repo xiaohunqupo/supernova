@@ -32,17 +32,45 @@ namespace doriax{
         static void addMissingShader(const std::string& shaderStr);
 
     public:
-        static ShaderKey getShaderKey(ShaderType shaderType, uint32_t properties);
+        // ShaderKey layout (uint64):
+        //   bits [0..31]  properties bitfield
+        //   bits [32..47] ShaderType
+        //   bits [48..63] customShaderId (0 = built-in). Built-in keys are unchanged
+        //                 (customId 0), so old serialized keys remain valid.
+        static ShaderKey getShaderKey(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
 
-        static std::shared_ptr<ShaderRender> get(ShaderType shaderType, uint32_t properties);
-        static void remove(ShaderType shaderType, uint32_t properties);
+        static std::shared_ptr<ShaderRender> get(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
+        static void remove(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
 
-        static std::string getShaderStr(ShaderType shaderType, uint32_t properties);
+        static std::string getShaderStr(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
         static std::string getShaderTypeName(ShaderType shaderType, bool lowerCase = false);
         static int getShaderPropertyCount(ShaderType shaderType);
         static std::string getShaderPropertyName(ShaderType shaderType, int bit, bool shortName = true);
         static ShaderType getShaderTypeFromKey(ShaderKey key);
         static uint32_t getPropertiesFromKey(ShaderKey key);
+        static uint16_t getCustomIdFromKey(ShaderKey key);
+
+        // Key used to validate a serialized .sdat/header blob. The customShaderId is a
+        // session-local registry value (assigned in registration order) and is NOT
+        // stable between the editor that exported the shader and the standalone runtime
+        // that loads it. The unique filename already identifies the forked source, so
+        // the on-disk validation key drops customId and keeps only type+properties.
+        static ShaderKey getStorageKey(ShaderKey key);
+
+        // Custom (user-forked) shader registry. Interns a project-relative base path
+        // (e.g. "shaders/myMesh", no extension) and returns a stable session id used
+        // in the ShaderKey; an empty path returns 0 (built-in). The derived (sanitized)
+        // basename is what makes editor build, disk cache, export and shipping-runtime
+        // .sdat filenames line up. Thread-safe (ShaderBuilder runs on a thread pool).
+        static uint16_t registerCustomShader(const std::string& baseName);
+        static std::string getCustomShaderName(uint16_t customId);     // project-relative base, "" if none
+        static std::string getCustomShaderBasename(uint16_t customId); // filesystem-safe token, "" if none
+
+        // Frees the GPU handle of every cached forked-shader variant so the next get()
+        // rebuilds (used by the editor after a shader source is edited). The pool keeps
+        // the ShaderRender objects, so meshes holding them stay valid and re-bind on
+        // their needReload pass.
+        static void destroyCustomShaders();
 
         static std::string getShaderLangStr();
         static std::string getShaderLangStr(ShaderLang lang, int version, bool es = false, Platform platform = Platform::Linux);

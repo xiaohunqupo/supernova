@@ -8,9 +8,13 @@
 #include "thread/ResourceProgress.h"
 #include "thread/ThreadPoolManager.h"
 
+#include "pool/ShaderPool.h"
+
 #include <cstring>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 
 //#include <thread>
 //#include <chrono>
@@ -308,17 +312,26 @@ ShaderBuildResult editor::ShaderBuilder::buildShader(ShaderKey shaderKey, Projec
         return ShaderBuildResult(shaderDataCache[shaderKey], ResourceLoadState::Finished);
     }
 
-    // Try disk cache (<cache>/doriax/shaders/<version>/<basename>.sdat)
+    // Try disk cache (<cache>/doriax/shaders/<version>/<basename>.sdat). Forked shaders
+    // are cached too (the run-build / standalone runtime loads shaders from this same
+    // dir and cannot compile), but their cache is keyed only by basename, so it is
+    // skipped when the source .vert/.frag is newer than the cached .sdat. The validation
+    // key is the storage key (customId stripped) because that id is session-local and
+    // would not match across the editor and a separate run process.
+    const bool isCustom = ShaderPool::getCustomIdFromKey(shaderKey) != 0;
     if (project) {
         lock.unlock();
-        ShaderData diskData;
-        std::string err;
         const std::filesystem::path cachePath = getShaderCachePath(shaderKey, project);
-        if (ShaderDataSerializer::readFromFile(cachePath.string(), shaderKey, diskData, &err)) {
-            lock.lock();
-            shaderDataCache[shaderKey] = diskData;
-            printf("Shader loaded from disk cache: %s\n", cachePath.string().c_str());
-            return ShaderBuildResult(diskData, ResourceLoadState::Finished);
+        const bool fresh = !isCustom || !isCustomCacheStale(shaderKey, project, cachePath);
+        if (fresh) {
+            ShaderData diskData;
+            std::string err;
+            if (ShaderDataSerializer::readFromFile(cachePath.string(), ShaderPool::getStorageKey(shaderKey), diskData, &err)) {
+                lock.lock();
+                shaderDataCache[shaderKey] = diskData;
+                printf("Shader loaded from disk cache: %s\n", cachePath.string().c_str());
+                return ShaderBuildResult(diskData, ResourceLoadState::Finished);
+            }
         }
         lock.lock();
     }
@@ -467,6 +480,50 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     return true;
 }
 
+void editor::ShaderBuilder::setupBuildArgs(shadercompiler::args_t& args, ShaderKey shaderKey, Project* project) {
+    ShaderType shaderType = ShaderPool::getShaderTypeFromKey(shaderKey);
+    uint32_t properties = ShaderPool::getPropertiesFromKey(shaderKey);
+    uint16_t customId = ShaderPool::getCustomIdFromKey(shaderKey);
+
+    // Built-in entry-point files + property #defines (the variant system is identical
+    // for forked shaders).
+    if (!setupShaderArgs(args, shaderType, properties)) {
+        throw std::runtime_error("Unknown shader type");
+    }
+
+    if (customId == 0)
+        return;
+
+    // Overlay the project's forked .vert/.frag onto the engine file buffers. The
+    // top-level entry points come from the project; every #include "includes/..."
+    // still resolves against the embedded engine sources already in args.fileBuffers.
+    if (!project) {
+        throw std::runtime_error("Custom shader requested without a project");
+    }
+
+    std::string base = ShaderPool::getCustomShaderName(customId);
+    if (base.empty()) {
+        throw std::runtime_error("Unknown custom shader id");
+    }
+
+    auto readFile = [&](const std::string& relPath) -> std::string {
+        std::filesystem::path full = project->getProjectPath() / relPath;
+        std::ifstream f(full);
+        if (!f.is_open())
+            throw std::runtime_error("Could not open custom shader file: " + full.string());
+        std::stringstream ss;
+        ss << f.rdbuf();
+        return ss.str();
+    };
+
+    const std::string vertKey = base + ".vert";
+    const std::string fragKey = base + ".frag";
+    args.fileBuffers[vertKey] = readFile(vertKey);
+    args.fileBuffers[fragKey] = readFile(fragKey);
+    args.vert_file = vertKey;
+    args.frag_file = fragKey;
+}
+
 std::string editor::ShaderBuilder::getLangSuffix(shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform) {
     if (lang == shadercompiler::LANG_GLSL) {
         return es ? "_glsl" + std::to_string(version) + "es" : "_glsl" + std::to_string(version);
@@ -490,6 +547,7 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
 
     ShaderType shaderType = ShaderPool::getShaderTypeFromKey(shaderKey);
     uint32_t properties = ShaderPool::getPropertiesFromKey(shaderKey);
+    uint16_t customId = ShaderPool::getCustomIdFromKey(shaderKey);
 
     std::vector<shadercompiler::input_t> inputs;
     shadercompiler::args_t args = shadercompiler::initialize_args();
@@ -499,11 +557,13 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
     args.lang = shadercompiler::LANG_GLSL;
     args.version = 410;
 
-    if (!setupShaderArgs(args, shaderType, properties)) {
+    try {
+        setupBuildArgs(args, shaderKey, project);
+    } catch (const std::exception&) {
         if (trackProgress) {
             ResourceProgress::failBuild(shaderKey);
         }
-        throw std::runtime_error("Unknown shader type");
+        throw;
     }
 
     if (shutdownRequested) {
@@ -563,7 +623,7 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
     }
 
     // Use a deterministic basename for stage naming and disk cache
-    args.output_basename = ShaderPool::getShaderStr(shaderType, properties) + getLangSuffix(args.lang, args.version, args.es, args.platform);
+    args.output_basename = ShaderPool::getShaderStr(shaderType, properties, customId) + getLangSuffix(args.lang, args.version, args.es, args.platform);
     ShaderData shaderData = convertToShaderData(spirvcrossvec, inputs, args);
 
     if (shutdownRequested) {
@@ -589,7 +649,8 @@ std::filesystem::path editor::ShaderBuilder::getShaderCachePath(ShaderKey shader
 
     ShaderType shaderType = ShaderPool::getShaderTypeFromKey(shaderKey);
     uint32_t properties = ShaderPool::getPropertiesFromKey(shaderKey);
-    std::string basename = ShaderPool::getShaderStr(shaderType, properties) + "_glsl410";
+    uint16_t customId = ShaderPool::getCustomIdFromKey(shaderKey);
+    std::string basename = ShaderPool::getShaderStr(shaderType, properties, customId) + "_glsl410";
 
     return App::getUserShaderCacheDir() / (basename + ".sdat");
 }
@@ -613,13 +674,41 @@ bool editor::ShaderBuilder::saveShaderDataCache(ShaderKey shaderKey, Project* pr
         return false;
     }
 
-    return ShaderDataSerializer::writeToFile(cachePath.string(), shaderKey, shaderData, err);
+    // Validate/serialize with the storage key (customId stripped): a separate run
+    // process assigns its own session-local customId, so the on-disk key must not
+    // depend on it (the unique basename in the filename identifies the forked source).
+    return ShaderDataSerializer::writeToFile(cachePath.string(), ShaderPool::getStorageKey(shaderKey), shaderData, err);
+}
+
+bool editor::ShaderBuilder::isCustomCacheStale(ShaderKey shaderKey, Project* project, const std::filesystem::path& cachePath) {
+    std::error_code ec;
+    if (!std::filesystem::exists(cachePath, ec))
+        return true;
+    const auto cacheTime = std::filesystem::last_write_time(cachePath, ec);
+    if (ec)
+        return true;
+
+    const std::string base = ShaderPool::getCustomShaderName(ShaderPool::getCustomIdFromKey(shaderKey));
+    if (base.empty())
+        return true;
+
+    // Stale if either forked source file is newer than the cached .sdat (so saving an
+    // edit forces a rebuild + re-cache on the next get()).
+    for (const char* ext : {".vert", ".frag"}) {
+        const std::filesystem::path src = project->getProjectPath() / (base + ext);
+        std::error_code srcEc;
+        const auto srcTime = std::filesystem::last_write_time(src, srcEc);
+        if (!srcEc && srcTime > cacheTime)
+            return true;
+    }
+    return false;
 }
 
 std::string editor::ShaderBuilder::getShaderDisplayName(ShaderKey key) {
     ShaderType type = ShaderPool::getShaderTypeFromKey(key);
     uint32_t properties = ShaderPool::getPropertiesFromKey(key);
-    std::string shaderStr = ShaderPool::getShaderStr(type, properties);
+    uint16_t customId = ShaderPool::getCustomIdFromKey(key);
+    std::string shaderStr = ShaderPool::getShaderStr(type, properties, customId);
 
     std::string cliSpec;
     if (ShaderPool::getShaderCliSpec(shaderStr, cliSpec)) {
@@ -629,14 +718,34 @@ std::string editor::ShaderBuilder::getShaderDisplayName(ShaderKey key) {
     return shaderStr;
 }
 
+void editor::ShaderBuilder::invalidateCustomShaders() {
+    std::lock_guard<std::mutex> lock(cacheMutex);
+    for (auto it = shaderDataCache.begin(); it != shaderDataCache.end(); ) {
+        if (ShaderPool::getCustomIdFromKey(it->first) != 0)
+            it = shaderDataCache.erase(it);
+        else
+            ++it;
+    }
+    // Drop pending custom builds too, otherwise buildShader would reap a stale (pre-edit)
+    // future into the cache. ThreadPoolManager futures don't block on destruction; an
+    // in-flight task simply discards its result and the next get() restarts the build.
+    for (auto it = pendingBuilds.begin(); it != pendingBuilds.end(); ) {
+        if (ShaderPool::getCustomIdFromKey(it->first) != 0)
+            it = pendingBuilds.erase(it);
+        else
+            ++it;
+    }
+}
+
 ShaderData& editor::ShaderBuilder::getShaderData(ShaderKey shaderKey) { 
     std::lock_guard<std::mutex> lock(cacheMutex);
     return shaderDataCache[shaderKey]; 
 }
 
-ShaderData editor::ShaderBuilder::buildShaderForExport(ShaderKey shaderKey, shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform) {
+ShaderData editor::ShaderBuilder::buildShaderForExport(ShaderKey shaderKey, Project* project, shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform) {
     ShaderType shaderType = ShaderPool::getShaderTypeFromKey(shaderKey);
     uint32_t properties = ShaderPool::getPropertiesFromKey(shaderKey);
+    uint16_t customId = ShaderPool::getCustomIdFromKey(shaderKey);
 
     std::vector<shadercompiler::input_t> inputs;
     shadercompiler::args_t args = shadercompiler::initialize_args();
@@ -648,9 +757,7 @@ ShaderData editor::ShaderBuilder::buildShaderForExport(ShaderKey shaderKey, shad
     args.es = es;
     args.platform = platform;
 
-    if (!setupShaderArgs(args, shaderType, properties)) {
-        throw std::runtime_error("Unknown shader type");
-    }
+    setupBuildArgs(args, shaderKey, project);
 
     if (!shadercompiler::load_input(inputs, args)) {
         throw std::runtime_error("Error loading shader input");
@@ -668,7 +775,7 @@ ShaderData editor::ShaderBuilder::buildShaderForExport(ShaderKey shaderKey, shad
         throw std::runtime_error("Error cross-compiling");
     }
 
-    args.output_basename = ShaderPool::getShaderStr(shaderType, properties) + getLangSuffix(lang, version, es, platform);
+    args.output_basename = ShaderPool::getShaderStr(shaderType, properties, customId) + getLangSuffix(lang, version, es, platform);
     ShaderData shaderData = convertToShaderData(spirvcrossvec, inputs, args);
 
     Platform shaderPlatform = Platform::Linux;

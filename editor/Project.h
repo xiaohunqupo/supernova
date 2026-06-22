@@ -374,6 +374,11 @@ namespace doriax::editor{
 
         std::vector<SceneProject>& getScenes();
         const std::vector<SceneProject>& getScenes() const;
+
+        // Flushes compiled forked-shader caches and flags meshes that use a custom
+        // shader for reload, so editing a shader source file updates the viewport.
+        void invalidateCustomShaders();
+
         SceneProject* getScene(uint32_t sceneId);
         const SceneProject* getScene(uint32_t sceneId) const;
         SceneProject* getSelectedScene();

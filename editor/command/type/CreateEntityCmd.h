@@ -82,7 +82,7 @@ namespace doriax::editor{
 
         // Component type -> property name -> property setter function
         std::unordered_map<ComponentType, std::unordered_map<std::string, std::function<void(Entity)>>> propertySetters;
-        int updateFlags;
+        uint64_t updateFlags;
 
     public:
         CreateEntityCmd(Project* project, uint32_t sceneId, std::string entityName, bool addToBundle = false);

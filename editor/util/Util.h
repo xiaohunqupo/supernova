@@ -94,6 +94,19 @@ namespace doriax::editor{
             return materialExtensions.find(ext) != materialExtensions.end();
         }
 
+        inline static bool isShaderFile(const std::string& path) {
+             static const std::unordered_set<std::string> shaderExtensions = {
+                ".vert", ".frag", ".glsl"
+            };
+
+            std::string ext = std::filesystem::path(path).extension().string();
+            if (ext.empty() && !path.empty() && path[0] == '.') {
+                ext = path;
+            }
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            return shaderExtensions.find(ext) != shaderExtensions.end();
+        }
+
         inline static bool isBundleFile(const std::string& path) {
              static const std::unordered_set<std::string> bundleExtensions = {
                 ".bundle"

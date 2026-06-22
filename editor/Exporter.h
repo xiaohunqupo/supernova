@@ -96,7 +96,7 @@ namespace doriax::editor {
         ExportProgress getProgress() const;
         bool isRunning() const;
 
-        static std::string getShaderDisplayName(ShaderType type, uint32_t properties);
+        static std::string getShaderDisplayName(ShaderType type, uint32_t properties, uint16_t customId = 0);
         static std::string getPlatformName(::doriax::Platform platform);
     };
 

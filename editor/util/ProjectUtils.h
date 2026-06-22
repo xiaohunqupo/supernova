@@ -12,6 +12,7 @@
 
 #include "texture/Texture.h"
 #include "ecs/Entity.h"
+#include "render/Render.h"
 
 #include "command/Command.h"
 
@@ -56,6 +57,13 @@ public:
 
     // Fills a Texture with the editor built-in default skybox cubemap.
     static void setDefaultSkyTexture(Texture& outTexture);
+
+    // Forks a built-in shader (Mesh/UI/Points/Lines/Sky) into the project's shaders/
+    // folder, copying the engine <type>.vert/.frag sources (their #includes still
+    // resolve to the engine). Picks a unique name from desiredName. Returns the
+    // project-relative base path with no extension (e.g. "shaders/myMesh"), or "" on
+    // failure.
+    static std::string forkShader(Project* project, ShaderType shaderType, const std::string& desiredName);
 
     // Builds a MultiPropertyCmd that removes tile at tileIndex from a TilemapComponent.
     // Returns the command (caller must add it to CommandHandle) or nullptr if invalid.

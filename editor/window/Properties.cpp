@@ -4497,6 +4497,74 @@ void editor::Properties::drawTransform(ComponentType cpType, SceneProject* scene
     endTable();
 }
 
+void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType shaderType, SceneProject* sceneProject, std::vector<Entity> entities){
+    // The custom shader is per-component. Forking copies the built-in <type>.vert/.frag
+    // into the project's shaders/ folder; #includes still resolve to the engine sources
+    // and the variant/#define system is unchanged. Shown only for a single selection
+    // (the path is per-entity).
+    if (entities.size() != 1)
+        return;
+
+    Entity shaderEntity = entities[0];
+    std::string* shaderRef = Catalog::getPropertyRef<std::string>(sceneProject->scene, shaderEntity, cpType, "customShader");
+    if (!shaderRef)
+        return;
+    const std::string currentShader = *shaderRef;
+
+    beginTable(cpType, getLabelSize("receive shadows"), "custom_shader_table");
+    propertyHeader("Shader");
+
+    auto setCustomShader = [&](const std::string& value) {
+        Command* shaderCmd = new PropertyCmd<std::string>(project, sceneProject->id, shaderEntity, cpType, "customShader", value);
+        CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
+    };
+    auto openInEditor = [&](const std::string& base) {
+        if (CodeEditor* codeEditor = Backend::getApp().getCodeEditor()) {
+            codeEditor->openFile((project->getProjectPath() / (base + ".frag")).string());
+            codeEditor->openFile((project->getProjectPath() / (base + ".vert")).string());
+        }
+    };
+
+    ImGui::SetNextItemWidth(-1);
+    if (currentShader.empty()) {
+        ImGui::TextDisabled("Built-in");
+        if (ImGui::Button("Customize##fork_custom_shader")) {
+            std::string base = ProjectUtils::forkShader(project, shaderType, sceneProject->scene->getEntityName(shaderEntity));
+            if (!base.empty()) {
+                setCustomShader(base);
+                openInEditor(base);
+            }
+        }
+        ImGui::SetItemTooltip("Fork the built-in shader into this project and edit it");
+    } else {
+        ImGui::TextWrapped("%s", currentShader.c_str());
+        if (ImGui::Button("Edit##edit_custom_shader")) {
+            openInEditor(currentShader);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset to Built-in##reset_custom_shader")) {
+            setCustomShader("");
+        }
+    }
+
+    // Drag-drop an existing .vert/.frag from the resources window.
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("resource_files")) {
+            std::vector<std::string> receivedStrings = editor::Util::getStringsFromPayload(payload);
+            if (!receivedStrings.empty() && Util::isShaderFile(receivedStrings[0])) {
+                std::string rel = std::filesystem::relative(receivedStrings[0], project->getProjectPath()).generic_string();
+                // store the base path without the .vert/.frag extension
+                std::filesystem::path relPath(rel);
+                std::string base = (relPath.parent_path() / relPath.stem()).generic_string();
+                setCustomShader(base);
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    endTable();
+}
+
 void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     beginTable(cpType, getLabelSize("receive shadows"));
 
@@ -4723,6 +4791,8 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
     propertyRowWithAutoButton(RowPropertyType::Bool, cpType, "transparent", "Transparent", "autoTransparency", "Auto Transparency", sceneProject, entities, transparencySettings);
 
     endTable();
+
+    drawCustomShaderRow(cpType, ShaderType::MESH, sceneProject, entities);
 
     unsigned int numSubmeshes = sceneProject->scene->getComponent<MeshComponent>(entities[0]).numSubmeshes;
     for (Entity& entity : entities){
@@ -5101,6 +5171,8 @@ void editor::Properties::drawUIComponent(ComponentType cpType, SceneProject* sce
     propertyRow(RowPropertyType::Color4L, cpType, "color", "Color", sceneProject, entities);
     propertyRow(RowPropertyType::Texture, cpType, "texture", "Texture", sceneProject, entities);
     endTable();
+
+    drawCustomShaderRow(cpType, ShaderType::UI, sceneProject, entities);
 }
 
 void editor::Properties::drawButtonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
@@ -7338,6 +7410,8 @@ void editor::Properties::drawSkyComponent(ComponentType cpType, SceneProject* sc
     propertyRow(RowPropertyType::Float, cpType, "rotation", "Rotation", sceneProject, entities);
 
     endTable();
+
+    drawCustomShaderRow(cpType, ShaderType::SKYBOX, sceneProject, entities);
 }
 
 void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
@@ -7874,6 +7948,8 @@ void editor::Properties::drawPointsComponent(ComponentType cpType, SceneProject*
     propertyRow(RowPropertyType::UInt, cpType, "maxPoints", "Max Points", sceneProject, entities, settingsInt);
     endTable();
 
+    drawCustomShaderRow(cpType, ShaderType::POINTS, sceneProject, entities);
+
     if (entities.size() != 1) {
         ImGui::SeparatorText("Points");
         ImGui::TextDisabled("Select a single entity to edit points");
@@ -7999,6 +8075,8 @@ void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* 
     beginTable(cpType, getLabelSize("Max Lines"));
     propertyRow(RowPropertyType::UInt, cpType, "maxLines", "Max Lines", sceneProject, entities, settingsInt);
     endTable();
+
+    drawCustomShaderRow(cpType, ShaderType::LINES, sceneProject, entities);
 
     if (entities.size() != 1) {
         ImGui::SeparatorText("Lines");

@@ -1,12 +1,13 @@
 #pragma once
 
 #include <stddef.h>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "Scene.h"
 
 namespace doriax::editor{
-    enum UpdateFlags{
+    enum UpdateFlags : uint64_t {
         UpdateFlags_None                = 0,
         UpdateFlags_Transform           = 1 << 0,
         UpdateFlags_Camera              = 1 << 1,
@@ -38,7 +39,10 @@ namespace doriax::editor{
         UpdateFlags_Sound               = 1 << 27,
         UpdateFlags_Lines               = 1 << 28,
         UpdateFlags_Lines_Reload        = 1 << 29,
-        UpdateFlags_Points_Texture      = 1 << 30
+        UpdateFlags_Points_Texture      = 1 << 30,
+        // Generic "reload the renderable's shader" flag, used by the per-component
+        // customShader property of Mesh/UI/Points/Lines/Sky.
+        UpdateFlags_Shader_Reload       = (uint64_t)1 << 31
     };
 
     // the order of components here affects properties window
@@ -116,7 +120,7 @@ namespace doriax::editor{
 
     struct PropertyData{
         PropertyType type;
-        int updateFlags;
+        uint64_t updateFlags;
         void* def;
         void* ref;
     };
@@ -142,10 +146,10 @@ namespace doriax::editor{
         static std::vector<ComponentType> findComponents(EntityRegistry* registry, Entity entity);
         static std::map<std::string, PropertyData> findEntityProperties(EntityRegistry* registry, Entity entity, ComponentType component);
 
-        static int getChangedUpdateFlags(ComponentType compType, void* oldComp, void* newComp);
-        static int getComponentStructuralUpdateFlags(ComponentType compType);
+        static uint64_t getChangedUpdateFlags(ComponentType compType, void* oldComp, void* newComp);
+        static uint64_t getComponentStructuralUpdateFlags(ComponentType compType);
 
-        static void updateEntity(EntityRegistry* registry, Entity entity, int updateFlags);
+        static void updateEntity(EntityRegistry* registry, Entity entity, uint64_t updateFlags);
 
         static void copyComponent(EntityRegistry* sourceRegistry, Entity sourceEntity,
                                 EntityRegistry* targetRegistry, Entity targetEntity,

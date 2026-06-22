@@ -702,6 +702,8 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
     code << ind << "mesh.receiveIBL = " << formatBool(mesh.receiveIBL) << ";\n";
     code << ind << "mesh.castShadows = " << formatBool(mesh.castShadows) << ";\n";
     code << ind << "mesh.receiveShadows = " << formatBool(mesh.receiveShadows) << ";\n";
+    if (!mesh.customShader.empty())
+        code << ind << "mesh.customShader = " << formatString(mesh.customShader) << ";\n";
     code << ind << "mesh.vertexCount = " << formatUInt(mesh.vertexCount) << ";\n";
     //code << ind << "mesh.submeshes.resize(" << formatUInt(mesh.numSubmeshes) << ");\n";
     code << ind << "mesh.numSubmeshes = " << formatUInt(mesh.numSubmeshes) << ";\n";
@@ -818,6 +820,8 @@ std::string editor::Factory::createUIComponent(int indentSpaces, EntityRegistry*
     const std::string ind = indentation(indentSpaces);
     code << ind << "UIComponent ui;\n";
     code << ind << "ui.color = " << formatVector4(ui.color) << ";\n";
+    if (!ui.customShader.empty())
+        code << ind << "ui.customShader = " << formatString(ui.customShader) << ";\n";
     code << formatTexture(indentSpaces, ui.texture, "ui.texture", projectPath);
     addComponentCode(code, ind, sceneName, entityName, entity, "UIComponent", "ui", assignExisting);
     return code.str();
@@ -1332,6 +1336,8 @@ std::string editor::Factory::createSkyComponent(int indentSpaces, EntityRegistry
     code << ind << "sky.color = " << formatVector4(sky.color) << ";\n";
     code << ind << "sky.rotation = " << formatFloat(sky.rotation) << ";\n";
     code << ind << "sky.visible = " << formatBool(sky.visible) << ";\n";
+    if (!sky.customShader.empty())
+        code << ind << "sky.customShader = " << formatString(sky.customShader) << ";\n";
 
     addComponentCode(code, ind, sceneName, entityName, entity, "SkyComponent", "sky", assignExisting);
     return code.str();
@@ -2583,6 +2589,8 @@ std::string editor::Factory::createPointsComponent(int indentSpaces, EntityRegis
     code << ind << "pointscomp.maxPoints = " << formatUInt(p.maxPoints) << ";\n";
     code << ind << "pointscomp.transparent = " << formatBool(p.transparent) << ";\n";
     code << ind << "pointscomp.autoTransparency = " << formatBool(p.autoTransparency) << ";\n";
+    if (!p.customShader.empty())
+        code << ind << "pointscomp.customShader = " << formatString(p.customShader) << ";\n";
     code << formatTexture(indentSpaces, p.texture, "pointscomp.texture", projectPath);
 
     if (p.numFramesRect > 0) {
@@ -2627,6 +2635,8 @@ std::string editor::Factory::createLinesComponent(int indentSpaces, EntityRegist
     unsigned int maxLines = std::max(l.maxLines, static_cast<unsigned int>(l.lines.size()));
     code << ind << "LinesComponent linescomp;\n";
     code << ind << "linescomp.maxLines = " << formatUInt(maxLines) << ";\n";
+    if (!l.customShader.empty())
+        code << ind << "linescomp.customShader = " << formatString(l.customShader) << ";\n";
 
     for (size_t i = 0; i < l.lines.size(); i++) {
         const LineData& line = l.lines[i];

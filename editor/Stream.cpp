@@ -2766,7 +2766,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<Transform>())){
             registry->addComponent<Transform>(entity, transform);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::Transform, existing, &transform);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::Transform, existing, &transform);
             registry->addEntityChild(transform.parent, entity, false);
             registry->getComponent<Transform>(entity) = transform;
             Catalog::updateEntity(registry, entity, flags);
@@ -2780,7 +2780,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<MeshComponent>())){
             registry->addComponent<MeshComponent>(entity, mesh);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::MeshComponent, existing, &mesh);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::MeshComponent, existing, &mesh);
             registry->getComponent<MeshComponent>(entity) = mesh;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2793,7 +2793,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<UIComponent>())){
             registry->addComponent<UIComponent>(entity, ui);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::UIComponent, existing, &ui);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::UIComponent, existing, &ui);
             registry->getComponent<UIComponent>(entity) = ui;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2806,7 +2806,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ButtonComponent>())){
             registry->addComponent<ButtonComponent>(entity, button);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ButtonComponent, existing, &button);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ButtonComponent, existing, &button);
             registry->getComponent<ButtonComponent>(entity) = button;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2819,7 +2819,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ScrollbarComponent>())){
             registry->addComponent<ScrollbarComponent>(entity, scrollbar);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ScrollbarComponent, existing, &scrollbar);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ScrollbarComponent, existing, &scrollbar);
             registry->getComponent<ScrollbarComponent>(entity) = scrollbar;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2832,7 +2832,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ProgressbarComponent>())){
             registry->addComponent<ProgressbarComponent>(entity, progressbar);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ProgressbarComponent, existing, &progressbar);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ProgressbarComponent, existing, &progressbar);
             registry->getComponent<ProgressbarComponent>(entity) = progressbar;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2845,7 +2845,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<TextEditComponent>())){
             registry->addComponent<TextEditComponent>(entity, textedit);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::TextEditComponent, existing, &textedit);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::TextEditComponent, existing, &textedit);
             registry->getComponent<TextEditComponent>(entity) = textedit;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2858,7 +2858,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<PanelComponent>())){
             registry->addComponent<PanelComponent>(entity, panel);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::PanelComponent, existing, &panel);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::PanelComponent, existing, &panel);
             registry->getComponent<PanelComponent>(entity) = panel;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2871,7 +2871,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<UILayoutComponent>())){
             registry->addComponent<UILayoutComponent>(entity, layout);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::UILayoutComponent, existing, &layout);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::UILayoutComponent, existing, &layout);
             registry->getComponent<UILayoutComponent>(entity) = layout;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2884,7 +2884,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<UIContainerComponent>())){
             registry->addComponent<UIContainerComponent>(entity, container);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::UIContainerComponent, existing, &container);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::UIContainerComponent, existing, &container);
             registry->getComponent<UIContainerComponent>(entity) = container;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2897,7 +2897,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<TextComponent>())){
             registry->addComponent<TextComponent>(entity, text);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::TextComponent, existing, &text);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::TextComponent, existing, &text);
             registry->getComponent<TextComponent>(entity) = text;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2910,7 +2910,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ImageComponent>())){
             registry->addComponent<ImageComponent>(entity, image);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ImageComponent, existing, &image);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ImageComponent, existing, &image);
             registry->getComponent<ImageComponent>(entity) = image;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2923,7 +2923,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<SpriteComponent>())){
             registry->addComponent<SpriteComponent>(entity, sprite);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::SpriteComponent, existing, &sprite);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::SpriteComponent, existing, &sprite);
             registry->getComponent<SpriteComponent>(entity) = sprite;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2936,7 +2936,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<TilemapComponent>())){
             registry->addComponent<TilemapComponent>(entity, tilemap);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::TilemapComponent, existing, &tilemap);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::TilemapComponent, existing, &tilemap);
             registry->getComponent<TilemapComponent>(entity) = tilemap;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2949,7 +2949,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<TerrainComponent>())){
             registry->addComponent<TerrainComponent>(entity, terrain);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::TerrainComponent, existing, &terrain);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::TerrainComponent, existing, &terrain);
             registry->getComponent<TerrainComponent>(entity) = terrain;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2963,7 +2963,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
             registry->addComponent<LightComponent>(entity, light);
             Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::LightComponent));
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::LightComponent, existing, &light);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::LightComponent, existing, &light);
             registry->getComponent<LightComponent>(entity) = light;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2977,7 +2977,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
             registry->addComponent<FogComponent>(entity, fog);
             Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::FogComponent));
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::FogComponent, existing, &fog);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::FogComponent, existing, &fog);
             registry->getComponent<FogComponent>(entity) = fog;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -2991,7 +2991,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
             registry->addComponent<MirrorComponent>(entity, mirror);
             Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::MirrorComponent));
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::MirrorComponent, existing, &mirror);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::MirrorComponent, existing, &mirror);
             registry->getComponent<MirrorComponent>(entity) = mirror;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3004,7 +3004,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<CameraComponent>())){
             registry->addComponent<CameraComponent>(entity, camera);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::CameraComponent, existing, &camera);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::CameraComponent, existing, &camera);
             registry->getComponent<CameraComponent>(entity) = camera;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3017,7 +3017,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<SoundComponent>())){
             registry->addComponent<SoundComponent>(entity, audio);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::SoundComponent, existing, &audio);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::SoundComponent, existing, &audio);
             registry->getComponent<SoundComponent>(entity) = audio;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3030,7 +3030,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ScriptComponent>())){
             registry->addComponent<ScriptComponent>(entity, script);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ScriptComponent, existing, &script);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ScriptComponent, existing, &script);
             registry->getComponent<ScriptComponent>(entity) = script;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3043,7 +3043,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<SkyComponent>())){
             registry->addComponent<SkyComponent>(entity, sky);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::SkyComponent, existing, &sky);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::SkyComponent, existing, &sky);
             registry->getComponent<SkyComponent>(entity) = sky;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3056,7 +3056,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ModelComponent>())){
             registry->addComponent<ModelComponent>(entity, model);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ModelComponent, existing, &model);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ModelComponent, existing, &model);
             registry->getComponent<ModelComponent>(entity) = model;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3069,7 +3069,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<Body2DComponent>())){
             registry->addComponent<Body2DComponent>(entity, body);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::Body2DComponent, existing, &body);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::Body2DComponent, existing, &body);
             registry->getComponent<Body2DComponent>(entity) = body;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3082,7 +3082,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<Body3DComponent>())){
             registry->addComponent<Body3DComponent>(entity, body);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::Body3DComponent, existing, &body);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::Body3DComponent, existing, &body);
             registry->getComponent<Body3DComponent>(entity) = body;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3095,7 +3095,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<Joint2DComponent>())){
             registry->addComponent<Joint2DComponent>(entity, joint);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::Joint2DComponent, existing, &joint);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::Joint2DComponent, existing, &joint);
             registry->getComponent<Joint2DComponent>(entity) = joint;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3108,7 +3108,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<Joint3DComponent>())){
             registry->addComponent<Joint3DComponent>(entity, joint);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::Joint3DComponent, existing, &joint);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::Joint3DComponent, existing, &joint);
             registry->getComponent<Joint3DComponent>(entity) = joint;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3121,7 +3121,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ActionComponent>())){
             registry->addComponent<ActionComponent>(entity, action);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ActionComponent, existing, &action);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ActionComponent, existing, &action);
             registry->getComponent<ActionComponent>(entity) = action;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3134,7 +3134,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<TimedActionComponent>())){
             registry->addComponent<TimedActionComponent>(entity, timed);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::TimedActionComponent, existing, &timed);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::TimedActionComponent, existing, &timed);
             registry->getComponent<TimedActionComponent>(entity) = timed;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3147,7 +3147,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<PositionActionComponent>())){
             registry->addComponent<PositionActionComponent>(entity, posAction);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::PositionActionComponent, existing, &posAction);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::PositionActionComponent, existing, &posAction);
             registry->getComponent<PositionActionComponent>(entity) = posAction;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3160,7 +3160,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<RotationActionComponent>())){
             registry->addComponent<RotationActionComponent>(entity, rotAction);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::RotationActionComponent, existing, &rotAction);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::RotationActionComponent, existing, &rotAction);
             registry->getComponent<RotationActionComponent>(entity) = rotAction;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3173,7 +3173,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ScaleActionComponent>())){
             registry->addComponent<ScaleActionComponent>(entity, scaleAction);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ScaleActionComponent, existing, &scaleAction);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ScaleActionComponent, existing, &scaleAction);
             registry->getComponent<ScaleActionComponent>(entity) = scaleAction;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3186,7 +3186,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<ColorActionComponent>())){
             registry->addComponent<ColorActionComponent>(entity, colorAction);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::ColorActionComponent, existing, &colorAction);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ColorActionComponent, existing, &colorAction);
             registry->getComponent<ColorActionComponent>(entity) = colorAction;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3199,7 +3199,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<AlphaActionComponent>())){
             registry->addComponent<AlphaActionComponent>(entity, alphaAction);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::AlphaActionComponent, existing, &alphaAction);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::AlphaActionComponent, existing, &alphaAction);
             registry->getComponent<AlphaActionComponent>(entity) = alphaAction;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3212,7 +3212,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<SpriteAnimationComponent>())){
             registry->addComponent<SpriteAnimationComponent>(entity, spriteanim);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::SpriteAnimationComponent, existing, &spriteanim);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::SpriteAnimationComponent, existing, &spriteanim);
             registry->getComponent<SpriteAnimationComponent>(entity) = spriteanim;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3225,7 +3225,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<AnimationComponent>())){
             registry->addComponent<AnimationComponent>(entity, animation);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::AnimationComponent, existing, &animation);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::AnimationComponent, existing, &animation);
             registry->getComponent<AnimationComponent>(entity) = animation;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3359,7 +3359,7 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         if (!signature.test(registry->getComponentId<InstancedMeshComponent>())){
             registry->addComponent<InstancedMeshComponent>(entity, instmesh);
         }else{
-            int flags = Catalog::getChangedUpdateFlags(ComponentType::InstancedMeshComponent, existing, &instmesh);
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::InstancedMeshComponent, existing, &instmesh);
             registry->getComponent<InstancedMeshComponent>(entity) = instmesh;
             Catalog::updateEntity(registry, entity, flags);
         }
@@ -3500,6 +3500,9 @@ YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool e
     node["cullingMode"] = cullingModeToString(mesh.cullingMode);
     node["windingOrder"] = windingOrderToString(mesh.windingOrder);
 
+    if (!mesh.customShader.empty())
+        node["customShader"] = mesh.customShader;
+
     //node["needUpdateBuffer"] = mesh.needUpdateBuffer;
     //node["needReload"] = mesh.needReload;
 
@@ -3579,6 +3582,8 @@ MeshComponent editor::Stream::decodeMeshComponent(const YAML::Node& node, const 
     if (node["cullingMode"]) mesh.cullingMode = stringToCullingMode(node["cullingMode"].as<std::string>());
     if (node["windingOrder"]) mesh.windingOrder = stringToWindingOrder(node["windingOrder"].as<std::string>());
 
+    if (node["customShader"]) mesh.customShader = node["customShader"].as<std::string>();
+
     //mesh.needUpdateBuffer = node["needUpdateBuffer"].as<bool>();
     //mesh.needReload = node["needReload"].as<bool>();
 
@@ -3615,6 +3620,9 @@ YAML::Node editor::Stream::encodeUIComponent(const UIComponent& ui, bool embedTe
 
     node["pointerMoved"] = ui.pointerMoved;
     node["focused"] = ui.focused;
+
+    if (!ui.customShader.empty())
+        node["customShader"] = ui.customShader;
 
     //node["needReload"] = ui.needReload;
     //node["needUpdateAABB"] = ui.needUpdateAABB;
@@ -3659,6 +3667,8 @@ UIComponent editor::Stream::decodeUIComponent(const YAML::Node& node, const UICo
 
     if (node["pointerMoved"]) ui.pointerMoved = node["pointerMoved"].as<bool>();
     if (node["focused"]) ui.focused = node["focused"].as<bool>();
+
+    if (node["customShader"]) ui.customShader = node["customShader"].as<std::string>();
 
     //ui.needReload = node["needReload"].as<bool>();
     //ui.needUpdateAABB = node["needUpdateAABB"].as<bool>();
@@ -4622,6 +4632,9 @@ YAML::Node editor::Stream::encodeSkyComponent(const SkyComponent& sky) {
     node["rotation"] = sky.rotation;
     node["visible"] = sky.visible;
 
+    if (!sky.customShader.empty())
+        node["customShader"] = sky.customShader;
+
     return node;
 }
 
@@ -4652,6 +4665,8 @@ SkyComponent editor::Stream::decodeSkyComponent(const YAML::Node& node, const Sk
     if (node["color"]) sky.color = decodeVector4(node["color"]);
     if (node["rotation"]) sky.rotation = node["rotation"].as<float>();
     if (node["visible"]) sky.visible = node["visible"].as<bool>();
+
+    if (node["customShader"]) sky.customShader = node["customShader"].as<std::string>();
 
     return sky;
 }
@@ -6134,6 +6149,9 @@ YAML::Node editor::Stream::encodePointsComponent(const PointsComponent& points) 
     }
     node["points"] = pointsNode;
 
+    if (!points.customShader.empty())
+        node["customShader"] = points.customShader;
+
     return node;
 }
 
@@ -6170,6 +6188,8 @@ PointsComponent editor::Stream::decodePointsComponent(const YAML::Node& node, co
         }
     }
 
+    if (node["customShader"]) points.customShader = node["customShader"].as<std::string>();
+
     // Reset runtime fields
     points.renderPoints.clear();
     points.numVisible = 0;
@@ -6199,6 +6219,9 @@ YAML::Node editor::Stream::encodeLinesComponent(const LinesComponent& lines) {
     }
     node["lines"] = linesNode;
 
+    if (!lines.customShader.empty())
+        node["customShader"] = lines.customShader;
+
     return node;
 }
 
@@ -6223,6 +6246,8 @@ LinesComponent editor::Stream::decodeLinesComponent(const YAML::Node& node, cons
     if (lines.lines.size() > lines.maxLines) {
         lines.maxLines = static_cast<unsigned int>(lines.lines.size());
     }
+
+    if (node["customShader"]) lines.customShader = node["customShader"].as<std::string>();
 
     lines.loaded = false;
     lines.loadCalled = false;

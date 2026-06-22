@@ -54,17 +54,31 @@ namespace doriax::editor {
         bool setupShaderArgs(shadercompiler::args_t& args, ShaderType shaderType, uint32_t properties);
         std::string getLangSuffix(shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform);
 
+        // Sets entry-point files + defines for the key, and (when the key carries a
+        // customId) overlays the project's forked .vert/.frag onto args.fileBuffers so
+        // includes still resolve from the engine sources. Throws on failure.
+        void setupBuildArgs(shadercompiler::args_t& args, ShaderKey shaderKey, Project* project);
+
         ShaderData buildShaderInternal(ShaderKey shaderKey, Project* project, bool trackProgress);
         std::string getShaderDisplayName(ShaderKey key);
 
         static std::filesystem::path getShaderCachePath(ShaderKey shaderKey, Project* project);
+
+        // True when a forked shader's cached .sdat is missing or older than its source
+        // .vert/.frag, so the next build recompiles instead of serving a stale cache.
+        static bool isCustomCacheStale(ShaderKey shaderKey, Project* project, const std::filesystem::path& cachePath);
 
     public:
         ShaderBuilder();
         virtual ~ShaderBuilder();
 
         ShaderBuildResult buildShader(ShaderKey shaderKey, Project* project);
-        ShaderData buildShaderForExport(ShaderKey shaderKey, shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform = shadercompiler::SHADER_DEFAULT);
+        ShaderData buildShaderForExport(ShaderKey shaderKey, Project* project, shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform = shadercompiler::SHADER_DEFAULT);
+
+        // Drops cached (in-memory + pending) builds for every variant of a forked
+        // shader so the next get() recompiles from the edited source. Called when a
+        // shader source file is saved in the editor.
+        static void invalidateCustomShaders();
 
         static void requestShutdown();
 

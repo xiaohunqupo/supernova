@@ -7,6 +7,7 @@
 
 #include "buffer/Buffer.h"
 #include "texture/Texture.h"
+#include <string>
 
 namespace doriax{
 
@@ -20,6 +21,10 @@ namespace doriax{
 
         ObjectRender render;
         std::shared_ptr<ShaderRender> shader;
+        // optional user-forked shader: project-relative base path (no extension),
+        // empty = built-in. customShaderId is the resolved id for ShaderPool keys.
+        std::string customShader;
+        uint16_t customShaderId = 0;
         int slotVSParams = -1;
         int slotFSParams = -1;
 

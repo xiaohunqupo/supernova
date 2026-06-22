@@ -833,7 +833,8 @@ bool editor::Exporter::buildAndSaveShaders() {
     for (const ShaderKey& shaderKey : config.selectedShaderKeys) {
         ShaderType type = ShaderPool::getShaderTypeFromKey(shaderKey);
         uint32_t props = ShaderPool::getPropertiesFromKey(shaderKey);
-        std::string shaderStr = ShaderPool::getShaderStr(type, props);
+        uint16_t customId = ShaderPool::getCustomIdFromKey(shaderKey);
+        std::string shaderStr = ShaderPool::getShaderStr(type, props, customId);
 
         for (const auto& fmt : requiredFormats) {
             float shaderProgress = 0.6f + (0.3f * (float)current / (float)std::max(total, 1));
@@ -842,14 +843,18 @@ bool editor::Exporter::buildAndSaveShaders() {
 
             try {
                 // Synchronous build without cache
-                ShaderData resultData = shaderBuilder.buildShaderForExport(shaderKey, fmt.lang, fmt.version, fmt.es, fmt.platform);
+                ShaderData resultData = shaderBuilder.buildShaderForExport(shaderKey, project, fmt.lang, fmt.version, fmt.es, fmt.platform);
 
                 std::string basename = shaderStr + "_" + fmtStr;
                 std::string err;
 
+                // Persist with the storage key (customId stripped): the runtime assigns
+                // its own session-local id, so the embedded key must not depend on it.
+                ShaderKey storageKey = ShaderPool::getStorageKey(shaderKey);
+
                 if (config.shaderOutputFormat == ShaderOutputFormat::Header) {
                     std::vector<unsigned char> sdatBytes;
-                    if (!ShaderDataSerializer::writeToBytes(sdatBytes, shaderKey, resultData, &err)) {
+                    if (!ShaderDataSerializer::writeToBytes(sdatBytes, storageKey, resultData, &err)) {
                         Out::warning("Failed to encode shader %s: %s", basename.c_str(), err.c_str());
                         hadFailure = true;
                     } else {
@@ -858,14 +863,14 @@ bool editor::Exporter::buildAndSaveShaders() {
                 } else if (config.shaderOutputFormat == ShaderOutputFormat::Json) {
                     std::string filename = basename + ".json";
                     fs::path outputPath = shadersDst / filename;
-                    if (!ShaderDataSerializer::writeJsonToFile(outputPath.string(), shaderKey, resultData, &err)) {
+                    if (!ShaderDataSerializer::writeJsonToFile(outputPath.string(), storageKey, resultData, &err)) {
                         Out::warning("Failed to save shader %s: %s", filename.c_str(), err.c_str());
                         hadFailure = true;
                     }
                 } else {
                     std::string filename = basename + ".sdat";
                     fs::path outputPath = shadersDst / filename;
-                    if (!ShaderDataSerializer::writeToFile(outputPath.string(), shaderKey, resultData, &err)) {
+                    if (!ShaderDataSerializer::writeToFile(outputPath.string(), storageKey, resultData, &err)) {
                         Out::warning("Failed to save shader %s: %s", filename.c_str(), err.c_str());
                         hadFailure = true;
                     }
@@ -903,8 +908,15 @@ bool editor::Exporter::buildAndSaveShaders() {
 
 // Static helpers for UI display
 
-std::string editor::Exporter::getShaderDisplayName(ShaderType type, uint32_t properties) {
+std::string editor::Exporter::getShaderDisplayName(ShaderType type, uint32_t properties, uint16_t customId) {
     std::string name = ShaderPool::getShaderTypeName(type);
+
+    // Distinguish forked shaders (same type/props, different source) in the list.
+    std::string customName = ShaderPool::getCustomShaderName(customId);
+    if (!customName.empty()) {
+        name += " [" + customName + "]";
+    }
+
     int propCount = ShaderPool::getShaderPropertyCount(type);
 
     std::string props;

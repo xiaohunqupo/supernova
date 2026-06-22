@@ -10,6 +10,10 @@
 #include "util/Base64.h"
 #include <cstdint>
 #include <algorithm>
+#include <vector>
+#include <string>
+#include <mutex>
+#include <cctype>
 
 #ifdef SOKOL_GLCORE
 #include "glsl410.h"
@@ -96,6 +100,52 @@ std::vector<std::string>& ShaderPool::getMissingShaders(){
     static std::vector<std::string>* missingshaders = new std::vector<std::string>();
     return *missingshaders;
 };
+
+// Custom shader registry: index = customId-1, value = project-relative base path.
+static std::mutex& customShaderMutex(){
+    static std::mutex* m = new std::mutex();
+    return *m;
+}
+static std::vector<std::string>& customShaderNames(){
+    static std::vector<std::string>* names = new std::vector<std::string>();
+    return *names;
+}
+
+uint16_t ShaderPool::registerCustomShader(const std::string& baseName){
+    if (baseName.empty())
+        return 0;
+
+    std::lock_guard<std::mutex> lock(customShaderMutex());
+    auto& names = customShaderNames();
+    for (size_t i = 0; i < names.size(); i++){
+        if (names[i] == baseName)
+            return (uint16_t)(i + 1);
+    }
+    names.push_back(baseName);
+    return (uint16_t)names.size();
+}
+
+std::string ShaderPool::getCustomShaderName(uint16_t customId){
+    if (customId == 0)
+        return "";
+
+    std::lock_guard<std::mutex> lock(customShaderMutex());
+    auto& names = customShaderNames();
+    if (customId <= names.size())
+        return names[customId - 1];
+    return "";
+}
+
+std::string ShaderPool::getCustomShaderBasename(uint16_t customId){
+    std::string base = getCustomShaderName(customId);
+    // Sanitize the project-relative base into a filesystem-safe, deterministic token
+    // (e.g. "shaders/myMesh" -> "shaders_myMesh") used in .sdat filenames.
+    for (char& c : base){
+        if (!(std::isalnum((unsigned char)c) || c == '_'))
+            c = '_';
+    }
+    return base;
+}
 
 void ShaderPool::setShaderBuilder(ShaderBuilderFn fn) {
     shaderBuilderFn = fn;
@@ -364,10 +414,18 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
     return shortName ? "?" : "Unknown";
 }
 
-std::string ShaderPool::getShaderStr(ShaderType shaderType, uint32_t properties){
+std::string ShaderPool::getShaderStr(ShaderType shaderType, uint32_t properties, uint16_t customId){
 
     std::string str = getShaderTypeName(shaderType, true);
     std::string propOut;
+
+    // Custom (forked) shaders get a unique basename so their compiled .sdat does not
+    // collide with the built-in shader of the same type/variant.
+    if (customId != 0) {
+        std::string customBase = getCustomShaderBasename(customId);
+        if (!customBase.empty())
+            str += "_" + customBase;
+    }
 
     int propCount = getShaderPropertyCount(shaderType);
     for (int i = 0; i < propCount; i++) {
@@ -384,8 +442,8 @@ std::string ShaderPool::getShaderStr(ShaderType shaderType, uint32_t properties)
     return str;
 }
 
-ShaderKey ShaderPool::getShaderKey(ShaderType shaderType, uint32_t properties) {
-    return ((uint64_t)shaderType << 32) | (properties & 0xFFFFFFFF);
+ShaderKey ShaderPool::getShaderKey(ShaderType shaderType, uint32_t properties, uint16_t customId) {
+    return ((uint64_t)customId << 48) | (((uint64_t)shaderType & 0xFFFF) << 32) | (properties & 0xFFFFFFFF);
 }
 
 void ShaderPool::addMissingShader(const std::string& shaderStr) {
@@ -395,8 +453,8 @@ void ShaderPool::addMissingShader(const std::string& shaderStr) {
     }
 }
 
-std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t properties){
-    ShaderKey shaderKey = getShaderKey(shaderType, properties);
+std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t properties, uint16_t customId){
+    ShaderKey shaderKey = getShaderKey(shaderType, properties, customId);
     auto& shared = getMap()[shaderKey];
 
     if (shared && shared->isCreated()){
@@ -420,12 +478,16 @@ std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t pr
         } else {
             ShaderData tempShaderData;
 
-            std::string shaderStr = getShaderStr(shaderType, properties);
+            std::string shaderStr = getShaderStr(shaderType, properties, customId);
             std::string base64Shd = getBase64Shader(getShaderName(shaderStr));
 
-            if (!base64Shd.empty() && ShaderDataSerializer::readFromBytes(Base64::decode(base64Shd), shaderKey, tempShaderData)){
+            // Validate against the storage key (customId stripped): the unique shaderStr
+            // already selected the forked source; the embedded key only checks type+props.
+            ShaderKey storageKey = getStorageKey(shaderKey);
+
+            if (!base64Shd.empty() && ShaderDataSerializer::readFromBytes(Base64::decode(base64Shd), storageKey, tempShaderData)){
                 shared->createShader(tempShaderData);
-            } else if (ShaderDataSerializer::readFromFile("shader://"+getShaderFile(shaderStr, ".sdat"), shaderKey, tempShaderData)){
+            } else if (ShaderDataSerializer::readFromFile("shader://"+getShaderFile(shaderStr, ".sdat"), storageKey, tempShaderData)){
                 shared->createShader(tempShaderData);
             } else {
                 addMissingShader(shaderStr);
@@ -436,8 +498,8 @@ std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t pr
     return shared;
 }
 
-void ShaderPool::remove(ShaderType shaderType, uint32_t properties){
-    ShaderKey shaderKey = getShaderKey(shaderType, properties);
+void ShaderPool::remove(ShaderType shaderType, uint32_t properties, uint16_t customId){
+    ShaderKey shaderKey = getShaderKey(shaderType, properties, customId);
     if (getMap().count(shaderKey)){
         auto& shared = getMap()[shaderKey];
         if (shared.use_count() <= 1){
@@ -452,12 +514,29 @@ void ShaderPool::remove(ShaderType shaderType, uint32_t properties){
     }
 }
 
+void ShaderPool::destroyCustomShaders(){
+    for (auto& entry : getMap()){
+        if (getCustomIdFromKey(entry.first) != 0 && entry.second && entry.second->isCreated()){
+            entry.second->destroyShader();
+        }
+    }
+}
+
 ShaderType ShaderPool::getShaderTypeFromKey(ShaderKey key) {
-    return (ShaderType)(key >> 32);
+    return (ShaderType)((key >> 32) & 0xFFFF);
 }
 
 uint32_t ShaderPool::getPropertiesFromKey(ShaderKey key) {
     return (uint32_t)(key & 0xFFFFFFFF);
+}
+
+uint16_t ShaderPool::getCustomIdFromKey(ShaderKey key) {
+    return (uint16_t)((key >> 48) & 0xFFFF);
+}
+
+ShaderKey ShaderPool::getStorageKey(ShaderKey key) {
+    // Strip the session-local customShaderId (bits 48..63); keep type + properties.
+    return key & 0x0000FFFFFFFFFFFFULL;
 }
 
 uint32_t ShaderPool::getMeshProperties(

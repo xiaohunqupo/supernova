@@ -959,7 +959,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                         p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
                         (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao);
-        mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties);
+        // a user-forked main shader overrides the built-in Mesh shader; the variant
+        // (#define) system, depth/gbuffer passes and bind-slots are unchanged
+        mesh.submeshes[i].customShaderId = ShaderPool::registerCustomShader(mesh.customShader);
+        mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties, mesh.submeshes[i].customShaderId);
         // the depth shader feeds shadow maps (casters) and the SSAO depth pre-pass
         // (SSR uses its own G-buffer shader, built below)
         if ((hasShadows && mesh.castShadows) || scene->isSSAOEnabled()){
@@ -2131,7 +2134,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
             //Destroy shader
             if (submesh.shader){
                 submesh.shader.reset();
-                ShaderPool::remove(ShaderType::MESH, submesh.shaderProperties);
+                ShaderPool::remove(ShaderType::MESH, submesh.shaderProperties, submesh.customShaderId);
             }
             // depth shader may have been loaded for shadows and/or SSAO
             if (submesh.depthShader){
@@ -2248,7 +2251,8 @@ bool RenderSystem::loadUI(Entity entity, UIComponent& ui, uint8_t pipelines, boo
     }
 
     ui.shaderProperties = ShaderPool::getUIProperties(p_hasTexture, p_hasFontAtlasTexture, false, p_vertexColorVec4);
-    ui.shader = ShaderPool::get(ShaderType::UI, ui.shaderProperties);
+    ui.customShaderId = ShaderPool::registerCustomShader(ui.customShader);
+    ui.shader = ShaderPool::get(ShaderType::UI, ui.shaderProperties, ui.customShaderId);
     if (!ui.shader->isCreated())
         return false;
     render.setShader(ui.shader.get());
@@ -2367,7 +2371,7 @@ void RenderSystem::destroyUI(Entity entity, UIComponent& ui){
         //Destroy shader
         if (ui.shader){
             ui.shader.reset();
-            ShaderPool::remove(ShaderType::UI, ui.shaderProperties);
+            ShaderPool::remove(ShaderType::UI, ui.shaderProperties, ui.customShaderId);
         }
 
         //Destroy texture
@@ -2423,7 +2427,8 @@ bool RenderSystem::loadPoints(Entity entity, PointsComponent& points, uint8_t pi
     }
 
     points.shaderProperties = ShaderPool::getPointsProperties(p_hasTexture, false, true, p_hasTextureRect);
-    points.shader = ShaderPool::get(ShaderType::POINTS, points.shaderProperties);
+    points.customShaderId = ShaderPool::registerCustomShader(points.customShader);
+    points.shader = ShaderPool::get(ShaderType::POINTS, points.shaderProperties, points.customShaderId);
     if (!points.shader->isCreated())
         return false;
     render.setShader(points.shader.get());
@@ -2486,7 +2491,8 @@ bool RenderSystem::loadLines(Entity entity, LinesComponent& lines, uint8_t pipel
     render.beginLoad(PrimitiveType::LINES);
 
     lines.shaderProperties = ShaderPool::getLinesProperties(false, true);
-    lines.shader = ShaderPool::get(ShaderType::LINES, lines.shaderProperties);
+    lines.customShaderId = ShaderPool::registerCustomShader(lines.customShader);
+    lines.shader = ShaderPool::get(ShaderType::LINES, lines.shaderProperties, lines.customShaderId);
     if (!lines.shader->isCreated())
         return false;
     render.setShader(lines.shader.get());
@@ -2614,7 +2620,7 @@ void RenderSystem::destroyPoints(Entity entity, PointsComponent& points){
         //Destroy shader
         if (points.shader){
             points.shader.reset();
-            ShaderPool::remove(ShaderType::POINTS, points.shaderProperties);
+            ShaderPool::remove(ShaderType::POINTS, points.shaderProperties, points.customShaderId);
         }
 
         //Destroy texture
@@ -2667,7 +2673,7 @@ void RenderSystem::destroyLines(Entity entity, LinesComponent& lines){
         //Destroy shader
         if (lines.shader){
             lines.shader.reset();
-            ShaderPool::remove(ShaderType::LINES, lines.shaderProperties);
+            ShaderPool::remove(ShaderType::LINES, lines.shaderProperties, lines.customShaderId);
         }
     }
 
@@ -2741,7 +2747,8 @@ bool RenderSystem::loadSky(Entity entity, SkyComponent& sky, uint8_t pipelines){
 
     render->beginLoad(PrimitiveType::TRIANGLES);
 
-    sky.shader = ShaderPool::get(ShaderType::SKYBOX, 0);
+    sky.customShaderId = ShaderPool::registerCustomShader(sky.customShader);
+    sky.shader = ShaderPool::get(ShaderType::SKYBOX, 0, sky.customShaderId);
     if (!sky.shader->isCreated())
         return false;
     render->setShader(sky.shader.get());
@@ -2820,7 +2827,7 @@ void RenderSystem::destroySky(Entity entity, SkyComponent& sky){
         //Destroy shader
         if (sky.shader){
             sky.shader.reset();
-            ShaderPool::remove(ShaderType::SKYBOX, 0);
+            ShaderPool::remove(ShaderType::SKYBOX, 0, sky.customShaderId);
         }
 
         //Destroy texture

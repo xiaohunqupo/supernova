@@ -1055,6 +1055,16 @@ bool editor::CodeEditor::save(EditorInstance& instance) {
 
         updateAllProjectSymbols();
 
+        // Editing a shader source (or shared include) invalidates compiled forked
+        // shaders so the viewport reflects the change.
+        {
+            std::string ext = instance.filepath.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            if (ext == ".vert" || ext == ".frag" || ext == ".glsl") {
+                project->invalidateCustomShaders();
+            }
+        }
+
         return true;
     } catch (const std::exception& e) {
         // Handle file save errors
@@ -1144,7 +1154,9 @@ void editor::CodeEditor::openFile(const std::string& filepath) {
     std::string filename = instance.filepath.filename().string();
 
     if (ext == ".cpp" || ext == ".cc" || ext == ".cxx" || ext == ".c" ||
-        ext == ".hpp" || ext == ".hh" || ext == ".hxx" || ext == ".h") {
+        ext == ".hpp" || ext == ".hh" || ext == ".hxx" || ext == ".h" ||
+        ext == ".vert" || ext == ".frag" || ext == ".glsl") {
+        // GLSL shaders reuse the C++ highlighter (close enough syntax)
         instance.languageType = SyntaxLanguage::Cpp;
         instance.editor->SetLanguage(SyntaxLanguage::Cpp);
     } else if (ext == ".lua") {

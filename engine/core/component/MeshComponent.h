@@ -21,6 +21,7 @@
 #include "math/Rect.h"
 #include <map>
 #include <memory>
+#include <string>
 
 namespace doriax{
 
@@ -39,6 +40,10 @@ namespace doriax{
         uint32_t shaderProperties = 0;
         uint32_t depthShaderProperties = 0;
         uint32_t gbufferShaderProperties = 0;
+
+        // resolved id of MeshComponent::customShader for the main pass (0 = built-in);
+        // cached here so the matching ShaderPool::remove uses the same key
+        uint16_t customShaderId = 0;
 
         int slotVSParams = -1;
         int slotFSParams = -1;
@@ -105,6 +110,12 @@ namespace doriax{
 
         HybridArray<Submesh, MAX_SUBMESHES> submeshes;
         unsigned int numSubmeshes = 0;
+
+        // Optional user-forked shader. Project-relative base path (no extension),
+        // e.g. "shaders/myMesh" -> shaders/myMesh.vert + shaders/myMesh.frag.
+        // Empty = use the built-in Mesh shader. Drives the main render pass only;
+        // depth/gbuffer passes keep the built-in shaders.
+        std::string customShader;
 
         Matrix4 bonesMatrix[MAX_BONES];
         float normAdjustJoint = 1;
