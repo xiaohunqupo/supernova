@@ -84,13 +84,15 @@ OBB::OBB(const AABB& aabb)
         mBoxType = BOXTYPE_FINITE;
 }
 
-OBB::OBB(const AABB& aabb, const Matrix4& transform) {
+OBB::OBB(const AABB& aabb, const Matrix4& transform)
+    : mCorners(0)
+{
     // Extract position, rotation, and scale from transform matrix
     Vector3 position;
     Vector3 scale;
     Quaternion rotation;
     transform.decompose(position, scale, rotation);
-    
+
     // Set center, half extents, and orientation
     mCenter = transform * aabb.getCenter();
     mHalfExtents = aabb.getHalfSize() * scale;
@@ -437,6 +439,17 @@ bool OBB::intersects(const OBB& other) const {
         }
     }
 
+    // Add an epsilon to absolute values to counter near-zero cross products when
+    // the two boxes have parallel edges; without it floating-point error can
+    // report a false separating axis and miss the collision.
+    const float EPSILON = 1e-6f;
+    float AbsR[3][3];
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            AbsR[i][j] = std::abs(R[i][j]) + EPSILON;
+        }
+    }
+
     // Translation relative to A's frame
     float t[3];
     t[0] = translation.dotProduct(*axes1[0]);
@@ -446,10 +459,10 @@ bool OBB::intersects(const OBB& other) const {
     // Test axes of this OBB
     for (int i = 0; i < 3; ++i) {
         float ra = mHalfExtents[i];
-        float rb = other.mHalfExtents[0] * std::abs(R[i][0]) + 
-                   other.mHalfExtents[1] * std::abs(R[i][1]) + 
-                   other.mHalfExtents[2] * std::abs(R[i][2]);
-        
+        float rb = other.mHalfExtents[0] * AbsR[i][0] +
+                   other.mHalfExtents[1] * AbsR[i][1] +
+                   other.mHalfExtents[2] * AbsR[i][2];
+
         if (std::abs(t[i]) > ra + rb) {
             return false;
         }
@@ -457,9 +470,9 @@ bool OBB::intersects(const OBB& other) const {
 
     // Test axes of other OBB
     for (int i = 0; i < 3; ++i) {
-        float ra = mHalfExtents[0] * std::abs(R[0][i]) + 
-                   mHalfExtents[1] * std::abs(R[1][i]) + 
-                   mHalfExtents[2] * std::abs(R[2][i]);
+        float ra = mHalfExtents[0] * AbsR[0][i] +
+                   mHalfExtents[1] * AbsR[1][i] +
+                   mHalfExtents[2] * AbsR[2][i];
         float rb = other.mHalfExtents[i];
 
         float t_i = t[0] * R[0][i] + t[1] * R[1][i] + t[2] * R[2][i];
@@ -472,8 +485,8 @@ bool OBB::intersects(const OBB& other) const {
     // Test the 9 cross products of the edges
     // X axis of this with X, Y, Z of other
     {
-        float ra = mHalfExtents[1] * std::abs(R[2][0]) + mHalfExtents[2] * std::abs(R[1][0]);
-        float rb = other.mHalfExtents[1] * std::abs(R[0][2]) + other.mHalfExtents[2] * std::abs(R[0][1]);
+        float ra = mHalfExtents[1] * AbsR[2][0] + mHalfExtents[2] * AbsR[1][0];
+        float rb = other.mHalfExtents[1] * AbsR[0][2] + other.mHalfExtents[2] * AbsR[0][1];
         float t_i = t[2] * R[1][0] - t[1] * R[2][0];
 
         if (std::abs(t_i) > ra + rb) {
@@ -483,8 +496,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // X axis of this with Y axis of other
     {
-        float ra = mHalfExtents[1] * std::abs(R[2][1]) + mHalfExtents[2] * std::abs(R[1][1]);
-        float rb = other.mHalfExtents[0] * std::abs(R[0][2]) + other.mHalfExtents[2] * std::abs(R[0][0]);
+        float ra = mHalfExtents[1] * AbsR[2][1] + mHalfExtents[2] * AbsR[1][1];
+        float rb = other.mHalfExtents[0] * AbsR[0][2] + other.mHalfExtents[2] * AbsR[0][0];
         float t_i = t[2] * R[1][1] - t[1] * R[2][1];
 
         if (std::abs(t_i) > ra + rb) {
@@ -494,8 +507,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // X axis of this with Z axis of other
     {
-        float ra = mHalfExtents[1] * std::abs(R[2][2]) + mHalfExtents[2] * std::abs(R[1][2]);
-        float rb = other.mHalfExtents[0] * std::abs(R[0][1]) + other.mHalfExtents[1] * std::abs(R[0][0]);
+        float ra = mHalfExtents[1] * AbsR[2][2] + mHalfExtents[2] * AbsR[1][2];
+        float rb = other.mHalfExtents[0] * AbsR[0][1] + other.mHalfExtents[1] * AbsR[0][0];
         float t_i = t[2] * R[1][2] - t[1] * R[2][2];
 
         if (std::abs(t_i) > ra + rb) {
@@ -505,8 +518,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // Y axis of this with X, Y, Z of other
     {
-        float ra = mHalfExtents[0] * std::abs(R[2][0]) + mHalfExtents[2] * std::abs(R[0][0]);
-        float rb = other.mHalfExtents[1] * std::abs(R[1][2]) + other.mHalfExtents[2] * std::abs(R[1][1]);
+        float ra = mHalfExtents[0] * AbsR[2][0] + mHalfExtents[2] * AbsR[0][0];
+        float rb = other.mHalfExtents[1] * AbsR[1][2] + other.mHalfExtents[2] * AbsR[1][1];
         float t_i = t[0] * R[2][0] - t[2] * R[0][0];
 
         if (std::abs(t_i) > ra + rb) {
@@ -516,8 +529,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // Y axis of this with Y axis of other
     {
-        float ra = mHalfExtents[0] * std::abs(R[2][1]) + mHalfExtents[2] * std::abs(R[0][1]);
-        float rb = other.mHalfExtents[0] * std::abs(R[1][2]) + other.mHalfExtents[2] * std::abs(R[1][0]);
+        float ra = mHalfExtents[0] * AbsR[2][1] + mHalfExtents[2] * AbsR[0][1];
+        float rb = other.mHalfExtents[0] * AbsR[1][2] + other.mHalfExtents[2] * AbsR[1][0];
         float t_i = t[0] * R[2][1] - t[2] * R[0][1];
 
         if (std::abs(t_i) > ra + rb) {
@@ -527,8 +540,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // Y axis of this with Z axis of other
     {
-        float ra = mHalfExtents[0] * std::abs(R[2][2]) + mHalfExtents[2] * std::abs(R[0][2]);
-        float rb = other.mHalfExtents[0] * std::abs(R[1][1]) + other.mHalfExtents[1] * std::abs(R[1][0]);
+        float ra = mHalfExtents[0] * AbsR[2][2] + mHalfExtents[2] * AbsR[0][2];
+        float rb = other.mHalfExtents[0] * AbsR[1][1] + other.mHalfExtents[1] * AbsR[1][0];
         float t_i = t[0] * R[2][2] - t[2] * R[0][2];
 
         if (std::abs(t_i) > ra + rb) {
@@ -538,8 +551,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // Z axis of this with X, Y, Z of other
     {
-        float ra = mHalfExtents[0] * std::abs(R[1][0]) + mHalfExtents[1] * std::abs(R[0][0]);
-        float rb = other.mHalfExtents[1] * std::abs(R[2][2]) + other.mHalfExtents[2] * std::abs(R[2][1]);
+        float ra = mHalfExtents[0] * AbsR[1][0] + mHalfExtents[1] * AbsR[0][0];
+        float rb = other.mHalfExtents[1] * AbsR[2][2] + other.mHalfExtents[2] * AbsR[2][1];
         float t_i = t[1] * R[0][0] - t[0] * R[1][0];
 
         if (std::abs(t_i) > ra + rb) {
@@ -549,8 +562,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // Z axis of this with Y axis of other
     {
-        float ra = mHalfExtents[0] * std::abs(R[1][1]) + mHalfExtents[1] * std::abs(R[0][1]);
-        float rb = other.mHalfExtents[0] * std::abs(R[2][2]) + other.mHalfExtents[2] * std::abs(R[2][0]);
+        float ra = mHalfExtents[0] * AbsR[1][1] + mHalfExtents[1] * AbsR[0][1];
+        float rb = other.mHalfExtents[0] * AbsR[2][2] + other.mHalfExtents[2] * AbsR[2][0];
         float t_i = t[1] * R[0][1] - t[0] * R[1][1];
 
         if (std::abs(t_i) > ra + rb) {
@@ -560,8 +573,8 @@ bool OBB::intersects(const OBB& other) const {
 
     // Z axis of this with Z axis of other
     {
-        float ra = mHalfExtents[0] * std::abs(R[1][2]) + mHalfExtents[1] * std::abs(R[0][2]);
-        float rb = other.mHalfExtents[0] * std::abs(R[2][1]) + other.mHalfExtents[1] * std::abs(R[2][0]);
+        float ra = mHalfExtents[0] * AbsR[1][2] + mHalfExtents[1] * AbsR[0][2];
+        float rb = other.mHalfExtents[0] * AbsR[2][1] + other.mHalfExtents[1] * AbsR[2][0];
         float t_i = t[1] * R[0][2] - t[0] * R[1][2];
 
         if (std::abs(t_i) > ra + rb) {

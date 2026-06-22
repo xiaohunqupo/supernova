@@ -97,7 +97,7 @@ namespace doriax::editor{
         // visual=false (default) returns an orthonormal OBB, required by ray picking
         // (Ray::intersects) and OBB::enclose, which assume orthonormal axes.
         OBB getOBB(Entity entity, bool local, bool visual = false);
-        OBB getFamilyOBB(Entity entity, float offset, bool visual = false);
+        OBB getFamilyVisualOBB(Entity entity, float offset);
         static OBB transformAABBPreservingShear(const Matrix4& modelMatrix, const AABB& localAABB);
         void updateTerrainBrushCursor();
         float snapRotationAngle(float angle, bool invertRotationSnap) const;

@@ -345,20 +345,31 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local, bool visual){
     return OBB(); // null OBB
 }
 
-OBB editor::SceneRender::getFamilyOBB(Entity entity, float offset, bool visual){
+// Builds a single shear-preserving selection box enclosing the entity and every
+// entity in its subtree. We cannot merge the members with OBB::enclose: the visual
+// boxes have non-orthonormal axes (preserved shear), and enclose projects onto
+// those axes assuming they are orthonormal, which inflates and skews the result.
+// Instead we gather every member's world-space corners in the SELECTED entity's
+// local frame, build one local AABB, then transform it once with the selected
+// entity's matrix. The box is oriented to the selected node and tightly bounds the
+// whole subtree (and reduces to the exact single-mesh box for a leaf).
+OBB editor::SceneRender::getFamilyVisualOBB(Entity entity, float offset){
     Signature signature = scene->getSignature(entity);
     if (!signature.test(scene->getComponentId<Transform>())) {
-        OBB entityOBB = getOBB(entity, false, visual);
-        if (!entityOBB.isNull()) {
+        OBB entityOBB = getOBB(entity, false, /*visual*/ true);
+        if (!entityOBB.isNull()){
             entityOBB.setHalfExtents(entityOBB.getHalfExtents() + Vector3(offset));
         }
         return entityOBB;
     }
 
+    Transform& selTransform = scene->getComponent<Transform>(entity);
+    Matrix4 invSel = selTransform.modelMatrix.inverse();
+
     auto transforms = scene->getComponentArray<Transform>();
     size_t index = transforms->getIndex(entity);
 
-    OBB obb;
+    AABB localBounds; // null until first corner merged, in the selected node's local space
     std::vector<Entity> parentList;
     for (int i = index; i < transforms->size(); i++){
         Transform& transform = transforms->getComponentFromIndex(i);
@@ -370,19 +381,28 @@ OBB editor::SceneRender::getFamilyOBB(Entity entity, float offset, bool visual){
             }
         }
 
-        entity = transforms->getEntity(i);
-        parentList.push_back(entity);
+        Entity member = transforms->getEntity(i);
+        parentList.push_back(member);
 
-        OBB entityOBB = getOBB(entity, false, visual);
+        OBB memberOBB = getOBB(member, false, /*visual*/ true);
+        if (memberOBB.isNull()){
+            continue;
+        }
 
-        if (!entityOBB.isNull()){
-            entityOBB.setHalfExtents(entityOBB.getHalfExtents() + Vector3(offset));
-
-            obb.enclose(entityOBB);
+        // Fold the member's true world-space corners into the selected node's frame.
+        const Vector3* corners = memberOBB.getCorners();
+        for (int c = 0; c < 8; c++){
+            localBounds.merge(invSel * corners[c]);
         }
     }
 
-    return obb;
+    if (localBounds.isNull()){
+        return OBB();
+    }
+
+    OBB result = transformAABBPreservingShear(selTransform.modelMatrix, localBounds);
+    result.setHalfExtents(result.getHalfExtents() + Vector3(offset));
+    return result;
 }
 
 void editor::SceneRender::hideAllGizmos(){
@@ -492,7 +512,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
                 gizmoRotation = transform->worldRotation;
             }
 
-            selBB.push_back(getFamilyOBB(entity, selectionOffset, true));
+            selBB.push_back(getFamilyVisualOBB(entity, selectionOffset));
 
             totalSelBB.enclose(getOBB(entity, false));
         }
