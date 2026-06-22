@@ -264,9 +264,10 @@ editor::SceneRender3D::SceneRender3D(Scene* scene): SceneRender(scene, false, tr
     //camera->setRenderToTexture(true);
     //camera->setUseFramebufferSizes(false);
 
-    scene->setLightState(LightState::ON);
-    scene->setGlobalIllumination(0.2);
-    scene->setBackgroundColor(Vector4(0.25, 0.45, 0.65, 1.0));
+    // Note: scene-appearance defaults (light state, global illumination, background
+    // color) are applied when a new scene is created in Project::createScene(), not
+    // here. Setting them in the constructor would clobber values loaded from disk,
+    // since createSceneRender() runs after the scene has been decoded.
 
     uilayer.setViewportGizmoTexture(viewgizmo.getFramebuffer());
 

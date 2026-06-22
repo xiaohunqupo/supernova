@@ -1297,6 +1297,12 @@ uint32_t editor::Project::createNewSceneInternal(std::string sceneName, SceneTyp
     setSelectedSceneId(data.id);
 
     if (data.sceneType == SceneType::SCENE_3D){
+        // Scene-appearance defaults for newly created 3D scenes. Loaded scenes keep
+        // the values decoded from disk (see SceneRender3D constructor note).
+        data.scene->setLightState(LightState::ON);
+        data.scene->setGlobalIllumination(0.2);
+        data.scene->setBackgroundColor(Vector4(0.25, 0.45, 0.65, 1.0));
+
         CreateEntityCmd sunCreator(this, data.id, "Sun", EntityCreationType::DIRECTIONAL_LIGHT);
         sunCreator.addProperty<Vector3>(ComponentType::Transform, "position", Vector3(0.0f, 10.0f, 0.0f));
         sunCreator.addProperty<float>(ComponentType::LightComponent, "intensity", 4.0f);
