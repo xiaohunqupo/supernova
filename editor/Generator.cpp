@@ -991,6 +991,15 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "    #  - DORIAX_EDITOR keeps HybridArray (and other editor-only layouts)\n";
     cmakeContent += "    #    ABI-compatible across the DLL boundary.\n";
     cmakeContent += "    add_compile_definitions(DORIAX_SHARED DORIAX_EDITOR)\n";
+    cmakeContent += "    if(MSVC)\n";
+    cmakeContent += "        # Match the editor engine's CRT (it builds DORIAX_SHARED with the\n";
+    cmakeContent += "        # dynamic runtime) so std::string/std::vector cross the plugin<->engine\n";
+    cmakeContent += "        # DLL boundary on a single shared CRT heap. A static (/MT) or\n";
+    cmakeContent += "        # debug/release-mismatched runtime here corrupts memory and crashes on\n";
+    cmakeContent += "        # play. The editor builds the plugin with the configuration matching\n";
+    cmakeContent += "        # its own, so this expression resolves to the same runtime.\n";
+    cmakeContent += "        set(CMAKE_MSVC_RUNTIME_LIBRARY \"MultiThreaded$<$<CONFIG:Debug>:Debug>DLL\")\n";
+    cmakeContent += "    endif()\n";
     cmakeContent += "endif()\n\n";
 
     cmakeContent += getPlatformCMakeConfig() + "\n";
