@@ -4338,15 +4338,23 @@ void RenderSystem::update(double dt){
             if (signature.test(scene->getComponentId<BoneComponent>())){
                 BoneComponent& bone = scene->getComponent<BoneComponent>(entity);
 
-                if (bone.model != NULL_ENTITY){
+                if (bone.model != NULL_ENTITY && bone.index >= 0 && bone.index < MAX_BONES){
                     ModelComponent* model = scene->findComponent<ModelComponent>(bone.model);
-                    MeshComponent* mesh = scene->findComponent<MeshComponent>(bone.model);
 
-                    if (model && mesh) {
+                    if (model) {
                         Matrix4 skinning = model->inverseDerivedTransform * transform.modelMatrix * bone.offsetMatrix;
 
-                        if (bone.index >= 0 && bone.index < MAX_BONES)
+                        // Single-mesh / flattened models keep their skinned geometry on the model
+                        // entity's own mesh. Multi-node skinned models split each mesh node into a
+                        // child entity (each with its own MeshComponent), so the same bone must drive
+                        // every child mesh that shares this skeleton.
+                        if (MeshComponent* mesh = scene->findComponent<MeshComponent>(bone.model))
                             mesh->bonesMatrix[bone.index] = skinning;
+
+                        for (auto const& meshNode : model->meshNodesMapping){
+                            if (MeshComponent* childMesh = scene->findComponent<MeshComponent>(meshNode.second))
+                                childMesh->bonesMatrix[bone.index] = skinning;
+                        }
                     }
                 }
             }
