@@ -166,6 +166,8 @@ void ProjectSettingsWindow::open(Project* project) {
     m_textureStrategyIndex = findTextureStrategyIndex(project->getTextureStrategy());
     m_assetsDir = project->getAssetsDir();
     m_luaDir = project->getLuaDir();
+    m_shadersDir = project->getShadersDir();
+    m_shaderSourcesDir = project->getShaderSourcesDir();
 
     m_startSceneIndex = 0;
     uint32_t savedStartSceneId = project->getStartSceneId();
@@ -199,8 +201,8 @@ void ProjectSettingsWindow::show() {
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSizeConstraints(
-        ImVec2(500, 0),
-        ImVec2(500, ImGui::GetMainViewport()->WorkSize.y * 0.9f)
+        ImVec2(600, 0),
+        ImVec2(600, ImGui::GetMainViewport()->WorkSize.y * 0.9f)
     );
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings |
@@ -222,7 +224,7 @@ void ProjectSettingsWindow::show() {
 void ProjectSettingsWindow::drawSettings() {
     ImGui::PushItemWidth(-1);
     ImGui::BeginTable("project_settings", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp);
-    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 120);
+    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 160);
     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
     // Canvas width row
@@ -368,6 +370,60 @@ void ProjectSettingsWindow::drawSettings() {
         }
     }
 
+    // Shaders directory row (compiled .sdat output the engine/runtime loads)
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Shader Binaries Directory");
+    ImGui::SetItemTooltip("Where compiled .sdat shaders are written/loaded (engine-facing).");
+    ImGui::TableNextColumn();
+    {
+        float browseWidth = ImGui::CalcTextSize("Browse").x + ImGui::GetStyle().FramePadding.x * 2;
+        float inputWidth = ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x;
+
+        Vector2 pathSize = Vector2(inputWidth, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
+        fs::path shadersDisplay = m_shadersDir.empty() ? fs::path("shaders")
+                                : (m_shadersDir == "." ? fs::path("<Project root>") : m_shadersDir);
+        Widgets::pathDisplay("##ShadersPath", shadersDisplay, pathSize);
+
+        ImGui::SameLine();
+        if (ImGui::Button("Browse##shaders")) {
+            std::string defaultPath = m_project ? m_project->getProjectPath().string() : "";
+            std::string selectedPath = FileDialogs::openFileDialog(defaultPath, FILE_DIALOG_ALL, true);
+            if (!selectedPath.empty()) {
+                std::error_code ec;
+                fs::path relPath = fs::relative(fs::path(selectedPath), m_project->getProjectPath(), ec);
+                m_shadersDir = (ec || relPath.empty()) ? fs::path("shaders") : relPath;
+            }
+        }
+    }
+
+    // Shader sources directory row (editor-only; .vert/.frag/.glsl forks)
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Shader Sources Directory");
+    ImGui::SetItemTooltip("Where forked shader sources (.vert/.frag/.glsl) are stored. Editor-only; the engine never reads it.");
+    ImGui::TableNextColumn();
+    {
+        float browseWidth = ImGui::CalcTextSize("Browse").x + ImGui::GetStyle().FramePadding.x * 2;
+        float inputWidth = ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x;
+
+        Vector2 pathSize = Vector2(inputWidth, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
+        fs::path sourcesDisplay = m_shaderSourcesDir.empty() ? fs::path("shaders")
+                                : (m_shaderSourcesDir == "." ? fs::path("<Project root>") : m_shaderSourcesDir);
+        Widgets::pathDisplay("##ShaderSourcesPath", sourcesDisplay, pathSize);
+
+        ImGui::SameLine();
+        if (ImGui::Button("Browse##shadersources")) {
+            std::string defaultPath = m_project ? m_project->getProjectPath().string() : "";
+            std::string selectedPath = FileDialogs::openFileDialog(defaultPath, FILE_DIALOG_ALL, true);
+            if (!selectedPath.empty()) {
+                std::error_code ec;
+                fs::path relPath = fs::relative(fs::path(selectedPath), m_project->getProjectPath(), ec);
+                m_shaderSourcesDir = (ec || relPath.empty()) ? fs::path("shaders") : relPath;
+            }
+        }
+    }
+
     // CMake Kit row
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -439,6 +495,8 @@ void ProjectSettingsWindow::drawSettings() {
         m_project->setTextureStrategy(textureStrategyValues[m_textureStrategyIndex]);
         m_project->setAssetsDir(m_assetsDir);
         m_project->setLuaDir(m_luaDir);
+        m_project->setShadersDir(m_shadersDir);
+        m_project->setShaderSourcesDir(m_shaderSourcesDir);
         const auto& scenes = m_project->getScenes();
         if (m_startSceneIndex >= 0 && m_startSceneIndex < (int)scenes.size()) {
             m_project->setStartSceneId(scenes[m_startSceneIndex].id);

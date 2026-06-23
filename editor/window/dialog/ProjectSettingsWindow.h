@@ -23,6 +23,8 @@ namespace doriax::editor {
         int m_startSceneIndex = 0;
         fs::path m_assetsDir;
         fs::path m_luaDir;
+        fs::path m_shadersDir;
+        fs::path m_shaderSourcesDir;
         std::vector<CMakeKit> m_availableKits;
         int m_cmakeKitIndex = 0;
 

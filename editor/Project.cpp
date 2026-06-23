@@ -1206,6 +1206,23 @@ std::filesystem::path editor::Project::getLuaDir() const{
     return luaDir;
 }
 
+void editor::Project::setShadersDir(const std::filesystem::path& shadersDir){
+    this->shadersDir = shadersDir;
+}
+
+std::filesystem::path editor::Project::getShadersDir() const{
+    // Falls back to the default so older projects (and a cleared setting) still resolve.
+    return shadersDir.empty() ? std::filesystem::path("shaders") : shadersDir;
+}
+
+void editor::Project::setShaderSourcesDir(const std::filesystem::path& shaderSourcesDir){
+    this->shaderSourcesDir = shaderSourcesDir;
+}
+
+std::filesystem::path editor::Project::getShaderSourcesDir() const{
+    return shaderSourcesDir.empty() ? std::filesystem::path("shaders") : shaderSourcesDir;
+}
+
 void editor::Project::setCMakeKit(const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator){
     this->cmakeCCompiler = cCompiler;
     this->cmakeCxxCompiler = cxxCompiler;
@@ -2196,6 +2213,8 @@ void editor::Project::resetConfigs() {
     textureStrategy = TextureStrategy::RESIZE;
     assetsDir = ".";
     luaDir = ".";
+    shadersDir = "shaders";
+    shaderSourcesDir = "shaders";
     cmakeCCompiler = "";
     cmakeCxxCompiler = "";
     cmakeGenerator = "";

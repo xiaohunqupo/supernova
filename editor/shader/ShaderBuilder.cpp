@@ -522,6 +522,27 @@ void editor::ShaderBuilder::setupBuildArgs(shadercompiler::args_t& args, ShaderK
     args.fileBuffers[fragKey] = readFile(fragKey);
     args.vert_file = vertKey;
     args.frag_file = fragKey;
+
+    // Project shader includes: <project>/shaders/ mirrors the engine shaderlib root, so
+    // any .glsl there is overlaid under its shaders-relative key and becomes includable
+    // from a fork (e.g. shaders/lib/noise.glsl -> #include "lib/noise.glsl"). A file whose
+    // key matches an engine include (e.g. includes/pbr.glsl) overrides it. This applies
+    // only to forked shaders; built-in shaders keep the engine sources.
+    std::error_code ec;
+    const std::filesystem::path shadersDir = project->getProjectPath() / project->getShaderSourcesDir();
+    if (std::filesystem::exists(shadersDir, ec)) {
+        for (auto& entry : std::filesystem::recursive_directory_iterator(shadersDir, std::filesystem::directory_options::skip_permission_denied, ec)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".glsl") continue;
+            std::error_code relEc;
+            const std::filesystem::path rel = std::filesystem::relative(entry.path(), shadersDir, relEc);
+            if (relEc) continue;
+            std::ifstream f(entry.path());
+            if (!f.is_open()) continue;
+            std::stringstream ss;
+            ss << f.rdbuf();
+            args.fileBuffers[rel.generic_string()] = ss.str();
+        }
+    }
 }
 
 std::string editor::ShaderBuilder::getLangSuffix(shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform) {
@@ -700,6 +721,20 @@ bool editor::ShaderBuilder::isCustomCacheStale(ShaderKey shaderKey, Project* pro
         const auto srcTime = std::filesystem::last_write_time(src, srcEc);
         if (!srcEc && srcTime > cacheTime)
             return true;
+    }
+
+    // Also stale if any project shader include (.glsl under the sources dir) is newer: a
+    // fork may #include one, and we don't track which, so any change forces a rebuild.
+    const std::filesystem::path shadersDir = project->getProjectPath() / project->getShaderSourcesDir();
+    std::error_code dirEc;
+    if (std::filesystem::exists(shadersDir, dirEc)) {
+        for (auto& entry : std::filesystem::recursive_directory_iterator(shadersDir, std::filesystem::directory_options::skip_permission_denied, dirEc)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".glsl") continue;
+            std::error_code srcEc;
+            const auto srcTime = std::filesystem::last_write_time(entry.path(), srcEc);
+            if (!srcEc && srcTime > cacheTime)
+                return true;
+        }
     }
     return false;
 }

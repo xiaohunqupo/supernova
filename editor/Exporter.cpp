@@ -190,7 +190,14 @@ fs::path editor::Exporter::getShaderOutputDir() const {
         return config.targetDir / "shaders";
     }
 
-    return getExportProjectRoot() / "assets" / "shaders";
+    // Loose .sdat/JSON go under the project's compiled-shaders dir inside assets.
+    // NOTE: the standalone runtime loads them from System::getShaderPath() =
+    // <assets>/shaders (the "/shaders" suffix is hardcoded in the engine), so for a
+    // loose-file export the dir must stay "shaders" to be found. It is freely
+    // configurable for the default Header export, which embeds shaders into the build
+    // and never reads this directory at runtime.
+    const fs::path shadersDir = project ? project->getShadersDir() : fs::path("shaders");
+    return getExportProjectRoot() / "assets" / shadersDir;
 }
 
 bool editor::Exporter::shouldSkipExportSupportFile(const fs::path& relativePath) {

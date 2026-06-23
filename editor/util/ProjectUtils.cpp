@@ -113,7 +113,8 @@ std::string editor::ProjectUtils::forkShader(Project* project, ShaderType shader
         return "";
     }
 
-    std::filesystem::path shadersDir = project->getProjectPath() / "shaders";
+    const std::filesystem::path shadersRel = project->getShaderSourcesDir();
+    const std::filesystem::path shadersDir = project->getProjectPath() / shadersRel;
     std::error_code ec;
     std::filesystem::create_directories(shadersDir, ec);
     if (ec) {
@@ -152,7 +153,7 @@ std::string editor::ProjectUtils::forkShader(Project* project, ShaderType shader
         return "";
     }
 
-    return "shaders/" + name;
+    return (shadersRel / name).generic_string();
 }
 
 void editor::ProjectUtils::collectModelEntities(Scene* scene, const ModelComponent& model, std::vector<Entity>& out){
