@@ -14,6 +14,7 @@ enum class ProviderId {
     OpenAI,
     Anthropic,
     Gemini,
+    DeepSeek,
     OpenAICompatible
 };
 
@@ -114,6 +115,9 @@ struct ActionProposal {
 std::string toString(ProviderId provider);
 ProviderId providerFromString(const std::string& value);
 std::string defaultModelForProvider(ProviderId provider);
+
+std::string toString(ChatRole role);
+ChatRole chatRoleFromString(const std::string& value);
 
 std::string toString(ApprovalMode mode);
 ApprovalMode approvalModeFromString(const std::string& value);

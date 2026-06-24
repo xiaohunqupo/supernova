@@ -5,7 +5,7 @@
 namespace doriax::editor::ai {
 
 // Payload builders / response parsers, implemented at the bottom of this file.
-// OpenAI and OpenAI-compatible share the Chat Completions wire format.
+// OpenAI, DeepSeek and OpenAI-compatible share the Chat Completions wire format.
 Json buildChatCompletionsPayload(const ProviderRequest& request);
 Json buildAnthropicPayload(const ProviderRequest& request);
 Json buildGeminiPayload(const ProviderRequest& request);
@@ -111,6 +111,26 @@ public:
     }
 };
 
+class DeepSeekProvider : public Provider {
+public:
+    ProviderId id() const override { return ProviderId::DeepSeek; }
+
+    HttpRequest buildRequest(const ProviderRequest& request) const override {
+        HttpRequest http;
+        http.url = "https://api.deepseek.com/chat/completions";
+        http.headers = {
+            "Content-Type: application/json",
+            "Authorization: Bearer " + request.apiKey
+        };
+        http.body = buildChatCompletionsPayload(request).dump();
+        return http;
+    }
+
+    ProviderResponse parseResponse(const std::string& body) const override {
+        return parseChatCompletionsBody(body);
+    }
+};
+
 class AnthropicProvider : public Provider {
 public:
     ProviderId id() const override { return ProviderId::Anthropic; }
@@ -157,6 +177,7 @@ std::unique_ptr<Provider> createProvider(ProviderId provider) {
     switch (provider) {
         case ProviderId::Anthropic: return std::make_unique<AnthropicProvider>();
         case ProviderId::Gemini: return std::make_unique<GeminiProvider>();
+        case ProviderId::DeepSeek: return std::make_unique<DeepSeekProvider>();
         case ProviderId::OpenAICompatible: return std::make_unique<OpenAICompatibleProvider>();
         case ProviderId::OpenAI:
         default: return std::make_unique<OpenAIProvider>();

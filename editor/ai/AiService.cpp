@@ -126,6 +126,16 @@ void AiService::clearConversation() {
     toolRounds = 0;
 }
 
+void AiService::loadConversation(std::vector<ChatMessage> newMessages) {
+    if (busy.load()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex);
+    messages = std::move(newMessages);
+    proposals.clear();
+    toolRounds = 0;
+}
+
 ActionResult AiService::executeProposal(uint64_t proposalId, EditorActionExecutor& executor) {
     ActionProposal proposal;
     {
@@ -220,7 +230,7 @@ std::string AiService::buildSystemPrompt() const {
 ProviderRequest AiService::buildRequestSnapshotLocked() const {
     ProviderRequest request;
     request.settings = settings;
-    request.apiKey = SecretStore::getSessionApiKey(settings.provider);
+    request.apiKey = SecretStore::getApiKey(settings.provider);
     request.messages = messages;
     request.tools = EditorActionRegistry::tools();
     request.systemPrompt = buildSystemPrompt();

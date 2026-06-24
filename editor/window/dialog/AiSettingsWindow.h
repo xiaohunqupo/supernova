@@ -8,21 +8,20 @@ namespace doriax::editor {
 
 namespace ai { class AiService; }
 
-// Modal dialog that owns all AI assistant configuration (provider, model,
-// endpoint, approval mode, output budget and the session API key) so the chat
-// window itself can stay clean and Copilot-like.
+// Modal dialog that manages API keys for every provider (add one, switch
+// provider, add another - like VS Code) plus the OpenAI-compatible endpoint and
+// the output budget. Model and approval controls live in the chat composer.
 class AiSettingsWindow {
 private:
+    static constexpr int kProviderCount = 5;
+
     bool m_isOpen = false;
     ai::AiService* m_service = nullptr;
 
-    int m_providerIndex = 0;
-    int m_approvalIndex = 0;
-    int m_maxOutputTokens = 1200;
-    std::array<char, 256> m_modelBuffer{};
+    std::array<std::array<char, 512>, kProviderCount> m_keyBuffers{};
+    std::array<bool, kProviderCount> m_keySet{};
     std::array<char, 512> m_endpointBuffer{};
-    std::array<char, 512> m_apiKeyBuffer{};
-    bool m_keySet = false;
+    int m_maxOutputTokens = 1200;
 
     void drawSettings();
     void refreshKeyState();

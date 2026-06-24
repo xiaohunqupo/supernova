@@ -45,6 +45,7 @@ ImVec4 editor::App::ThemeColors::ExtEntityButtonActive;
 ImVec4 editor::App::ThemeColors::NestedHeader;
 ImVec4 editor::App::ThemeColors::NestedHeaderHovered;
 ImVec4 editor::App::ThemeColors::NestedHeaderActive;
+ImVec4 editor::App::ThemeColors::DisabledGreenText;
 
 ImFont* editor::App::codeFont = nullptr;
 
@@ -1403,6 +1404,9 @@ void editor::App::kewtStyleTheme(){
     ThemeColors::NestedHeader = ImVec4(0.25f, 0.25f, 0.30f, 1.00f);
     ThemeColors::NestedHeaderHovered = ImVec4(0.30f, 0.30f, 0.35f, 1.00f);
     ThemeColors::NestedHeaderActive = ImVec4(0.35f, 0.35f, 0.40f, 1.00f);
+    ThemeColors::DisabledGreenText = ImLerp(colors[ImGuiCol_TextDisabled],
+                                            ImVec4(0.38f, 0.72f, 0.46f, 1.00f),
+                                            0.58f);
 
     // main
     style.WindowPadding = ImVec2(8, 8);

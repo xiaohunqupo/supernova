@@ -32,6 +32,10 @@ public:
     std::vector<ActionProposal> getProposals() const;
     void clearConversation();
 
+    // Replaces the in-memory conversation (e.g. when loading saved history).
+    // Ignored while a request is in flight.
+    void loadConversation(std::vector<ChatMessage> newMessages);
+
     ActionResult executeProposal(uint64_t proposalId, EditorActionExecutor& executor);
     void removeProposal(uint64_t proposalId);
 

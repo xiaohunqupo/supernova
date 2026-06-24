@@ -14,42 +14,16 @@ namespace doriax::editor {
 
 namespace {
 
-const char* kProviderLabels[] = {"OpenAI", "Anthropic", "Gemini", "OpenAI-compatible"};
+const char* kProviderLabels[] = {"OpenAI", "Anthropic", "Gemini", "DeepSeek", "OpenAI-compatible"};
 const ai::ProviderId kProviderValues[] = {
     ai::ProviderId::OpenAI,
     ai::ProviderId::Anthropic,
     ai::ProviderId::Gemini,
+    ai::ProviderId::DeepSeek,
     ai::ProviderId::OpenAICompatible
 };
-constexpr int kProviderCount = IM_ARRAYSIZE(kProviderValues);
 
-const char* kApprovalLabels[] = {"Preview then approve", "Auto-run read-only", "Full agent"};
-const ai::ApprovalMode kApprovalValues[] = {
-    ai::ApprovalMode::PreviewThenApprove,
-    ai::ApprovalMode::SafeAutoRun,
-    ai::ApprovalMode::FullAgent
-};
-constexpr int kApprovalCount = IM_ARRAYSIZE(kApprovalValues);
-
-const char* kApprovalHelp[] = {
-    "Every tool call waits for your approval.",
-    "Read-only tools run automatically; changes still need approval.",
-    "All tool calls run automatically. Use with care."
-};
-
-int providerToIndex(ai::ProviderId provider) {
-    for (int i = 0; i < kProviderCount; ++i) {
-        if (kProviderValues[i] == provider) return i;
-    }
-    return 0;
-}
-
-int approvalToIndex(ai::ApprovalMode mode) {
-    for (int i = 0; i < kApprovalCount; ++i) {
-        if (kApprovalValues[i] == mode) return i;
-    }
-    return 0;
-}
+const ImVec4 kKeySetColor(0.55f, 0.85f, 0.55f, 1.0f);
 
 } // namespace
 
@@ -58,40 +32,42 @@ void AiSettingsWindow::open(ai::AiService* service) {
     m_service = service;
 
     ai::Settings settings = AppSettings::getAiSettings();
-    m_providerIndex = providerToIndex(settings.provider);
-    m_approvalIndex = approvalToIndex(settings.approvalMode);
     m_maxOutputTokens = settings.maxOutputTokens;
-    std::snprintf(m_modelBuffer.data(), m_modelBuffer.size(), "%s", settings.model.c_str());
     std::snprintf(m_endpointBuffer.data(), m_endpointBuffer.size(), "%s", settings.customEndpoint.c_str());
-    m_apiKeyBuffer.fill('\0');
+    for (auto& buffer : m_keyBuffers) {
+        buffer.fill('\0');
+    }
     refreshKeyState();
 }
 
 void AiSettingsWindow::refreshKeyState() {
-    m_keySet = ai::SecretStore::hasSessionApiKey(kProviderValues[m_providerIndex]);
+    static_assert(IM_ARRAYSIZE(kProviderValues) == kProviderCount,
+                  "kProviderValues/kProviderLabels must list every provider");
+    static_assert(IM_ARRAYSIZE(kProviderLabels) == kProviderCount,
+                  "kProviderValues/kProviderLabels must list every provider");
+    for (int i = 0; i < kProviderCount; ++i) {
+        m_keySet[i] = ai::SecretStore::hasApiKey(kProviderValues[i]);
+    }
 }
 
 void AiSettingsWindow::apply() {
     ai::Settings settings = AppSettings::getAiSettings();
-    settings.provider = kProviderValues[m_providerIndex];
-    settings.approvalMode = kApprovalValues[m_approvalIndex];
-    settings.model = m_modelBuffer.data();
     settings.customEndpoint = m_endpointBuffer.data();
     settings.maxOutputTokens = std::clamp(m_maxOutputTokens, 256, 16000);
-    if (settings.model.empty()) {
-        settings.model = ai::defaultModelForProvider(settings.provider);
-    }
-
     AppSettings::setAiSettings(settings);
     if (m_service) {
         m_service->setSettings(settings);
     }
 
-    // The API key is kept in memory for this session only and never persisted.
-    if (m_apiKeyBuffer[0] != '\0') {
-        ai::SecretStore::setSessionApiKey(settings.provider, m_apiKeyBuffer.data());
-        m_apiKeyBuffer.fill('\0');
+    // Persist any keys the user typed (one per provider). Keys are stored
+    // obfuscated in the user config dir, never alongside the project.
+    for (int i = 0; i < kProviderCount; ++i) {
+        if (m_keyBuffers[i][0] != '\0') {
+            ai::SecretStore::setApiKey(kProviderValues[i], m_keyBuffers[i].data());
+            m_keyBuffers[i].fill('\0');
+        }
     }
+    refreshKeyState();
 }
 
 void AiSettingsWindow::show() {
@@ -102,8 +78,8 @@ void AiSettingsWindow::show() {
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSizeConstraints(
-        ImVec2(520, 0),
-        ImVec2(520, ImGui::GetMainViewport()->WorkSize.y * 0.9f)
+        ImVec2(560, 0),
+        ImVec2(560, ImGui::GetMainViewport()->WorkSize.y * 0.9f)
     );
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings |
@@ -120,94 +96,75 @@ void AiSettingsWindow::show() {
 }
 
 void AiSettingsWindow::drawSettings() {
-    const bool isCompatible = kProviderValues[m_providerIndex] == ai::ProviderId::OpenAICompatible;
+    ImGui::TextDisabled("Add a key for any provider; keys are stored obfuscated in your");
+    ImGui::TextDisabled("user config folder. The model picker lists configured providers.");
+    ImGui::Spacing();
 
     ImGui::BeginTable("ai_settings", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp);
-    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 150);
+    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 160);
     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-    // Provider
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Provider");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##Provider", &m_providerIndex, kProviderLabels, kProviderCount)) {
-            // Switch to the provider's default model and reflect its key state.
-            std::snprintf(m_modelBuffer.data(), m_modelBuffer.size(), "%s",
-                          ai::defaultModelForProvider(kProviderValues[m_providerIndex]).c_str());
-            refreshKeyState();
-        }
-    }
+    float clearWidth = ImGui::GetFrameHeight();
+    float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-    // Model
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Model");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputText("##Model", m_modelBuffer.data(), m_modelBuffer.size());
-    }
-
-    // Custom endpoint (OpenAI-compatible only)
-    if (isCompatible) {
+    for (int i = 0; i < kProviderCount; ++i) {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Endpoint");
-        ImGui::SetItemTooltip("Chat Completions URL. Leave empty to use OpenRouter.");
-        ImGui::TableNextColumn();
-        {
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputTextWithHint("##Endpoint", "https://openrouter.ai/api/v1/chat/completions",
-                                     m_endpointBuffer.data(), m_endpointBuffer.size());
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", kProviderLabels[i]);
+        if (m_keySet[i]) {
+            ImGui::SameLine();
+            ImGui::TextColored(kKeySetColor, ICON_FA_CIRCLE_CHECK);
+            ImGui::SetItemTooltip("Key configured");
         }
-    }
 
-    // API key
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("API Key");
-    ImGui::SetItemTooltip("Stored in memory for this session only. Never written to disk.");
-    ImGui::TableNextColumn();
-    {
-        float clearWidth = ImGui::GetFrameHeight();
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearWidth - ImGui::GetStyle().ItemSpacing.x);
-        ImGui::InputTextWithHint("##ApiKey", m_keySet ? "session key set - type to replace" : "paste API key",
-                                 m_apiKeyBuffer.data(), m_apiKeyBuffer.size(), ImGuiInputTextFlags_Password);
+        ImGui::TableNextColumn();
+        ImGui::PushID(i);
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearWidth - spacing);
+        ImGui::InputTextWithHint("##Key", m_keySet[i] ? "key set - type to replace" : "paste API key",
+                                 m_keyBuffers[i].data(), m_keyBuffers[i].size(),
+                                 ImGuiInputTextFlags_Password);
+        if (ImGui::BeginPopupContextItem("##KeyContext")) {
+            if (ImGui::MenuItem(ICON_FA_CLIPBOARD " Paste")) {
+                const char* clipboard = ImGui::GetClipboardText();
+                if (clipboard) {
+                    std::snprintf(m_keyBuffers[i].data(), m_keyBuffers[i].size(), "%s", clipboard);
+                }
+            }
+            ImGui::EndPopup();
+        }
         ImGui::SameLine();
-        ImGui::BeginDisabled(!m_keySet && m_apiKeyBuffer[0] == '\0');
+        ImGui::BeginDisabled(!m_keySet[i] && m_keyBuffers[i][0] == '\0');
         if (Widgets::iconButton("##ClearKey", ICON_FA_TRASH, ImVec2(clearWidth, ImGui::GetFrameHeight()))) {
-            ai::SecretStore::clearSessionApiKey(kProviderValues[m_providerIndex]);
-            m_apiKeyBuffer.fill('\0');
+            ai::SecretStore::clearApiKey(kProviderValues[i]);
+            m_keyBuffers[i].fill('\0');
             refreshKeyState();
         }
         ImGui::EndDisabled();
-        ImGui::SetItemTooltip("Clear the session key for this provider");
+        ImGui::SetItemTooltip("Clear this provider's key");
+        ImGui::PopID();
     }
 
-    // Approval mode
+    // OpenAI-compatible endpoint
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("Approval");
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Compatible endpoint");
+    ImGui::SetItemTooltip("Chat Completions URL for the OpenAI-compatible provider. Empty = OpenRouter.");
     ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        ImGui::Combo("##Approval", &m_approvalIndex, kApprovalLabels, kApprovalCount);
-        ImGui::TextDisabled("%s", kApprovalHelp[m_approvalIndex]);
-    }
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##Endpoint", "https://openrouter.ai/api/v1/chat/completions",
+                             m_endpointBuffer.data(), m_endpointBuffer.size());
 
     // Max output tokens
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
     ImGui::Text("Max Output Tokens");
     ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputInt("##MaxOutput", &m_maxOutputTokens, 256, 1024);
-        m_maxOutputTokens = std::clamp(m_maxOutputTokens, 256, 16000);
-    }
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputInt("##MaxOutput", &m_maxOutputTokens, 256, 1024);
+    m_maxOutputTokens = std::clamp(m_maxOutputTokens, 256, 16000);
 
     ImGui::EndTable();
 

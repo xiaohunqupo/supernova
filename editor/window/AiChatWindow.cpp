@@ -9,6 +9,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,125 @@ const ImVec4 kAssistantColor(0.72f, 0.86f, 0.68f, 1.0f);
 const ImVec4 kSuccessColor(0.55f, 0.85f, 0.55f, 1.0f);
 const ImVec4 kErrorColor(0.95f, 0.55f, 0.55f, 1.0f);
 const ImVec4 kCodeColor(0.82f, 0.85f, 0.72f, 1.0f);
+
+const char* providerDisplayName(ai::ProviderId provider) {
+    switch (provider) {
+        case ai::ProviderId::OpenAI: return "OpenAI";
+        case ai::ProviderId::Anthropic: return "Anthropic";
+        case ai::ProviderId::Gemini: return "Gemini";
+        case ai::ProviderId::DeepSeek: return "DeepSeek";
+        case ai::ProviderId::OpenAICompatible: return "OpenAI-compatible";
+    }
+    return "OpenAI";
+}
+
+const char* kApprovalLabels[] = {"Preview then approve", "Auto-run read-only", "Full agent"};
+const ai::ApprovalMode kApprovalValues[] = {
+    ai::ApprovalMode::PreviewThenApprove,
+    ai::ApprovalMode::SafeAutoRun,
+    ai::ApprovalMode::FullAgent
+};
+constexpr int kApprovalCount = IM_ARRAYSIZE(kApprovalValues);
+
+int approvalToIndex(ai::ApprovalMode mode) {
+    for (int i = 0; i < kApprovalCount; ++i) {
+        if (kApprovalValues[i] == mode) return i;
+    }
+    return 0;
+}
+
+const char* approvalDisplayName(ai::ApprovalMode mode) {
+    return kApprovalLabels[approvalToIndex(mode)];
+}
+
+std::string modelDisplayName(const ai::Settings& settings) {
+    std::vector<ai::ProviderId> providers = ai::SecretStore::providersWithKeys();
+    if (providers.empty()) {
+        return "No model";
+    }
+    if (!ai::SecretStore::hasApiKey(settings.provider)) {
+        return "Select model";
+    }
+
+    std::string current = settings.model.empty()
+        ? ai::defaultModelForProvider(settings.provider)
+        : settings.model;
+    for (const auto& model : ai::ModelCatalog::curatedModels(settings.provider)) {
+        if (current == model.id) {
+            return model.label;
+        }
+    }
+    return current;
+}
+
+std::string compactTitleText(const std::string& text) {
+    std::string out;
+    out.reserve(text.size());
+    bool lastSpace = false;
+    for (unsigned char c : text) {
+        if (c == '\r' || c == '\n' || c == '\t' || c == ' ') {
+            if (!lastSpace && !out.empty()) {
+                out.push_back(' ');
+                lastSpace = true;
+            }
+        } else {
+            out.push_back(static_cast<char>(c));
+            lastSpace = false;
+        }
+    }
+    while (!out.empty() && out.back() == ' ') {
+        out.pop_back();
+    }
+    return out;
+}
+
+std::string conversationTitleFromMessages(const std::vector<ai::ChatMessage>& messages) {
+    for (const auto& message : messages) {
+        if (message.role != ai::ChatRole::User) {
+            continue;
+        }
+        std::string title = compactTitleText(message.content);
+        if (title.empty()) {
+            continue;
+        }
+        constexpr size_t kMaxTitleChars = 72;
+        if (title.size() > kMaxTitleChars) {
+            title.resize(kMaxTitleChars);
+            title += "...";
+        }
+        return title;
+    }
+    return messages.empty() ? "New conversation" : "AI conversation";
+}
+
+std::string elideToWidth(std::string text, float width) {
+    if (width <= 0.0f) {
+        return {};
+    }
+    if (ImGui::CalcTextSize(text.c_str()).x <= width) {
+        return text;
+    }
+    const std::string suffix = "...";
+    while (!text.empty()) {
+        text.pop_back();
+        std::string candidate = text + suffix;
+        if (ImGui::CalcTextSize(candidate.c_str()).x <= width) {
+            return candidate;
+        }
+    }
+    return suffix;
+}
+
+bool inlineIconButton(const char* strId, const char* icon, const ImVec2& size) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    bool pressed = ImGui::InvisibleButton(strId, size);
+    ImVec2 textSize = ImGui::CalcTextSize(icon);
+    ImU32 color = ImGui::GetColorU32(ImGui::IsItemHovered() ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+    ImGui::GetWindowDrawList()->AddText(
+        ImVec2(pos.x + (size.x - textSize.x) * 0.5f, pos.y + (size.y - textSize.y) * 0.5f),
+        color, icon);
+    return pressed;
+}
 
 // Light Markdown pass for assistant text: turns "- "/"* "/"+ " bullets into a
 // bullet glyph and renders fenced ``` code blocks ``` in a monospace font. Other
@@ -86,7 +206,8 @@ void appendMarkdownParagraphs(const std::string& content, ImU32 textColor, ImU32
 
 AiChatWindow::AiChatWindow(Project* project, ResourcesWindow* resourcesWindow)
     : project(project)
-    , resourcesWindow(resourcesWindow) {
+    , resourcesWindow(resourcesWindow)
+    , conversationStore(project) {
     service.setSettings(AppSettings::getAiSettings());
 }
 
@@ -100,7 +221,8 @@ void AiChatWindow::show() {
         focusRequested = false;
     }
 
-    if (!ImGui::Begin(WINDOW_NAME, &windowOpen)) {
+    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    if (!ImGui::Begin(WINDOW_NAME, &windowOpen, windowFlags)) {
         windowFocused = false;
         ImGui::End();
         settingsWindow.show();
@@ -114,6 +236,7 @@ void AiChatWindow::show() {
     if (!service.isBusy()) {
         autoRunProposals();
         service.update();
+        persistConversation();
     }
 
     drawHeader();
@@ -121,7 +244,8 @@ void AiChatWindow::show() {
 
     const ImGuiStyle& style = ImGui::GetStyle();
     float inputHeight = ImGui::GetTextLineHeight() * 3.0f + style.FramePadding.y * 2.0f;
-    float composerHeight = inputHeight + style.ItemSpacing.y * 2.0f + 2.0f;
+    float controlsHeight = ImGui::GetFrameHeight();
+    float composerHeight = inputHeight + controlsHeight + style.ItemSpacing.y + 2.0f;
 
     std::vector<ai::ActionProposal> proposals = service.getProposals();
     int pending = 0;
@@ -172,31 +296,96 @@ bool AiChatWindow::isFocused() const {
 }
 
 void AiChatWindow::drawHeader() {
-    ai::Settings settings = service.getSettings();
+    std::vector<ai::ChatMessage> messages = service.getMessages();
     const ImGuiStyle& style = ImGui::GetStyle();
 
     float height = ImGui::GetFrameHeight();
     ImVec2 buttonSize(height, height);
     float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+    float buttonsWidth = height * 3.0f + style.ItemSpacing.x * 2.0f;
+    float titleWidth = std::max(20.0f, ImGui::GetContentRegionAvail().x - buttonsWidth - style.ItemSpacing.x);
 
     ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled(ICON_FA_ROBOT "  %s", settings.model.c_str());
+    std::string title = elideToWidth(std::string(ICON_FA_MESSAGE "  ") +
+                                     conversationTitleFromMessages(messages), titleWidth);
+    ImGui::TextDisabled("%s", title.c_str());
 
     ImGui::SameLine();
-    ImGui::SetCursorPosX(rightEdge - height * 2.0f - style.ItemSpacing.x);
+    ImGui::SetCursorPosX(rightEdge - buttonsWidth);
     ImGui::BeginDisabled(service.isBusy());
     if (Widgets::iconButton("##AiNewChat", ICON_FA_PLUS, buttonSize)) {
+        // The previous conversation was already persisted by the per-frame pump.
         service.clearConversation();
+        currentConversationId.clear();
+        lastSavedMessageCount = 0;
         inputBuffer.fill('\0');
+        scrollToBottom = false;
     }
     ImGui::EndDisabled();
     ImGui::SetItemTooltip("New chat");
+
+    ImGui::SameLine();
+    if (Widgets::iconButton("##AiHistory", ICON_FA_CLOCK_ROTATE_LEFT, buttonSize)) {
+        ImGui::OpenPopup("AI History##AiHistoryPopup");
+    }
+    ImGui::SetItemTooltip("History");
+    drawHistoryPopup();
 
     ImGui::SameLine();
     if (Widgets::iconButton("##AiSettings", ICON_FA_GEAR, buttonSize)) {
         settingsWindow.open(&service);
     }
     ImGui::SetItemTooltip("AI settings");
+}
+
+void AiChatWindow::drawHistoryPopup() {
+    if (!ImGui::BeginPopup("AI History##AiHistoryPopup")) {
+        return;
+    }
+
+    ImGui::TextDisabled(ICON_FA_COMMENTS "  Conversations");
+    ImGui::Separator();
+
+    std::vector<ai::ConversationMeta> conversations = conversationStore.list();
+    if (conversations.empty()) {
+        ImGui::TextDisabled("No saved conversations yet");
+        ImGui::EndPopup();
+        return;
+    }
+
+    float trashWidth = ImGui::GetFrameHeight();
+    float rowWidth = 300.0f;
+    std::string toDelete;
+
+    for (const auto& meta : conversations) {
+        ImGui::PushID(meta.id.c_str());
+        bool isCurrent = meta.id == currentConversationId;
+
+        std::string label = elideToWidth(meta.title.empty() ? "Conversation" : meta.title,
+                                         rowWidth - trashWidth - ImGui::GetStyle().ItemSpacing.x);
+        if (ImGui::Selectable(label.c_str(), isCurrent,
+                              ImGuiSelectableFlags_AllowOverlap, ImVec2(rowWidth - trashWidth - ImGui::GetStyle().ItemSpacing.x, 0))) {
+            loadConversation(meta.id);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (Widgets::iconButton("##DeleteConversation", ICON_FA_TRASH, ImVec2(trashWidth, ImGui::GetFrameHeight()))) {
+            toDelete = meta.id;
+        }
+        ImGui::SetItemTooltip("Delete conversation");
+        ImGui::PopID();
+    }
+
+    if (!toDelete.empty()) {
+        conversationStore.remove(toDelete);
+        if (toDelete == currentConversationId) {
+            service.clearConversation();
+            currentConversationId.clear();
+            lastSavedMessageCount = 0;
+        }
+    }
+
+    ImGui::EndPopup();
 }
 
 void AiChatWindow::drawTranscript(float height) {
@@ -209,7 +398,7 @@ void AiChatWindow::drawTranscript(float height) {
         ImGui::TextDisabled("Ask about your project, scene, or resources,");
         ImGui::TextDisabled("or request an editor action such as");
         ImGui::TextDisabled("\"add a point light above the player\".");
-        if (!ai::SecretStore::hasSessionApiKey(service.getSettings().provider)) {
+        if (ai::SecretStore::providersWithKeys().empty()) {
             ImGui::Spacing();
             if (ImGui::Button(ICON_FA_KEY " Set API key")) {
                 settingsWindow.open(&service);
@@ -337,21 +526,257 @@ void AiChatWindow::drawComposer(float inputHeight) {
         ImGui::SetItemTooltip("Stop");
     } else {
         bool hasText = inputBuffer[0] != '\0';
-        ImGui::BeginDisabled(!hasText);
+        std::string disabledReason;
+        bool canSend = hasText && canSendMessage(&disabledReason);
+        ImGui::BeginDisabled(!canSend);
         if (Widgets::iconButton("##AiSend", ICON_FA_PAPER_PLANE, ImVec2(buttonWidth, inputHeight))) {
             submitted = true;
         }
         ImGui::EndDisabled();
-        ImGui::SetItemTooltip("Send  (Enter - Ctrl+Enter for newline)");
+        if (hasText && !disabledReason.empty()) {
+            ImGui::SetItemTooltip("%s", disabledReason.c_str());
+        } else {
+            ImGui::SetItemTooltip("Send  (Enter - Ctrl+Enter for newline)");
+        }
     }
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - style.ItemSpacing.y);
+    drawComposerControls();
 
     if (submitted) {
         submitMessage();
     }
 }
 
+void AiChatWindow::drawComposerControls() {
+    const ImGuiStyle& style = ImGui::GetStyle();
+
+    ai::Settings settings = service.getSettings();
+    const bool busy = service.isBusy();
+
+    float avail = ImGui::GetContentRegionAvail().x;
+    float buttonWidth = ImGui::GetFrameHeight();
+    float editGap = std::max(4.0f, style.ItemInnerSpacing.x);
+    std::string modelText = modelDisplayName(settings);
+    float preferredModelWidth = ImGui::CalcTextSize(modelText.c_str()).x + buttonWidth + editGap;
+    float modelWidth = std::min(std::max(70.0f, preferredModelWidth),
+                                std::max(70.0f, avail * 0.62f));
+    if (avail > 84.0f) {
+        modelWidth = std::min(modelWidth, avail - 44.0f);
+    }
+    float approvalWidth = avail - modelWidth - style.ItemSpacing.x;
+    approvalWidth = std::max(40.0f, approvalWidth);
+    modelWidth = std::max(40.0f, modelWidth);
+    float rowStartX = ImGui::GetCursorPosX();
+    float rowRightX = rowStartX + avail;
+
+    ImGui::BeginDisabled(busy);
+
+    const ImVec4* approvalColor = settings.approvalMode == ai::ApprovalMode::FullAgent
+        ? &App::ThemeColors::DisabledGreenText
+        : nullptr;
+    drawEditableSettingLabel("Approval", approvalDisplayName(settings.approvalMode), approvalWidth,
+                             "##AiApprovalEdit", "AI Approval##AiApprovalPopup",
+                             "Change approval mode", approvalColor);
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(std::max(rowStartX, rowRightX - modelWidth));
+    drawEditableSettingLabel("Model", modelText, modelWidth,
+                             "##AiModelEdit", "AI Model##AiModelPopup", "Change model");
+
+    ImGui::EndDisabled();
+
+    drawModelPopup();
+    drawCustomModelPopup();
+    drawApprovalPopup();
+}
+
+void AiChatWindow::drawEditableSettingLabel(const char* label, const std::string& value, float width,
+                                           const char* editId, const char* popupId, const char* tooltip,
+                                           const ImVec4* textColor) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float buttonWidth = ImGui::GetFrameHeight();
+    float gap = std::max(4.0f, style.ItemInnerSpacing.x);
+    float textWidth = std::max(1.0f, width - buttonWidth - gap);
+
+    ImGui::AlignTextToFramePadding();
+    std::string display = elideToWidth(value, textWidth);
+    if (textColor) {
+        ImGui::PushStyleColor(ImGuiCol_TextDisabled, *textColor);
+    }
+    ImGui::TextDisabled("%s", display.c_str());
+    if (textColor) {
+        ImGui::PopStyleColor();
+    }
+    if (!value.empty() && ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s: %s", label, value.c_str());
+    }
+
+    ImGui::SameLine(0.0f, gap);
+    if (inlineIconButton(editId, ICON_FA_PEN_TO_SQUARE, ImVec2(buttonWidth, ImGui::GetFrameHeight()))) {
+        ImGui::OpenPopup(popupId);
+    }
+    ImGui::SetItemTooltip("%s", tooltip);
+}
+
+void AiChatWindow::drawModelPopup() {
+    if (!ImGui::BeginPopup("AI Model##AiModelPopup")) {
+        return;
+    }
+
+    ai::Settings settings = service.getSettings();
+    std::vector<ai::ProviderId> providers = ai::SecretStore::providersWithKeys();
+
+    if (providers.empty()) {
+        ImGui::TextDisabled("No providers configured");
+        if (ImGui::Selectable("Add an API key...")) {
+            settingsWindow.open(&service);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+        return;
+    }
+
+    std::string current = settings.model.empty()
+        ? ai::defaultModelForProvider(settings.provider)
+        : settings.model;
+
+    // Only providers with a configured key are listed; their models are fetched
+    // live (curated list shown until the fetch lands).
+    for (size_t pi = 0; pi < providers.size(); ++pi) {
+        ai::ProviderId provider = providers[pi];
+        if (modelCatalog.status(provider) == ai::CatalogStatus::Idle) {
+            modelCatalog.refresh(provider, ai::SecretStore::getApiKey(provider), settings.customEndpoint);
+        }
+
+        if (pi > 0) {
+            ImGui::Spacing();
+        }
+        const char* suffix = "";
+        switch (modelCatalog.status(provider)) {
+            case ai::CatalogStatus::Loading: suffix = "  (loading...)"; break;
+            case ai::CatalogStatus::Error:   suffix = "  (defaults)"; break;
+            default: break;
+        }
+        ImGui::TextDisabled("%s%s", providerDisplayName(provider), suffix);
+        ImGui::Separator();
+
+        for (const auto& model : modelCatalog.models(provider)) {
+            bool selected = (provider == settings.provider) && (current == model.id);
+            ImGui::PushID(model.id.c_str());
+            if (ImGui::Selectable(model.label.c_str(), selected)) {
+                ai::Settings next = settings;
+                next.provider = provider;
+                next.model = model.id;
+                applySettings(next);
+                ImGui::CloseCurrentPopup();
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", model.id.c_str());
+            }
+            ImGui::PopID();
+        }
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    if (ImGui::Selectable(ICON_FA_ROTATE "  Refresh models")) {
+        for (ai::ProviderId provider : providers) {
+            modelCatalog.refresh(provider, ai::SecretStore::getApiKey(provider), settings.customEndpoint);
+        }
+    }
+
+    if (ImGui::Selectable("Custom model...")) {
+        std::snprintf(customModelBuffer.data(), customModelBuffer.size(), "%s", current.c_str());
+        customModelPopupRequested = true;
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void AiChatWindow::drawCustomModelPopup() {
+    if (customModelPopupRequested) {
+        ImGui::OpenPopup("Custom model##AiCustomModelPopup");
+        customModelPopupRequested = false;
+    }
+
+    if (!ImGui::BeginPopupModal("Custom model##AiCustomModelPopup", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        return;
+    }
+
+    ImGui::SetNextItemWidth(320.0f);
+    ImGui::InputText("##AiCustomModelInput", customModelBuffer.data(), customModelBuffer.size());
+
+    ImGui::BeginDisabled(customModelBuffer[0] == '\0');
+    if (ImGui::Button("Use", ImVec2(90, 0))) {
+        ai::Settings next = service.getSettings();
+        next.model = customModelBuffer.data();
+        applySettings(next);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(90, 0))) {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void AiChatWindow::drawApprovalPopup() {
+    if (ImGui::BeginPopup("AI Approval##AiApprovalPopup")) {
+        ai::Settings settings = service.getSettings();
+        int approvalIndex = approvalToIndex(settings.approvalMode);
+        for (int i = 0; i < kApprovalCount; ++i) {
+            bool selected = i == approvalIndex;
+            if (ImGui::Selectable(kApprovalLabels[i], selected)) {
+                settings.approvalMode = kApprovalValues[i];
+                applySettings(settings);
+                ImGui::CloseCurrentPopup();
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void AiChatWindow::applySettings(const ai::Settings& settings) {
+    ai::Settings next = settings;
+    if (next.model.empty()) {
+        next.model = ai::defaultModelForProvider(next.provider);
+    }
+    AppSettings::setAiSettings(next);
+    service.setSettings(next);
+}
+
+bool AiChatWindow::canSendMessage(std::string* reason) const {
+    ai::Settings settings = service.getSettings();
+    if (ai::SecretStore::providersWithKeys().empty()) {
+        if (reason) *reason = "Add an API key before sending.";
+        return false;
+    }
+    if (!ai::SecretStore::hasApiKey(settings.provider)) {
+        if (reason) *reason = "Select a configured model/provider before sending.";
+        return false;
+    }
+    if (settings.model.empty()) {
+        if (reason) *reason = "Select a model before sending.";
+        return false;
+    }
+    return true;
+}
+
 void AiChatWindow::submitMessage() {
-    if (service.isBusy() || inputBuffer[0] == '\0') {
+    if (service.isBusy() || inputBuffer[0] == '\0' || !canSendMessage()) {
         return;
     }
     if (service.sendUserMessage(inputBuffer.data())) {
@@ -384,6 +809,37 @@ void AiChatWindow::autoRunProposals() {
             break; // one per frame keeps the UI responsive
         }
     }
+}
+
+void AiChatWindow::persistConversation() {
+    std::vector<ai::ChatMessage> messages = service.getMessages();
+    if (messages.size() == lastSavedMessageCount) {
+        return; // nothing new since the last save
+    }
+    if (messages.empty()) {
+        lastSavedMessageCount = 0;
+        return;
+    }
+    if (currentConversationId.empty()) {
+        currentConversationId = ai::ConversationStore::newId();
+    }
+    conversationStore.save(currentConversationId, conversationTitleFromMessages(messages), messages);
+    lastSavedMessageCount = messages.size();
+}
+
+void AiChatWindow::loadConversation(const std::string& id) {
+    if (service.isBusy()) {
+        return;
+    }
+    std::vector<ai::ChatMessage> messages;
+    if (!conversationStore.load(id, messages)) {
+        return;
+    }
+    service.loadConversation(std::move(messages));
+    currentConversationId = id;
+    lastSavedMessageCount = service.getMessages().size();
+    inputBuffer.fill('\0');
+    scrollToBottom = true;
 }
 
 } // namespace doriax::editor

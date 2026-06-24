@@ -160,6 +160,7 @@ namespace doriax::editor{
             static ImVec4 NestedHeader;
             static ImVec4 NestedHeaderHovered;
             static ImVec4 NestedHeaderActive;
+            static ImVec4 DisabledGreenText;
         };
 
         App();

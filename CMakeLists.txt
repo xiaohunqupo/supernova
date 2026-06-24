@@ -210,9 +210,11 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/ai/AiProvider.cpp
     ${EDITOR_DIR}/ai/AiService.cpp
     ${EDITOR_DIR}/ai/AiTypes.cpp
+    ${EDITOR_DIR}/ai/ConversationStore.cpp
     ${EDITOR_DIR}/ai/EditorActionExecutor.cpp
     ${EDITOR_DIR}/ai/EditorActionRegistry.cpp
     ${EDITOR_DIR}/ai/HttpClient.cpp
+    ${EDITOR_DIR}/ai/ModelCatalog.cpp
     ${EDITOR_DIR}/ai/SecretStore.cpp
 
     ${EDITOR_DIR}/util/ShaderHeaderBuilder.cpp
