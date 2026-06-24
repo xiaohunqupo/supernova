@@ -33,6 +33,7 @@ private:
     bool windowFocused = false;
     bool isWindowVisible = false;
     bool hasNotification = false;
+    bool syncedInitialSettings = false;
     bool scrollToBottom = false;
     bool refocusInput = false;
     bool customModelPopupRequested = false;
@@ -48,8 +49,8 @@ private:
     void drawProposals(const std::vector<ai::ActionProposal>& proposals, float height);
     void drawComposer(float inputHeight);
     void drawComposerControls();
-    void drawEditableSettingLabel(const char* label, const std::string& value, float width,
-                                  const char* editId, const char* popupId, const char* tooltip,
+    void drawEditableSettingLabel(const std::string& value, float width,
+                                  const char* editId, const char* popupId,
                                   const ImVec4* textColor = nullptr);
     void drawModelPopup();
     void drawCustomModelPopup();

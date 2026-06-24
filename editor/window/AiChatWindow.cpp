@@ -131,17 +131,6 @@ std::string elideToWidth(std::string text, float width) {
     return suffix;
 }
 
-bool inlineIconButton(const char* strId, const char* icon, const ImVec2& size) {
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool pressed = ImGui::InvisibleButton(strId, size);
-    ImVec2 textSize = ImGui::CalcTextSize(icon);
-    ImU32 color = ImGui::GetColorU32(ImGui::IsItemHovered() ? ImGuiCol_Text : ImGuiCol_TextDisabled);
-    ImGui::GetWindowDrawList()->AddText(
-        ImVec2(pos.x + (size.x - textSize.x) * 0.5f, pos.y + (size.y - textSize.y) * 0.5f),
-        color, icon);
-    return pressed;
-}
-
 // Light Markdown pass for assistant text: turns "- "/"* "/"+ " bullets into a
 // bullet glyph and renders fenced ``` code blocks ``` in a monospace font. Other
 // Markdown (bold, headings, inline code) is left as plain text on purpose.
@@ -215,6 +204,11 @@ void AiChatWindow::show() {
     if (!windowOpen) {
         isWindowVisible = false;
         return;
+    }
+
+    if (!syncedInitialSettings) {
+        service.setSettings(AppSettings::getAiSettings());
+        syncedInitialSettings = true;
     }
 
     if (!isWindowVisible) {
@@ -600,14 +594,14 @@ void AiChatWindow::drawComposerControls() {
     const ImVec4* approvalColor = settings.approvalMode == ai::ApprovalMode::FullAgent
         ? &App::ThemeColors::DisabledGreenText
         : nullptr;
-    drawEditableSettingLabel("Approval", approvalDisplayName(settings.approvalMode), approvalWidth,
+    drawEditableSettingLabel(approvalDisplayName(settings.approvalMode), approvalWidth,
                              "##AiApprovalEdit", "AI Approval##AiApprovalPopup",
-                             "Change approval mode", approvalColor);
+                             approvalColor);
 
     ImGui::SameLine();
     ImGui::SetCursorPosX(std::max(rowStartX, rowRightX - modelWidth));
-    drawEditableSettingLabel("Model", modelText, modelWidth,
-                             "##AiModelEdit", "AI Model##AiModelPopup", "Change model");
+    drawEditableSettingLabel(modelText, modelWidth,
+                             "##AiModelEdit", "AI Model##AiModelPopup");
 
     ImGui::EndDisabled();
 
@@ -616,32 +610,34 @@ void AiChatWindow::drawComposerControls() {
     drawApprovalPopup();
 }
 
-void AiChatWindow::drawEditableSettingLabel(const char* label, const std::string& value, float width,
-                                           const char* editId, const char* popupId, const char* tooltip,
+void AiChatWindow::drawEditableSettingLabel(const std::string& value, float width,
+                                           const char* editId, const char* popupId,
                                            const ImVec4* textColor) {
     const ImGuiStyle& style = ImGui::GetStyle();
-    float buttonWidth = ImGui::GetFrameHeight();
+    const char* icon = ICON_FA_PEN_TO_SQUARE;
+    float frameHeight = ImGui::GetFrameHeight();
+    float iconWidth = ImGui::CalcTextSize(icon).x;
     float gap = std::max(4.0f, style.ItemInnerSpacing.x);
-    float textWidth = std::max(1.0f, width - buttonWidth - gap);
+    float textWidth = std::max(1.0f, width - iconWidth - gap);
 
-    ImGui::AlignTextToFramePadding();
     std::string display = elideToWidth(value, textWidth);
-    if (textColor) {
-        ImGui::PushStyleColor(ImGuiCol_TextDisabled, *textColor);
-    }
-    ImGui::TextDisabled("%s", display.c_str());
-    if (textColor) {
-        ImGui::PopStyleColor();
-    }
-    if (!value.empty() && ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s: %s", label, value.c_str());
-    }
-
-    ImGui::SameLine(0.0f, gap);
-    if (inlineIconButton(editId, ICON_FA_PEN_TO_SQUARE, ImVec2(buttonWidth, ImGui::GetFrameHeight()))) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    if (ImGui::InvisibleButton(editId, ImVec2(width, frameHeight))) {
         ImGui::OpenPopup(popupId);
     }
-    ImGui::SetItemTooltip("%s", tooltip);
+
+    ImU32 valueColor = textColor
+        ? ImGui::GetColorU32(*textColor)
+        : ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    ImU32 iconColor = ImGui::GetColorU32(ImGui::IsItemHovered() ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+    ImVec2 textSize = ImGui::CalcTextSize(display.c_str());
+    float textY = pos.y + (frameHeight - textSize.y) * 0.5f;
+    ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x, textY), valueColor, display.c_str());
+
+    float iconX = std::min(pos.x + textSize.x + gap, pos.x + width - iconWidth);
+    ImVec2 iconSize = ImGui::CalcTextSize(icon);
+    float iconY = pos.y + (frameHeight - iconSize.y) * 0.5f;
+    ImGui::GetWindowDrawList()->AddText(ImVec2(iconX, iconY), iconColor, icon);
 }
 
 void AiChatWindow::drawModelPopup() {
@@ -698,9 +694,6 @@ void AiChatWindow::drawModelPopup() {
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s", model.id.c_str());
             }
             ImGui::PopID();
         }
