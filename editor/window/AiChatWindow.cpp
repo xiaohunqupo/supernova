@@ -213,7 +213,12 @@ AiChatWindow::AiChatWindow(Project* project, ResourcesWindow* resourcesWindow)
 
 void AiChatWindow::show() {
     if (!windowOpen) {
+        isWindowVisible = false;
         return;
+    }
+
+    if (!isWindowVisible) {
+        updateMessageNotification();
     }
 
     if (focusRequested) {
@@ -222,13 +227,24 @@ void AiChatWindow::show() {
     }
 
     ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    if (hasNotification) {
+        App::pushTabNotificationStyle();
+        windowFlags |= ImGuiWindowFlags_UnsavedDocument;
+    }
+
     if (!ImGui::Begin(WINDOW_NAME, &windowOpen, windowFlags)) {
+        if (hasNotification) App::popTabNotificationStyle();
         windowFocused = false;
+        isWindowVisible = false;
+        updateMessageNotification();
         ImGui::End();
         settingsWindow.show();
         return;
     }
+    if (hasNotification) App::popTabNotificationStyle();
 
+    isWindowVisible = true;
+    hasNotification = false;
     windowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
     // Drive the agent loop: auto-run eligible proposals, then let the service
@@ -236,6 +252,7 @@ void AiChatWindow::show() {
     if (!service.isBusy()) {
         autoRunProposals();
         service.update();
+        updateMessageNotification();
         persistConversation();
     }
 
@@ -284,6 +301,10 @@ void AiChatWindow::setOpen(bool open) {
     if (open && !windowOpen) {
         focusRequested = true;
     }
+    if (!open) {
+        isWindowVisible = false;
+        windowFocused = false;
+    }
     windowOpen = open;
 }
 
@@ -318,6 +339,8 @@ void AiChatWindow::drawHeader() {
         service.clearConversation();
         currentConversationId.clear();
         lastSavedMessageCount = 0;
+        lastObservedMessageCount = 0;
+        hasNotification = false;
         inputBuffer.fill('\0');
         scrollToBottom = false;
     }
@@ -382,6 +405,8 @@ void AiChatWindow::drawHistoryPopup() {
             service.clearConversation();
             currentConversationId.clear();
             lastSavedMessageCount = 0;
+            lastObservedMessageCount = 0;
+            hasNotification = false;
         }
     }
 
@@ -811,6 +836,27 @@ void AiChatWindow::autoRunProposals() {
     }
 }
 
+void AiChatWindow::updateMessageNotification() {
+    std::vector<ai::ChatMessage> messages = service.getMessages();
+    if (messages.size() < lastObservedMessageCount) {
+        lastObservedMessageCount = messages.size();
+        return;
+    }
+
+    bool receivedIncomingMessage = false;
+    for (size_t i = lastObservedMessageCount; i < messages.size(); ++i) {
+        if (messages[i].role == ai::ChatRole::Assistant || messages[i].role == ai::ChatRole::Tool) {
+            receivedIncomingMessage = true;
+            break;
+        }
+    }
+
+    if (receivedIncomingMessage && !isWindowVisible) {
+        hasNotification = true;
+    }
+    lastObservedMessageCount = messages.size();
+}
+
 void AiChatWindow::persistConversation() {
     std::vector<ai::ChatMessage> messages = service.getMessages();
     if (messages.size() == lastSavedMessageCount) {
@@ -838,6 +884,8 @@ void AiChatWindow::loadConversation(const std::string& id) {
     service.loadConversation(std::move(messages));
     currentConversationId = id;
     lastSavedMessageCount = service.getMessages().size();
+    lastObservedMessageCount = lastSavedMessageCount;
+    hasNotification = false;
     inputBuffer.fill('\0');
     scrollToBottom = true;
 }

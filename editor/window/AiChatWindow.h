@@ -31,6 +31,8 @@ private:
     bool windowOpen = true;
     bool focusRequested = false;
     bool windowFocused = false;
+    bool isWindowVisible = false;
+    bool hasNotification = false;
     bool scrollToBottom = false;
     bool refocusInput = false;
     bool customModelPopupRequested = false;
@@ -38,6 +40,7 @@ private:
     std::array<char, 256> customModelBuffer{};
     std::string currentConversationId;
     size_t lastSavedMessageCount = 0;
+    size_t lastObservedMessageCount = 0;
 
     void drawHeader();
     void drawHistoryPopup();
@@ -56,6 +59,7 @@ private:
     void submitMessage();
     void executeProposal(uint64_t proposalId);
     void autoRunProposals();
+    void updateMessageNotification();
     void persistConversation();
     void loadConversation(const std::string& id);
 
