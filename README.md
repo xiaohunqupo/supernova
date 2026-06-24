@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <strong>Doriax Engine</strong> is the continuation of Supernova Engine under a new identity and a broader workflow focused on visual editing, shader generation, and project export.
+  <strong>Doriax Engine</strong> is the continuation of Supernova Engine under a new identity and a broader workflow focused on visual editing, shader authoring, and project export.
 </p>
 
 <p align="center">
@@ -47,9 +47,8 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 - 3D scene editing with cameras, lighting, models, and play mode
 - Animation tools, timeline editing, and bone workflows
 - Integrated code editor and scripting workflow for Lua and C++
+- Custom shaders: fork and edit the built-in Mesh, UI, Points, Lines, and Sky shaders per component, with live recompile in the viewport
 - Shader-aware export pipeline that prepares scenes, assets, scripts, engine files, and compiled shaders
-
-> **Note:** Direct shader manipulation is not fully integrated into the editor yet — this feature is available at the engine/runtime level.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-2d-tilemap.png" alt="Doriax Engine 2D tilemap editor" width="48%">
