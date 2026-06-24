@@ -5,6 +5,7 @@
 #include <filesystem>
 #include "imgui.h"
 #include "external/IconsFontAwesome6.h"
+#include "Vector2.h"
 
 namespace fs = std::filesystem;
 
@@ -47,6 +48,20 @@ namespace doriax::editor{
         }
 
     public:
+        // Square/compact icon button whose glyph is always centered. A plain
+        // button is drawn at the requested size and the icon is painted on top,
+        // centered, so it never clips or shifts when the button is narrower than
+        // the glyph plus frame padding. `strId` should be label-less (e.g. "##foo").
+        inline static bool iconButton(const char* strId, const char* icon, const ImVec2& size){
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            bool pressed = ImGui::Button(strId, size);
+            ImVec2 textSize = ImGui::CalcTextSize(icon);
+            ImGui::GetWindowDrawList()->AddText(
+                ImVec2(pos.x + (size.x - textSize.x) * 0.5f, pos.y + (size.y - textSize.y) * 0.5f),
+                ImGui::GetColorU32(ImGuiCol_Text), icon);
+            return pressed;
+        }
+
         inline static void pathDisplay(const char* id, fs::path path, const Vector2& size = Vector2::ZERO, fs::path basePath = fs::path()){
             ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(50, 50, 50, 255));
             ImGui::BeginChild(id, ImVec2(size.x, size.y), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);

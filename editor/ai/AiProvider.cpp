@@ -1,0 +1,494 @@
+#include "AiProvider.h"
+
+#include "HttpClient.h"
+
+namespace doriax::editor::ai {
+
+// Payload builders / response parsers, implemented at the bottom of this file.
+// OpenAI and OpenAI-compatible share the Chat Completions wire format.
+Json buildChatCompletionsPayload(const ProviderRequest& request);
+Json buildAnthropicPayload(const ProviderRequest& request);
+Json buildGeminiPayload(const ProviderRequest& request);
+ProviderResponse parseChatCompletionsBody(const std::string& body);
+ProviderResponse parseAnthropicBody(const std::string& body);
+ProviderResponse parseGeminiBody(const std::string& body);
+
+// Strips JSON Schema keywords Gemini's function-declaration schema rejects (e.g.
+// additionalProperties). Returns a null Json for an empty object schema so the
+// caller can omit the parameters field entirely.
+Json sanitizeGeminiSchema(const Json& schema);
+
+namespace {
+
+Json toolParametersOrObject(const ToolDefinition& tool) {
+    return tool.parameters.is_object() ? tool.parameters : Json::object();
+}
+
+// Tool-call arguments are carried as a JSON object internally but the Chat
+// Completions wire format expects them as a serialized string.
+std::string argumentsToString(const Json& args) {
+    if (args.is_string()) return args.get<std::string>();
+    if (args.is_null()) return "{}";
+    return args.dump();
+}
+
+Json parseArgumentObject(const Json& args) {
+    if (args.is_object()) return args;
+    if (args.is_string()) {
+        try {
+            Json parsed = Json::parse(args.get<std::string>());
+            return parsed.is_object() ? parsed : Json::object();
+        } catch (...) {
+            return Json::object();
+        }
+    }
+    return Json::object();
+}
+
+ProviderResponse parseErrorOrBody(const std::string& body, Json& root) {
+    ProviderResponse result;
+    try {
+        root = Json::parse(body);
+    } catch (const std::exception& e) {
+        result.error = std::string("Invalid JSON response: ") + e.what();
+        return result;
+    }
+
+    if (root.contains("error")) {
+        const Json& error = root["error"];
+        if (error.is_string()) {
+            result.error = error.get<std::string>();
+        } else if (error.contains("message") && error["message"].is_string()) {
+            result.error = error["message"].get<std::string>();
+        }
+    }
+    return result;
+}
+
+// --- Provider adapters ----------------------------------------------------
+
+class OpenAIProvider : public Provider {
+public:
+    ProviderId id() const override { return ProviderId::OpenAI; }
+
+    HttpRequest buildRequest(const ProviderRequest& request) const override {
+        HttpRequest http;
+        http.url = "https://api.openai.com/v1/chat/completions";
+        http.headers = {
+            "Content-Type: application/json",
+            "Authorization: Bearer " + request.apiKey
+        };
+        http.body = buildChatCompletionsPayload(request).dump();
+        return http;
+    }
+
+    ProviderResponse parseResponse(const std::string& body) const override {
+        return parseChatCompletionsBody(body);
+    }
+};
+
+class OpenAICompatibleProvider : public Provider {
+public:
+    ProviderId id() const override { return ProviderId::OpenAICompatible; }
+
+    HttpRequest buildRequest(const ProviderRequest& request) const override {
+        HttpRequest http;
+        http.url = request.settings.customEndpoint.empty()
+            ? "https://openrouter.ai/api/v1/chat/completions"
+            : request.settings.customEndpoint;
+        http.headers = {
+            "Content-Type: application/json",
+            "Authorization: Bearer " + request.apiKey,
+            "HTTP-Referer: https://doriaxengine.org",
+            "X-Title: Doriax Editor"
+        };
+        http.body = buildChatCompletionsPayload(request).dump();
+        return http;
+    }
+
+    ProviderResponse parseResponse(const std::string& body) const override {
+        return parseChatCompletionsBody(body);
+    }
+};
+
+class AnthropicProvider : public Provider {
+public:
+    ProviderId id() const override { return ProviderId::Anthropic; }
+
+    HttpRequest buildRequest(const ProviderRequest& request) const override {
+        HttpRequest http;
+        http.url = "https://api.anthropic.com/v1/messages";
+        http.headers = {
+            "Content-Type: application/json",
+            "x-api-key: " + request.apiKey,
+            "anthropic-version: 2023-06-01"
+        };
+        http.body = buildAnthropicPayload(request).dump();
+        return http;
+    }
+
+    ProviderResponse parseResponse(const std::string& body) const override {
+        return parseAnthropicBody(body);
+    }
+};
+
+class GeminiProvider : public Provider {
+public:
+    ProviderId id() const override { return ProviderId::Gemini; }
+
+    HttpRequest buildRequest(const ProviderRequest& request) const override {
+        HttpRequest http;
+        http.url = "https://generativelanguage.googleapis.com/v1beta/models/" +
+                   request.settings.model + ":generateContent?key=" +
+                   HttpClient::urlEncode(request.apiKey);
+        http.headers = {"Content-Type: application/json"};
+        http.body = buildGeminiPayload(request).dump();
+        return http;
+    }
+
+    ProviderResponse parseResponse(const std::string& body) const override {
+        return parseGeminiBody(body);
+    }
+};
+
+} // namespace
+
+std::unique_ptr<Provider> createProvider(ProviderId provider) {
+    switch (provider) {
+        case ProviderId::Anthropic: return std::make_unique<AnthropicProvider>();
+        case ProviderId::Gemini: return std::make_unique<GeminiProvider>();
+        case ProviderId::OpenAICompatible: return std::make_unique<OpenAICompatibleProvider>();
+        case ProviderId::OpenAI:
+        default: return std::make_unique<OpenAIProvider>();
+    }
+}
+
+// --- Chat Completions (OpenAI + OpenAI-compatible) ------------------------
+
+Json buildChatCompletionsPayload(const ProviderRequest& request) {
+    Json root;
+    root["model"] = request.settings.model;
+    root["max_tokens"] = request.settings.maxOutputTokens;
+
+    Json messages = Json::array();
+    messages.push_back({{"role", "system"}, {"content", request.systemPrompt}});
+
+    for (const auto& message : request.messages) {
+        switch (message.role) {
+            case ChatRole::System:
+                break;
+            case ChatRole::User:
+                messages.push_back({{"role", "user"}, {"content", message.content}});
+                break;
+            case ChatRole::Assistant: {
+                Json item;
+                item["role"] = "assistant";
+                if (message.toolCalls.empty()) {
+                    item["content"] = message.content;
+                } else {
+                    // content may be empty when the turn is purely tool calls.
+                    item["content"] = message.content.empty() ? Json(nullptr) : Json(message.content);
+                    Json toolCalls = Json::array();
+                    for (const auto& call : message.toolCalls) {
+                        toolCalls.push_back({
+                            {"id", call.id},
+                            {"type", "function"},
+                            {"function", {
+                                {"name", call.name},
+                                {"arguments", argumentsToString(call.arguments)}
+                            }}
+                        });
+                    }
+                    item["tool_calls"] = toolCalls;
+                }
+                messages.push_back(item);
+                break;
+            }
+            case ChatRole::Tool:
+                messages.push_back({
+                    {"role", "tool"},
+                    {"tool_call_id", message.toolCallId},
+                    {"content", message.content}
+                });
+                break;
+        }
+    }
+    root["messages"] = messages;
+
+    if (!request.tools.empty()) {
+        Json tools = Json::array();
+        for (const auto& tool : request.tools) {
+            tools.push_back({
+                {"type", "function"},
+                {"function", {
+                    {"name", tool.name},
+                    {"description", tool.description},
+                    {"parameters", toolParametersOrObject(tool)}
+                }}
+            });
+        }
+        root["tools"] = tools;
+        root["tool_choice"] = "auto";
+    }
+    return root;
+}
+
+ProviderResponse parseChatCompletionsBody(const std::string& body) {
+    Json root;
+    ProviderResponse result = parseErrorOrBody(body, root);
+    if (!result.error.empty()) return result;
+
+    if (!root.contains("choices") || !root["choices"].is_array() || root["choices"].empty()) {
+        return result;
+    }
+
+    const Json& message = root["choices"][0].value("message", Json::object());
+    if (message.contains("content") && message["content"].is_string()) {
+        result.text = message["content"].get<std::string>();
+    }
+
+    if (message.contains("tool_calls") && message["tool_calls"].is_array()) {
+        for (const auto& item : message["tool_calls"]) {
+            const Json& fn = item.value("function", Json::object());
+            ToolCall call;
+            call.id = item.value("id", "");
+            call.name = fn.value("name", "");
+            call.arguments = parseArgumentObject(fn.value("arguments", Json::object()));
+            if (!call.name.empty()) result.toolCalls.push_back(call);
+        }
+    }
+    return result;
+}
+
+// --- Anthropic ------------------------------------------------------------
+
+Json buildAnthropicPayload(const ProviderRequest& request) {
+    Json root;
+    root["model"] = request.settings.model;
+    root["system"] = request.systemPrompt;
+    root["max_tokens"] = request.settings.maxOutputTokens;
+
+    Json messages = Json::array();
+    for (size_t i = 0; i < request.messages.size();) {
+        const ChatMessage& message = request.messages[i];
+
+        if (message.role == ChatRole::Tool) {
+            // Merge a run of tool results into a single user message; Anthropic
+            // requires roles to alternate.
+            Json content = Json::array();
+            while (i < request.messages.size() && request.messages[i].role == ChatRole::Tool) {
+                const ChatMessage& tool = request.messages[i];
+                Json block = {
+                    {"type", "tool_result"},
+                    {"tool_use_id", tool.toolCallId},
+                    {"content", tool.content}
+                };
+                if (!tool.toolSuccess) block["is_error"] = true;
+                content.push_back(block);
+                ++i;
+            }
+            messages.push_back({{"role", "user"}, {"content", content}});
+            continue;
+        }
+
+        if (message.role == ChatRole::User) {
+            messages.push_back({
+                {"role", "user"},
+                {"content", Json::array({{{"type", "text"}, {"text", message.content}}})}
+            });
+        } else if (message.role == ChatRole::Assistant) {
+            Json content = Json::array();
+            if (!message.content.empty()) {
+                content.push_back({{"type", "text"}, {"text", message.content}});
+            }
+            for (const auto& call : message.toolCalls) {
+                content.push_back({
+                    {"type", "tool_use"},
+                    {"id", call.id},
+                    {"name", call.name},
+                    {"input", call.arguments.is_object() ? call.arguments : Json::object()}
+                });
+            }
+            if (!content.empty()) {
+                messages.push_back({{"role", "assistant"}, {"content", content}});
+            }
+        }
+        ++i;
+    }
+    root["messages"] = messages;
+
+    if (!request.tools.empty()) {
+        Json tools = Json::array();
+        for (const auto& tool : request.tools) {
+            tools.push_back({
+                {"name", tool.name},
+                {"description", tool.description},
+                {"input_schema", toolParametersOrObject(tool)}
+            });
+        }
+        root["tools"] = tools;
+    }
+    return root;
+}
+
+ProviderResponse parseAnthropicBody(const std::string& body) {
+    Json root;
+    ProviderResponse result = parseErrorOrBody(body, root);
+    if (!result.error.empty()) return result;
+
+    if (!root.contains("content") || !root["content"].is_array()) {
+        return result;
+    }
+    for (const auto& part : root["content"]) {
+        const std::string type = part.value("type", "");
+        if (type == "text" && part.contains("text") && part["text"].is_string()) {
+            if (!result.text.empty()) result.text += "\n";
+            result.text += part["text"].get<std::string>();
+        } else if (type == "tool_use") {
+            ToolCall call;
+            call.id = part.value("id", "");
+            call.name = part.value("name", "");
+            call.arguments = parseArgumentObject(part.value("input", Json::object()));
+            if (!call.name.empty()) result.toolCalls.push_back(call);
+        }
+    }
+    return result;
+}
+
+// --- Gemini ---------------------------------------------------------------
+
+Json sanitizeGeminiSchema(const Json& schema) {
+    if (!schema.is_object()) {
+        return schema;
+    }
+
+    Json out = Json::object();
+    for (auto it = schema.begin(); it != schema.end(); ++it) {
+        const std::string& key = it.key();
+        // Keywords Gemini's OpenAPI subset rejects outright.
+        if (key == "additionalProperties" || key == "$schema" ||
+            key == "additionalItems" || key == "$ref" ||
+            key == "$defs" || key == "definitions") {
+            continue;
+        }
+        // Drop empty "required" arrays; Gemini treats required as optional.
+        if (key == "required" && it->is_array() && it->empty()) {
+            continue;
+        }
+        if (key == "properties" && it->is_object()) {
+            Json props = Json::object();
+            for (auto p = it->begin(); p != it->end(); ++p) {
+                Json child = sanitizeGeminiSchema(p.value());
+                if (!child.is_null()) props[p.key()] = child;
+            }
+            out["properties"] = props;
+        } else if (key == "items") {
+            out["items"] = sanitizeGeminiSchema(it.value());
+        } else {
+            out[key] = it.value();
+        }
+    }
+
+    // An OBJECT schema with no properties confuses Gemini; signal omission.
+    if (out.value("type", "") == "object") {
+        auto props = out.find("properties");
+        if (props == out.end() || (props->is_object() && props->empty())) {
+            return Json(nullptr);
+        }
+    }
+    return out;
+}
+
+Json buildGeminiPayload(const ProviderRequest& request) {
+    Json root;
+    root["system_instruction"] = {{"parts", Json::array({{{"text", request.systemPrompt}}})}};
+
+    Json contents = Json::array();
+    for (size_t i = 0; i < request.messages.size();) {
+        const ChatMessage& message = request.messages[i];
+
+        if (message.role == ChatRole::Tool) {
+            // Merge a run of tool results into a single user turn.
+            Json parts = Json::array();
+            while (i < request.messages.size() && request.messages[i].role == ChatRole::Tool) {
+                const ChatMessage& tool = request.messages[i];
+                parts.push_back({{"functionResponse", {
+                    {"name", tool.toolName},
+                    {"response", {{"result", tool.content}}}
+                }}});
+                ++i;
+            }
+            contents.push_back({{"role", "user"}, {"parts", parts}});
+            continue;
+        }
+
+        if (message.role == ChatRole::User) {
+            contents.push_back({
+                {"role", "user"},
+                {"parts", Json::array({{{"text", message.content}}})}
+            });
+        } else if (message.role == ChatRole::Assistant) {
+            Json parts = Json::array();
+            if (!message.content.empty()) {
+                parts.push_back({{"text", message.content}});
+            }
+            for (const auto& call : message.toolCalls) {
+                parts.push_back({{"functionCall", {
+                    {"name", call.name},
+                    {"args", call.arguments.is_object() ? call.arguments : Json::object()}
+                }}});
+            }
+            if (!parts.empty()) {
+                contents.push_back({{"role", "model"}, {"parts", parts}});
+            }
+        }
+        ++i;
+    }
+    root["contents"] = contents;
+
+    if (!request.tools.empty()) {
+        Json declarations = Json::array();
+        for (const auto& tool : request.tools) {
+            Json decl = {{"name", tool.name}, {"description", tool.description}};
+            Json params = sanitizeGeminiSchema(toolParametersOrObject(tool));
+            if (!params.is_null()) decl["parameters"] = params;
+            declarations.push_back(decl);
+        }
+        root["tools"] = Json::array({{{"function_declarations", declarations}}});
+    }
+
+    root["generationConfig"] = {{"maxOutputTokens", request.settings.maxOutputTokens}};
+    return root;
+}
+
+ProviderResponse parseGeminiBody(const std::string& body) {
+    Json root;
+    ProviderResponse result = parseErrorOrBody(body, root);
+    if (!result.error.empty()) return result;
+
+    if (!root.contains("candidates") || !root["candidates"].is_array() || root["candidates"].empty()) {
+        return result;
+    }
+    const Json& parts = root["candidates"][0].value("content", Json::object()).value("parts", Json::array());
+    if (!parts.is_array()) {
+        return result;
+    }
+    for (const auto& part : parts) {
+        if (part.contains("text") && part["text"].is_string()) {
+            if (!result.text.empty()) result.text += "\n";
+            result.text += part["text"].get<std::string>();
+        }
+        if (part.contains("functionCall")) {
+            const Json& fn = part["functionCall"];
+            ToolCall call;
+            // Gemini matches function responses by name, so reuse it as the id.
+            call.id = fn.value("name", "");
+            call.name = fn.value("name", "");
+            call.arguments = parseArgumentObject(fn.value("args", Json::object()));
+            if (!call.name.empty()) result.toolCalls.push_back(call);
+        }
+    }
+    return result;
+}
+
+} // namespace doriax::editor::ai

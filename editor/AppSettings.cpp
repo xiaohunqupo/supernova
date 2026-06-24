@@ -21,6 +21,7 @@ int AppSettings::resourcesLayout = 0;
 int AppSettings::resourcesItemViewStyle = 1;
 float AppSettings::resourcesLeftPanelWidth = 200.0f;
 float AppSettings::codeEditorFontSize = AppSettings::defaultCodeEditorFontSize;
+ai::Settings AppSettings::aiSettings;
 
 bool AppSettings::initialize() {
     // Get config file path in the application directory
@@ -123,6 +124,19 @@ bool AppSettings::loadSettings() {
             }
         }
 
+        // Load AI assistant settings (no API keys)
+        if (settingsData["ai_assistant"]) {
+            auto aiNode = settingsData["ai_assistant"];
+            if (aiNode["provider"]) aiSettings.provider = ai::providerFromString(aiNode["provider"].as<std::string>());
+            if (aiNode["model"]) aiSettings.model = aiNode["model"].as<std::string>();
+            if (aiNode["custom_endpoint"]) aiSettings.customEndpoint = aiNode["custom_endpoint"].as<std::string>();
+            if (aiNode["approval_mode"]) aiSettings.approvalMode = ai::approvalModeFromString(aiNode["approval_mode"].as<std::string>());
+            if (aiNode["max_output_tokens"]) aiSettings.maxOutputTokens = aiNode["max_output_tokens"].as<int>();
+            if (aiSettings.model.empty()) {
+                aiSettings.model = ai::defaultModelForProvider(aiSettings.provider);
+            }
+        }
+
         return true;
     } catch (const std::exception& e) {
         Out::error("Failed to load settings: %s", e.what());
@@ -177,6 +191,15 @@ bool AppSettings::saveSettings() {
         YAML::Node codeNode;
         codeNode["font_size"] = codeEditorFontSize;
         settingsData["code_editor"] = codeNode;
+
+        // AI assistant settings. Secrets must never be serialized here.
+        YAML::Node aiNode;
+        aiNode["provider"] = ai::toString(aiSettings.provider);
+        aiNode["model"] = aiSettings.model;
+        aiNode["custom_endpoint"] = aiSettings.customEndpoint;
+        aiNode["approval_mode"] = ai::toString(aiSettings.approvalMode);
+        aiNode["max_output_tokens"] = aiSettings.maxOutputTokens;
+        settingsData["ai_assistant"] = aiNode;
 
         // Save to file
         std::ofstream fout(configFilePath.string());
@@ -321,6 +344,18 @@ float AppSettings::getCodeEditorFontSize() {
 
 void AppSettings::setCodeEditorFontSize(float size) {
     codeEditorFontSize = std::clamp(size, minCodeEditorFontSize, maxCodeEditorFontSize);
+}
+
+ai::Settings AppSettings::getAiSettings() {
+    return aiSettings;
+}
+
+void AppSettings::setAiSettings(const ai::Settings& settings) {
+    aiSettings = settings;
+    if (aiSettings.model.empty()) {
+        aiSettings.model = ai::defaultModelForProvider(aiSettings.provider);
+    }
+    saveSettings();
 }
 
 } // namespace doriax::editor

@@ -14,6 +14,7 @@
 #include "window/CodeEditor.h"
 #include "window/AnimationWindow.h"
 #include "window/TerrainEditWindow.h"
+#include "window/AiChatWindow.h"
 
 #include "window/LoadingWindow.h"
 
@@ -76,6 +77,7 @@ namespace doriax::editor{
         ResourcesWindow* resourcesWindow;
         AnimationWindow* animationWindow;
         TerrainEditWindow* terrainEditWindow;
+        AiChatWindow* aiChatWindow;
 
         LoadingWindow* loadingWindow;
 
@@ -115,7 +117,8 @@ namespace doriax::editor{
             None,
             AnySceneWindow, // Represents any of the scene-related windows (Scene, Properties, Structure)
             Resources,
-            Code
+            Code,
+            AI
         } lastFocusedWindow;
 
         void saveFunc();

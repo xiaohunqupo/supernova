@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include "ai/AiTypes.h"
 #include "yaml-cpp/yaml.h"
 
 namespace doriax::editor {
@@ -35,6 +36,9 @@ private:
 
     // Code editor settings
     static float codeEditorFontSize;
+
+    // AI assistant settings (API keys are intentionally not stored here)
+    static ai::Settings aiSettings;
 
     // Private methods
     static void ensureConfigDirectory();
@@ -87,6 +91,10 @@ public:
 
     static float getCodeEditorFontSize();
     static void setCodeEditorFontSize(float size);
+
+    // AI assistant settings
+    static ai::Settings getAiSettings();
+    static void setAiSettings(const ai::Settings& settings);
 
     // Load and save settings
     static bool loadSettings();

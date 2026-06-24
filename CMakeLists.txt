@@ -42,6 +42,14 @@ set(EDITOR_DIR editor)
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_package(CURL QUIET)
+if(NOT CURL_FOUND)
+    find_program(DORIAX_CURL_EXECUTABLE curl)
+    if(NOT DORIAX_CURL_EXECUTABLE)
+        message(FATAL_ERROR "Doriax AI assistant requires either libcurl development files or the curl command-line tool.")
+    endif()
+    message(STATUS "libcurl development files not found; AI HTTP client will use curl CLI fallback: ${DORIAX_CURL_EXECUTABLE}")
+endif()
 
 set(BACKEND_SOURCES)
 set(BACKEND_LIBS)
@@ -128,6 +136,7 @@ add_custom_command(
 include_directories (${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories (${DORIAX_ROOT}/libs/sokol)
+include_directories (${DORIAX_ROOT}/libs/json)
 include_directories (${DORIAX_ROOT}/libs/lua)
 include_directories (${DORIAX_ROOT}/libs/luabridge3)
 include_directories (${DORIAX_ROOT}/libs/box2d/include)
@@ -197,6 +206,15 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/Stream.cpp
     ${EDITOR_DIR}/Exporter.cpp
 
+    ${EDITOR_DIR}/ai/AiPathUtils.cpp
+    ${EDITOR_DIR}/ai/AiProvider.cpp
+    ${EDITOR_DIR}/ai/AiService.cpp
+    ${EDITOR_DIR}/ai/AiTypes.cpp
+    ${EDITOR_DIR}/ai/EditorActionExecutor.cpp
+    ${EDITOR_DIR}/ai/EditorActionRegistry.cpp
+    ${EDITOR_DIR}/ai/HttpClient.cpp
+    ${EDITOR_DIR}/ai/SecretStore.cpp
+
     ${EDITOR_DIR}/util/ShaderHeaderBuilder.cpp
     ${EDITOR_DIR}/util/GraphicUtils.cpp
     ${EDITOR_DIR}/util/CameraTextureLink.cpp
@@ -215,6 +233,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/window/CodeEditor.cpp
     ${EDITOR_DIR}/window/AnimationWindow.cpp
     ${EDITOR_DIR}/window/TerrainEditWindow.cpp
+    ${EDITOR_DIR}/window/AiChatWindow.cpp
     ${EDITOR_DIR}/window/LoadingWindow.cpp
     ${EDITOR_DIR}/window/dialog/SceneSaveDialog.cpp
     ${EDITOR_DIR}/window/dialog/ComponentAddDialog.cpp
@@ -223,8 +242,10 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/window/dialog/TextureSlicerToolDialog.cpp
     ${EDITOR_DIR}/window/dialog/ExportWindow.cpp
     ${EDITOR_DIR}/window/dialog/ProjectSettingsWindow.cpp
+    ${EDITOR_DIR}/window/dialog/AiSettingsWindow.cpp
     ${EDITOR_DIR}/window/widget/CustomTextEditor.cpp
     ${EDITOR_DIR}/window/widget/SemanticSuggestions.cpp
+    ${EDITOR_DIR}/window/widget/SelectableTextView.cpp
 
     ${EDITOR_DIR}/render/ToolsLayer.cpp
     ${EDITOR_DIR}/render/UILayer.cpp
@@ -301,6 +322,12 @@ function(configure_doriax_editor_target target_name)
         nfd
         yaml-cpp
     )
+
+    if(CURL_FOUND)
+        target_link_libraries(${target_name} PRIVATE CURL::libcurl)
+    else()
+        target_compile_definitions(${target_name} PRIVATE DORIAX_AI_USE_CURL_CLI)
+    endif()
 
     set_target_properties(
         ${target_name}

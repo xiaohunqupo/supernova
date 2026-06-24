@@ -58,6 +58,7 @@ editor::App::App(){
     loadingWindow = new LoadingWindow();
     animationWindow = new AnimationWindow(&project);
     terrainEditWindow = new TerrainEditWindow(&project);
+    aiChatWindow = new AiChatWindow(&project, resourcesWindow);
 
     isInitialized = false;
     dockspaceNeedsRebuild = false;
@@ -264,6 +265,9 @@ void editor::App::showMenu(){
             } else if (lastFocusedWindow == LastFocusedWindow::Code) {
                 canUndo = codeEditor->canUndoLastFocused();
                 canRedo = codeEditor->canRedoLastFocused();
+            } else if (lastFocusedWindow == LastFocusedWindow::AI) {
+                canUndo = false;
+                canRedo = false;
             } else {
                 canUndo = CommandHandle::get(project.getSelectedSceneId())->canUndo();
                 canRedo = CommandHandle::get(project.getSelectedSceneId())->canRedo();
@@ -276,7 +280,7 @@ void editor::App::showMenu(){
                     resourcesWindow->refreshCurrentDirectory();
                 } else if (lastFocusedWindow == LastFocusedWindow::Code) {
                     codeEditor->undoLastFocused();
-                } else {
+                } else if (lastFocusedWindow != LastFocusedWindow::AI) {
                     CommandHandle::get(project.getSelectedSceneId())->undo();
                 }
             }
@@ -288,7 +292,7 @@ void editor::App::showMenu(){
                     resourcesWindow->refreshCurrentDirectory();
                 } else if (lastFocusedWindow == LastFocusedWindow::Code) {
                     codeEditor->redoLastFocused();
-                } else {
+                } else if (lastFocusedWindow != LastFocusedWindow::AI) {
                     CommandHandle::get(project.getSelectedSceneId())->redo();
                 }
             }
@@ -326,6 +330,11 @@ void editor::App::showMenu(){
                 terrainEditWindow->setOpen(terrainOpen);
             }
 
+            bool aiChatOpen = aiChatWindow->isOpen();
+            if (ImGui::MenuItem(AiChatWindow::WINDOW_NAME, nullptr, &aiChatOpen)) {
+                aiChatWindow->setOpen(aiChatOpen);
+            }
+
             ImGui::Separator();
             if (ImGui::MenuItem("Reset Layout")) {
                 structureWindow->setOpen(true);
@@ -333,6 +342,7 @@ void editor::App::showMenu(){
                 resourcesWindow->setOpen(true);
                 outputWindow->setOpen(true);
                 animationWindow->setOpen(true);
+                aiChatWindow->setOpen(true);
                 buildDockspace(true);
             }
             ImGui::EndMenu();
@@ -689,6 +699,7 @@ void editor::App::buildDefaultLayout(){
     ImGui::DockBuilderSplitNode(dock_id_middle, ImGuiDir_Right, 0.0f, &dock_id_right, &dock_id_middle);
     ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(19*ImGui::GetFontSize(), viewport.y));
     ImGui::DockBuilderDockWindow(Properties::WINDOW_NAME, dock_id_right);
+    ImGui::DockBuilderDockWindow(AiChatWindow::WINDOW_NAME, dock_id_right);
 
     // Output/Animation across the bottom; scenes fill the remaining centre.
     ImGui::DockBuilderSplitNode(dock_id_middle, ImGuiDir_Down, 0.0f, &dock_id_middle_bottom, &dock_id_middle_top);
@@ -924,6 +935,8 @@ void editor::App::show(){
         lastFocusedWindow = LastFocusedWindow::Resources;
     } else if (codeEditor->isFocused()) {
         lastFocusedWindow = LastFocusedWindow::Code;
+    } else if (aiChatWindow->isFocused()) {
+        lastFocusedWindow = LastFocusedWindow::AI;
     }else{
         lastFocusedWindow = LastFocusedWindow::AnySceneWindow;
     }
@@ -986,7 +999,7 @@ void editor::App::show(){
         // space to keys events
     }
 
-    if (!resourcesWindow->isFocused() && !codeEditor->isFocused()){
+    if (!resourcesWindow->isFocused() && !codeEditor->isFocused() && !aiChatWindow->isFocused()){
         uint32_t sceneId = project.getSelectedSceneId();
 
         // Update the Undo and Redo button logic:
@@ -1129,6 +1142,7 @@ void editor::App::show(){
     outputWindow->show();
     animationWindow->show();
     terrainEditWindow->show();
+    aiChatWindow->show();
     propertiesWindow->show();
     codeEditor->show();
     sceneWindow->show();
