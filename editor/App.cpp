@@ -682,6 +682,7 @@ void editor::App::buildDockspace(bool resetLayout){
 void editor::App::buildDefaultLayout(){
     const ImVec2 viewport = ImGui::GetMainViewport()->Size;
     ImGuiID dock_id_left, dock_id_left_top, dock_id_left_bottom, dock_id_right, dock_id_middle, dock_id_middle_bottom;
+    // dock_id_middle_top is a member: dockTabWindow() reads it after this runs.
 
     ImGui::DockBuilderRemoveNode(dockspace_id);
     ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
@@ -702,6 +703,18 @@ void editor::App::buildDefaultLayout(){
     ImGui::DockBuilderDockWindow(Properties::WINDOW_NAME, dock_id_right);
     ImGui::DockBuilderDockWindow(AiChatWindow::WINDOW_NAME, dock_id_right);
 
+    auto stampPanelDockOrder = [](const char* windowName, short order) {
+        ImGuiID windowId = ImHashStr(windowName);
+        ImGuiWindowSettings* settings = ImGui::FindWindowSettingsByID(windowId);
+        if (!settings) settings = ImGui::CreateNewWindowSettings(windowName);
+        settings->DockOrder = order;
+        if (ImGuiWindow* window = ImGui::FindWindowByName(windowName)) {
+            window->DockOrder = order;
+        }
+    };
+    stampPanelDockOrder(Properties::WINDOW_NAME, 0);
+    stampPanelDockOrder(AiChatWindow::WINDOW_NAME, 1);
+
     // Output/Animation across the bottom; scenes fill the remaining centre.
     ImGui::DockBuilderSplitNode(dock_id_middle, ImGuiDir_Down, 0.0f, &dock_id_middle_bottom, &dock_id_middle_top);
     ImGui::DockBuilderSetNodeSize(dock_id_middle_bottom, ImVec2(viewport.x, 10*ImGui::GetFontSize()));
@@ -719,28 +732,52 @@ void editor::App::buildDefaultLayout(){
 void editor::App::dockProjectTabs(){
     // Re-open code tabs and dock scenes in their saved order. dockTabWindow()
     // leaves already-known windows where the ini put them (unless resetting).
-    for (const auto& tab : project.getTabs()) {
-        if (tab.type == TabType::SCENE) {
-            for (auto& sceneProject : project.getScenes()) {
-                if (sceneProject.opened && sceneProject.filepath.string() == tab.filepath) {
-                    addNewSceneToDock(sceneProject.id);
-                    break;
-                }
-            }
-        } else if (tab.type == TabType::CODE_EDITOR) {
-            fs::path fullPath = project.getProjectPath() / tab.filepath;
-            if (fs::exists(fullPath)) {
-                codeEditor->openFile(tab.filepath);
-            }
-        }
-    }
+    const std::vector<TabEntry>& tabs = project.getTabs();
 
-    // Dock any opened scenes that weren't in tabs (fallback).
-    for (auto& sceneProject : project.getScenes()) {
-        if (!sceneProject.opened) continue;
-        if (!project.hasTab(TabType::SCENE, sceneProject.filepath.string())) {
-            addNewSceneToDock(sceneProject.id);
+    auto dockSceneTab = [&](const TabEntry& tab) {
+        for (auto& sceneProject : project.getScenes()) {
+            if (sceneProject.opened && sceneProject.filepath.string() == tab.filepath) {
+                addNewSceneToDock(sceneProject.id);
+                break;
+            }
         }
+    };
+
+    auto dockCodeTab = [&](const TabEntry& tab) {
+        fs::path fullPath = project.getProjectPath() / tab.filepath;
+        if (fs::exists(fullPath)) {
+            if (!codeEditor->isFileOpen(tab.filepath)) {
+                codeEditor->openFile(tab.filepath);
+            } else {
+                dockTabWindow("###" + tab.filepath);
+            }
+        }
+    };
+
+    auto dockOrphanScenes = [&]() {
+        for (auto& sceneProject : project.getScenes()) {
+            if (!sceneProject.opened) continue;
+            if (!project.hasTab(TabType::SCENE, sceneProject.filepath.string())) {
+                addNewSceneToDock(sceneProject.id);
+            }
+        }
+    };
+
+    if (forceDockTabs) {
+        // Reset layout: scenes first, then code editors.
+        for (const auto& tab : tabs) {
+            if (tab.type == TabType::SCENE) dockSceneTab(tab);
+        }
+        dockOrphanScenes();
+        for (const auto& tab : tabs) {
+            if (tab.type == TabType::CODE_EDITOR) dockCodeTab(tab);
+        }
+    } else {
+        for (const auto& tab : tabs) {
+            if (tab.type == TabType::SCENE) dockSceneTab(tab);
+            else if (tab.type == TabType::CODE_EDITOR) dockCodeTab(tab);
+        }
+        dockOrphanScenes();
     }
 
     // Make the saved tab list authoritative for tab ordering. Scene window ids
@@ -752,13 +789,35 @@ void editor::App::dockProjectTabs(){
     // DockOrder when it is created, and tabs appearing on the same frame are
     // sorted by it.
     short dockOrder = 0;
-    for (const auto& tab : project.getTabs()) {
-        const std::string windowName = tabWindowName(tab);
-        if (windowName.empty()) continue;
+    auto stampDockOrder = [&](const std::string& windowName) {
+        if (windowName.empty()) return;
         ImGuiID windowId = ImHashStr(windowName.c_str());
         ImGuiWindowSettings* settings = ImGui::FindWindowSettingsByID(windowId);
         if (!settings) settings = ImGui::CreateNewWindowSettings(windowName.c_str());
-        settings->DockOrder = dockOrder++;
+        settings->DockOrder = dockOrder;
+        if (ImGuiWindow* window = ImGui::FindWindowByName(windowName.c_str())) {
+            window->DockOrder = dockOrder;
+        }
+        dockOrder++;
+    };
+
+    if (forceDockTabs) {
+        for (const auto& tab : tabs) {
+            if (tab.type == TabType::SCENE) stampDockOrder(tabWindowName(tab));
+        }
+        for (auto& sceneProject : project.getScenes()) {
+            if (!sceneProject.opened) continue;
+            if (!project.hasTab(TabType::SCENE, sceneProject.filepath.string())) {
+                stampDockOrder("###Scene" + std::to_string(sceneProject.id));
+            }
+        }
+        for (const auto& tab : tabs) {
+            if (tab.type == TabType::CODE_EDITOR) stampDockOrder(tabWindowName(tab));
+        }
+    } else {
+        for (const auto& tab : tabs) {
+            stampDockOrder(tabWindowName(tab));
+        }
     }
 }
 
@@ -821,11 +880,12 @@ void editor::App::captureTabOrder() {
     }
 }
 
-void editor::App::dockTabWindow(const std::string& windowName){
+void editor::App::dockTabWindow(const std::string& windowName, bool force){
     // Auto-dock only a window the layout ini has never seen, so we never override
     // a position the user chose (docked or intentionally floating). A layout reset
-    // (forceDockTabs) overrides this and snaps every tab back to the default slot.
-    if (forceDockTabs || !ImGui::FindWindowSettingsByID(ImHashStr(windowName.c_str()))) {
+    // (forceDockTabs) and explicit user opens (force) snap the tab to the centre.
+    if (force || forceDockTabs || !ImGui::FindWindowSettingsByID(ImHashStr(windowName.c_str()))) {
+        dock_id_middle_top = getCentralDockId();
         ImGui::DockBuilderDockWindow(windowName.c_str(), dock_id_middle_top);
     }
 }
@@ -1143,8 +1203,8 @@ void editor::App::show(){
     outputWindow->show();
     animationWindow->show();
     terrainEditWindow->show();
-    aiChatWindow->show();
     propertiesWindow->show();
+    aiChatWindow->show();
     codeEditor->show();
     sceneWindow->show();
 
@@ -1324,9 +1384,9 @@ void editor::App::prepareForProjectSwitch() {
     dockspaceNeedsRebuild = true;
 }
 
-void editor::App::addNewCodeWindowToDock(fs::path path){
+void editor::App::addNewCodeWindowToDock(fs::path path, bool force){
     if (isInitialized){
-        dockTabWindow("###" + path.string());
+        dockTabWindow("###" + path.string(), force);
     }
 }
 

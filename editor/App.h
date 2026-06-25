@@ -133,7 +133,7 @@ namespace doriax::editor{
         void buildDockspace(bool resetLayout = false);
         void buildDefaultLayout();
         void dockProjectTabs();
-        void dockTabWindow(const std::string& windowName);
+        void dockTabWindow(const std::string& windowName, bool force = false);
         void captureTabOrder();
         std::string tabWindowName(const TabEntry& tab) const;
         ImGuiID getCentralDockId();
@@ -176,7 +176,7 @@ namespace doriax::editor{
         void engineShutdown();
 
         void addNewSceneToDock(uint32_t sceneId) override;
-        void addNewCodeWindowToDock(fs::path path);
+        void addNewCodeWindowToDock(fs::path path, bool force = false);
         void clearSceneWindowState(uint32_t sceneId) override;
         void prepareForProjectSwitch() override;
 

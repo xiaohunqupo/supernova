@@ -4520,8 +4520,8 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
     };
     auto openInEditor = [&](const std::string& base) {
         if (CodeEditor* codeEditor = Backend::getApp().getCodeEditor()) {
-            codeEditor->openFile((project->getProjectPath() / (base + ".frag")).string());
-            codeEditor->openFile((project->getProjectPath() / (base + ".vert")).string());
+            codeEditor->openFile((project->getProjectPath() / (base + ".frag")).string(), true);
+            codeEditor->openFile((project->getProjectPath() / (base + ".vert")).string(), true);
         }
     };
 
@@ -7270,7 +7270,7 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
             bool hdrExists = hasHeader && std::filesystem::exists(hdrPath);
             ImGui::BeginDisabled(!hdrExists);
             if (ImGui::Button((ICON_FA_FILE_LINES "##open_hdr_" + std::to_string(scriptIdx)).c_str())) {
-                Backend::getApp().getCodeEditor()->openFile(hdrPath.string());
+                Backend::getApp().getCodeEditor()->openFile(hdrPath.string(), true);
             }
             if (ImGui::IsItemHovered()) {
                 if (hdrExists){
@@ -7289,7 +7289,7 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
             bool srcExists = !script.path.empty() && std::filesystem::exists(srcPath);
             ImGui::BeginDisabled(!srcExists);
             if (ImGui::Button((ICON_FA_FILE_CODE "##open_src_" + std::to_string(scriptIdx)).c_str())) {
-                Backend::getApp().getCodeEditor()->openFile(srcPath.string());
+                Backend::getApp().getCodeEditor()->openFile(srcPath.string(), true);
             }
             if (ImGui::IsItemHovered()) {
                 if (srcExists){

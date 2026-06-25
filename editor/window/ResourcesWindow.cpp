@@ -550,7 +550,7 @@ void editor::ResourcesWindow::renderFileListing(bool showDirectories){
                     if (extension == ".scene")
                         project->openScene(currentPath / file.name);
                     else
-                        codeEditor->openFile((currentPath / file.name).string());
+                        codeEditor->openFile((currentPath / file.name).string(), true);
                 }
             }
 

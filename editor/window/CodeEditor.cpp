@@ -1134,11 +1134,14 @@ bool editor::CodeEditor::hasLastFocusedUnsavedChanges() const {
     return false;
 }
 
-void editor::CodeEditor::openFile(const std::string& filepath) {
+void editor::CodeEditor::openFile(const std::string& filepath, bool dockToCentral) {
     std::string key = toRelativePath(filepath);
 
     auto it = editors.find(key);
     if (it != editors.end()) {
+        if (dockToCentral) {
+            Backend::getApp().addNewCodeWindowToDock(it->second.filepath, true);
+        }
         // File already open - set this window as focused for the next frame
         ImGui::SetWindowFocus(getWindowTitle(it->second).c_str());
         return;
@@ -1193,7 +1196,7 @@ void editor::CodeEditor::openFile(const std::string& filepath) {
     project->addTab(TabType::CODE_EDITOR, key);
     project->saveProjectFile();
 
-    Backend::getApp().addNewCodeWindowToDock(instance.filepath);
+    Backend::getApp().addNewCodeWindowToDock(instance.filepath, dockToCentral);
 
     updateAllProjectSymbols();
 }

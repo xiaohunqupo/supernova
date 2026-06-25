@@ -90,7 +90,7 @@ namespace doriax::editor {
         bool hasUnsavedChanges() const;
         bool hasLastFocusedUnsavedChanges() const;
 
-        void openFile(const std::string& filepath);
+        void openFile(const std::string& filepath, bool dockToCentral = false);
         void closeFile(const std::string& filepath);
         bool isFileOpen(const std::string& filepath) const;
         void setText(const std::string& filepath, const std::string& text);
