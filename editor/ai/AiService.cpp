@@ -221,6 +221,7 @@ std::string AiService::buildSystemPrompt() const {
         << "You answer questions and drive the editor through the provided tools. The engine layer is not aware of you.\n"
         << "Call tools only when they help the user's explicit goal, and never invent tool names.\n"
         << "Read-only tools inspect project context. Mutating, file-writing, download, and import tools may require user approval before they run.\n"
+        << "Use read_resource_file before editing existing scripts or materials. Use inspect_scene for scene-level settings.\n"
         << "After a tool returns, use its result to decide the next step and report concise progress to the user.\n"
         << "Prefer project-relative paths. Never request arbitrary shell commands. Never ask for secrets in chat.\n"
         << "For external assets, use curated sources only and preserve license/author/source attribution.\n"

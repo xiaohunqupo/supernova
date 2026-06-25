@@ -17,6 +17,8 @@
 #include "component/ScriptComponent.h"
 #include "component/TerrainComponent.h"
 #include "command/CommandHandle.h"
+#include "command/CommandHistory.h"
+#include "component/CameraComponent.h"
 #include "command/type/AddChildSceneCmd.h"
 #include "command/type/AddComponentCmd.h"
 #include "command/type/AddEntityToBundleCmd.h"
@@ -45,7 +47,14 @@
 #include "command/type/SceneNameCmd.h"
 #include "command/type/ScenePropertyCmd.h"
 #include "command/type/SetChildSceneStartActiveCmd.h"
+#include "command/type/SetMainCameraCmd.h"
+#include "command/type/MeshChangeCmd.h"
 #include "command/type/UnlinkMaterialCmd.h"
+#include "component/AnimationComponent.h"
+#include "component/KeyframeTracksComponent.h"
+#include "component/TilemapComponent.h"
+#include "subsystem/MeshSystem.h"
+#include "util/ShapeParameters.h"
 #include "texture/Texture.h"
 #include "util/Util.h"
 #include "window/ResourcesWindow.h"
@@ -54,6 +63,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <memory>
 #include <random>
@@ -674,6 +684,334 @@ Entity resolveTerrainEntity(Project* project, SceneProject* sceneProject, const 
     return NULL_ENTITY;
 }
 
+bool parseGeometryType(const std::string& name, int& out) {
+    static const std::unordered_map<std::string, int> map = {
+        {"plane", 0}, {"box", 1}, {"sphere", 2}, {"cylinder", 3},
+        {"capsule", 4}, {"torus", 5}, {"wall", 6}
+    };
+    auto it = map.find(lower(name));
+    if (it == map.end()) return false;
+    out = it->second;
+    return true;
+}
+
+bool parseGeometryTypeValue(const Json& args, ShapeParameters& shape, std::string& error) {
+    if (!args.contains("geometry_type")) return true;
+
+    int geometryType = shape.geometryType;
+    if (args["geometry_type"].is_string()) {
+        if (!parseGeometryType(args["geometry_type"].get<std::string>(), geometryType)) {
+            error = "Unsupported geometry_type. Use plane, box, sphere, cylinder, capsule, torus, or wall.";
+            return false;
+        }
+    } else if (args["geometry_type"].is_number_integer()) {
+        geometryType = args["geometry_type"].get<int>();
+        if (geometryType < 0 || geometryType > 6) {
+            error = "geometry_type integer must be between 0 and 6.";
+            return false;
+        }
+    } else {
+        error = "geometry_type must be a string or integer.";
+        return false;
+    }
+
+    shape.geometryType = geometryType;
+    return true;
+}
+
+float clampedFloatArg(const Json& args, const char* key, float current, float minValue, float maxValue) {
+    if (!args.contains(key) || !args[key].is_number()) return current;
+    float value = args[key].get<float>();
+    if (!std::isfinite(value)) return current;
+    return std::clamp(value, minValue, maxValue);
+}
+
+unsigned int clampedUIntArg(const Json& args, const char* key, unsigned int current,
+                            unsigned int minValue, unsigned int maxValue) {
+    if (!args.contains(key) || !args[key].is_number_integer()) return current;
+    int64_t value = args[key].get<int64_t>();
+    if (value < static_cast<int64_t>(minValue)) return minValue;
+    if (value > static_cast<int64_t>(maxValue)) return maxValue;
+    return static_cast<unsigned int>(value);
+}
+
+void applyShapeParameters(const Json& args, ShapeParameters& shape) {
+    constexpr float kMinSize = 0.1f;
+    constexpr float kMaxSize = 100.0f;
+    constexpr unsigned int kMaxSegments = 100;
+
+    shape.planeWidth = clampedFloatArg(args, "plane_width", shape.planeWidth, kMinSize, kMaxSize);
+    shape.planeDepth = clampedFloatArg(args, "plane_depth", shape.planeDepth, kMinSize, kMaxSize);
+    shape.planeTiles = clampedUIntArg(args, "plane_tiles", shape.planeTiles, 1, kMaxSegments);
+    shape.wallWidth = clampedFloatArg(args, "wall_width", shape.wallWidth, kMinSize, kMaxSize);
+    shape.wallHeight = clampedFloatArg(args, "wall_height", shape.wallHeight, kMinSize, kMaxSize);
+    shape.wallTiles = clampedUIntArg(args, "wall_tiles", shape.wallTiles, 1, kMaxSegments);
+    shape.boxWidth = clampedFloatArg(args, "box_width", shape.boxWidth, kMinSize, kMaxSize);
+    shape.boxHeight = clampedFloatArg(args, "box_height", shape.boxHeight, kMinSize, kMaxSize);
+    shape.boxDepth = clampedFloatArg(args, "box_depth", shape.boxDepth, kMinSize, kMaxSize);
+    shape.boxTiles = clampedUIntArg(args, "box_tiles", shape.boxTiles, 1, kMaxSegments);
+    shape.sphereRadius = clampedFloatArg(args, "sphere_radius", shape.sphereRadius, kMinSize, kMaxSize);
+    shape.sphereSlices = clampedUIntArg(args, "sphere_slices", shape.sphereSlices, 3, kMaxSegments);
+    shape.sphereStacks = clampedUIntArg(args, "sphere_stacks", shape.sphereStacks, 3, kMaxSegments);
+    shape.cylinderBaseRadius = clampedFloatArg(args, "cylinder_base_radius", shape.cylinderBaseRadius, kMinSize, kMaxSize);
+    shape.cylinderTopRadius = clampedFloatArg(args, "cylinder_top_radius", shape.cylinderTopRadius, kMinSize, kMaxSize);
+    shape.cylinderHeight = clampedFloatArg(args, "cylinder_height", shape.cylinderHeight, kMinSize, kMaxSize);
+    shape.cylinderSlices = clampedUIntArg(args, "cylinder_slices", shape.cylinderSlices, 3, kMaxSegments);
+    shape.cylinderStacks = clampedUIntArg(args, "cylinder_stacks", shape.cylinderStacks, 1, kMaxSegments);
+    shape.capsuleBaseRadius = clampedFloatArg(args, "capsule_base_radius", shape.capsuleBaseRadius, kMinSize, kMaxSize);
+    shape.capsuleTopRadius = clampedFloatArg(args, "capsule_top_radius", shape.capsuleTopRadius, kMinSize, kMaxSize);
+    shape.capsuleHeight = clampedFloatArg(args, "capsule_height", shape.capsuleHeight, kMinSize, kMaxSize);
+    shape.capsuleSlices = clampedUIntArg(args, "capsule_slices", shape.capsuleSlices, 3, kMaxSegments);
+    shape.capsuleStacks = clampedUIntArg(args, "capsule_stacks", shape.capsuleStacks, 1, kMaxSegments);
+    shape.torusRadius = clampedFloatArg(args, "torus_radius", shape.torusRadius, kMinSize, kMaxSize);
+    shape.torusRingRadius = clampedFloatArg(args, "torus_ring_radius", shape.torusRingRadius, kMinSize, kMaxSize);
+    shape.torusSides = clampedUIntArg(args, "torus_sides", shape.torusSides, 3, kMaxSegments);
+    shape.torusRings = clampedUIntArg(args, "torus_rings", shape.torusRings, 3, kMaxSegments);
+}
+
+void updateMeshShape(MeshComponent& meshComp, MeshSystem* meshSys, const ShapeParameters& shapeParams) {
+    switch (shapeParams.geometryType) {
+        case 0:
+            meshSys->createPlane(meshComp, shapeParams.planeWidth, shapeParams.planeDepth, shapeParams.planeTiles);
+            break;
+        case 1:
+            meshSys->createBox(meshComp, shapeParams.boxWidth, shapeParams.boxHeight, shapeParams.boxDepth, shapeParams.boxTiles);
+            break;
+        case 2:
+            meshSys->createSphere(meshComp, shapeParams.sphereRadius, shapeParams.sphereSlices, shapeParams.sphereStacks);
+            break;
+        case 3:
+            meshSys->createCylinder(meshComp, shapeParams.cylinderBaseRadius, shapeParams.cylinderTopRadius,
+                                  shapeParams.cylinderHeight, shapeParams.cylinderSlices, shapeParams.cylinderStacks);
+            break;
+        case 4:
+            meshSys->createCapsule(meshComp, shapeParams.capsuleBaseRadius, shapeParams.capsuleTopRadius,
+                                   shapeParams.capsuleHeight, shapeParams.capsuleSlices, shapeParams.capsuleStacks);
+            break;
+        case 5:
+            meshSys->createTorus(meshComp, shapeParams.torusRadius, shapeParams.torusRingRadius,
+                                 shapeParams.torusSides, shapeParams.torusRings);
+            break;
+        case 6:
+            meshSys->createWall(meshComp, shapeParams.wallWidth, shapeParams.wallHeight, shapeParams.wallTiles);
+            break;
+    }
+}
+
+bool isReadableTextResource(const std::string& ext) {
+    static const std::set<std::string> allowed = {
+        ".lua", ".cpp", ".h", ".hpp", ".material", ".scene", ".yaml", ".yml",
+        ".json", ".txt", ".glsl", ".vert", ".frag", ".hlsl", ".md", ".csv", ".ini", ".cfg"
+    };
+    return allowed.count(ext) > 0;
+}
+
+Json sceneReadableProperties(SceneProject* sceneProject) {
+    Scene* scene = sceneProject->scene;
+    Json props = Json::object();
+    props["background_color"] = {{"type", "vector4"}, {"value", vector4Json(Catalog::getSceneProperty<Vector4>(scene, "background_color"))}};
+    props["shadows_pcf"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "shadows_pcf")}};
+    props["global_illumination_color"] = {{"type", "vector3"}, {"value", vector3Json(Catalog::getSceneProperty<Vector3>(scene, "global_illumination_color"))}};
+    props["global_illumination_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "global_illumination_intensity")}};
+    props["light_state"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<LightState>(scene, "light_state"))}};
+    props["ssao_enabled"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "ssao_enabled")}};
+    props["ssao_radius"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssao_radius")}};
+    props["ssao_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssao_intensity")}};
+    props["ssao_bias"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssao_bias")}};
+    props["ssao_debug"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "ssao_debug")}};
+    props["ssr_enabled"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "ssr_enabled")}};
+    props["ssr_max_distance"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssr_max_distance")}};
+    props["ssr_thickness"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssr_thickness")}};
+    props["ssr_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssr_intensity")}};
+    props["ssr_blur"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssr_blur")}};
+    props["ssr_max_steps"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "ssr_max_steps")}};
+    props["ssr_debug_mode"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "ssr_debug_mode")}};
+    return props;
+}
+
+bool readWholeFile(const fs::path& path, std::string& content) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+    content.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return true;
+}
+
+bool writeWholeFile(const fs::path& path, const std::string& content) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) return false;
+    out << content;
+    out.close();
+    return static_cast<bool>(out);
+}
+
+void refreshMaterialEdit(Project* project, ResourcesWindow* resourcesWindow, const fs::path& fullPath) {
+    if (project) {
+        project->refreshLinkedMaterials(true);
+    }
+    if (resourcesWindow) {
+        resourcesWindow->notifyResourceFileChanged(fullPath);
+        resourcesWindow->refreshCurrentDirectory();
+    }
+}
+
+bool normalizeMaterialPayload(const fs::path& rel, const std::string& content,
+                              std::string& normalized, std::string& error) {
+    try {
+        YAML::Node node = YAML::Load(content);
+        if (!node || !node.IsMap()) {
+            error = "Material content must be a YAML map.";
+            return false;
+        }
+
+        Material material = Stream::decodeMaterial(node);
+        material.name = rel.lexically_normal().generic_string();
+        normalized = YAML::Dump(Stream::encodeMaterial(material));
+        return true;
+    } catch (const std::exception& e) {
+        error = std::string("Material content is invalid: ") + e.what();
+        return false;
+    }
+}
+
+uint32_t findSceneByPath(Project* project, const fs::path& relPath) {
+    if (!project) return NULL_PROJECT_SCENE;
+    const fs::path normalized = relPath.lexically_normal();
+    for (const SceneProject& scene : project->getScenes()) {
+        if (scene.filepath.lexically_normal() == normalized) {
+            return scene.id;
+        }
+    }
+    return NULL_PROJECT_SCENE;
+}
+
+class ReplaceMaterialFileCmd : public Command {
+public:
+    ReplaceMaterialFileCmd(Project* project, ResourcesWindow* resourcesWindow,
+                           fs::path fullPath, std::string newContent)
+        : project(project)
+        , resourcesWindow(resourcesWindow)
+        , fullPath(std::move(fullPath))
+        , newContent(std::move(newContent)) {}
+
+    bool execute() override {
+        if (!capturedOldContent) {
+            oldExists = fs::exists(fullPath) && !fs::is_directory(fullPath);
+            if (oldExists && !readWholeFile(fullPath, oldContent)) {
+                return false;
+            }
+            capturedOldContent = true;
+        }
+
+        if (!writeWholeFile(fullPath, newContent)) {
+            return false;
+        }
+
+        refreshMaterialEdit(project, resourcesWindow, fullPath);
+        return true;
+    }
+
+    void undo() override {
+        if (oldExists) {
+            writeWholeFile(fullPath, oldContent);
+        } else {
+            std::error_code ec;
+            fs::remove(fullPath, ec);
+        }
+        refreshMaterialEdit(project, resourcesWindow, fullPath);
+    }
+
+    bool mergeWith(Command*) override {
+        return false;
+    }
+
+private:
+    Project* project;
+    ResourcesWindow* resourcesWindow;
+    fs::path fullPath;
+    std::string newContent;
+    std::string oldContent;
+    bool oldExists = false;
+    bool capturedOldContent = false;
+};
+
+class RemoveProjectSceneCmd : public Command {
+public:
+    RemoveProjectSceneCmd(Project* project, uint32_t sceneId)
+        : project(project)
+        , sceneId(sceneId) {}
+
+    bool execute() override {
+        if (!project || project->isAnyScenePlaying() || project->getScenes().size() <= 1) {
+            return false;
+        }
+
+        uint32_t targetSceneId = sceneId;
+        SceneProject* sceneProject = project->getScene(targetSceneId);
+        if (!sceneProject && !scenePath.empty()) {
+            targetSceneId = findSceneByPath(project, scenePath);
+            sceneProject = project->getScene(targetSceneId);
+        }
+        if (!sceneProject || sceneProject->filepath.empty()) {
+            return false;
+        }
+        if (project->hasSceneUnsavedChanges(sceneProject->id)) {
+            return false;
+        }
+
+        sceneId = targetSceneId;
+        scenePath = sceneProject->filepath.lexically_normal();
+        sceneName = sceneProject->name;
+        wasOpened = sceneProject->opened;
+        previousSelectedScene = project->getSelectedSceneId();
+
+        project->removeScene(sceneId);
+        if (project->getScene(sceneId) || findSceneByPath(project, scenePath) != NULL_PROJECT_SCENE) {
+            return false;
+        }
+
+        if (!project->saveProjectFile()) {
+            restoreScene();
+            return false;
+        }
+
+        removed = true;
+        return true;
+    }
+
+    void undo() override {
+        if (!removed) return;
+        restoreScene();
+    }
+
+    bool mergeWith(Command*) override {
+        return false;
+    }
+
+private:
+    void restoreScene() {
+        if (!project || scenePath.empty()) return;
+        if (findSceneByPath(project, scenePath) == NULL_PROJECT_SCENE) {
+            project->loadScene(scenePath, wasOpened, true, wasOpened);
+        }
+
+        uint32_t restoredSceneId = findSceneByPath(project, scenePath);
+        if (previousSelectedScene != NULL_PROJECT_SCENE && project->getScene(previousSelectedScene)) {
+            project->setSelectedSceneId(previousSelectedScene);
+        } else if (restoredSceneId != NULL_PROJECT_SCENE) {
+            project->setSelectedSceneId(restoredSceneId);
+        }
+        project->saveProjectFile();
+    }
+
+    Project* project;
+    uint32_t sceneId;
+    fs::path scenePath;
+    std::string sceneName;
+    bool wasOpened = false;
+    bool removed = false;
+    uint32_t previousSelectedScene = NULL_PROJECT_SCENE;
+};
+
 } // namespace
 
 EditorActionExecutor::EditorActionExecutor(Project* project, ResourcesWindow* resourcesWindow, const HttpClient* httpClient)
@@ -748,6 +1086,25 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "import_project_model") return importProjectModel(arguments);
     if (name == "search_curated_assets") return searchCuratedAssets(arguments, cancel);
     if (name == "download_curated_asset") return downloadCuratedAsset(arguments, cancel);
+    if (name == "read_resource_file") return readResourceFile(arguments);
+    if (name == "set_main_camera") return setMainCamera(arguments);
+    if (name == "open_scene") return openScene(arguments);
+    if (name == "select_scene") return selectScene(arguments);
+    if (name == "regenerate_mesh_geometry") return regenerateMeshGeometry(arguments);
+    if (name == "delete_scene") return deleteScene(arguments);
+    if (name == "save_project") return saveProject();
+    if (name == "copy_resource") return copyResource(arguments);
+    if (name == "update_material_file") return updateMaterialFile(arguments);
+    if (name == "set_component_properties") return setComponentProperties(arguments);
+    if (name == "inspect_scene") return inspectScene(arguments);
+    if (name == "add_tilemap_tile") return addTilemapTile(arguments);
+    if (name == "remove_tilemap_tile") return removeTilemapTile(arguments);
+    if (name == "duplicate_tilemap_tile") return duplicateTilemapTile(arguments);
+    if (name == "add_animation_action") return addAnimationAction(arguments);
+    if (name == "remove_animation_action") return removeAnimationAction(arguments);
+    if (name == "set_keyframe_times") return setKeyframeTimes(arguments);
+    if (name == "undo_editor") return undoEditor(arguments);
+    if (name == "redo_editor") return redoEditor(arguments);
 
     return failResult("Unknown action.");
 }
@@ -757,6 +1114,7 @@ ActionResult EditorActionExecutor::getProjectSummary() {
     data["name"] = project->getName();
     data["path"] = project->getProjectPath().string();
     data["selected_scene_id"] = project->getSelectedSceneId();
+    data["start_scene_id"] = project->getStartSceneId();
     data["assets_dir"] = project->getAssetsDir().generic_string();
     data["scenes"] = Json::array();
     for (const auto& scene : project->getScenes()) {
@@ -765,6 +1123,9 @@ ActionResult EditorActionExecutor::getProjectSummary() {
             {"name", scene.name},
             {"type", sceneTypeName(scene.sceneType)},
             {"opened", scene.opened},
+            {"modified", scene.isModified},
+            {"main_camera", scene.mainCamera},
+            {"filepath", scene.filepath.generic_string()},
             {"entity_count", scene.entities.size()},
             {"selected_entities", scene.selectedEntities.size()}
         });
@@ -1091,10 +1452,39 @@ ActionResult EditorActionExecutor::selectEntities(const Json& arguments) {
         project->clearSelectedEntities(sceneId);
         return okResult("Cleared selection.");
     }
-    Entity entity = resolveEntity(sceneProject, arguments);
-    if (entity == NULL_ENTITY) return failResult("Entity not found.");
-    project->setSelectedEntity(sceneId, entity);
-    return okResult("Selected entity.", Json{{"scene_id", sceneId}, {"entity_id", entity}});
+
+    std::vector<Entity> selected;
+    if (arguments.contains("entity_ids") && arguments["entity_ids"].is_array()) {
+        for (const Json& idNode : arguments["entity_ids"]) {
+            Json tmp = Json::object();
+            tmp["entity_id"] = idNode;
+            Entity entity = resolveEntity(sceneProject, tmp);
+            if (entity == NULL_ENTITY) return failResult("Entity not found in entity_ids.");
+            selected.push_back(entity);
+        }
+    } else if (arguments.contains("entity_names") && arguments["entity_names"].is_array()) {
+        for (const Json& nameNode : arguments["entity_names"]) {
+            Json tmp = Json::object();
+            tmp["entity_name"] = nameNode;
+            Entity entity = resolveEntity(sceneProject, tmp);
+            if (entity == NULL_ENTITY) return failResult("Entity not found in entity_names.");
+            selected.push_back(entity);
+        }
+    } else {
+        Entity entity = resolveEntity(sceneProject, arguments);
+        if (entity == NULL_ENTITY) return failResult("Entity not found.");
+        selected.push_back(entity);
+    }
+
+    if (selected.empty()) return failResult("No entities to select.");
+    project->clearSelectedEntities(sceneId);
+    for (Entity entity : selected) {
+        project->addSelectedEntity(sceneId, entity);
+    }
+
+    Json ids = Json::array();
+    for (Entity entity : selected) ids.push_back(entity);
+    return okResult("Updated entity selection.", Json{{"scene_id", sceneId}, {"entity_ids", ids}});
 }
 
 ActionResult EditorActionExecutor::addComponent(const Json& arguments) {
@@ -1154,9 +1544,14 @@ ActionResult EditorActionExecutor::createScene(const Json& arguments) {
         return failResult("Unsupported scene type. Use 3d, 2d, or ui.");
     }
 
-    project->createNewScene(arguments.value("name", "Scene"), type);
-    return okResult("Requested new scene creation.", Json{{"name", arguments.value("name", "Scene")},
-                                                          {"type", sceneTypeName(type)}});
+    const std::string requestedName = arguments.value("name", "Scene");
+    project->createNewScene(requestedName, type);
+    const uint32_t sceneId = project->getSelectedSceneId();
+    SceneProject* created = project->getScene(sceneId);
+    const std::string actualName = created ? created->name : requestedName;
+    return okResult("Created new scene.", Json{{"scene_id", sceneId},
+                                               {"name", actualName},
+                                               {"type", sceneTypeName(type)}});
 }
 
 ActionResult EditorActionExecutor::renameScene(const Json& arguments) {
@@ -2235,6 +2630,508 @@ ActionResult EditorActionExecutor::downloadCuratedAsset(const Json& arguments, c
 
     Out::success("AI imported curated asset '%s'", title.c_str());
     return okResult("Downloaded curated asset and recorded attribution.", data);
+}
+
+ActionResult EditorActionExecutor::readResourceFile(const Json& arguments) {
+    std::string error;
+    fs::path rel;
+    if (!safeRelativePath(project, arguments, "path", rel, error, true)) {
+        return failResult(error);
+    }
+
+    const std::string ext = lower(rel.extension().string());
+    if (!isReadableTextResource(ext)) {
+        return failResult("path extension is not supported for read_resource_file.");
+    }
+
+    const fs::path fullPath = project->getProjectPath() / rel;
+    std::ifstream in(fullPath, std::ios::binary);
+    if (!in) return failResult("Failed to open resource file.");
+
+    constexpr size_t kMaxBytes = 512 * 1024;
+    std::string content;
+    content.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    if (content.size() > kMaxBytes) {
+        return failResult("Resource file is too large to read (max 512 KB).");
+    }
+
+    return okResult("Read resource file.",
+                    Json{{"path", rel.lexically_normal().generic_string()},
+                         {"bytes", content.size()},
+                         {"content", content}});
+}
+
+ActionResult EditorActionExecutor::setMainCamera(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity cameraEntity = NULL_ENTITY;
+    if (arguments.value("clear", false)) {
+        cameraEntity = NULL_ENTITY;
+    } else {
+        cameraEntity = resolveEntity(sceneProject, arguments);
+        if (cameraEntity == NULL_ENTITY) return failResult("Camera entity not found.");
+        if (!sceneProject->scene->findComponent<CameraComponent>(cameraEntity)) {
+            return failResult("Entity does not have a Camera component.");
+        }
+    }
+
+    CommandHandle::get(sceneId)->addCommandNoMerge(new SetMainCameraCmd(project, sceneId, cameraEntity));
+    return okResult("Set main camera through the command history.",
+                    Json{{"scene_id", sceneId}, {"main_camera", cameraEntity}});
+}
+
+ActionResult EditorActionExecutor::openScene(const Json& arguments) {
+    std::string error;
+    fs::path rel;
+    if (!safeRelativePath(project, arguments, "scene_path", rel, error, true)) {
+        return failResult(error);
+    }
+    if (!Util::isSceneFile(rel.string())) {
+        return failResult("scene_path must point to a .scene file.");
+    }
+    if (project->isAnyScenePlaying()) {
+        return failResult("Cannot open a scene while play mode is active.");
+    }
+
+    const bool closePrevious = arguments.value("close_previous", false);
+    project->openScene(rel, closePrevious);
+    return okResult("Requested scene open.",
+                    Json{{"scene_path", rel.lexically_normal().generic_string()},
+                         {"selected_scene_id", project->getSelectedSceneId()}});
+}
+
+ActionResult EditorActionExecutor::selectScene(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject) return failResult("Scene not found.");
+    if (!sceneProject->opened) return failResult("Scene is not open. Use open_scene first.");
+
+    project->setSelectedSceneId(sceneId);
+    return okResult("Selected scene tab.", Json{{"scene_id", sceneId}, {"scene_name", sceneProject->name}});
+}
+
+ActionResult EditorActionExecutor::regenerateMeshGeometry(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+    if (!hasComponent(sceneProject->scene, entity, ComponentType::MeshComponent)) {
+        return failResult("Entity has no Mesh component.");
+    }
+
+    MeshComponent meshComp = sceneProject->scene->getComponent<MeshComponent>(entity);
+    bool hasGenerated = false;
+    for (unsigned int i = 0; i < meshComp.numSubmeshes; ++i) {
+        if (meshComp.submeshes[i].generated) {
+            hasGenerated = true;
+            break;
+        }
+    }
+    if (!hasGenerated) {
+        return failResult("Mesh entity has no generated procedural geometry to regenerate.");
+    }
+
+    ShapeParameters shapeParams;
+    std::string geometryError;
+    if (!parseGeometryTypeValue(arguments, shapeParams, geometryError)) {
+        return failResult(geometryError);
+    }
+    applyShapeParameters(arguments, shapeParams);
+
+    std::shared_ptr<MeshSystem> meshSys = sceneProject->scene->getSystem<MeshSystem>();
+    if (!meshSys) return failResult("Mesh system is unavailable.");
+    updateMeshShape(meshComp, meshSys.get(), shapeParams);
+    CommandHandle::get(sceneId)->addCommandNoMerge(new MeshChangeCmd(project, sceneId, entity, meshComp));
+    return okResult("Regenerated mesh geometry through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"geometry_type", shapeParams.geometryType}});
+}
+
+ActionResult EditorActionExecutor::deleteScene(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject) return failResult("Scene not found.");
+    if (project->getScenes().size() <= 1) {
+        return failResult("Cannot delete the last scene in the project.");
+    }
+    if (project->isAnyScenePlaying()) {
+        return failResult("Cannot delete a scene while play mode is active.");
+    }
+    if (sceneProject->filepath.empty()) {
+        return failResult("Cannot delete an unsaved scene through AI because it cannot be restored on undo.");
+    }
+    if (project->hasSceneUnsavedChanges(sceneId)) {
+        return failResult("Save the scene and its dependent resources before deleting it through AI.");
+    }
+
+    const std::string sceneName = sceneProject->name;
+    const fs::path scenePath = sceneProject->filepath.lexically_normal();
+    project->getProjectCommandHistory()->addCommandNoMerge(new RemoveProjectSceneCmd(project, sceneId));
+    if (project->getScene(sceneId) || findSceneByPath(project, scenePath) != NULL_PROJECT_SCENE) {
+        return failResult("Failed to remove scene.");
+    }
+    return okResult("Removed scene from project through the project command history.",
+                    Json{{"removed_scene_id", sceneId}, {"removed_scene_name", sceneName},
+                         {"scene_path", scenePath.generic_string()},
+                         {"selected_scene_id", project->getSelectedSceneId()}});
+}
+
+ActionResult EditorActionExecutor::saveProject() {
+    if (!project->saveProject(false)) {
+        return failResult("Failed to save project.");
+    }
+    return okResult("Saved project.", Json{{"path", project->getProjectPath().string()}});
+}
+
+ActionResult EditorActionExecutor::copyResource(const Json& arguments) {
+    std::string error;
+    fs::path sourceRel;
+    fs::path targetRel;
+    if (!safeRelativePath(project, arguments, "source_path", sourceRel, error, true)) return failResult(error);
+    if (!safeRelativePath(project, arguments, "target_dir", targetRel, error, false)) return failResult(error);
+
+    const fs::path sourceFull = project->getProjectPath() / sourceRel;
+    const fs::path targetFull = project->getProjectPath() / targetRel;
+    if (!fs::exists(sourceFull)) return failResult("source_path does not exist.");
+    std::error_code ec;
+    fs::create_directories(targetFull, ec);
+    if (ec) return failResult("Failed to create target_dir: " + ec.message());
+
+    project->getProjectCommandHistory()->addCommandNoMerge(
+        new CopyFileCmd(project, std::vector<std::string>{sourceFull.string()}, targetFull.string(), true));
+    if (resourcesWindow) resourcesWindow->refreshCurrentDirectory();
+    return okResult("Copied resource through the project command history.",
+                    Json{{"source_path", sourceRel.generic_string()},
+                         {"target_dir", targetRel.generic_string()}});
+}
+
+ActionResult EditorActionExecutor::updateMaterialFile(const Json& arguments) {
+    std::string error;
+    fs::path rel;
+    if (!safeRelativePath(project, arguments, "path", rel, error, true)) return failResult(error);
+    if (!Util::isMaterialFile(rel.string())) {
+        return failResult("path must point to a .material file.");
+    }
+
+    const std::string content = arguments.value("content", "");
+    constexpr size_t kMaxBytes = 512 * 1024;
+    if (content.size() > kMaxBytes) {
+        return failResult("Material content is too large for an AI edit.");
+    }
+
+    const fs::path fullPath = project->getProjectPath() / rel;
+    std::string normalizedContent;
+    std::string materialError;
+    if (!normalizeMaterialPayload(rel, content, normalizedContent, materialError)) {
+        return failResult(materialError);
+    }
+
+    project->getProjectCommandHistory()->addCommandNoMerge(
+        new ReplaceMaterialFileCmd(project, resourcesWindow, fullPath, normalizedContent));
+
+    std::string writtenContent;
+    if (!readWholeFile(fullPath, writtenContent) || writtenContent != normalizedContent) {
+        return failResult("Failed to update material file through the project command history.");
+    }
+
+    Out::info("AI updated material file: %s", rel.generic_string().c_str());
+    return okResult("Updated material file through the project command history.",
+                    Json{{"path", rel.lexically_normal().generic_string()}, {"bytes", normalizedContent.size()}});
+}
+
+ActionResult EditorActionExecutor::setComponentProperties(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+    if (!arguments.contains("properties") || !arguments["properties"].is_array() || arguments["properties"].empty()) {
+        return failResult("properties must be a non-empty array.");
+    }
+
+    auto* multiCmd = new MultiPropertyCmd();
+    int applied = 0;
+    for (const Json& item : arguments["properties"]) {
+        if (!item.is_object()) return failResult("Each properties entry must be an object.");
+        ComponentType component;
+        if (!parseComponentType(item.value("component", ""), component)) {
+            delete multiCmd;
+            return failResult("Unknown component in properties array.");
+        }
+        const std::string propertyName = item.value("property", "");
+        if (propertyName.empty()) {
+            delete multiCmd;
+            return failResult("Each properties entry requires property.");
+        }
+
+        auto props = Catalog::findEntityProperties(sceneProject->scene, entity, component);
+        auto it = props.find(propertyName);
+        if (it == props.end()) {
+            delete multiCmd;
+            return failResult("Property not found: " + propertyName);
+        }
+
+        std::string buildError;
+        Command* cmd = buildPropertyCommand(project, sceneId, entity, component, propertyName, it->second, item, buildError);
+        if (!cmd) {
+            delete multiCmd;
+            return failResult(buildError.empty() ? ("Failed to build property command for " + propertyName) : buildError);
+        }
+        multiCmd->addCommand(std::unique_ptr<Command>(cmd));
+        ++applied;
+    }
+
+    multiCmd->setNoMerge();
+    CommandHandle::get(sceneId)->addCommandNoMerge(multiCmd);
+    return okResult("Set component properties through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"applied_count", applied}});
+}
+
+ActionResult EditorActionExecutor::inspectScene(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Json childScenes = Json::array();
+    for (uint32_t childId : project->getChildScenes(sceneId)) {
+        SceneProject* child = project->getScene(childId);
+        childScenes.push_back({
+            {"scene_id", childId},
+            {"name", child ? child->name : ""},
+            {"start_active", project->isChildSceneStartActive(sceneId, childId)}
+        });
+    }
+
+    Json data = {
+        {"scene_id", sceneId},
+        {"name", sceneProject->name},
+        {"type", sceneTypeName(sceneProject->sceneType)},
+        {"opened", sceneProject->opened},
+        {"modified", sceneProject->isModified},
+        {"filepath", sceneProject->filepath.generic_string()},
+        {"main_camera", sceneProject->mainCamera},
+        {"entity_count", sceneProject->entities.size()},
+        {"selected_entities", project->getSelectedEntities(sceneId)},
+        {"child_scenes", childScenes},
+        {"properties", sceneReadableProperties(sceneProject)}
+    };
+    return okResult("Inspected scene.", data);
+}
+
+ActionResult EditorActionExecutor::addTilemapTile(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    TilemapComponent* tilemap = sceneProject->scene->findComponent<TilemapComponent>(entity);
+    if (!tilemap) return failResult("Entity has no Tilemap component.");
+
+    const int rectIndex = arguments.value("rect_index", 0);
+    if (rectIndex < 0 || static_cast<unsigned int>(rectIndex) >= tilemap->numTilesRect) {
+        return failResult("rect_index is out of range.");
+    }
+
+    const unsigned int freeSlot = tilemap->numTiles;
+    if (freeSlot >= tilemap->tiles.size()) {
+        return failResult("Tilemap tile array is full.");
+    }
+
+    const TileRectData& rectData = tilemap->tilesRect[rectIndex];
+    Vector2 position(rectData.rect.getX(), rectData.rect.getY());
+    if (arguments.contains("position")) {
+        if (!parseVector2(arguments["position"], position)) return failResult("position must be a vector2 object.");
+    }
+    float tileW = rectData.rect.getWidth();
+    float tileH = rectData.rect.getHeight();
+    if (arguments.contains("width") && arguments["width"].is_number()) tileW = arguments["width"].get<float>();
+    if (arguments.contains("height") && arguments["height"].is_number()) tileH = arguments["height"].get<float>();
+
+    const std::string tilePrefix = "tiles[" + std::to_string(freeSlot) + "]";
+    auto* multiCmd = new MultiPropertyCmd();
+    multiCmd->addPropertyCmd<std::string>(project, sceneId, entity, ComponentType::TilemapComponent,
+                                          tilePrefix + ".name", rectData.name);
+    multiCmd->addPropertyCmd<int>(project, sceneId, entity, ComponentType::TilemapComponent,
+                                  tilePrefix + ".rectId", rectIndex);
+    multiCmd->addPropertyCmd<Vector2>(project, sceneId, entity, ComponentType::TilemapComponent,
+                                      tilePrefix + ".position", position);
+    multiCmd->addPropertyCmd<float>(project, sceneId, entity, ComponentType::TilemapComponent,
+                                    tilePrefix + ".width", tileW);
+    multiCmd->addPropertyCmd<float>(project, sceneId, entity, ComponentType::TilemapComponent,
+                                    tilePrefix + ".height", tileH);
+    multiCmd->addPropertyCmd<unsigned int>(project, sceneId, entity, ComponentType::TilemapComponent,
+                                           "numTiles", freeSlot + 1);
+    multiCmd->setNoMerge();
+    CommandHandle::get(sceneId)->addCommandNoMerge(multiCmd);
+    return okResult("Added tilemap tile through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"tile_index", freeSlot}});
+}
+
+ActionResult EditorActionExecutor::removeTilemapTile(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    const unsigned int tileIndex = static_cast<unsigned int>(std::max(0, arguments.value("tile_index", 0)));
+    Command* cmd = ProjectUtils::buildDeleteTileCmd(project, sceneId, entity, tileIndex);
+    if (!cmd) return failResult("Failed to remove tile. Check tile_index and Tilemap component.");
+    CommandHandle::get(sceneId)->addCommandNoMerge(cmd);
+    return okResult("Removed tilemap tile through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"tile_index", tileIndex}});
+}
+
+ActionResult EditorActionExecutor::duplicateTilemapTile(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    const unsigned int tileIndex = static_cast<unsigned int>(std::max(0, arguments.value("tile_index", 0)));
+    TilemapComponent* tilemap = sceneProject->scene->findComponent<TilemapComponent>(entity);
+    const unsigned int newIndex = tilemap ? tilemap->numTiles : 0;
+    Command* cmd = ProjectUtils::buildDuplicateTileCmd(project, sceneId, entity, tileIndex);
+    if (!cmd) return failResult("Failed to duplicate tile. Check tile_index and Tilemap capacity.");
+    CommandHandle::get(sceneId)->addCommandNoMerge(cmd);
+    return okResult("Duplicated tilemap tile through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity},
+                         {"source_tile_index", tileIndex}, {"new_tile_index", newIndex}});
+}
+
+ActionResult EditorActionExecutor::addAnimationAction(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    AnimationComponent* anim = sceneProject->scene->findComponent<AnimationComponent>(entity);
+    if (!anim) return failResult("Entity has no Animation component.");
+
+    ActionFrame frame;
+    frame.startTime = arguments.value("start_time", 0.0f);
+    frame.duration = arguments.value("duration", 1.0f);
+    frame.track = static_cast<uint32_t>(std::max(0, arguments.value("track", 0)));
+    if (arguments.contains("action_entity_id")) {
+        frame.action = static_cast<Entity>(std::max(0, arguments.value("action_entity_id", 0)));
+    } else if (arguments.contains("action_entity_name")) {
+        Json tmp = Json::object();
+        tmp["entity_name"] = arguments["action_entity_name"];
+        frame.action = resolveEntity(sceneProject, tmp);
+    }
+
+    std::vector<ActionFrame> actions = anim->actions;
+    for (const auto& existing : actions) {
+        if (existing.track != frame.track) continue;
+        const float startA = existing.startTime;
+        const float endA = existing.startTime + existing.duration;
+        const float startB = frame.startTime;
+        const float endB = frame.startTime + frame.duration;
+        if (std::max(startA, startB) < std::min(endA, endB)) {
+            return failResult("New action overlaps an existing action on the same track.");
+        }
+    }
+    actions.push_back(frame);
+
+    CommandHandle::get(sceneId)->addCommandNoMerge(new PropertyCmd<std::vector<ActionFrame>>(
+        project, sceneId, entity, ComponentType::AnimationComponent, "actions", actions));
+    return okResult("Added animation action through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"action_index", actions.size() - 1}});
+}
+
+ActionResult EditorActionExecutor::removeAnimationAction(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    AnimationComponent* anim = sceneProject->scene->findComponent<AnimationComponent>(entity);
+    if (!anim) return failResult("Entity has no Animation component.");
+
+    const size_t actionIndex = static_cast<size_t>(std::max(0, arguments.value("action_index", 0)));
+    if (actionIndex >= anim->actions.size()) return failResult("action_index is out of range.");
+
+    std::vector<ActionFrame> actions = anim->actions;
+    actions.erase(actions.begin() + static_cast<std::ptrdiff_t>(actionIndex));
+    CommandHandle::get(sceneId)->addCommandNoMerge(new PropertyCmd<std::vector<ActionFrame>>(
+        project, sceneId, entity, ComponentType::AnimationComponent, "actions", actions));
+    return okResult("Removed animation action through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"removed_action_index", actionIndex}});
+}
+
+ActionResult EditorActionExecutor::setKeyframeTimes(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    KeyframeTracksComponent* keyframes = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity);
+    if (!keyframes) return failResult("Entity has no KeyframeTracks component.");
+
+    std::vector<float> times;
+    if (arguments.contains("times") && arguments["times"].is_array()) {
+        for (const Json& value : arguments["times"]) {
+            if (!value.is_number()) return failResult("times must contain numbers.");
+            times.push_back(value.get<float>());
+        }
+    } else if (arguments.value("append", false)) {
+        times = keyframes->times;
+        times.push_back(arguments.value("time", times.empty() ? 0.0f : times.back()));
+    } else {
+        return failResult("Provide times array or append=true with time.");
+    }
+
+    CommandHandle::get(sceneId)->addCommandNoMerge(new PropertyCmd<std::vector<float>>(
+        project, sceneId, entity, ComponentType::KeyframeTracksComponent, "times", times));
+    return okResult("Set keyframe times through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"count", times.size()}});
+}
+
+ActionResult EditorActionExecutor::undoEditor(const Json& arguments) {
+    const std::string scope = lower(arguments.value("scope", "scene"));
+    if (scope == "project") {
+        CommandHistory* history = project->getProjectCommandHistory();
+        if (!history || !history->canUndo()) return failResult("Nothing to undo in project history.");
+        history->undo();
+        return okResult("Undid last project-level command.");
+    }
+
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    CommandHistory* history = CommandHandle::get(sceneId);
+    if (!history || !history->canUndo()) return failResult("Nothing to undo in scene history.");
+    history->undo();
+    return okResult("Undid last scene command.", Json{{"scene_id", sceneId}});
+}
+
+ActionResult EditorActionExecutor::redoEditor(const Json& arguments) {
+    const std::string scope = lower(arguments.value("scope", "scene"));
+    if (scope == "project") {
+        CommandHistory* history = project->getProjectCommandHistory();
+        if (!history || !history->canRedo()) return failResult("Nothing to redo in project history.");
+        history->redo();
+        return okResult("Redid last project-level command.");
+    }
+
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    CommandHistory* history = CommandHandle::get(sceneId);
+    if (!history || !history->canRedo()) return failResult("Nothing to redo in scene history.");
+    history->redo();
+    return okResult("Redid last scene command.", Json{{"scene_id", sceneId}});
 }
 
 } // namespace doriax::editor::ai

@@ -80,6 +80,26 @@ private:
     ActionResult importProjectModel(const Json& arguments);
     ActionResult searchCuratedAssets(const Json& arguments, const std::atomic<bool>* cancel);
     ActionResult downloadCuratedAsset(const Json& arguments, const std::atomic<bool>* cancel);
+
+    ActionResult readResourceFile(const Json& arguments);
+    ActionResult setMainCamera(const Json& arguments);
+    ActionResult openScene(const Json& arguments);
+    ActionResult selectScene(const Json& arguments);
+    ActionResult regenerateMeshGeometry(const Json& arguments);
+    ActionResult deleteScene(const Json& arguments);
+    ActionResult saveProject();
+    ActionResult copyResource(const Json& arguments);
+    ActionResult updateMaterialFile(const Json& arguments);
+    ActionResult setComponentProperties(const Json& arguments);
+    ActionResult inspectScene(const Json& arguments);
+    ActionResult addTilemapTile(const Json& arguments);
+    ActionResult removeTilemapTile(const Json& arguments);
+    ActionResult duplicateTilemapTile(const Json& arguments);
+    ActionResult addAnimationAction(const Json& arguments);
+    ActionResult removeAnimationAction(const Json& arguments);
+    ActionResult setKeyframeTimes(const Json& arguments);
+    ActionResult undoEditor(const Json& arguments);
+    ActionResult redoEditor(const Json& arguments);
 };
 
 } // namespace doriax::editor::ai

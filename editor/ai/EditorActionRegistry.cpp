@@ -278,11 +278,21 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "select_entities",
-            "Replace the editor selection for a scene.",
+            "Replace the editor selection for a scene. Supports one entity, multiple entity_ids/entity_names, or clear.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"entity_id", integerSchema("Single entity id to select")},
                 {"entity_name", stringSchema("Single entity name to select, used only when entity_id is omitted")},
+                {"entity_ids", {
+                    {"type", "array"},
+                    {"description", "Multiple entity ids to select"},
+                    {"items", {{"type", "integer"}}}
+                }},
+                {"entity_names", {
+                    {"type", "array"},
+                    {"description", "Multiple entity names to select"},
+                    {"items", {{"type", "string"}}}
+                }},
                 {"clear", boolSchema("When true, clear selection")}
             }),
             false
@@ -704,6 +714,236 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"position", vector3Schema("Optional import position")}
             }, {"provider", "asset_id", "title", "source_url", "download_url"}),
             false
+        },
+        {
+            "read_resource_file",
+            "Read a text project resource such as scripts, materials, scenes, shaders, or config files.",
+            objectSchema({
+                {"path", stringSchema("Safe project-relative file path")}
+            }, {"path"}),
+            true
+        },
+        {
+            "inspect_scene",
+            "Read scene metadata, child scenes, main camera, and supported scene properties.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")}
+            }),
+            true
+        },
+        {
+            "set_main_camera",
+            "Set or clear the scene main camera through SetMainCameraCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Camera entity id")},
+                {"entity_name", stringSchema("Camera entity name, used only when entity_id is omitted")},
+                {"clear", boolSchema("When true, clear the main camera")}
+            }),
+            false
+        },
+        {
+            "open_scene",
+            "Open a .scene file from the project and select it in the editor.",
+            objectSchema({
+                {"scene_path", stringSchema("Safe project-relative .scene path")},
+                {"close_previous", boolSchema("When true, close the previously selected scene tab")}
+            }, {"scene_path"}),
+            false
+        },
+        {
+            "select_scene",
+            "Select an already-open scene tab in the editor.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id to select")}
+            }, {"scene_id"}),
+            false
+        },
+        {
+            "regenerate_mesh_geometry",
+            "Regenerate procedural mesh geometry for generated mesh primitives through MeshChangeCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Mesh entity id")},
+                {"entity_name", stringSchema("Mesh entity name, used only when entity_id is omitted")},
+                {"geometry_type", stringSchema("plane, box, sphere, cylinder, capsule, torus, or wall")},
+                {"plane_width", numberSchema("Plane width")},
+                {"plane_depth", numberSchema("Plane depth")},
+                {"plane_tiles", integerSchema("Plane tile count")},
+                {"wall_width", numberSchema("Wall width")},
+                {"wall_height", numberSchema("Wall height")},
+                {"wall_tiles", integerSchema("Wall tile count")},
+                {"box_width", numberSchema("Box width")},
+                {"box_height", numberSchema("Box height")},
+                {"box_depth", numberSchema("Box depth")},
+                {"box_tiles", integerSchema("Box tile count")},
+                {"sphere_radius", numberSchema("Sphere radius")},
+                {"sphere_slices", integerSchema("Sphere slices")},
+                {"sphere_stacks", integerSchema("Sphere stacks")},
+                {"cylinder_base_radius", numberSchema("Cylinder base radius")},
+                {"cylinder_top_radius", numberSchema("Cylinder top radius")},
+                {"cylinder_height", numberSchema("Cylinder height")},
+                {"cylinder_slices", integerSchema("Cylinder slices")},
+                {"cylinder_stacks", integerSchema("Cylinder stacks")},
+                {"capsule_base_radius", numberSchema("Capsule base radius")},
+                {"capsule_top_radius", numberSchema("Capsule top radius")},
+                {"capsule_height", numberSchema("Capsule height")},
+                {"capsule_slices", integerSchema("Capsule slices")},
+                {"capsule_stacks", integerSchema("Capsule stacks")},
+                {"torus_radius", numberSchema("Torus radius")},
+                {"torus_ring_radius", numberSchema("Torus ring radius")},
+                {"torus_sides", integerSchema("Torus sides")},
+                {"torus_rings", integerSchema("Torus rings")}
+            }),
+            false
+        },
+        {
+            "delete_scene",
+            "Remove a saved scene from the project through project command history. Cannot remove the last scene.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id to remove")}
+            }, {"scene_id"}),
+            false
+        },
+        {
+            "save_project",
+            "Save the project file and project metadata.",
+            objectSchema({}),
+            false
+        },
+        {
+            "copy_resource",
+            "Copy a project file or directory to another project directory through CopyFileCmd.",
+            objectSchema({
+                {"source_path", stringSchema("Safe project-relative source file or directory path")},
+                {"target_dir", stringSchema("Safe project-relative destination directory")}
+            }, {"source_path", "target_dir"}),
+            false
+        },
+        {
+            "update_material_file",
+            "Validate and replace an existing .material file with complete YAML content through project command history.",
+            objectSchema({
+                {"path", stringSchema("Existing safe project-relative .material path")},
+                {"content", stringSchema("Complete replacement file contents")},
+                {"reason", stringSchema("Short reason shown in the approval preview")}
+            }, {"path", "content"}),
+            false
+        },
+        {
+            "set_component_properties",
+            "Set multiple supported component properties atomically through MultiPropertyCmd.",
+            objectSchemaFromProperties(propertyValueFields({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"properties", {
+                    {"type", "array"},
+                    {"description", "Property changes. Each item needs component, property, and one typed value field."},
+                    {"items", objectSchemaFromProperties(propertyValueFields({
+                        {"component", stringSchema("Component name")},
+                        {"property", stringSchema("Property path")}
+                    }), {"component", "property"})}
+                }}
+            }), {"properties"}),
+            false
+        },
+        {
+            "add_tilemap_tile",
+            "Add a tile instance to a TilemapComponent using a tile rect index.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Tilemap entity id")},
+                {"entity_name", stringSchema("Tilemap entity name, used only when entity_id is omitted")},
+                {"rect_index", integerSchema("Tile rect index in tilesRect")},
+                {"position", vector2Schema("Optional tile position")},
+                {"width", numberSchema("Optional tile width override")},
+                {"height", numberSchema("Optional tile height override")}
+            }, {"rect_index"}),
+            false
+        },
+        {
+            "remove_tilemap_tile",
+            "Remove a tile from a TilemapComponent by tile index.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Tilemap entity id")},
+                {"entity_name", stringSchema("Tilemap entity name, used only when entity_id is omitted")},
+                {"tile_index", integerSchema("Tile index to remove")}
+            }, {"tile_index"}),
+            false
+        },
+        {
+            "duplicate_tilemap_tile",
+            "Duplicate a tile in a TilemapComponent by tile index.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Tilemap entity id")},
+                {"entity_name", stringSchema("Tilemap entity name, used only when entity_id is omitted")},
+                {"tile_index", integerSchema("Tile index to duplicate")}
+            }, {"tile_index"}),
+            false
+        },
+        {
+            "add_animation_action",
+            "Add an action frame to an AnimationComponent timeline.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Animation entity id")},
+                {"entity_name", stringSchema("Animation entity name, used only when entity_id is omitted")},
+                {"start_time", numberSchema("Action start time")},
+                {"duration", numberSchema("Action duration")},
+                {"track", integerSchema("Timeline track index")},
+                {"action_entity_id", integerSchema("Action entity id")},
+                {"action_entity_name", stringSchema("Action entity name, used only when action_entity_id is omitted")}
+            }),
+            false
+        },
+        {
+            "remove_animation_action",
+            "Remove an action frame from an AnimationComponent by index.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Animation entity id")},
+                {"entity_name", stringSchema("Animation entity name, used only when entity_id is omitted")},
+                {"action_index", integerSchema("Action index to remove")}
+            }, {"action_index"}),
+            false
+        },
+        {
+            "set_keyframe_times",
+            "Set or append keyframe times on a KeyframeTracksComponent.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id with KeyframeTracksComponent")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"times", {
+                    {"type", "array"},
+                    {"description", "Complete replacement keyframe time list"},
+                    {"items", {{"type", "number"}}}
+                }},
+                {"append", boolSchema("When true, append time to existing keyframes")},
+                {"time", numberSchema("Time value used with append=true")}
+            }),
+            false
+        },
+        {
+            "undo_editor",
+            "Undo the last editor command in scene or project scope.",
+            objectSchema({
+                {"scope", stringSchema("scene or project. Defaults to scene")},
+                {"scene_id", integerSchema("Scene id for scene scope. Omit to use the selected scene")}
+            }),
+            false
+        },
+        {
+            "redo_editor",
+            "Redo the last undone editor command in scene or project scope.",
+            objectSchema({
+                {"scope", stringSchema("scene or project. Defaults to scene")},
+                {"scene_id", integerSchema("Scene id for scene scope. Omit to use the selected scene")}
+            }),
+            false
         }
     };
     return definitions;
@@ -952,6 +1192,78 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         }
         return ok();
     }
+    if (name == "read_resource_file") {
+        return hasString(arguments, "path") ? ok() : fail("read_resource_file requires path.");
+    }
+    if (name == "inspect_scene") {
+        return ok();
+    }
+    if (name == "set_main_camera") {
+        if (arguments.value("clear", false)) return ok();
+        return hasEntitySelector(arguments) ? ok() : fail("set_main_camera requires entity_id, entity_name, or clear.");
+    }
+    if (name == "open_scene") {
+        return hasString(arguments, "scene_path") ? ok() : fail("open_scene requires scene_path.");
+    }
+    if (name == "select_scene" || name == "delete_scene") {
+        return hasSceneId(arguments, "scene_id") ? ok() : fail(name + " requires scene_id.");
+    }
+    if (name == "regenerate_mesh_geometry") {
+        return hasEntitySelector(arguments) ? ok() : fail("regenerate_mesh_geometry requires entity_id or entity_name.");
+    }
+    if (name == "save_project") {
+        return ok();
+    }
+    if (name == "copy_resource") {
+        return hasString(arguments, "source_path") && hasString(arguments, "target_dir")
+            ? ok() : fail("copy_resource requires source_path and target_dir.");
+    }
+    if (name == "update_material_file") {
+        if (!hasString(arguments, "path")) return fail("update_material_file requires path.");
+        if (!arguments.contains("content") || !arguments["content"].is_string()) {
+            return fail("update_material_file requires string content.");
+        }
+        return ok();
+    }
+    if (name == "set_component_properties") {
+        if (!hasEntitySelector(arguments)) return fail("set_component_properties requires entity_id or entity_name.");
+        if (!arguments.contains("properties") || !arguments["properties"].is_array() || arguments["properties"].empty()) {
+            return fail("set_component_properties requires a non-empty properties array.");
+        }
+        for (const Json& item : arguments["properties"]) {
+            if (!item.is_object() || !hasString(item, "component") || !hasString(item, "property")) {
+                return fail("Each properties entry requires component and property.");
+            }
+            if (!hasAnyValueField(item)) {
+                return fail("Each properties entry requires one typed value field.");
+            }
+        }
+        return ok();
+    }
+    if (name == "add_tilemap_tile") {
+        if (!hasEntitySelector(arguments)) return fail("add_tilemap_tile requires entity_id or entity_name.");
+        return arguments.contains("rect_index") ? ok() : fail("add_tilemap_tile requires rect_index.");
+    }
+    if (name == "remove_tilemap_tile" || name == "duplicate_tilemap_tile") {
+        if (!hasEntitySelector(arguments)) return fail(name + " requires entity_id or entity_name.");
+        return arguments.contains("tile_index") ? ok() : fail(name + " requires tile_index.");
+    }
+    if (name == "add_animation_action") {
+        return hasEntitySelector(arguments) ? ok() : fail("add_animation_action requires entity_id or entity_name.");
+    }
+    if (name == "remove_animation_action") {
+        if (!hasEntitySelector(arguments)) return fail("remove_animation_action requires entity_id or entity_name.");
+        return arguments.contains("action_index") ? ok() : fail("remove_animation_action requires action_index.");
+    }
+    if (name == "set_keyframe_times") {
+        if (!hasEntitySelector(arguments)) return fail("set_keyframe_times requires entity_id or entity_name.");
+        if (arguments.contains("times") && arguments["times"].is_array()) return ok();
+        if (arguments.value("append", false) && arguments.contains("time") && arguments["time"].is_number()) return ok();
+        return fail("set_keyframe_times requires times array or append=true with time.");
+    }
+    if (name == "undo_editor" || name == "redo_editor") {
+        return ok();
+    }
 
     return ok();
 }
@@ -1138,6 +1450,65 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "download_curated_asset") {
         return "Download curated asset \"" + arguments.value("title", "Asset") + "\"";
+    }
+    if (name == "read_resource_file") {
+        return "Read resource " + arguments.value("path", "");
+    }
+    if (name == "inspect_scene") {
+        return arguments.contains("scene_id")
+            ? "Inspect scene " + std::to_string(arguments.value("scene_id", 0))
+            : "Inspect selected scene";
+    }
+    if (name == "set_main_camera") {
+        return arguments.value("clear", false) ? "Clear main camera" : "Set main camera";
+    }
+    if (name == "open_scene") {
+        return "Open scene " + arguments.value("scene_path", "");
+    }
+    if (name == "select_scene") {
+        return "Select scene " + std::to_string(arguments.value("scene_id", 0));
+    }
+    if (name == "regenerate_mesh_geometry") {
+        return "Regenerate mesh geometry";
+    }
+    if (name == "delete_scene") {
+        return "Delete scene " + std::to_string(arguments.value("scene_id", 0));
+    }
+    if (name == "save_project") {
+        return "Save project";
+    }
+    if (name == "copy_resource") {
+        return "Copy " + arguments.value("source_path", "") + " to " + arguments.value("target_dir", "");
+    }
+    if (name == "update_material_file") {
+        return "Update material file " + arguments.value("path", "");
+    }
+    if (name == "set_component_properties") {
+        return "Set multiple component properties";
+    }
+    if (name == "add_tilemap_tile") {
+        return "Add tilemap tile";
+    }
+    if (name == "remove_tilemap_tile") {
+        return "Remove tilemap tile " + std::to_string(arguments.value("tile_index", 0));
+    }
+    if (name == "duplicate_tilemap_tile") {
+        return "Duplicate tilemap tile " + std::to_string(arguments.value("tile_index", 0));
+    }
+    if (name == "add_animation_action") {
+        return "Add animation action";
+    }
+    if (name == "remove_animation_action") {
+        return "Remove animation action " + std::to_string(arguments.value("action_index", 0));
+    }
+    if (name == "set_keyframe_times") {
+        return "Set keyframe times";
+    }
+    if (name == "undo_editor") {
+        return "Undo " + arguments.value("scope", "scene") + " command";
+    }
+    if (name == "redo_editor") {
+        return "Redo " + arguments.value("scope", "scene") + " command";
     }
     return name;
 }
