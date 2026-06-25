@@ -658,13 +658,12 @@ void AiChatWindow::drawTranscript(float height) {
         paragraphs.push_back({std::string(ICON_FA_SPINNER) + "  Thinking...", dimCol});
     }
 
-    // Tighten line spacing so the blank line separating turns reads as a single
-    // gap rather than a double one.
+    // Tighten transcript line spacing only; keep default ItemSpacing for the
+    // right-click menu (same pattern as OutputWindow).
     const ImGuiStyle& style = ImGui::GetStyle();
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
-                        ImVec2(style.ItemSpacing.x, std::max(2.0f, style.ItemSpacing.y * 0.4f)));
-    transcript.draw("##AiTranscript", ImVec2(0, height), paragraphs, scrollToBottom);
-    ImGui::PopStyleVar();
+    const float transcriptLineSpacing = std::max(2.0f, style.ItemSpacing.y * 0.4f);
+    transcript.draw("##AiTranscript", ImVec2(0, height), paragraphs, scrollToBottom,
+                    transcriptLineSpacing);
     scrollToBottom = false;
 }
 

@@ -20,7 +20,8 @@ public:
     };
 
     void draw(const char* id, const ImVec2& size,
-              const std::vector<Paragraph>& paragraphs, bool scrollToBottom);
+              const std::vector<Paragraph>& paragraphs, bool scrollToBottom,
+              float lineSpacingY = -1.0f);
 
 private:
     ImGuiTextBuffer buf;

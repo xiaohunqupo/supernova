@@ -250,7 +250,8 @@ void SelectableTextView::copyAllToClipboard() const {
 }
 
 void SelectableTextView::draw(const char* id, const ImVec2& size,
-                              const std::vector<Paragraph>& paragraphs, bool scrollToBottom) {
+                              const std::vector<Paragraph>& paragraphs, bool scrollToBottom,
+                              float lineSpacingY) {
     if (!ImGui::BeginChild(id, size, 0,
                            ImGuiWindowFlags_NoNav | ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
         ImGui::EndChild();
@@ -275,8 +276,16 @@ void SelectableTextView::draw(const char* id, const ImVec2& size,
     ImFont* font = ImGui::GetFont();
     const float fontSize = ImGui::GetFontSize();
     const float lineBoxHeight = ImGui::GetTextLineHeight();
-    const float lineAdvance = lineBoxHeight + ImGui::GetStyle().ItemSpacing.y;
+    const float rowSpacing = (lineSpacingY >= 0.0f)
+        ? lineSpacingY
+        : ImGui::GetStyle().ItemSpacing.y;
+    const float lineAdvance = lineBoxHeight + rowSpacing;
     const int totalLines = (lineOffsets.Size > 0) ? (lineOffsets.Size - 1) : 0;
+
+    if (lineSpacingY >= 0.0f) {
+        const ImGuiStyle& style = ImGui::GetStyle();
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, lineSpacingY));
+    }
 
     const bool winFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
     const ImGuiIO& io = ImGui::GetIO();
@@ -405,6 +414,10 @@ void SelectableTextView::draw(const char* id, const ImVec2& size,
     }
     if (isSelecting && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
         isSelecting = false;
+    }
+
+    if (lineSpacingY >= 0.0f) {
+        ImGui::PopStyleVar();
     }
 
     if (ImGui::BeginPopupContextWindow("##sel_ctx", ImGuiPopupFlags_MouseButtonRight)) {
