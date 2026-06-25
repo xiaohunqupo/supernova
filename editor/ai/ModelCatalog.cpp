@@ -1,6 +1,8 @@
 #include "ModelCatalog.h"
 
 #include <algorithm>
+#include <cctype>
+#include <set>
 
 namespace doriax::editor::ai {
 
@@ -56,7 +58,8 @@ std::vector<ModelInfo> ModelCatalog::models(ProviderId provider) const {
     if (it != cache.end() && it->second.status == CatalogStatus::Loaded && !it->second.models.empty()) {
         return it->second.models;
     }
-    return curatedModels(provider);
+    // No fabricated fallback: the list is only what the provider actually returns.
+    return {};
 }
 
 CatalogStatus ModelCatalog::status(ProviderId provider) const {
@@ -166,7 +169,8 @@ bool ModelCatalog::fetchModels(const Request& request, std::vector<ModelInfo>& o
             const std::string prefix = "models/";
             if (name.rfind(prefix, 0) == 0) name = name.substr(prefix.size());
             if (name.empty()) continue;
-            std::string label = model.value("displayName", name);
+            std::string label = model.value("displayName", std::string());
+            if (label.empty()) label = humanizeModelId(name);
             if (!looksLikeMainGeminiModel(name)) continue;
             out.push_back({name, label});
             if (out.size() >= kMaxModels) break;
@@ -184,53 +188,42 @@ bool ModelCatalog::fetchModels(const Request& request, std::vector<ModelInfo>& o
         if (request.provider == ProviderId::OpenAI && !looksLikeOpenAiChatModel(id)) {
             continue;
         }
-        std::string label = model.value("display_name", model.value("name", id));
+        std::string label = model.value("display_name", model.value("name", std::string()));
+        if (label.empty()) label = humanizeModelId(id);
         out.push_back({id, label});
         if (out.size() >= kMaxModels) break;
     }
     return !out.empty();
 }
 
-std::vector<ModelInfo> ModelCatalog::curatedModels(ProviderId provider) {
-    switch (provider) {
-        case ProviderId::Anthropic:
-            return {
-                {"claude-sonnet-4-20250514", "Claude Sonnet 4"},
-                {"claude-3-7-sonnet-20250219", "Claude 3.7 Sonnet"},
-                {"claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet"},
-                {"claude-3-5-haiku-20241022", "Claude 3.5 Haiku"}
-            };
-        case ProviderId::Gemini:
-            return {
-                {"gemini-3.5-flash", "Gemini 3.5 Flash"},
-                {"gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite"},
-                {"gemini-2.5-flash", "Gemini 2.5 Flash"},
-                {"gemini-2.5-pro", "Gemini 2.5 Pro"},
-                {"gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"}
-            };
-        case ProviderId::DeepSeek:
-            return {
-                {"deepseek-chat", "DeepSeek Chat (V3)"},
-                {"deepseek-reasoner", "DeepSeek Reasoner (R1)"}
-            };
-        case ProviderId::OpenAICompatible:
-            return {
-                {"openai/gpt-4.1", "OpenAI GPT-4.1"},
-                {"openai/gpt-4.1-mini", "OpenAI GPT-4.1 mini"},
-                {"anthropic/claude-sonnet-4", "Anthropic Claude Sonnet 4"},
-                {"google/gemini-2.5-flash", "Google Gemini 2.5 Flash"},
-                {"meta-llama/llama-3.3-70b-instruct", "Llama 3.3 70B Instruct"}
-            };
-        case ProviderId::OpenAI:
-        default:
-            return {
-                {"gpt-4.1", "GPT-4.1"},
-                {"gpt-4.1-mini", "GPT-4.1 mini"},
-                {"gpt-4o", "GPT-4o"},
-                {"gpt-4o-mini", "GPT-4o mini"},
-                {"o3-mini", "o3 mini"}
-            };
+std::string ModelCatalog::humanizeModelId(const std::string& id) {
+    // Title-case each hyphen/slash/underscore separated token, leaving version
+    // tokens ("4o", "3.5", "70b") untouched and upper-casing known acronyms.
+    static const std::set<std::string> acronyms = {"gpt", "ai", "llm", "tts", "hd"};
+    std::string out;
+    std::string token;
+    auto flush = [&]() {
+        if (token.empty()) return;
+        if (!out.empty()) out.push_back(' ');
+        if (acronyms.count(token)) {
+            for (char c : token) out.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+        } else if (std::isalpha(static_cast<unsigned char>(token[0]))) {
+            out.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(token[0]))));
+            out.append(token, 1, std::string::npos);
+        } else {
+            out += token; // version-like token, keep verbatim
+        }
+        token.clear();
+    };
+    for (char c : id) {
+        if (c == '-' || c == '_' || c == '/' || c == ' ' || c == ':') {
+            flush();
+        } else {
+            token.push_back(c); // '.' stays inside the token so "3.5" survives
+        }
     }
+    flush();
+    return out.empty() ? id : out;
 }
 
 } // namespace doriax::editor::ai

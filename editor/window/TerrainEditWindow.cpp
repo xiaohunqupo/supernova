@@ -6,6 +6,7 @@
 #include "command/CommandHandle.h"
 #include "external/IconsFontAwesome6.h"
 #include "subsystem/MeshSystem.h"
+#include "util/PngWriter.h"
 #include "stb_image_write.h"
 
 #include <algorithm>
@@ -24,147 +25,6 @@
 using namespace doriax;
 using namespace doriax::editor;
 
-// Public zlib (DEFLATE) compressor exposed by the stb_image_write implementation TU
-// (engine/libs/stb/stb_image_write.c). Reused here so we don't hand-roll a compressor.
-extern "C" unsigned char* stbi_zlib_compress(unsigned char* data, int data_len, int* out_len, int quality);
-
-namespace {
-    // stb_image_write cannot emit 16-bit PNGs, so this is a small self-contained encoder for
-    // single-channel 16-bit grayscale heightmaps. It applies adaptive PNG row filtering (so the
-    // smooth gradients in a heightmap compress well) and DEFLATEs the result via stb's own
-    // zlib compressor. stb_image's loader reads these back via stbi_load_16.
-
-    uint32_t png_crc32(const unsigned char* data, size_t len, uint32_t crc){
-        crc = ~crc;
-        for (size_t i = 0; i < len; i++){
-            crc ^= data[i];
-            for (int b = 0; b < 8; b++){
-                crc = (crc >> 1) ^ (0xEDB88320u & (~(crc & 1) + 1));
-            }
-        }
-        return ~crc;
-    }
-
-    void png_put_u32(std::vector<unsigned char>& out, uint32_t v){
-        out.push_back(static_cast<unsigned char>((v >> 24) & 0xFF));
-        out.push_back(static_cast<unsigned char>((v >> 16) & 0xFF));
-        out.push_back(static_cast<unsigned char>((v >> 8) & 0xFF));
-        out.push_back(static_cast<unsigned char>(v & 0xFF));
-    }
-
-    void png_write_chunk(std::vector<unsigned char>& out, const char tag[4], const unsigned char* data, size_t len){
-        png_put_u32(out, static_cast<uint32_t>(len));
-        const size_t typeStart = out.size();
-        out.insert(out.end(), tag, tag + 4);
-        if (len){
-            out.insert(out.end(), data, data + len);
-        }
-        const uint32_t crc = png_crc32(out.data() + typeStart, len + 4, 0);
-        png_put_u32(out, crc);
-    }
-
-    unsigned char png_paeth(int a, int b, int c){
-        const int p = a + b - c;
-        const int pa = std::abs(p - a);
-        const int pb = std::abs(p - b);
-        const int pc = std::abs(p - c);
-        if (pa <= pb && pa <= pc) return static_cast<unsigned char>(a);
-        return pb <= pc ? static_cast<unsigned char>(b) : static_cast<unsigned char>(c);
-    }
-
-    // pixels: width*height 16-bit samples, little-endian in memory (native unsigned short).
-    bool write_gray16_png(const char* path, int width, int height, const unsigned char* pixels){
-        const int bpp = 2; // bytes per pixel: 16-bit single channel
-        const size_t rowBytes = static_cast<size_t>(width) * bpp;
-
-        // Original (unfiltered) big-endian scanlines; PNG stores 16-bit samples big-endian.
-        std::vector<unsigned char> rows(static_cast<size_t>(height) * rowBytes);
-        for (int y = 0; y < height; y++){
-            const unsigned char* src = pixels + static_cast<size_t>(y) * rowBytes;
-            unsigned char* dst = rows.data() + static_cast<size_t>(y) * rowBytes;
-            for (int x = 0; x < width; x++){
-                dst[x * 2]     = src[x * 2 + 1]; // high byte first
-                dst[x * 2 + 1] = src[x * 2];
-            }
-        }
-
-        // Adaptive per-row filtering: pick, for each scanline, the filter that minimizes the
-        // sum of absolute (signed) bytes (the heuristic stb/libpng use). Output is the
-        // filter-type byte + filtered bytes per row, ready to DEFLATE.
-        std::vector<unsigned char> filtered;
-        filtered.reserve(static_cast<size_t>(height) * (1 + rowBytes));
-        std::vector<unsigned char> candidate(rowBytes);
-        std::vector<unsigned char> best(rowBytes);
-        for (int y = 0; y < height; y++){
-            const unsigned char* cur = rows.data() + static_cast<size_t>(y) * rowBytes;
-            const unsigned char* prior = y > 0 ? rows.data() + static_cast<size_t>(y - 1) * rowBytes : nullptr;
-
-            int bestType = 0;
-            long bestCost = -1;
-            for (int ft = 0; ft <= 4; ft++){
-                long cost = 0;
-                for (size_t i = 0; i < rowBytes; i++){
-                    const int raw = cur[i];
-                    const int a = i >= static_cast<size_t>(bpp) ? cur[i - bpp] : 0;       // left
-                    const int b = prior ? prior[i] : 0;                                   // up
-                    const int c = (prior && i >= static_cast<size_t>(bpp)) ? prior[i - bpp] : 0; // up-left
-                    int f;
-                    switch (ft){
-                        case 1:  f = raw - a; break;                          // Sub
-                        case 2:  f = raw - b; break;                          // Up
-                        case 3:  f = raw - ((a + b) >> 1); break;             // Average
-                        case 4:  f = raw - png_paeth(a, b, c); break;         // Paeth
-                        default: f = raw; break;                              // None
-                    }
-                    const unsigned char fb = static_cast<unsigned char>(f & 0xFF);
-                    candidate[i] = fb;
-                    cost += std::abs(static_cast<int>(static_cast<signed char>(fb)));
-                }
-                if (bestCost < 0 || cost < bestCost){
-                    bestCost = cost;
-                    bestType = ft;
-                    best.swap(candidate);
-                }
-            }
-
-            filtered.push_back(static_cast<unsigned char>(bestType));
-            filtered.insert(filtered.end(), best.begin(), best.end());
-        }
-
-        int zlen = 0;
-        unsigned char* zdata = stbi_zlib_compress(filtered.data(), static_cast<int>(filtered.size()), &zlen, 8);
-        if (!zdata){
-            return false;
-        }
-
-        std::vector<unsigned char> out;
-        const unsigned char sig[8] = {137, 80, 78, 71, 13, 10, 26, 10};
-        out.insert(out.end(), sig, sig + 8);
-
-        std::vector<unsigned char> ihdr;
-        png_put_u32(ihdr, static_cast<uint32_t>(width));
-        png_put_u32(ihdr, static_cast<uint32_t>(height));
-        ihdr.push_back(16); // bit depth
-        ihdr.push_back(0);  // color type: grayscale
-        ihdr.push_back(0);  // compression
-        ihdr.push_back(0);  // filter
-        ihdr.push_back(0);  // interlace
-        png_write_chunk(out, "IHDR", ihdr.data(), ihdr.size());
-        png_write_chunk(out, "IDAT", zdata, static_cast<size_t>(zlen));
-        png_write_chunk(out, "IEND", nullptr, 0);
-
-        // stbi_zlib_compress allocates with stb's default allocator (malloc); free with free().
-        std::free(zdata);
-
-        FILE* f = std::fopen(path, "wb");
-        if (!f){
-            return false;
-        }
-        const size_t wrote = std::fwrite(out.data(), 1, out.size(), f);
-        std::fclose(f);
-        return wrote == out.size();
-    }
-}
 
 bool editor::TerrainEditWindow::loadTerrainTextureDataFromPath(Project* project, const std::string& path, TextureData& data){
     if (path.empty()){
@@ -353,7 +213,7 @@ bool editor::TerrainEditWindow::writeTextureFile(Project* project, const std::st
     bool written;
     if (bytesPerChannel >= 2){
         // 16-bit single-channel grayscale heightmap (stb_image_write cannot emit these).
-        written = write_gray16_png(outputPath.string().c_str(), width, height, pixels.data());
+        written = writeGray16Png(outputPath, width, height, pixels.data(), pixels.size());
     }else{
         written = stbi_write_png(outputPath.string().c_str(), width, height, channels, pixels.data(), width * channels) != 0;
     }

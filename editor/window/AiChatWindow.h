@@ -40,8 +40,10 @@ private:
     std::array<char, 8192> inputBuffer{};
     std::array<char, 256> customModelBuffer{};
     std::string currentConversationId;
+    std::string autoLoadedProjectPath;
     size_t lastSavedMessageCount = 0;
     size_t lastObservedMessageCount = 0;
+    bool autoLoadedLatestConversation = false;
 
     void drawHeader();
     void drawHistoryPopup();
@@ -61,8 +63,10 @@ private:
     void executeProposal(uint64_t proposalId);
     void autoRunProposals();
     void updateMessageNotification();
+    void loadLatestConversationForCurrentProject();
     void persistConversation();
     void loadConversation(const std::string& id);
+    void prefetchModels();
 
 public:
     static constexpr const char* WINDOW_NAME = "AI Chat";

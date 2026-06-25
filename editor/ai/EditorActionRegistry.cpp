@@ -26,6 +26,19 @@ Json objectSchema(std::initializer_list<std::pair<const char*, Json>> properties
     };
 }
 
+Json objectSchemaFromProperties(Json properties, std::initializer_list<const char*> required = {}) {
+    Json req = Json::array();
+    for (const char* key : required) {
+        req.push_back(key);
+    }
+    return {
+        {"type", "object"},
+        {"additionalProperties", false},
+        {"properties", std::move(properties)},
+        {"required", req}
+    };
+}
+
 Json stringSchema(const std::string& description) {
     return {{"type", "string"}, {"description", description}};
 }
@@ -36,6 +49,22 @@ Json numberSchema(const std::string& description) {
 
 Json integerSchema(const std::string& description) {
     return {{"type", "integer"}, {"description", description}};
+}
+
+Json boolSchema(const std::string& description) {
+    return {{"type", "boolean"}, {"description", description}};
+}
+
+Json vector2Schema(const std::string& description) {
+    return {
+        {"type", "object"},
+        {"description", description},
+        {"additionalProperties", false},
+        {"properties", {
+            {"x", numberSchema("X value")},
+            {"y", numberSchema("Y value")}
+        }}
+    };
 }
 
 Json vector3Schema(const std::string& description) {
@@ -49,6 +78,54 @@ Json vector3Schema(const std::string& description) {
             {"z", numberSchema("Z value")}
         }}
     };
+}
+
+Json vector4Schema(const std::string& description) {
+    return {
+        {"type", "object"},
+        {"description", description},
+        {"additionalProperties", false},
+        {"properties", {
+            {"x", numberSchema("X value")},
+            {"y", numberSchema("Y value")},
+            {"z", numberSchema("Z value")},
+            {"w", numberSchema("W value")}
+        }}
+    };
+}
+
+Json quaternionSchema(const std::string& description) {
+    return {
+        {"type", "object"},
+        {"description", description},
+        {"additionalProperties", false},
+        {"properties", {
+            {"w", numberSchema("W value")},
+            {"x", numberSchema("X value")},
+            {"y", numberSchema("Y value")},
+            {"z", numberSchema("Z value")}
+        }}
+    };
+}
+
+Json propertyValueFields(std::initializer_list<std::pair<const char*, Json>> extra = {}) {
+    Json fields = Json::object({
+        {"bool_value", boolSchema("Boolean property value")},
+        {"int_value", integerSchema("Integer/enum property value")},
+        {"number_value", numberSchema("Float/double property value")},
+        {"string_value", stringSchema("String property value")},
+        {"vector2_value", vector2Schema("Vector2 property value")},
+        {"vector3_value", vector3Schema("Vector3 or Color3 property value")},
+        {"vector4_value", vector4Schema("Vector4 or Color4 property value")},
+        {"quat_value", quaternionSchema("Quaternion property value")},
+        {"texture_path", stringSchema("Project-relative texture/resource path for Texture properties")},
+        {"entity_value", integerSchema("Entity id for Entity or EntityReference properties")},
+        {"entity_scene_id", integerSchema("Scene id for EntityReference properties. Omit to use scene_id")}
+    });
+    for (const auto& item : extra) {
+        fields[item.first] = item.second;
+    }
+    return fields;
 }
 
 const std::vector<ToolDefinition>& cachedTools() {
@@ -78,12 +155,41 @@ const std::vector<ToolDefinition>& cachedTools() {
             true
         },
         {
+            "inspect_entity",
+            "Read one entity's name, selection state, hierarchy data, components, and optionally all supported property values.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"include_properties", boolSchema("When true, include supported component property values")}
+            }),
+            true
+        },
+        {
+            "inspect_component",
+            "Read supported property names, types, and current values for one entity component.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Component name, e.g. Transform, Mesh, Camera, TerrainComponent")}
+            }, {"component"}),
+            true
+        },
+        {
+            "list_component_types",
+            "List component names accepted by add_component, remove_component, inspect_component, and set_component_property.",
+            objectSchema({}),
+            true
+        },
+        {
             "create_entity",
             "Create an undoable entity in the selected scene using an allowed editor entity type.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"name", stringSchema("Entity display name")},
-                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, camera, point_light, directional_light, spot_light, sky, fog, model, terrain")},
+                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, image, sprite, tilemap, text, button, scrollbar, progressbar, textedit, panel, polygon, container, point_light, directional_light, spot_light, joint2d, joint3d, body2d, body3d, sky, fog, camera, sound, sound_3d, animation, sprite_animation, position_action, rotation_action, scale_action, color_action, alpha_action, model, particles, points, lines, mesh_polygon, terrain")},
+                {"parent_id", integerSchema("Optional parent entity id for transform entities")},
                 {"position", vector3Schema("Optional local position")}
             }, {"name", "type"}),
             false
@@ -96,7 +202,222 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"entity_id", integerSchema("Entity id")},
                 {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
                 {"position", vector3Schema("Optional local position")},
+                {"rotation", quaternionSchema("Optional local rotation quaternion")},
                 {"scale", vector3Schema("Optional local scale")}
+            }),
+            false
+        },
+        {
+            "rename_entity",
+            "Rename an entity through the undoable command system.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"new_name", stringSchema("New entity name")}
+            }, {"new_name"}),
+            false
+        },
+        {
+            "delete_entity",
+            "Delete an entity through the undoable command system.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")}
+            }),
+            false
+        },
+        {
+            "duplicate_entity",
+            "Duplicate one entity through the undoable command system.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")}
+            }),
+            false
+        },
+        {
+            "reparent_entity",
+            "Move a transform entity under a new parent or scene root through MoveEntityOrderCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id to move")},
+                {"entity_name", stringSchema("Entity name to move, used only when entity_id is omitted")},
+                {"parent_id", integerSchema("New parent entity id. Use 0 or omit for scene root")},
+                {"parent_name", stringSchema("New parent entity name, used only when parent_id is omitted")}
+            }),
+            false
+        },
+        {
+            "move_entity_order",
+            "Move an entity relative to another entity in hierarchy order.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id to move")},
+                {"entity_name", stringSchema("Entity name to move, used only when entity_id is omitted")},
+                {"target_id", integerSchema("Target entity id")},
+                {"target_name", stringSchema("Target entity name, used only when target_id is omitted")},
+                {"insertion", stringSchema("before, after, child_first, or child_last")}
+            }, {"insertion"}),
+            false
+        },
+        {
+            "select_entities",
+            "Replace the editor selection for a scene.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Single entity id to select")},
+                {"entity_name", stringSchema("Single entity name to select, used only when entity_id is omitted")},
+                {"clear", boolSchema("When true, clear selection")}
+            }),
+            false
+        },
+        {
+            "add_component",
+            "Add a component to an entity through AddComponentCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Component name")}
+            }, {"component"}),
+            false
+        },
+        {
+            "remove_component",
+            "Remove a component from an entity through RemoveComponentCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Component name")}
+            }, {"component"}),
+            false
+        },
+        {
+            "set_component_property",
+            "Set one supported component property through PropertyCmd. Use the typed value field matching the property type.",
+            objectSchemaFromProperties(propertyValueFields({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Component name")},
+                {"property", stringSchema("Property path from inspect_component, e.g. position or submeshes[0].material.baseColorTexture")}
+            }), {"component", "property"}),
+            false
+        },
+        {
+            "create_scene",
+            "Create a new 2D, 3D, or UI scene in the project.",
+            objectSchema({
+                {"name", stringSchema("Scene name")},
+                {"type", stringSchema("Scene type: 3d, 2d, or ui")}
+            }, {"name", "type"}),
+            false
+        },
+        {
+            "rename_scene",
+            "Rename a scene through SceneNameCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"new_name", stringSchema("New scene name")}
+            }, {"new_name"}),
+            false
+        },
+        {
+            "save_scene",
+            "Save one scene. Omit scene_id to save the selected scene.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")}
+            }),
+            false
+        },
+        {
+            "save_all_scenes",
+            "Save all project scenes.",
+            objectSchema({}),
+            false
+        },
+        {
+            "set_start_scene",
+            "Set the project startup scene.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id to use as startup scene")}
+            }, {"scene_id"}),
+            false
+        },
+        {
+            "set_scene_property",
+            "Set a supported scene-level property such as background_color, shadows_pcf, global_illumination_color, ssao_enabled, ssr_enabled.",
+            objectSchemaFromProperties(propertyValueFields({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"property", stringSchema("Scene property name")}
+            }), {"property"}),
+            false
+        },
+        {
+            "control_play_mode",
+            "Start, pause, resume, or stop play mode for a scene.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"action", stringSchema("start, pause, resume, or stop")}
+            }, {"action"}),
+            false
+        },
+        {
+            "add_child_scene",
+            "Add a child scene reference through AddChildSceneCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Parent scene id. Omit to use selected scene")},
+                {"child_scene_id", integerSchema("Child scene id")},
+                {"start_active", boolSchema("Whether the child scene starts active. Defaults true")}
+            }, {"child_scene_id"}),
+            false
+        },
+        {
+            "remove_child_scene",
+            "Remove a child scene reference through RemoveChildSceneCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Parent scene id. Omit to use selected scene")},
+                {"child_scene_id", integerSchema("Child scene id")}
+            }, {"child_scene_id"}),
+            false
+        },
+        {
+            "set_child_scene_start_active",
+            "Set a child scene's Start active flag through SetChildSceneStartActiveCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Parent scene id. Omit to use selected scene")},
+                {"child_scene_id", integerSchema("Child scene id")},
+                {"start_active", boolSchema("New Start active value")}
+            }, {"child_scene_id", "start_active"}),
+            false
+        },
+        {
+            "load_child_scene_inline",
+            "Load or unload a child scene inline for editing context.",
+            objectSchema({
+                {"child_scene_id", integerSchema("Child scene id")},
+                {"load", boolSchema("true to load inline, false to unload")}
+            }, {"child_scene_id", "load"}),
+            false
+        },
+        {
+            "create_terrain_heightmap",
+            "Create or replace an undoable 16-bit heightmap for a terrain entity. Use mode 'middle' for the editor default flat midpoint map, 'flat' for a custom constant height, 'random_noise' for random heights, or 'fractal_noise' for smoother terrain.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Terrain entity id")},
+                {"entity_name", stringSchema("Terrain entity name, used only when entity_id is omitted")},
+                {"resolution", integerSchema("Square heightmap resolution, 2-2048. Defaults to 512")},
+                {"mode", stringSchema("flat, middle, random_noise, or fractal_noise. Defaults to middle")},
+                {"seed", integerSchema("Optional deterministic seed for noise modes")},
+                {"base_height", numberSchema("Normalized base height 0-1. Defaults to 0.5 for middle/flat")},
+                {"amplitude", numberSchema("Noise amplitude 0-1. Defaults to 0.35")},
+                {"frequency", numberSchema("Noise frequency. Defaults to 4.0")},
+                {"octaves", integerSchema("Fractal octave count, 1-8. Defaults to 4")}
             }),
             false
         },
@@ -109,6 +430,228 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"entity_name", stringSchema("Name for the created model entity")},
                 {"position", vector3Schema("Optional drop position")}
             }, {"model_path"}),
+            false
+        },
+        {
+            "create_folder",
+            "Create a folder inside the project through CreateDirCmd.",
+            objectSchema({
+                {"parent_path", stringSchema("Safe project-relative parent directory. Empty means project root")},
+                {"name", stringSchema("New folder name")}
+            }, {"name"}),
+            false
+        },
+        {
+            "rename_resource",
+            "Rename or move one project resource through RenameFileCmd, updating project references where supported.",
+            objectSchema({
+                {"path", stringSchema("Safe project-relative file or directory path")},
+                {"new_name", stringSchema("New file or directory name, not a full path")}
+            }, {"path", "new_name"}),
+            false
+        },
+        {
+            "delete_resource",
+            "Delete one project resource through DeleteFileCmd, moving it to the project trash where supported.",
+            objectSchema({
+                {"path", stringSchema("Safe project-relative file or directory path")}
+            }, {"path"}),
+            false
+        },
+        {
+            "import_resource_file",
+            "Copy an existing local file into the project through CopyFileCmd. No shell is used.",
+            objectSchema({
+                {"source_path", stringSchema("Absolute local file path to import")},
+                {"target_dir", stringSchema("Safe project-relative destination directory")}
+            }, {"source_path", "target_dir"}),
+            false
+        },
+        {
+            "link_material",
+            "Link a .material file to a mesh submesh through LinkMaterialCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Mesh entity id")},
+                {"entity_name", stringSchema("Mesh entity name, used only when entity_id is omitted")},
+                {"material_path", stringSchema("Safe project-relative .material path")},
+                {"submesh_index", integerSchema("Submesh index. Defaults to 0")}
+            }, {"material_path"}),
+            false
+        },
+        {
+            "unlink_material",
+            "Unlink a mesh submesh from a shared material file through UnlinkMaterialCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Mesh entity id")},
+                {"entity_name", stringSchema("Mesh entity name, used only when entity_id is omitted")},
+                {"submesh_index", integerSchema("Submesh index. Defaults to 0")}
+            }),
+            false
+        },
+        {
+            "create_material_file",
+            "Create a .material file from a mesh submesh and link it back to that submesh.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Mesh entity id")},
+                {"entity_name", stringSchema("Mesh entity name, used only when entity_id is omitted")},
+                {"submesh_index", integerSchema("Submesh index. Defaults to 0")},
+                {"target_dir", stringSchema("Safe project-relative directory for the material file")}
+            }, {"target_dir"}),
+            false
+        },
+        {
+            "set_terrain_textures",
+            "Assign terrain base/blend/detail texture paths through undoable property commands.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Terrain entity id")},
+                {"entity_name", stringSchema("Terrain entity name, used only when entity_id is omitted")},
+                {"heightmap_path", stringSchema("Optional project-relative heightmap texture path")},
+                {"blendmap_path", stringSchema("Optional project-relative blendmap texture path")},
+                {"detail_red_path", stringSchema("Optional project-relative detail texture path for blend red")},
+                {"detail_green_path", stringSchema("Optional project-relative detail texture path for blend green")},
+                {"detail_blue_path", stringSchema("Optional project-relative detail texture path for blend blue")}
+            }),
+            false
+        },
+        {
+            "create_terrain_blendmap",
+            "Create an undoable RGB terrain blendmap texture with constant channel values.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Terrain entity id")},
+                {"entity_name", stringSchema("Terrain entity name, used only when entity_id is omitted")},
+                {"resolution", integerSchema("Square blendmap resolution, 2-2048. Defaults to terrain heightmap setting")},
+                {"red", numberSchema("Red channel 0-1")},
+                {"green", numberSchema("Green channel 0-1")},
+                {"blue", numberSchema("Blue channel 0-1")}
+            }),
+            false
+        },
+        {
+            "add_terrain_collision",
+            "Add Body3DComponent to a terrain entity and configure a height-field shape when supported.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Terrain entity id")},
+                {"entity_name", stringSchema("Terrain entity name, used only when entity_id is omitted")}
+            }),
+            false
+        },
+        {
+            "create_script",
+            "Create a Lua or C++ script file from a minimal template, attach it to an entity, and update ScriptComponent.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"type", stringSchema("lua, cpp_subclass, or cpp_script_class")},
+                {"class_name", stringSchema("Class/module name")},
+                {"target_dir", stringSchema("Safe project-relative target directory. Defaults to scripts")}
+            }, {"type", "class_name"}),
+            false
+        },
+        {
+            "attach_script",
+            "Attach an existing Lua or C++ script entry to an entity ScriptComponent.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"type", stringSchema("lua, cpp_subclass, or cpp_script_class")},
+                {"class_name", stringSchema("Class/module name")},
+                {"path", stringSchema("Safe project-relative .lua or .cpp path")},
+                {"header_path", stringSchema("Safe project-relative header path for C++ scripts")}
+            }, {"type", "class_name", "path"}),
+            false
+        },
+        {
+            "create_bundle_from_entity",
+            "Create a .bundle from an entity hierarchy through CreateEntityBundleCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Root entity id")},
+                {"entity_name", stringSchema("Root entity name, used only when entity_id is omitted")},
+                {"bundle_path", stringSchema("Safe project-relative .bundle output path")}
+            }, {"bundle_path"}),
+            false
+        },
+        {
+            "import_bundle_instance",
+            "Import a .bundle file as a scene instance through ImportEntityBundleCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"bundle_path", stringSchema("Safe project-relative .bundle path")},
+                {"parent_id", integerSchema("Optional parent entity id")}
+            }, {"bundle_path"}),
+            false
+        },
+        {
+            "add_entity_to_bundle",
+            "Insert an entity into an existing bundle through AddEntityToBundleCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"bundle_root_id", integerSchema("Bundle root/parent entity id")}
+            }, {"bundle_root_id"}),
+            false
+        },
+        {
+            "remove_entity_from_bundle",
+            "Remove a bundle member entity from its bundle through RemoveEntityFromBundleCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")}
+            }),
+            false
+        },
+        {
+            "make_bundle_component_unique",
+            "Convert a shared bundle component into a local override through ComponentToBundleLocalCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Component name")}
+            }, {"component"}),
+            false
+        },
+        {
+            "revert_bundle_component",
+            "Revert a local bundle component override back to the shared bundle through ComponentToBundleSharedCmd.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Component name")}
+            }, {"component"}),
+            false
+        },
+        {
+            "export_project",
+            "Run the editor export pipeline for selected platforms.",
+            objectSchema({
+                {"target_dir", stringSchema("Output directory. Must be outside or separate from project source")},
+                {"platforms", stringSchema("Comma-separated platforms: linux, windows, macos, ios, android, web, all")},
+                {"assets_dir", stringSchema("Optional asset directory, project-relative or absolute")},
+                {"lua_dir", stringSchema("Optional Lua directory, project-relative or absolute")},
+                {"start_scene_id", integerSchema("Optional startup scene id override")}
+            }, {"target_dir"}),
+            false
+        },
+        {
+            "generate_shaders",
+            "Generate selected shaders using the editor shader builder.",
+            objectSchema({
+                {"target_dir", stringSchema("Output directory")},
+                {"platforms", stringSchema("Comma-separated platforms: linux, windows, macos, ios, android, web, all")},
+                {"format", stringSchema("binary, header, or json")}
+            }, {"target_dir"}),
             false
         },
         {
@@ -149,6 +692,26 @@ bool hasString(const Json& args, const char* key) {
 
 bool hasObject(const Json& args, const char* key) {
     return args.contains(key) && args[key].is_object();
+}
+
+bool hasAnyValueField(const Json& args) {
+    static const char* keys[] = {
+        "bool_value", "int_value", "number_value", "string_value",
+        "vector2_value", "vector3_value", "vector4_value", "quat_value",
+        "texture_path", "entity_value"
+    };
+    for (const char* key : keys) {
+        if (args.contains(key)) return true;
+    }
+    return false;
+}
+
+bool hasEntitySelector(const Json& args) {
+    return args.contains("entity_id") || hasString(args, "entity_name");
+}
+
+bool hasSceneId(const Json& args, const char* key) {
+    return args.contains(key) && (args[key].is_number_integer() || args[key].is_number_unsigned());
 }
 
 ValidationResult ok() {
@@ -194,6 +757,18 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
     if (name == "search_resources") {
         return hasString(arguments, "query") ? ok() : fail("search_resources requires query.");
     }
+    if (name == "inspect_entity" || name == "delete_entity" || name == "duplicate_entity") {
+        return hasEntitySelector(arguments) ? ok() : fail(name + " requires entity_id or entity_name.");
+    }
+    if (name == "inspect_component" || name == "add_component" || name == "remove_component" ||
+        name == "make_bundle_component_unique" || name == "revert_bundle_component") {
+        if (!hasEntitySelector(arguments)) return fail(name + " requires entity_id or entity_name.");
+        return hasString(arguments, "component") ? ok() : fail(name + " requires component.");
+    }
+    if (name == "rename_entity") {
+        if (!hasEntitySelector(arguments)) return fail("rename_entity requires entity_id or entity_name.");
+        return hasString(arguments, "new_name") ? ok() : fail("rename_entity requires new_name.");
+    }
     if (name == "create_entity") {
         if (!hasString(arguments, "name") || !hasString(arguments, "type")) {
             return fail("create_entity requires name and type.");
@@ -204,8 +779,109 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         if (!arguments.contains("entity_id") && !hasString(arguments, "entity_name")) {
             return fail("set_entity_transform requires entity_id or entity_name.");
         }
-        if (!hasObject(arguments, "position") && !hasObject(arguments, "scale")) {
-            return fail("set_entity_transform requires position or scale.");
+        if (!hasObject(arguments, "position") && !hasObject(arguments, "rotation") && !hasObject(arguments, "scale")) {
+            return fail("set_entity_transform requires position, rotation, or scale.");
+        }
+        return ok();
+    }
+    if (name == "reparent_entity") {
+        return hasEntitySelector(arguments) ? ok() : fail("reparent_entity requires entity_id or entity_name.");
+    }
+    if (name == "move_entity_order") {
+        if (!hasEntitySelector(arguments)) return fail("move_entity_order requires entity_id or entity_name.");
+        if (!arguments.contains("target_id") && !hasString(arguments, "target_name")) return fail("move_entity_order requires target_id or target_name.");
+        return hasString(arguments, "insertion") ? ok() : fail("move_entity_order requires insertion.");
+    }
+    if (name == "set_component_property") {
+        if (!hasEntitySelector(arguments)) return fail("set_component_property requires entity_id or entity_name.");
+        if (!hasString(arguments, "component") || !hasString(arguments, "property")) {
+            return fail("set_component_property requires component and property.");
+        }
+        return hasAnyValueField(arguments) ? ok() : fail("set_component_property requires one typed value field.");
+    }
+    if (name == "create_scene") {
+        return hasString(arguments, "name") && hasString(arguments, "type")
+            ? ok() : fail("create_scene requires name and type.");
+    }
+    if (name == "rename_scene") {
+        return hasString(arguments, "new_name") ? ok() : fail("rename_scene requires new_name.");
+    }
+    if (name == "set_start_scene") {
+        return hasSceneId(arguments, "scene_id") ? ok() : fail("set_start_scene requires scene_id.");
+    }
+    if (name == "set_scene_property") {
+        if (!hasString(arguments, "property")) return fail("set_scene_property requires property.");
+        return hasAnyValueField(arguments) ? ok() : fail("set_scene_property requires one typed value field.");
+    }
+    if (name == "control_play_mode") {
+        return hasString(arguments, "action") ? ok() : fail("control_play_mode requires action.");
+    }
+    if (name == "add_child_scene" || name == "remove_child_scene") {
+        return hasSceneId(arguments, "child_scene_id") ? ok() : fail(name + " requires child_scene_id.");
+    }
+    if (name == "set_child_scene_start_active") {
+        if (!hasSceneId(arguments, "child_scene_id")) return fail("set_child_scene_start_active requires child_scene_id.");
+        return arguments.contains("start_active") && arguments["start_active"].is_boolean()
+            ? ok() : fail("set_child_scene_start_active requires start_active.");
+    }
+    if (name == "load_child_scene_inline") {
+        if (!hasSceneId(arguments, "child_scene_id")) return fail("load_child_scene_inline requires child_scene_id.");
+        return arguments.contains("load") && arguments["load"].is_boolean()
+            ? ok() : fail("load_child_scene_inline requires load.");
+    }
+    if (name == "create_folder") {
+        return hasString(arguments, "name") ? ok() : fail("create_folder requires name.");
+    }
+    if (name == "rename_resource") {
+        return hasString(arguments, "path") && hasString(arguments, "new_name")
+            ? ok() : fail("rename_resource requires path and new_name.");
+    }
+    if (name == "delete_resource") {
+        return hasString(arguments, "path") ? ok() : fail("delete_resource requires path.");
+    }
+    if (name == "import_resource_file") {
+        return hasString(arguments, "source_path") && hasString(arguments, "target_dir")
+            ? ok() : fail("import_resource_file requires source_path and target_dir.");
+    }
+    if (name == "link_material") {
+        if (!hasEntitySelector(arguments)) return fail("link_material requires entity_id or entity_name.");
+        return hasString(arguments, "material_path") ? ok() : fail("link_material requires material_path.");
+    }
+    if (name == "unlink_material" || name == "remove_entity_from_bundle") {
+        return hasEntitySelector(arguments) ? ok() : fail(name + " requires entity_id or entity_name.");
+    }
+    if (name == "create_material_file") {
+        if (!hasEntitySelector(arguments)) return fail("create_material_file requires entity_id or entity_name.");
+        return hasString(arguments, "target_dir") ? ok() : fail("create_material_file requires target_dir.");
+    }
+    if (name == "create_script") {
+        if (!hasEntitySelector(arguments)) return fail("create_script requires entity_id or entity_name.");
+        return hasString(arguments, "type") && hasString(arguments, "class_name")
+            ? ok() : fail("create_script requires type and class_name.");
+    }
+    if (name == "attach_script") {
+        if (!hasEntitySelector(arguments)) return fail("attach_script requires entity_id or entity_name.");
+        return hasString(arguments, "type") && hasString(arguments, "class_name") && hasString(arguments, "path")
+            ? ok() : fail("attach_script requires type, class_name, and path.");
+    }
+    if (name == "create_bundle_from_entity") {
+        if (!hasString(arguments, "bundle_path")) return fail("create_bundle_from_entity requires bundle_path.");
+        return hasEntitySelector(arguments) ? ok() : fail("create_bundle_from_entity requires entity_id or entity_name.");
+    }
+    if (name == "import_bundle_instance") {
+        return hasString(arguments, "bundle_path") ? ok() : fail("import_bundle_instance requires bundle_path.");
+    }
+    if (name == "add_entity_to_bundle") {
+        if (!hasEntitySelector(arguments)) return fail("add_entity_to_bundle requires entity_id or entity_name.");
+        return arguments.contains("bundle_root_id") ? ok() : fail("add_entity_to_bundle requires bundle_root_id.");
+    }
+    if (name == "export_project" || name == "generate_shaders") {
+        return hasString(arguments, "target_dir") ? ok() : fail(name + " requires target_dir.");
+    }
+    if (name == "create_terrain_heightmap") {
+        std::string mode = arguments.value("mode", "middle");
+        if (mode != "flat" && mode != "middle" && mode != "random_noise" && mode != "fractal_noise") {
+            return fail("create_terrain_heightmap mode must be flat, middle, random_noise, or fractal_noise.");
         }
         return ok();
     }
@@ -252,6 +928,17 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
             ? "List entities in scene " + std::to_string(arguments.value("scene_id", 0))
             : "List entities in the selected scene";
     }
+    if (name == "inspect_entity") {
+        return arguments.contains("entity_id")
+            ? "Inspect entity " + std::to_string(arguments.value("entity_id", 0))
+            : "Inspect entity \"" + arguments.value("entity_name", "") + "\"";
+    }
+    if (name == "inspect_component") {
+        return "Inspect " + arguments.value("component", "component") + " properties";
+    }
+    if (name == "list_component_types") {
+        return "List editor component types";
+    }
     if (name == "create_entity") {
         out << "Create " << arguments.value("type", "entity")
             << " entity \"" << arguments.value("name", "Entity") << "\"";
@@ -262,6 +949,136 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
             out << "Set transform for entity " << arguments["entity_id"].get<uint64_t>();
         } else {
             out << "Set transform for entity \"" << arguments.value("entity_name", "") << "\"";
+        }
+        return out.str();
+    }
+    if (name == "rename_entity") {
+        return "Rename entity to \"" + arguments.value("new_name", "") + "\"";
+    }
+    if (name == "delete_entity") {
+        return "Delete entity";
+    }
+    if (name == "duplicate_entity") {
+        return "Duplicate entity";
+    }
+    if (name == "reparent_entity") {
+        return "Reparent entity";
+    }
+    if (name == "move_entity_order") {
+        return "Move entity " + arguments.value("insertion", "relative to target");
+    }
+    if (name == "select_entities") {
+        return arguments.value("clear", false) ? "Clear entity selection" : "Select entity";
+    }
+    if (name == "add_component") {
+        return "Add " + arguments.value("component", "component");
+    }
+    if (name == "remove_component") {
+        return "Remove " + arguments.value("component", "component");
+    }
+    if (name == "set_component_property") {
+        return "Set " + arguments.value("component", "component") + "." + arguments.value("property", "property");
+    }
+    if (name == "create_scene") {
+        return "Create " + arguments.value("type", "scene") + " scene \"" + arguments.value("name", "Scene") + "\"";
+    }
+    if (name == "rename_scene") {
+        return "Rename scene to \"" + arguments.value("new_name", "") + "\"";
+    }
+    if (name == "save_scene") {
+        return "Save scene";
+    }
+    if (name == "save_all_scenes") {
+        return "Save all scenes";
+    }
+    if (name == "set_start_scene") {
+        return "Set startup scene " + std::to_string(arguments.value("scene_id", 0));
+    }
+    if (name == "set_scene_property") {
+        return "Set scene property " + arguments.value("property", "");
+    }
+    if (name == "control_play_mode") {
+        return arguments.value("action", "Control") + " play mode";
+    }
+    if (name == "add_child_scene") {
+        return "Add child scene " + std::to_string(arguments.value("child_scene_id", 0));
+    }
+    if (name == "remove_child_scene") {
+        return "Remove child scene " + std::to_string(arguments.value("child_scene_id", 0));
+    }
+    if (name == "set_child_scene_start_active") {
+        return std::string(arguments.value("start_active", true) ? "Enable" : "Disable") + " child scene Start active";
+    }
+    if (name == "load_child_scene_inline") {
+        return std::string(arguments.value("load", true) ? "Load" : "Unload") + " child scene inline";
+    }
+    if (name == "create_folder") {
+        return "Create folder \"" + arguments.value("name", "") + "\"";
+    }
+    if (name == "rename_resource") {
+        return "Rename resource " + arguments.value("path", "");
+    }
+    if (name == "delete_resource") {
+        return "Delete resource " + arguments.value("path", "");
+    }
+    if (name == "import_resource_file") {
+        return "Import file " + arguments.value("source_path", "");
+    }
+    if (name == "link_material") {
+        return "Link material " + arguments.value("material_path", "");
+    }
+    if (name == "unlink_material") {
+        return "Unlink material";
+    }
+    if (name == "create_material_file") {
+        return "Create linked material file";
+    }
+    if (name == "set_terrain_textures") {
+        return "Set terrain textures";
+    }
+    if (name == "create_terrain_blendmap") {
+        return "Create terrain blendmap";
+    }
+    if (name == "add_terrain_collision") {
+        return "Add terrain collision";
+    }
+    if (name == "create_script") {
+        return "Create " + arguments.value("type", "script") + " script " + arguments.value("class_name", "");
+    }
+    if (name == "attach_script") {
+        return "Attach script " + arguments.value("class_name", "");
+    }
+    if (name == "create_bundle_from_entity") {
+        return "Create bundle " + arguments.value("bundle_path", "");
+    }
+    if (name == "import_bundle_instance") {
+        return "Import bundle " + arguments.value("bundle_path", "");
+    }
+    if (name == "add_entity_to_bundle") {
+        return "Add entity to bundle";
+    }
+    if (name == "remove_entity_from_bundle") {
+        return "Remove entity from bundle";
+    }
+    if (name == "make_bundle_component_unique") {
+        return "Make bundle component unique";
+    }
+    if (name == "revert_bundle_component") {
+        return "Revert bundle component";
+    }
+    if (name == "export_project") {
+        return "Export project to " + arguments.value("target_dir", "");
+    }
+    if (name == "generate_shaders") {
+        return "Generate shaders to " + arguments.value("target_dir", "");
+    }
+    if (name == "create_terrain_heightmap") {
+        out << "Create " << arguments.value("mode", "middle")
+            << " terrain heightmap";
+        if (arguments.contains("entity_id")) {
+            out << " for entity " << arguments["entity_id"].get<uint64_t>();
+        } else if (arguments.contains("entity_name")) {
+            out << " for \"" << arguments.value("entity_name", "") << "\"";
         }
         return out.str();
     }

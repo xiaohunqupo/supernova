@@ -53,7 +53,7 @@ const char* approvalDisplayName(ai::ApprovalMode mode) {
     return kApprovalLabels[approvalToIndex(mode)];
 }
 
-std::string modelDisplayName(const ai::Settings& settings) {
+std::string modelDisplayName(const ai::Settings& settings, const ai::ModelCatalog& catalog) {
     std::vector<ai::ProviderId> providers = ai::SecretStore::providersWithKeys();
     if (providers.empty()) {
         return "No model";
@@ -65,12 +65,12 @@ std::string modelDisplayName(const ai::Settings& settings) {
     std::string current = settings.model.empty()
         ? ai::defaultModelForProvider(settings.provider)
         : settings.model;
-    for (const auto& model : ai::ModelCatalog::curatedModels(settings.provider)) {
+    for (const auto& model : catalog.models(settings.provider)) {
         if (current == model.id) {
             return model.label;
         }
     }
-    return current;
+    return ai::ModelCatalog::humanizeModelId(current);
 }
 
 std::string compactTitleText(const std::string& text) {
@@ -198,6 +198,16 @@ AiChatWindow::AiChatWindow(Project* project, ResourcesWindow* resourcesWindow)
     , resourcesWindow(resourcesWindow)
     , conversationStore(project) {
     service.setSettings(AppSettings::getAiSettings());
+    prefetchModels();
+}
+
+void AiChatWindow::prefetchModels() {
+    // Kick off a background /models fetch for every configured provider at
+    // app open, so the picker is already populated by the time it is opened.
+    const ai::Settings settings = AppSettings::getAiSettings();
+    for (ai::ProviderId provider : ai::SecretStore::providersWithKeys()) {
+        modelCatalog.refresh(provider, ai::SecretStore::getApiKey(provider), settings.customEndpoint);
+    }
 }
 
 void AiChatWindow::show() {
@@ -210,6 +220,7 @@ void AiChatWindow::show() {
         service.setSettings(AppSettings::getAiSettings());
         syncedInitialSettings = true;
     }
+    loadLatestConversationForCurrentProject();
 
     if (!isWindowVisible) {
         updateMessageNotification();
@@ -576,7 +587,7 @@ void AiChatWindow::drawComposerControls() {
     float avail = ImGui::GetContentRegionAvail().x;
     float buttonWidth = ImGui::GetFrameHeight();
     float editGap = std::max(4.0f, style.ItemInnerSpacing.x);
-    std::string modelText = modelDisplayName(settings);
+    std::string modelText = modelDisplayName(settings, modelCatalog);
     float preferredModelWidth = ImGui::CalcTextSize(modelText.c_str()).x + buttonWidth + editGap;
     float modelWidth = std::min(std::max(70.0f, preferredModelWidth),
                                 std::max(70.0f, avail * 0.62f));
@@ -663,7 +674,7 @@ void AiChatWindow::drawModelPopup() {
         : settings.model;
 
     // Only providers with a configured key are listed; their models are fetched
-    // live (curated list shown until the fetch lands).
+    // live from the provider (nothing is shown until the fetch lands).
     for (size_t pi = 0; pi < providers.size(); ++pi) {
         ai::ProviderId provider = providers[pi];
         if (modelCatalog.status(provider) == ai::CatalogStatus::Idle) {
@@ -673,16 +684,11 @@ void AiChatWindow::drawModelPopup() {
         if (pi > 0) {
             ImGui::Spacing();
         }
-        const char* suffix = "";
-        switch (modelCatalog.status(provider)) {
-            case ai::CatalogStatus::Loading: suffix = "  (loading...)"; break;
-            case ai::CatalogStatus::Error:   suffix = "  (defaults)"; break;
-            default: break;
-        }
-        ImGui::TextDisabled("%s%s", providerDisplayName(provider), suffix);
+        ImGui::TextDisabled("%s", providerDisplayName(provider));
         ImGui::Separator();
 
-        for (const auto& model : modelCatalog.models(provider)) {
+        std::vector<ai::ModelInfo> models = modelCatalog.models(provider);
+        for (const auto& model : models) {
             bool selected = (provider == settings.provider) && (current == model.id);
             ImGui::PushID(model.id.c_str());
             if (ImGui::Selectable(model.label.c_str(), selected)) {
@@ -696,6 +702,11 @@ void AiChatWindow::drawModelPopup() {
                 ImGui::SetItemDefaultFocus();
             }
             ImGui::PopID();
+        }
+        if (models.empty()) {
+            ImGui::TextDisabled("  %s", modelCatalog.status(provider) == ai::CatalogStatus::Loading
+                                            ? "Loading..."
+                                            : "No models available");
         }
     }
 
@@ -848,6 +859,35 @@ void AiChatWindow::updateMessageNotification() {
         hasNotification = true;
     }
     lastObservedMessageCount = messages.size();
+}
+
+void AiChatWindow::loadLatestConversationForCurrentProject() {
+    if (!project || service.isBusy()) {
+        return;
+    }
+
+    const std::string projectPath = project->getProjectPath().string();
+    if (projectPath != autoLoadedProjectPath) {
+        autoLoadedProjectPath = projectPath;
+        autoLoadedLatestConversation = false;
+        service.clearConversation();
+        currentConversationId.clear();
+        lastSavedMessageCount = 0;
+        lastObservedMessageCount = 0;
+        hasNotification = false;
+        scrollToBottom = false;
+        inputBuffer.fill('\0');
+    }
+
+    if (projectPath.empty() || autoLoadedLatestConversation) {
+        return;
+    }
+
+    autoLoadedLatestConversation = true;
+    std::vector<ai::ConversationMeta> conversations = conversationStore.list();
+    if (!conversations.empty()) {
+        loadConversation(conversations.front().id);
+    }
 }
 
 void AiChatWindow::persistConversation() {

@@ -209,6 +209,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/ai/AiPathUtils.cpp
     ${EDITOR_DIR}/ai/AiProvider.cpp
     ${EDITOR_DIR}/ai/AiService.cpp
+    ${EDITOR_DIR}/ai/AiTerrainCapability.cpp
     ${EDITOR_DIR}/ai/AiTypes.cpp
     ${EDITOR_DIR}/ai/ConversationStore.cpp
     ${EDITOR_DIR}/ai/EditorActionExecutor.cpp
@@ -223,6 +224,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/util/EntityBundle.cpp
     ${EDITOR_DIR}/util/ProjectUtils.cpp
     ${EDITOR_DIR}/util/ScriptParser.cpp
+    ${EDITOR_DIR}/util/PngWriter.cpp
     ${EDITOR_DIR}/util/UIUtils.cpp
 
     ${EDITOR_DIR}/shader/ShaderBuilder.cpp

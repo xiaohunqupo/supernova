@@ -38,7 +38,9 @@ public:
     // Queues a background fetch (forces a re-fetch even if already loaded).
     void refresh(ProviderId provider, const std::string& apiKey, const std::string& endpoint);
 
-    static std::vector<ModelInfo> curatedModels(ProviderId provider);
+    // Builds a friendly label from a raw model id when a provider exposes no
+    // display name (e.g. "deepseek-v4-flash" -> "Deepseek V4 Flash").
+    static std::string humanizeModelId(const std::string& id);
 
 private:
     struct Request {
