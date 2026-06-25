@@ -502,14 +502,7 @@ void AiChatWindow::drawHeader() {
     ImGui::SetCursorPosX(rightEdge - buttonsWidth);
     ImGui::BeginDisabled(service.isBusy());
     if (Widgets::iconButton("##AiNewChat", ICON_FA_PLUS, buttonSize)) {
-        // The previous conversation was already persisted by the per-frame pump.
-        service.clearConversation();
-        currentConversationId.clear();
-        lastSavedMessageCount = 0;
-        lastObservedMessageCount = 0;
-        hasNotification = false;
-        inputBuffer.fill('\0');
-        scrollToBottom = false;
+        startNewChat();
     }
     ImGui::EndDisabled();
     ImGui::SetItemTooltip("New chat");
@@ -1039,6 +1032,24 @@ void AiChatWindow::updateMessageNotification() {
         hasNotification = true;
     }
     lastObservedMessageCount = messages.size();
+}
+
+void AiChatWindow::startNewChat() {
+    if (service.isBusy()) {
+        return;
+    }
+    // The previous conversation was already persisted by the per-frame pump.
+    service.clearConversation();
+    currentConversationId.clear();
+    lastSavedMessageCount = 0;
+    lastObservedMessageCount = 0;
+    hasNotification = false;
+    inputBuffer.fill('\0');
+    scrollToBottom = false;
+    // Mark the current path as handled so a fresh temp project at a reused path
+    // does not auto-restore the previous chat on the next frame.
+    autoLoadedProjectPath = project ? project->getProjectPath().string() : std::string();
+    autoLoadedLatestConversation = true;
 }
 
 void AiChatWindow::loadLatestConversationForCurrentProject() {

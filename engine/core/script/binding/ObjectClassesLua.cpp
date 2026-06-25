@@ -316,7 +316,8 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("color", &Mesh::getColor, (void(Mesh::*)(Vector4))&Mesh::setColor)
         .addFunction("setColor", 
             luabridge::overload<const float, const float, const float>(&Mesh::setColor),
-            luabridge::overload<const float, const float, const float, const float>(&Mesh::setColor))
+            luabridge::overload<const float, const float, const float, const float>(&Mesh::setColor),
+            luabridge::overload<Vector4>(&Mesh::setColor))
         .addProperty("alpha", &Mesh::getAlpha, &Mesh::setAlpha)
         .addProperty("material", (Material(Mesh::*)()const)&Mesh::getMaterial, (void(Mesh::*)(const Material&))&Mesh::setMaterial)
         .addFunction("setMaterial", 

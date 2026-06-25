@@ -77,6 +77,10 @@ public:
     void setOpen(bool open);
     bool isOpen() const;
     bool isFocused() const;
+
+    // Clears the in-memory chat. Used by the header New Chat button and when
+    // the editor starts a fresh project at the same path (e.g. File > New Project).
+    void startNewChat();
 };
 
 } // namespace doriax::editor

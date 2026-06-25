@@ -566,7 +566,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "create_script",
-            "Create a Lua or C++ script file from a minimal template, attach it to an entity, and update ScriptComponent. Lua scripts are returned tables with init(), self.scene, and self.entity.",
+            "Create a Lua or C++ script file from a minimal template, attach it to an entity, and update ScriptComponent. Lua scripts are returned tables with init(), self.scene, and self.entity. C++ scripts use flat headers (\"Mesh.h\", \"ScriptBase.h\"); for mesh/cube behavior prefer cpp_subclass extending Mesh and unregister engine events in destructors.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"entity_id", integerSchema("Entity id")},
@@ -593,7 +593,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "update_script_file",
-            "Replace an existing project script file with complete content and refresh attached ScriptComponent properties. Lua content must use Doriax table modules, not Dori.Script or editor property paths.",
+            "Replace an existing project script file with complete content and refresh attached ScriptComponent properties. Lua content must use Doriax table modules, not Dori.Script or editor property paths. For Mesh/Shape color use Shape(self.scene, self.entity) and setColor(1,0,0,1) or setColor(Vector4(1,0,0,1)). C++ content must use flat quoted headers (\"Mesh.h\", not <core/Mesh.h>), cpp_subclass + setColor for mesh entities, onUpdate with REGISTER_ENGINE_EVENT, and destructor cleanup with UNREGISTER_ENGINE_EVENT.",
             objectSchema({
                 {"path", stringSchema("Existing safe project-relative script path. Allowed extensions: .lua, .cpp, .h, .hpp")},
                 {"content", stringSchema("Complete replacement file contents")},

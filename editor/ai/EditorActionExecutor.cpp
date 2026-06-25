@@ -391,6 +391,27 @@ std::string doriaxLuaScriptGuide(const std::string& className) {
            "Use search_engine_api for real signatures before writing engine API code.";
 }
 
+std::string doriaxCppScriptGuide(ScriptType type, const std::string& parentClass) {
+    std::ostringstream guide;
+    guide << "Doriax C++ scripts compile against flat engine API headers copied to .doriax/engine-api. "
+          << "Use quoted includes such as \"Mesh.h\", \"ScriptBase.h\", \"Engine.h\", and \"ScriptProperty.h\". "
+          << "Never use #include <core/...> or #include \"core/...\". ";
+    if (type == ScriptType::SCRIPT_CLASS) {
+        guide << "cpp_script_class inherits doriax::ScriptBase for general entity logic. "
+              << "Register frame callbacks with REGISTER_ENGINE_EVENT(onUpdate) in the constructor, "
+              << "unregister with UNREGISTER_ENGINE_EVENT(onUpdate) in the destructor, and implement void onUpdate(). "
+              << "ScriptBase exposes getScene()/getEntity(); construct a runtime wrapper such as Object(getScene(), getEntity()) to control the entity.";
+    } else {
+        guide << "cpp_subclass inherits doriax::" << parentClass
+              << " and calls engine methods (e.g. setColor) directly on this. "
+              << "Register frame callbacks with REGISTER_ENGINE_EVENT(onUpdate) in the constructor and unregister them in the destructor when using onUpdate(). "
+              << "For mesh/cube color on a Mesh entity, prefer cpp_subclass extending Mesh (or Shape), not ScriptBase.";
+    }
+    guide << " Call search_engine_api for real signatures before writing engine API code. "
+          << "DPROPERTY macros are optional; removing them clears stale editor properties automatically.";
+    return guide.str();
+}
+
 std::string validateDoriaxLuaScriptContent(const std::string& content) {
     const std::string contentLower = lower(content);
 
@@ -422,6 +443,32 @@ std::string validateDoriaxLuaScriptContent(const std::string& content) {
 
     if (contentLower.find("return ") == std::string::npos) {
         return "Doriax Lua modules must return their script table.";
+    }
+
+    return {};
+}
+
+std::string validateDoriaxCppScriptContent(const std::string& content) {
+    const std::string contentLower = lower(content);
+
+    struct ForbiddenCppPattern {
+        const char* token;
+        const char* message;
+    };
+    static const ForbiddenCppPattern patterns[] = {
+        {"<core/", "C++ scripts must use flat quoted headers such as \"Mesh.h\", not <core/...>."},
+        {"\"core/", "C++ scripts must use flat quoted headers such as \"Mesh.h\", not \"core/...\"."},
+        {"get_component<", "Doriax C++ scripts do not use get_component. Use cpp_subclass and inherit the runtime class (e.g. Mesh) instead."},
+        {"oninit(", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onInit()."},
+        {"void oninit", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onInit()."},
+        {"on_start", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not on_start()."},
+        {"onstart(", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onStart()."}
+    };
+
+    for (const auto& pattern : patterns) {
+        if (contentLower.find(pattern.token) != std::string::npos) {
+            return std::string(pattern.message) + " Call search_engine_api and rewrite using the Doriax C++ script pattern.";
+        }
     }
 
     return {};
@@ -1993,6 +2040,17 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
         headerFull = PathUtils::uniqueChildPath(targetFull, className, scriptTypeExtension(type, true));
     }
 
+    std::string parentClass = "EntityHandle";
+    if (type == ScriptType::SUBCLASS) {
+        if (hasComponent(sceneProject->scene, entity, ComponentType::CameraComponent)) parentClass = "Camera";
+        else if (hasComponent(sceneProject->scene, entity, ComponentType::MeshComponent) ||
+                 hasComponent(sceneProject->scene, entity, ComponentType::ModelComponent)) parentClass = "Mesh";
+        else if (hasComponent(sceneProject->scene, entity, ComponentType::LightComponent)) parentClass = "Light";
+        else if (hasComponent(sceneProject->scene, entity, ComponentType::Transform)) parentClass = "Object";
+    } else if (type != ScriptType::SCRIPT_LUA) {
+        parentClass = "ScriptBase";
+    }
+
     if (type == ScriptType::SCRIPT_LUA) {
         std::ofstream f(sourceFull, std::ios::trunc);
         if (!f) return failResult("Failed to create Lua script file.");
@@ -2011,22 +2069,16 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
         f << "end\n\n";
         f << "return " << className << "\n";
     } else {
-        std::string parentClass = "EntityHandle";
-        if (type == ScriptType::SUBCLASS) {
-            if (hasComponent(sceneProject->scene, entity, ComponentType::CameraComponent)) parentClass = "Camera";
-            else if (hasComponent(sceneProject->scene, entity, ComponentType::MeshComponent) ||
-                     hasComponent(sceneProject->scene, entity, ComponentType::ModelComponent)) parentClass = "Mesh";
-            else if (hasComponent(sceneProject->scene, entity, ComponentType::LightComponent)) parentClass = "Light";
-            else if (hasComponent(sceneProject->scene, entity, ComponentType::Transform)) parentClass = "Object";
-        } else {
-            parentClass = "ScriptBase";
-        }
-
         std::ofstream h(headerFull, std::ios::trunc);
         std::ofstream c(sourceFull, std::ios::trunc);
         if (!h || !c) return failResult("Failed to create C++ script files.");
         h << "#pragma once\n\n";
-        h << "#include \"" << parentClass << ".h\"\n";
+        if (type == ScriptType::SUBCLASS) {
+            h << "#include \"Shape.h\"\n";
+            h << "#include \"" << parentClass << ".h\"\n";
+        } else {
+            h << "#include \"ScriptBase.h\"\n";
+        }
         h << "#include \"Engine.h\"\n";
         h << "#include \"ScriptProperty.h\"\n\n";
         h << "class " << className << " : public doriax::" << parentClass << " {\n";
@@ -2044,6 +2096,7 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
         c << "    REGISTER_ENGINE_EVENT(onUpdate);\n";
         c << "}\n\n";
         c << className << "::~" << className << "() {\n";
+        c << "    UNREGISTER_ENGINE_EVENT(onUpdate);\n";
         c << "}\n\n";
         c << "void " << className << "::onUpdate() {\n";
         c << "    if (!isActive) return;\n";
@@ -2074,6 +2127,24 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
             "shape:setColor(1.0, 0.0, 0.0, 1.0)";
         data["next_step"] =
             "If the user asked for behavior, call search_engine_api for required runtime wrappers/methods, then update_script_file with complete Lua contents.";
+    } else {
+        data["cpp_script_guide"] = doriaxCppScriptGuide(type, parentClass);
+        data["cpp_startup_method"] = "onUpdate with REGISTER_ENGINE_EVENT in constructor and UNREGISTER_ENGINE_EVENT in destructor";
+        if (parentClass == "Mesh") {
+            data["recommended_type"] = "cpp_subclass";
+            data["cpp_cube_color_example"] =
+                "#include \"" + className + ".h\"\n\n"
+                "using namespace doriax;\n\n"
+                + className + "::" + className + "(Scene* scene, Entity entity): Mesh(scene, entity) {\n"
+                "    REGISTER_ENGINE_EVENT(onUpdate);\n"
+                "    setColor(1.0f, 0.0f, 0.0f, 1.0f);\n"
+                "}\n\n"
+                + className + "::~" + className + "() {\n"
+                "    UNREGISTER_ENGINE_EVENT(onUpdate);\n"
+                "}\n";
+        }
+        data["next_step"] =
+            "If the user asked for behavior, call search_engine_api for required methods, then update_script_file with complete .h and .cpp contents using flat headers (e.g. \"Mesh.h\").";
     }
     return okResult("Created and attached script.", data);
 }
@@ -2145,6 +2216,11 @@ ActionResult EditorActionExecutor::updateScriptFile(const Json& arguments) {
         if (!validationError.empty()) {
             return failResult(validationError);
         }
+    } else if (ext == ".cpp" || ext == ".h" || ext == ".hpp") {
+        std::string validationError = validateDoriaxCppScriptContent(content);
+        if (!validationError.empty()) {
+            return failResult(validationError);
+        }
     }
 
     const fs::path fullPath = project->getProjectPath() / rel;
@@ -2193,7 +2269,11 @@ ActionResult EditorActionExecutor::updateScriptFile(const Json& arguments) {
             if (!matchesFile) continue;
 
             std::vector<ScriptEntry> scripts = scriptComponent->scripts;
-            project->updateScriptProperties(&sceneProject, entity, scripts, content, fullPath.string());
+            if (ext == ".h" || ext == ".hpp") {
+                project->updateScriptProperties(&sceneProject, entity, scripts, content, fullPath.string());
+            } else {
+                project->updateScriptProperties(&sceneProject, entity, scripts);
+            }
             PropertyCmd<std::vector<ScriptEntry>> propertyCmd(
                 project, sceneProject.id, entity, ComponentType::ScriptComponent, "scripts", scripts);
             propertyCmd.execute();

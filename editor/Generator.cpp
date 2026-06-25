@@ -803,6 +803,9 @@ std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<Sce
         sourceContent += "\n";
 
         for (const auto& s : scriptFiles) {
+            if (s.properties.empty()) {
+                continue;
+            }
             sourceContent += "            if (scriptEntry.className == \"" + s.className + "\") {\n";
 
             sourceContent += "                " + s.className + "* typedScript = static_cast<" + s.className + "*>(scriptEntry.instance);\n";

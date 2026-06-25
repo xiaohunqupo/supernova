@@ -75,6 +75,23 @@ bool isSameOrBaseClass(const std::string& candidateBase,
     return false;
 }
 
+std::string luaCallHint(const std::string& detail, const std::string& parent) {
+    const std::string detailLower = lower(detail);
+    const std::string parentLower = lower(parent);
+    if (detailLower.find(":setcolor()") != std::string::npos &&
+        (parentLower == "mesh" || parentLower == "shape" || parentLower == "image" ||
+         parentLower == "text" || parentLower == "polygon" || parentLower == "skybox")) {
+        return "Lua: local shape = Shape(self.scene, self.entity); "
+               "shape:setColor(1.0, 0.0, 0.0, 1.0) or shape:setColor(Vector4(1.0, 0.0, 0.0, 1.0)). "
+               "C++ cpp_subclass on Mesh: setColor(1.0f, 0.0f, 0.0f, 1.0f) in constructor or onUpdate; include \"Mesh.h\" (not <core/Mesh.h>) and unregister engine events in the destructor.";
+    }
+    if (parentLower == "shape" && detailLower.find(":setcolor()") == std::string::npos &&
+        detailLower.find("shape") != std::string::npos && detailLower.find("constructor") != std::string::npos) {
+        return "Construct with Shape(self.scene, self.entity) for an existing entity.";
+    }
+    return {};
+}
+
 } // namespace
 
 Json AiEngineApiContext::search(const std::string& query,
@@ -164,6 +181,10 @@ Json AiEngineApiContext::search(const std::string& query,
         if (static_cast<int>(results.size()) >= maxResults) break;
         Json entry = item.data;
         entry["score"] = item.score;
+        const std::string hint = luaCallHint(entry.value("detail", ""), entry.value("parent", ""));
+        if (!hint.empty()) {
+            entry["lua_call_hint"] = hint;
+        }
         results.push_back(std::move(entry));
     }
 
@@ -172,7 +193,7 @@ Json AiEngineApiContext::search(const std::string& query,
         {"query", query},
         {"parent", parentFilter},
         {"results", results},
-        {"usage_note", "Lua instance methods use ':' as shown in detail. Construct wrappers with signatures returned here, e.g. Shape(Scene, Entity). Do not invent APIs that are not returned here."}
+        {"usage_note", "Lua instance methods use ':' as shown in detail. Construct wrappers with signatures returned here, e.g. Shape(self.scene, self.entity). For color on Mesh/Shape, Lua uses setColor with RGBA floats or Vector4; C++ cpp_subclass scripts inherit Mesh and call setColor(1,0,0,1) with flat headers like \"Mesh.h\". Register engine callbacks in the constructor and unregister them in the destructor. Read lua_call_hint when present."}
     };
 }
 

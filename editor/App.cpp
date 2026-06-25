@@ -144,23 +144,23 @@ void editor::App::showMenu(){
             ImGui::BeginDisabled(isProjectBusy);
             if (ImGui::MenuItem("New Project")) {
                 std::string projectName = "MyDoriaxProject";
+                auto startFreshProject = [this, projectName]() {
+                    if (project.createTempProject(projectName, true)) {
+                        aiChatWindow->startNewChat();
+                    }
+                };
                 if (project.hasScenesUnsavedChanges() || codeEditor->hasUnsavedChanges() || project.isTempUnsavedProject()) {
                     Backend::getApp().registerConfirmAlert(
                         "Unsaved Changes",
                         "There are unsaved changes. Do you want to save them before creating a new project?",
-                        [this, projectName]() {
-                            saveAllAndProject([this, projectName]() {
-                                project.createTempProject(projectName, true);
-                            });
+                        [this, startFreshProject]() {
+                            saveAllAndProject(startFreshProject);
                         },
-                        [this, projectName]() {
-                            // No callback - just reset without saving
-                            project.createTempProject(projectName, true);
-                        }
+                        startFreshProject
                     );
                 } else {
                     // No unsaved changes, just reset
-                    project.createTempProject(projectName, true);
+                    startFreshProject();
                 }
             }
             ImGui::EndDisabled();

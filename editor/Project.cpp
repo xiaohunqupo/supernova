@@ -3746,7 +3746,12 @@ void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity 
             } else {
                 parsedProperties = ScriptParser::parseScriptProperties(fullPath);
             }
+
             if (parsedProperties.empty()) {
+                if (!scriptEntry.properties.empty()) {
+                    scriptEntry.properties.clear();
+                    hasChanges = true;
+                }
                 continue;
             }
 
