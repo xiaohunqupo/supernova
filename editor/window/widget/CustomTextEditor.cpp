@@ -19,6 +19,21 @@
 
 namespace doriax::editor {
 
+namespace {
+
+bool isEngineApiConstructorSymbol(const EngineAPISymbol& sym) {
+    if (!sym.name || !sym.parent || !sym.detail) return false;
+
+    const std::string name = sym.name;
+    const std::string parent = sym.parent;
+    const std::string detail = sym.detail;
+    return !name.empty() &&
+           parent == name &&
+           detail.rfind(name + "(", 0) == 0;
+}
+
+} // namespace
+
 CustomTextEditor::CustomTextEditor()
     : primaryCursor(0)
     , undoIndex(0)
@@ -319,6 +334,8 @@ void CustomTextEditor::addEngineAPISuggestions() {
     };
 
     for (const auto& sym : apiSymbols) {
+        if (isEngineApiConstructorSymbol(sym)) continue;
+
         SuggestionKind sk = SuggestionKind::Variable;
         auto it = kindMap.find(sym.kind);
         if (it != kindMap.end()) sk = it->second;
@@ -2394,6 +2411,7 @@ void CustomTextEditor::UpdateProjectSymbols(const std::vector<ProjectSymbol>& sy
     static const std::unordered_set<std::string> engineKeys = [] {
         std::unordered_set<std::string> keys;
         for (const auto& sym : getEngineAPISymbols()) {
+            if (isEngineApiConstructorSymbol(sym)) continue;
             keys.insert(std::string(sym.name) + "\x1f" + (sym.parent ? sym.parent : ""));
         }
         return keys;

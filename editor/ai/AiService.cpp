@@ -223,7 +223,13 @@ std::string AiService::buildSystemPrompt() const {
         << "Read-only tools inspect project context. Mutating, file-writing, download, and import tools may require user approval before they run.\n"
         << "After a tool returns, use its result to decide the next step and report concise progress to the user.\n"
         << "Prefer project-relative paths. Never request arbitrary shell commands. Never ask for secrets in chat.\n"
-        << "For external assets, use curated sources only and preserve license/author/source attribution.\n";
+        << "For external assets, use curated sources only and preserve license/author/source attribution.\n"
+        << "For scripts and engine API code, do not invent Doriax APIs. Use search_engine_api when you need classes, methods, or signatures.\n"
+        << "When you create a script for requested behavior, write the complete script with update_script_file instead of asking the user to edit it manually.\n"
+        << "Doriax Lua scripts are plain returned module tables: local Name = { properties = {} }; function Name:init() ... end; return Name.\n"
+        << "Lua script instances receive self.scene and self.entity; self.entity is a numeric Entity id, not an object. Never call self.entity:... or self.entity....\n"
+        << "They do not use Dori.Script, on_start, get_entity, get_component/getComponent, or set_property/setProperty.\n"
+        << "Do not put editor property paths such as submeshes[0].material.baseColorFactor inside Lua scripts; use runtime wrappers and APIs from search_engine_api instead.\n";
     return prompt.str();
 }
 

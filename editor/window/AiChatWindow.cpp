@@ -9,6 +9,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -22,6 +23,107 @@ const ImVec4 kAssistantColor(0.72f, 0.86f, 0.68f, 1.0f);
 const ImVec4 kSuccessColor(0.55f, 0.85f, 0.55f, 1.0f);
 const ImVec4 kErrorColor(0.95f, 0.55f, 0.55f, 1.0f);
 const ImVec4 kCodeColor(0.82f, 0.85f, 0.72f, 1.0f);
+
+// ImGui does not soft-wrap editable multiline inputs, so the chat composer
+// inserts line breaks as the current line reaches the input edge.
+struct PromptWrapContext {
+    float maxLineWidth = 0.0f;
+};
+
+bool isPromptWrapSpace(char c) {
+    return c == ' ' || c == '\t';
+}
+
+bool isUtf8Continuation(char c) {
+    return (static_cast<unsigned char>(c) & 0xc0) == 0x80;
+}
+
+int nextCodepointStart(const char* text, int len, int pos) {
+    if (pos >= len) {
+        return len;
+    }
+    ++pos;
+    while (pos < len && isUtf8Continuation(text[pos])) {
+        ++pos;
+    }
+    return pos;
+}
+
+float promptLineWidth(const char* text, int start, int end) {
+    if (end <= start) {
+        return 0.0f;
+    }
+    return ImGui::CalcTextSize(text + start, text + end, false).x;
+}
+
+int findPromptWrapBreak(const char* text, int len, int lineStart, int cursorPos,
+                        float maxLineWidth, bool* replaceSpace) {
+    *replaceSpace = false;
+    for (int i = cursorPos - 1; i > lineStart; --i) {
+        if (!isPromptWrapSpace(text[i])) {
+            continue;
+        }
+        if (promptLineWidth(text, lineStart, i) <= maxLineWidth) {
+            *replaceSpace = true;
+            return i;
+        }
+    }
+
+    int best = lineStart;
+    for (int i = nextCodepointStart(text, len, lineStart);
+         i < cursorPos;
+         i = nextCodepointStart(text, len, i)) {
+        if (promptLineWidth(text, lineStart, i) > maxLineWidth) {
+            break;
+        }
+        best = i;
+    }
+    return best;
+}
+
+int promptWrapCallback(ImGuiInputTextCallbackData* data) {
+    if (data->EventFlag != ImGuiInputTextFlags_CallbackEdit) {
+        return 0;
+    }
+
+    const auto* context = static_cast<const PromptWrapContext*>(data->UserData);
+    if (!context || context->maxLineWidth <= ImGui::GetFontSize() * 4.0f) {
+        return 0;
+    }
+
+    for (int guard = 0; guard < 64; ++guard) {
+        int lineStart = data->CursorPos;
+        while (lineStart > 0 && data->Buf[lineStart - 1] != '\n') {
+            --lineStart;
+        }
+
+        if (data->CursorPos <= lineStart ||
+            promptLineWidth(data->Buf, lineStart, data->CursorPos) <= context->maxLineWidth) {
+            break;
+        }
+
+        bool replaceSpace = false;
+        int breakPos = findPromptWrapBreak(data->Buf, data->BufTextLen, lineStart,
+                                           data->CursorPos, context->maxLineWidth,
+                                           &replaceSpace);
+        if (breakPos <= lineStart || breakPos > data->CursorPos) {
+            break;
+        }
+
+        if (replaceSpace) {
+            data->Buf[breakPos] = '\n';
+            data->BufDirty = true;
+            data->SelectionStart = data->SelectionEnd = data->CursorPos;
+        } else {
+            if (data->BufTextLen + 1 >= data->BufSize) {
+                break;
+            }
+            data->InsertChars(breakPos, "\n");
+        }
+    }
+
+    return 0;
+}
 
 const char* providerDisplayName(ai::ProviderId provider) {
     switch (provider) {
@@ -129,6 +231,66 @@ std::string elideToWidth(std::string text, float width) {
         }
     }
     return suffix;
+}
+
+int64_t currentEpochSeconds() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+void constrainNextPopupToViewport(float minWidth, float maxWidth, float maxHeightFraction) {
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    float viewportMaxWidth = std::max(120.0f, viewport->WorkSize.x - 16.0f);
+    float popupMaxWidth = std::min(maxWidth, viewportMaxWidth);
+    float popupMinWidth = std::min(minWidth, popupMaxWidth);
+    float popupMaxHeight = std::max(ImGui::GetFrameHeightWithSpacing() * 8.0f,
+                                    viewport->WorkSize.y * maxHeightFraction);
+
+    ImGui::SetNextWindowSizeConstraints(ImVec2(popupMinWidth, 0.0f),
+                                        ImVec2(popupMaxWidth, popupMaxHeight));
+}
+
+void keepCurrentWindowInsideViewport() {
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 pos = ImGui::GetWindowPos();
+    ImVec2 size = ImGui::GetWindowSize();
+    ImVec2 workMin = viewport->WorkPos;
+    ImVec2 workMax(viewport->WorkPos.x + viewport->WorkSize.x,
+                   viewport->WorkPos.y + viewport->WorkSize.y);
+
+    if (pos.x + size.x > workMax.x) pos.x = workMax.x - size.x;
+    if (pos.y + size.y > workMax.y) pos.y = workMax.y - size.y;
+    if (pos.x < workMin.x) pos.x = workMin.x;
+    if (pos.y < workMin.y) pos.y = workMin.y;
+
+    ImGui::SetWindowPos(pos, ImGuiCond_Always);
+}
+
+std::string compactRelativeTime(int64_t updatedAt, int64_t now) {
+    if (updatedAt <= 0) {
+        return "";
+    }
+
+    int64_t seconds = std::max<int64_t>(0, now - updatedAt);
+    if (seconds < 60) return "now";
+
+    int64_t minutes = seconds / 60;
+    if (minutes < 60) return std::to_string(minutes) + "m";
+
+    int64_t hours = minutes / 60;
+    if (hours < 24) return std::to_string(hours) + "h";
+
+    int64_t days = hours / 24;
+    if (days < 7) return std::to_string(days) + "d";
+
+    int64_t weeks = days / 7;
+    if (weeks < 5) return std::to_string(weeks) + "w";
+
+    int64_t months = days / 30;
+    if (months < 12) return std::to_string(std::max<int64_t>(1, months)) + "mo";
+
+    int64_t years = days / 365;
+    return std::to_string(std::max<int64_t>(1, years)) + "y";
 }
 
 // Light Markdown pass for assistant text: turns "- "/"* "/"+ " bullets into a
@@ -382,20 +544,26 @@ void AiChatWindow::drawHistoryPopup() {
     }
 
     float trashWidth = ImGui::GetFrameHeight();
-    float rowWidth = 300.0f;
+    float ageWidth = ImGui::CalcTextSize("999mo").x;
+    float rowWidth = 360.0f;
+    int64_t now = currentEpochSeconds();
     std::string toDelete;
 
     for (const auto& meta : conversations) {
         ImGui::PushID(meta.id.c_str());
         bool isCurrent = meta.id == currentConversationId;
 
+        const ImGuiStyle& style = ImGui::GetStyle();
+        float titleWidth = rowWidth - trashWidth - ageWidth - style.ItemSpacing.x * 2.0f;
         std::string label = elideToWidth(meta.title.empty() ? "Conversation" : meta.title,
-                                         rowWidth - trashWidth - ImGui::GetStyle().ItemSpacing.x);
+                                         titleWidth);
         if (ImGui::Selectable(label.c_str(), isCurrent,
-                              ImGuiSelectableFlags_AllowOverlap, ImVec2(rowWidth - trashWidth - ImGui::GetStyle().ItemSpacing.x, 0))) {
+                              ImGuiSelectableFlags_AllowOverlap, ImVec2(titleWidth, 0))) {
             loadConversation(meta.id);
             ImGui::CloseCurrentPopup();
         }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", compactRelativeTime(meta.updatedAt, now).c_str());
         ImGui::SameLine();
         if (Widgets::iconButton("##DeleteConversation", ICON_FA_TRASH, ImVec2(trashWidth, ImGui::GetFrameHeight()))) {
             toDelete = meta.id;
@@ -541,11 +709,21 @@ void AiChatWindow::drawComposer(float inputHeight) {
         ImGui::SetKeyboardFocusHere();
         refocusInput = false;
     }
+    PromptWrapContext wrapContext{
+        std::max(0.0f, inputWidth - style.FramePadding.x * 2.0f)
+    };
     if (ImGui::InputTextMultiline("##AiInput", inputBuffer.data(), inputBuffer.size(),
                                   ImVec2(inputWidth, inputHeight),
                                   ImGuiInputTextFlags_EnterReturnsTrue |
-                                  ImGuiInputTextFlags_CtrlEnterForNewLine)) {
+                                  ImGuiInputTextFlags_CtrlEnterForNewLine |
+                                  ImGuiInputTextFlags_NoHorizontalScroll |
+                                  ImGuiInputTextFlags_CallbackEdit,
+                                  promptWrapCallback, &wrapContext)) {
         submitted = true;
+    }
+    if (submitted) {
+        submitMessage();
+        submitted = false;
     }
 
     ImGui::SameLine();
@@ -652,6 +830,7 @@ void AiChatWindow::drawEditableSettingLabel(const std::string& value, float widt
 }
 
 void AiChatWindow::drawModelPopup() {
+    constrainNextPopupToViewport(260.0f, 420.0f, 0.62f);
     if (!ImGui::BeginPopup("AI Model##AiModelPopup")) {
         return;
     }
@@ -665,6 +844,7 @@ void AiChatWindow::drawModelPopup() {
             settingsWindow.open(&service);
             ImGui::CloseCurrentPopup();
         }
+        keepCurrentWindowInsideViewport();
         ImGui::EndPopup();
         return;
     }
@@ -724,6 +904,7 @@ void AiChatWindow::drawModelPopup() {
         ImGui::CloseCurrentPopup();
     }
 
+    keepCurrentWindowInsideViewport();
     ImGui::EndPopup();
 }
 

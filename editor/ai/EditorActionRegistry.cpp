@@ -2,7 +2,10 @@
 
 #include "AiPathUtils.h"
 
+#include <filesystem>
 #include <sstream>
+
+namespace fs = std::filesystem;
 
 namespace doriax::editor::ai {
 
@@ -180,6 +183,16 @@ const std::vector<ToolDefinition>& cachedTools() {
             "list_component_types",
             "List component names accepted by add_component, remove_component, inspect_component, and set_component_property.",
             objectSchema({}),
+            true
+        },
+        {
+            "search_engine_api",
+            "Search authoritative Doriax engine API symbols generated from Lua bindings and C++ headers. Use this before writing scripts or engine API code.",
+            objectSchema({
+                {"query", stringSchema("API symbol, class, method, property, or behavior to search for, e.g. Mesh setColor")},
+                {"parent", stringSchema("Optional class/enum parent filter, e.g. Mesh")},
+                {"max_results", integerSchema("Maximum number of symbols to return, 1-50")}
+            }, {"query"}),
             true
         },
         {
@@ -543,7 +556,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "create_script",
-            "Create a Lua or C++ script file from a minimal template, attach it to an entity, and update ScriptComponent.",
+            "Create a Lua or C++ script file from a minimal template, attach it to an entity, and update ScriptComponent. Lua scripts are returned tables with init(), self.scene, and self.entity.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"entity_id", integerSchema("Entity id")},
@@ -566,6 +579,16 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"path", stringSchema("Safe project-relative .lua or .cpp path")},
                 {"header_path", stringSchema("Safe project-relative header path for C++ scripts")}
             }, {"type", "class_name", "path"}),
+            false
+        },
+        {
+            "update_script_file",
+            "Replace an existing project script file with complete content and refresh attached ScriptComponent properties. Lua content must use Doriax table modules, not Dori.Script or editor property paths.",
+            objectSchema({
+                {"path", stringSchema("Existing safe project-relative script path. Allowed extensions: .lua, .cpp, .h, .hpp")},
+                {"content", stringSchema("Complete replacement file contents")},
+                {"reason", stringSchema("Short reason shown in the approval preview")}
+            }, {"path", "content"}),
             false
         },
         {
@@ -757,6 +780,9 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
     if (name == "search_resources") {
         return hasString(arguments, "query") ? ok() : fail("search_resources requires query.");
     }
+    if (name == "search_engine_api") {
+        return hasString(arguments, "query") ? ok() : fail("search_engine_api requires query.");
+    }
     if (name == "inspect_entity" || name == "delete_entity" || name == "duplicate_entity") {
         return hasEntitySelector(arguments) ? ok() : fail(name + " requires entity_id or entity_name.");
     }
@@ -864,6 +890,21 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         return hasString(arguments, "type") && hasString(arguments, "class_name") && hasString(arguments, "path")
             ? ok() : fail("attach_script requires type, class_name, and path.");
     }
+    if (name == "update_script_file") {
+        if (!hasString(arguments, "path")) return fail("update_script_file requires path.");
+        if (!arguments.contains("content") || !arguments["content"].is_string()) {
+            return fail("update_script_file requires string content.");
+        }
+        fs::path path = fs::path(arguments["path"].get<std::string>()).lexically_normal();
+        if (!PathUtils::isSafeRelativePath(path)) {
+            return fail("path must be a safe project-relative path.");
+        }
+        const std::string ext = path.extension().string();
+        if (ext != ".lua" && ext != ".cpp" && ext != ".h" && ext != ".hpp") {
+            return fail("update_script_file only supports .lua, .cpp, .h, and .hpp files.");
+        }
+        return ok();
+    }
     if (name == "create_bundle_from_entity") {
         if (!hasString(arguments, "bundle_path")) return fail("create_bundle_from_entity requires bundle_path.");
         return hasEntitySelector(arguments) ? ok() : fail("create_bundle_from_entity requires entity_id or entity_name.");
@@ -938,6 +979,9 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "list_component_types") {
         return "List editor component types";
+    }
+    if (name == "search_engine_api") {
+        return "Search engine API for \"" + arguments.value("query", "") + "\"";
     }
     if (name == "create_entity") {
         out << "Create " << arguments.value("type", "entity")
@@ -1047,6 +1091,9 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "attach_script") {
         return "Attach script " + arguments.value("class_name", "");
+    }
+    if (name == "update_script_file") {
+        return "Update script file " + arguments.value("path", "");
     }
     if (name == "create_bundle_from_entity") {
         return "Create bundle " + arguments.value("bundle_path", "");

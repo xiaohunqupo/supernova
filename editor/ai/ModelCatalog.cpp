@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <set>
 
 namespace doriax::editor::ai {
@@ -9,14 +10,91 @@ namespace doriax::editor::ai {
 namespace {
 
 constexpr size_t kMaxModels = 60;
+constexpr int64_t kRecentOpenAiModelWindowSeconds = 60LL * 60LL * 24LL * 365LL * 2LL;
 
-bool looksLikeOpenAiChatModel(const std::string& id) {
-    // Exclude embeddings/audio/image/moderation endpoints; keep chat families.
-    static const char* prefixes[] = {"gpt", "chatgpt", "o1", "o3", "o4"};
+std::string lower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+bool startsWithAny(const std::string& value, std::initializer_list<const char*> prefixes) {
     for (const char* prefix : prefixes) {
-        if (id.rfind(prefix, 0) == 0) return true;
+        if (value.rfind(prefix, 0) == 0) return true;
     }
     return false;
+}
+
+bool containsAny(const std::string& value, std::initializer_list<const char*> needles) {
+    for (const char* needle : needles) {
+        if (value.find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
+
+bool isDigitAt(const std::string& value, size_t index) {
+    return index < value.size() && std::isdigit(static_cast<unsigned char>(value[index]));
+}
+
+bool containsIsoDateToken(const std::string& id) {
+    for (size_t i = 0; i + 10 <= id.size(); ++i) {
+        if ((i == 0 || id[i - 1] == '-') &&
+            isDigitAt(id, i) && isDigitAt(id, i + 1) &&
+            isDigitAt(id, i + 2) && isDigitAt(id, i + 3) &&
+            id[i + 4] == '-' &&
+            isDigitAt(id, i + 5) && isDigitAt(id, i + 6) &&
+            id[i + 7] == '-' &&
+            isDigitAt(id, i + 8) && isDigitAt(id, i + 9)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool containsCompactDateToken(const std::string& id) {
+    for (size_t i = 0; i + 5 <= id.size(); ++i) {
+        if (id[i] != '-') continue;
+        if (!isDigitAt(id, i + 1) || !isDigitAt(id, i + 2) ||
+            !isDigitAt(id, i + 3) || !isDigitAt(id, i + 4)) {
+            continue;
+        }
+        const bool tokenEnds = i + 5 == id.size() || id[i + 5] == '-';
+        if (tokenEnds) return true;
+    }
+    return false;
+}
+
+bool looksLikeOpenAiChatFamily(const std::string& id) {
+    return startsWithAny(id, {"gpt-", "chatgpt-", "o1", "o3", "o4"});
+}
+
+bool looksLikeMainOpenAiChatModel(const std::string& id, int64_t created, int64_t newestCreated) {
+    const std::string token = lower(id);
+    if (!looksLikeOpenAiChatFamily(token)) return false;
+
+    if (containsAny(token, {
+            "audio", "batch", "computer-use", "dall-e", "edit", "embedding",
+            "image", "instruct", "moderation", "preview", "realtime",
+            "search", "transcribe", "tts", "vision", "whisper"
+        })) {
+        return false;
+    }
+
+    // Provider model lists expose both aliases and dated snapshots. The aliases
+    // are the stable "main" entries users normally want in a picker.
+    if (containsIsoDateToken(token) || containsCompactDateToken(token)) {
+        return false;
+    }
+
+    // Drop old stable aliases without pinning specific model ids. If the provider
+    // omits creation times, keep the alias and let the user choose.
+    if (created > 0 && newestCreated > 0 &&
+        newestCreated - created > kRecentOpenAiModelWindowSeconds) {
+        return false;
+    }
+
+    return true;
 }
 
 bool looksLikeMainGeminiModel(const std::string& id) {
@@ -182,12 +260,48 @@ bool ModelCatalog::fetchModels(const Request& request, std::vector<ModelInfo>& o
     if (!root.contains("data") || !root["data"].is_array()) {
         return false;
     }
+
+    if (request.provider == ProviderId::OpenAI) {
+        struct OpenAiModelCandidate {
+            std::string id;
+            std::string label;
+            int64_t created = 0;
+        };
+
+        std::vector<OpenAiModelCandidate> candidates;
+        int64_t newestCreated = 0;
+        for (const Json& model : root["data"]) {
+            std::string id = model.value("id", "");
+            if (id.empty()) continue;
+            int64_t created = 0;
+            if (model.contains("created") && model["created"].is_number_integer()) {
+                created = model["created"].get<int64_t>();
+                newestCreated = std::max(newestCreated, created);
+            }
+            std::string label = model.value("display_name", model.value("name", std::string()));
+            if (label.empty()) label = humanizeModelId(id);
+            candidates.push_back({id, label, created});
+        }
+
+        std::sort(candidates.begin(), candidates.end(), [](const OpenAiModelCandidate& a,
+                                                           const OpenAiModelCandidate& b) {
+            if (a.created != b.created) return a.created > b.created;
+            return a.id < b.id;
+        });
+
+        for (const OpenAiModelCandidate& model : candidates) {
+            if (!looksLikeMainOpenAiChatModel(model.id, model.created, newestCreated)) {
+                continue;
+            }
+            out.push_back({model.id, model.label});
+            if (out.size() >= kMaxModels) break;
+        }
+        return !out.empty();
+    }
+
     for (const Json& model : root["data"]) {
         std::string id = model.value("id", "");
         if (id.empty()) continue;
-        if (request.provider == ProviderId::OpenAI && !looksLikeOpenAiChatModel(id)) {
-            continue;
-        }
         std::string label = model.value("display_name", model.value("name", std::string()));
         if (label.empty()) label = humanizeModelId(id);
         out.push_back({id, label});

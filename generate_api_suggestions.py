@@ -38,6 +38,20 @@ RE_ADD_STATIC_FUNCTION = re.compile(r'\.addStaticFunction\(\s*"([^"]+)"')
 RE_ADD_PROPERTY = re.compile(r'\.addProperty\(\s*"([^"]+)"')
 RE_ADD_STATIC_PROPERTY = re.compile(r'\.addStaticProperty\(\s*"([^"]+)"')
 
+EXCLUDED_HEADER_METHODS = {
+    ('EntityHandle', 'addComponent'),
+    ('EntityHandle', 'removeComponent'),
+    ('EntityHandle', 'getComponent'),
+    ('EntityRegistry', 'addComponent'),
+    ('EntityRegistry', 'removeComponent'),
+    ('EntityRegistry', 'getComponent'),
+    ('EntityRegistry', 'findComponent'),
+    ('EntityRegistry', 'findComponentFromIndex'),
+    ('EntityRegistry', 'getComponentFromIndex'),
+    ('EntityRegistry', 'getComponentId'),
+    ('EntityRegistry', 'getComponentArray'),
+}
+
 
 class APISymbol:
     """Represents one symbol in the engine API."""
@@ -90,10 +104,20 @@ def parse_binding_file(filepath):
     current_class = None
     current_lua_name = None
     current_base = None
-    has_constructor = False
+    current_constructors = []
+    pending_constructor = None
 
     for line in lines:
         stripped = line.strip()
+
+        if pending_constructor is not None:
+            pending_constructor += ' ' + stripped
+            if '>' in stripped:
+                current_constructors.extend(
+                    _parse_constructor_details(pending_constructor, current_lua_name)
+                )
+                pending_constructor = None
+            continue
 
         # beginClass
         m = RE_BEGIN_CLASS.search(stripped)
@@ -101,7 +125,8 @@ def parse_binding_file(filepath):
             current_class = m.group(1).strip()
             current_lua_name = m.group(2)
             current_base = None
-            has_constructor = False
+            current_constructors = []
+            pending_constructor = None
             continue
 
         # deriveClass
@@ -110,7 +135,8 @@ def parse_binding_file(filepath):
             current_class = m.group(1).strip()
             current_base = m.group(2).strip()
             current_lua_name = m.group(3)
-            has_constructor = False
+            current_constructors = []
+            pending_constructor = None
             continue
 
         # endClass
@@ -119,22 +145,29 @@ def parse_binding_file(filepath):
                 base_info = f' : {current_base}' if current_base else ''
                 detail = f'class {current_lua_name}{base_info}'
                 symbols.append(APISymbol(current_lua_name, 'Class', detail))
-                if has_constructor:
+                for constructor_detail in current_constructors:
                     symbols.append(APISymbol(
                         current_lua_name, 'Constructor',
-                        f'{current_lua_name}()', current_lua_name
+                        constructor_detail, current_lua_name
                     ))
             current_class = None
             current_lua_name = None
             current_base = None
+            current_constructors = []
+            pending_constructor = None
             continue
 
         if not current_lua_name:
             continue
 
         # Constructor
-        if RE_ADD_CONSTRUCTOR.search(stripped):
-            has_constructor = True
+        if '.addConstructor' in stripped:
+            if '>' in stripped:
+                current_constructors.extend(
+                    _parse_constructor_details(stripped, current_lua_name)
+                )
+            else:
+                pending_constructor = stripped
             continue
 
         # Static function
@@ -253,6 +286,29 @@ def _simplify_params(params_str):
     return ', '.join(simplified)
 
 
+def _parse_constructor_details(text, class_name):
+    """Extract Lua constructor overload signatures from an addConstructor call."""
+    if not class_name:
+        return []
+
+    m = re.search(r'\.addConstructor\s*<(.+?)>\s*\(', text)
+    if not m:
+        return [f'{class_name}(...)']
+
+    raw = m.group(1)
+    signature_pattern = re.compile(r'void\s*(?:\(\s*\*\s*\))?\s*\(([^()]*)\)')
+    details = []
+    seen = set()
+    for params in signature_pattern.findall(raw):
+        simplified = _simplify_params(params)
+        detail = f'{class_name}({simplified})'
+        if detail not in seen:
+            seen.add(detail)
+            details.append(detail)
+
+    return details or [f'{class_name}()']
+
+
 def parse_cpp_headers(base_dir):
     """Parse C++ headers to extract public method declarations with parameter info."""
     # class_methods[class_name] = { method_name: [(params_str, return_type), ...] }
@@ -309,6 +365,8 @@ def parse_cpp_headers(base_dir):
                     params_raw = m.group(3).strip()
                     if method_name == class_name or method_name.startswith('~'):
                         continue
+                    if (class_name, method_name) in EXCLUDED_HEADER_METHODS:
+                        continue
                     params = _simplify_params(params_raw)
                     if method_name not in class_methods[class_name]:
                         class_methods[class_name][method_name] = []
@@ -322,7 +380,7 @@ def generate_header(symbols, output_path):
     seen = set()
     unique = []
     for s in symbols:
-        key = (s.name, s.kind, s.parent)
+        key = (s.name, s.kind, s.parent, s.detail if s.kind == 'Constructor' else '')
         if key not in seen:
             seen.add(key)
             unique.append(s)
@@ -399,7 +457,7 @@ def generate_header(symbols, output_path):
     lines.append('inline const std::vector<EngineAPISymbol>& getEngineAPISymbols() {')
     lines.append('    static const std::vector<EngineAPISymbol> symbols = {')
 
-    all_symbols = enums + enum_members + classes + methods + static_methods + \
+    all_symbols = enums + enum_members + classes + constructors + methods + static_methods + \
                   properties + constants + events
     for s in all_symbols:
         sk = kind_to_suggestion_kind(s.kind)

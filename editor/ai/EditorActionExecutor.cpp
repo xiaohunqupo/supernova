@@ -1,6 +1,7 @@
 #include "EditorActionExecutor.h"
 
 #include "AiPathUtils.h"
+#include "AiEngineApiContext.h"
 #include "AiTerrainCapability.h"
 #include "EditorActionRegistry.h"
 #include "HttpClient.h"
@@ -371,6 +372,51 @@ std::string sanitizeIdentifier(const std::string& value, const std::string& fall
     return result;
 }
 
+std::string doriaxLuaScriptGuide(const std::string& className) {
+    return "Doriax Lua scripts are returned tables, not Dori.Script objects. "
+           "Use: local " + className + " = { properties = {} }; "
+           "function " + className + ":init() ... end; return " + className + ". "
+           "The engine injects self.scene and self.entity; self.entity is a numeric Entity id, not an object receiver. For an existing cube/shape, "
+           "use local shape = Shape(self.scene, self.entity); shape:setColor(1.0, 0.0, 0.0, 1.0). "
+           "Use search_engine_api for real signatures before writing engine API code.";
+}
+
+std::string validateDoriaxLuaScriptContent(const std::string& content) {
+    const std::string contentLower = lower(content);
+
+    struct ForbiddenLuaPattern {
+        const char* token;
+        const char* message;
+    };
+    static const ForbiddenLuaPattern patterns[] = {
+        {"dori.", "Doriax Lua scripts do not use a Dori namespace."},
+        {"script:new", "Doriax Lua scripts do not derive from Script:new(). Return a plain module table instead."},
+        {"on_start", "Doriax Lua scripts use init() for startup, not on_start()."},
+        {"on_scene_start", "Doriax Lua scripts use init() for startup, not on_scene_start()."},
+        {"self.entity:", "self.entity is a numeric Entity id, not an object receiver. Wrap it with a runtime class such as Shape(self.scene, self.entity)."},
+        {"self.entity.", "self.entity is a numeric Entity id, not an object. Pass it to runtime wrappers; do not access methods/properties on it."},
+        {"get_entity", "Doriax Lua scripts receive self.entity directly; there is no get_entity() helper."},
+        {"getentity", "Doriax Lua scripts receive self.entity directly; there is no getEntity() helper."},
+        {"get_component", "Doriax Lua scripts should use runtime wrappers returned by search_engine_api, not get_component()."},
+        {"getcomponent", "Doriax Lua scripts should use runtime wrappers returned by search_engine_api, not getComponent()."},
+        {"set_property", "Doriax Lua scripts should call runtime APIs, not editor-style set_property()."},
+        {"setproperty", "Doriax Lua scripts should call runtime APIs, not editor-style setProperty()."},
+        {"vector4.new", "Doriax Lua constructors use Vector4(...), not Vector4.new(...)."}
+    };
+
+    for (const auto& pattern : patterns) {
+        if (contentLower.find(pattern.token) != std::string::npos) {
+            return std::string(pattern.message) + " Call search_engine_api and rewrite using the Doriax Lua table pattern.";
+        }
+    }
+
+    if (contentLower.find("return ") == std::string::npos) {
+        return "Doriax Lua modules must return their script table.";
+    }
+
+    return {};
+}
+
 ActionResult okResult(const std::string& message, Json data = Json::object()) {
     return {true, message, std::move(data)};
 }
@@ -654,6 +700,7 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "inspect_entity") return inspectEntity(arguments);
     if (name == "inspect_component") return inspectComponent(arguments);
     if (name == "list_component_types") return listComponentTypes();
+    if (name == "search_engine_api") return searchEngineApi(arguments);
     if (name == "create_entity") return createEntity(arguments);
     if (name == "set_entity_transform") return setEntityTransform(arguments);
     if (name == "rename_entity") return renameEntity(arguments);
@@ -688,6 +735,7 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "add_terrain_collision") return addTerrainCollision(arguments);
     if (name == "create_script") return createScript(arguments);
     if (name == "attach_script") return attachScript(arguments);
+    if (name == "update_script_file") return updateScriptFile(arguments);
     if (name == "create_bundle_from_entity") return createBundleFromEntity(arguments);
     if (name == "import_bundle_instance") return importBundleInstance(arguments);
     if (name == "add_entity_to_bundle") return addEntityToBundle(arguments);
@@ -873,6 +921,16 @@ ActionResult EditorActionExecutor::listComponentTypes() {
         }
     }
     return okResult("Listed component types.", Json{{"components", components}});
+}
+
+ActionResult EditorActionExecutor::searchEngineApi(const Json& arguments) {
+    const std::string query = arguments.value("query", "");
+    const std::string parent = arguments.value("parent", "");
+    int maxResults = arguments.value("max_results", 16);
+    maxResults = std::max(1, std::min(50, maxResults));
+
+    Json data = AiEngineApiContext::search(query, parent, maxResults);
+    return okResult("Searched engine API.", data);
 }
 
 ActionResult EditorActionExecutor::createEntity(const Json& arguments) {
@@ -1606,9 +1664,23 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
     ActionResult attached = attachScript(attachArgs);
     if (!attached.success) return attached;
     if (resourcesWindow) resourcesWindow->refreshCurrentDirectory();
-    return okResult("Created and attached script.",
-                    Json{{"path", attachArgs["path"]},
-                         {"header_path", attachArgs.value("header_path", "")}});
+    Json data = {
+        {"path", attachArgs["path"]},
+        {"header_path", attachArgs.value("header_path", "")},
+        {"class_name", className},
+        {"type", arguments.value("type", "")}
+    };
+    if (type == ScriptType::SCRIPT_LUA) {
+        data["lua_script_guide"] = doriaxLuaScriptGuide(className);
+        data["lua_startup_method"] = "init";
+        data["lua_runtime_context"] = Json{{"scene", "self.scene"}, {"entity", "self.entity"}};
+        data["lua_cube_color_example"] =
+            "local shape = Shape(self.scene, self.entity)\n"
+            "shape:setColor(1.0, 0.0, 0.0, 1.0)";
+        data["next_step"] =
+            "If the user asked for behavior, call search_engine_api for required runtime wrappers/methods, then update_script_file with complete Lua contents.";
+    }
+    return okResult("Created and attached script.", data);
 }
 
 ActionResult EditorActionExecutor::attachScript(const Json& arguments) {
@@ -1654,6 +1726,95 @@ ActionResult EditorActionExecutor::attachScript(const Json& arguments) {
         project, sceneId, entity, ComponentType::ScriptComponent, "scripts", scripts));
     CommandHandle::get(sceneId)->addCommandNoMerge(multiCmd);
     return okResult("Attached script through the command history.");
+}
+
+ActionResult EditorActionExecutor::updateScriptFile(const Json& arguments) {
+    std::string error;
+    fs::path rel;
+    if (!safeRelativePath(project, arguments, "path", rel, error, true)) {
+        return failResult(error);
+    }
+
+    const std::string ext = lower(rel.extension().string());
+    if (ext != ".lua" && ext != ".cpp" && ext != ".h" && ext != ".hpp") {
+        return failResult("path must point to a .lua, .cpp, .h, or .hpp script file.");
+    }
+
+    const std::string content = arguments.value("content", "");
+    constexpr size_t kMaxScriptBytes = 2 * 1024 * 1024;
+    if (content.size() > kMaxScriptBytes) {
+        return failResult("Script content is too large for an AI edit.");
+    }
+    if (ext == ".lua") {
+        std::string validationError = validateDoriaxLuaScriptContent(content);
+        if (!validationError.empty()) {
+            return failResult(validationError);
+        }
+    }
+
+    const fs::path fullPath = project->getProjectPath() / rel;
+    std::ofstream out(fullPath, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        return failResult("Failed to open script file for writing.");
+    }
+    out << content;
+    out.close();
+    if (!out) {
+        return failResult("Failed to write script file.");
+    }
+
+    auto normalizeScriptPath = [this](const std::string& value) {
+        fs::path path(value);
+        if (path.is_absolute() && project) {
+            std::error_code ec;
+            fs::path relPath = fs::relative(path, project->getProjectPath(), ec);
+            if (!ec) {
+                path = relPath;
+            }
+        }
+        return path.lexically_normal().generic_string();
+    };
+
+    const std::string relString = rel.lexically_normal().generic_string();
+    int refreshedComponents = 0;
+    for (auto& sceneProject : project->getScenes()) {
+        if (!sceneProject.scene) continue;
+
+        for (Entity entity : sceneProject.entities) {
+            ScriptComponent* scriptComponent = sceneProject.scene->findComponent<ScriptComponent>(entity);
+            if (!scriptComponent) continue;
+
+            bool matchesFile = false;
+            for (const ScriptEntry& scriptEntry : scriptComponent->scripts) {
+                if (!scriptEntry.path.empty() && normalizeScriptPath(scriptEntry.path) == relString) {
+                    matchesFile = true;
+                    break;
+                }
+                if (!scriptEntry.headerPath.empty() && normalizeScriptPath(scriptEntry.headerPath) == relString) {
+                    matchesFile = true;
+                    break;
+                }
+            }
+            if (!matchesFile) continue;
+
+            std::vector<ScriptEntry> scripts = scriptComponent->scripts;
+            project->updateScriptProperties(&sceneProject, entity, scripts, content, fullPath.string());
+            PropertyCmd<std::vector<ScriptEntry>> propertyCmd(
+                project, sceneProject.id, entity, ComponentType::ScriptComponent, "scripts", scripts);
+            propertyCmd.execute();
+            refreshedComponents++;
+        }
+    }
+
+    if (resourcesWindow) {
+        resourcesWindow->refreshCurrentDirectory();
+    }
+    Out::info("AI updated script file: %s", relString.c_str());
+
+    return okResult("Updated script file.",
+                    Json{{"path", relString},
+                         {"bytes", content.size()},
+                         {"refreshed_script_components", refreshedComponents}});
 }
 
 ActionResult EditorActionExecutor::createBundleFromEntity(const Json& arguments) {

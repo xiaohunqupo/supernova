@@ -32,6 +32,7 @@ private:
     ActionResult inspectEntity(const Json& arguments);
     ActionResult inspectComponent(const Json& arguments);
     ActionResult listComponentTypes();
+    ActionResult searchEngineApi(const Json& arguments);
     ActionResult createEntity(const Json& arguments);
     ActionResult setEntityTransform(const Json& arguments);
     ActionResult renameEntity(const Json& arguments);
@@ -66,6 +67,7 @@ private:
     ActionResult addTerrainCollision(const Json& arguments);
     ActionResult createScript(const Json& arguments);
     ActionResult attachScript(const Json& arguments);
+    ActionResult updateScriptFile(const Json& arguments);
     ActionResult createBundleFromEntity(const Json& arguments);
     ActionResult importBundleInstance(const Json& arguments);
     ActionResult addEntityToBundle(const Json& arguments);

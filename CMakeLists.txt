@@ -209,6 +209,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/ai/AiPathUtils.cpp
     ${EDITOR_DIR}/ai/AiProvider.cpp
     ${EDITOR_DIR}/ai/AiService.cpp
+    ${EDITOR_DIR}/ai/AiEngineApiContext.cpp
     ${EDITOR_DIR}/ai/AiTerrainCapability.cpp
     ${EDITOR_DIR}/ai/AiTypes.cpp
     ${EDITOR_DIR}/ai/ConversationStore.cpp
