@@ -1196,8 +1196,8 @@ Submesh editor::Stream::decodeSubmesh(const YAML::Node& node, const Submesh* old
     submesh.textureShadow = node["textureShadow"].as<bool>();
 
     // Flags
-    submesh.hasTexCoord1 = node["hasTexCoord1"].as<bool>();
-    submesh.hasTexCoord2 = node["hasTexCoord2"].as<bool>();
+    if (node["hasTexCoord1"]) submesh.hasTexCoord1 = node["hasTexCoord1"].as<bool>();
+    if (node["hasTexCoord2"]) submesh.hasTexCoord2 = node["hasTexCoord2"].as<bool>();
     submesh.hasNormalMap = node["hasNormalMap"].as<bool>();
     submesh.hasTangent = node["hasTangent"].as<bool>();
     submesh.hasVertexColor4 = node["hasVertexColor4"].as<bool>();
@@ -1522,18 +1522,18 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
                         if (sceneNode["snapToGrid"])           ds.snapToGrid           = sceneNode["snapToGrid"].as<bool>();
                         if (sceneNode["snapRotation"])         ds.snapRotation         = sceneNode["snapRotation"].as<bool>();
                         if (sceneNode["rotationSnapDegrees"])  ds.rotationSnapDegrees  = decodePositiveFinite(sceneNode["rotationSnapDegrees"], ds.rotationSnapDegrees);
-                    }
 
-                    if (sceneNode["editorCamera"]) {
-                        SceneProject& loadedScene = scenes.back();
-                        loadedScene.editorCameraState = YAML::Clone(sceneNode["editorCamera"]);
-                        if (loadedScene.sceneRender) {
-                            Camera* editorCam = loadedScene.sceneRender->getCamera();
-                            if (editorCam) {
-                                float zoom = 0.0f;
-                                Stream::decodeEditorCamera(editorCam, sceneNode["editorCamera"], zoom);
-                                if ((loadedScene.sceneType == SceneType::SCENE_2D || loadedScene.sceneType == SceneType::SCENE_UI) && zoom > 0.0f) {
-                                    static_cast<SceneRender2D*>(loadedScene.sceneRender)->setZoom(zoom);
+                        if (sceneNode["editorCamera"]) {
+                            SceneProject& loadedScene = scenes.back();
+                            loadedScene.editorCameraState = YAML::Clone(sceneNode["editorCamera"]);
+                            if (loadedScene.sceneRender) {
+                                Camera* editorCam = loadedScene.sceneRender->getCamera();
+                                if (editorCam) {
+                                    float zoom = 0.0f;
+                                    Stream::decodeEditorCamera(editorCam, sceneNode["editorCamera"], zoom);
+                                    if ((loadedScene.sceneType == SceneType::SCENE_2D || loadedScene.sceneType == SceneType::SCENE_UI) && zoom > 0.0f) {
+                                        static_cast<SceneRender2D*>(loadedScene.sceneRender)->setZoom(zoom);
+                                    }
                                 }
                             }
                         }
@@ -2458,11 +2458,11 @@ Material editor::Stream::decodeMaterial(const YAML::Node& node) {
         material.normalTexture = decodeTexture(node["normalTexture"]);
     }
 
-    material.baseColorTexCoord = node["baseColorTexCoord"].as<int>();
-    material.metallicRoughnessTexCoord = node["metallicRoughnessTexCoord"].as<int>();
-    material.occlusionTexCoord = node["occlusionTexCoord"].as<int>();
-    material.emissiveTexCoord = node["emissiveTexCoord"].as<int>();
-    material.normalTexCoord = node["normalTexCoord"].as<int>();
+    if (node["baseColorTexCoord"]) material.baseColorTexCoord = node["baseColorTexCoord"].as<int>();
+    if (node["metallicRoughnessTexCoord"]) material.metallicRoughnessTexCoord = node["metallicRoughnessTexCoord"].as<int>();
+    if (node["occlusionTexCoord"]) material.occlusionTexCoord = node["occlusionTexCoord"].as<int>();
+    if (node["emissiveTexCoord"]) material.emissiveTexCoord = node["emissiveTexCoord"].as<int>();
+    if (node["normalTexCoord"]) material.normalTexCoord = node["normalTexCoord"].as<int>();
 
     material.name = node["name"].as<std::string>();
 
