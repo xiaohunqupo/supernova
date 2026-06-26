@@ -453,9 +453,9 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
 
     if (shaderType == ShaderType::MESH){
         args.defines.push_back({"MAX_LIGHTS", "6"});
-        args.defines.push_back({"MAX_SHADOWSMAP", std::to_string(MAX_SHADOWSMAP)});
-        args.defines.push_back({"MAX_SHADOWSCUBEMAP", "1"});
-        args.defines.push_back({"MAX_SHADOWCASCADES", "4"});
+        args.defines.push_back({"MAX_SHADOW_ATLAS_SLOTS", std::to_string(MAX_SHADOW_ATLAS_SLOTS)});
+        args.defines.push_back({"MAX_POINT_SHADOW_ATLAS_SLOTS", std::to_string(MAX_POINT_SHADOW_ATLAS_SLOTS)});
+        args.defines.push_back({"MAX_SHADOWCASCADES", std::to_string(MAX_SHADOWCASCADES)});
         args.defines.push_back({"MAX_BONES", "70"});
     }
     if (shaderType == ShaderType::DEPTH){

@@ -59,9 +59,13 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
 
     shadowAtlasSlotResolution = 0;
     needUpdateShadowAtlas = true;
+    shadowPointAtlasSlotResolution = 0;
+    needUpdateShadowPointAtlas = true;
     needUpdateShadowBindings = false;
     hasShadowAtlas = false;
+    hasShadowPointAtlas = false;
     initShadowAtlasRects();
+    initShadowPointAtlasRects();
 }
 
 RenderSystem::~RenderSystem(){
@@ -93,6 +97,9 @@ void RenderSystem::destroy(){
     shadowAtlasFramebuffer.destroyFramebuffer();
     shadowAtlasSlotResolution = 0;
     hasShadowAtlas = false;
+    shadowPointAtlasFramebuffer.destroyFramebuffer();
+    shadowPointAtlasSlotResolution = 0;
+    hasShadowPointAtlas = false;
 
     auto skys = scene->getComponentArray<SkyComponent>();
     if (skys->size() > 0){
@@ -231,10 +238,12 @@ int RenderSystem::checkLightsAndShadow(){
 }
 
 bool RenderSystem::loadLights(int numLights){
-    int freeShadowMap = 0;
-    int freeShadowCubeMap = MAX_SHADOWSMAP;
-    unsigned int maxShadowSlotResolution = 0;
-    bool any2DShadows = false;
+    int freeProjectiveSlot = 0;
+    int freePointSlot = 0;
+    unsigned int maxProjectiveSlotResolution = 0;
+    unsigned int maxPointSlotResolution = 0;
+    bool anyProjectiveShadows = false;
+    bool anyPointShadows = false;
 
     auto lights = scene->getComponentArray<LightComponent>();
     
@@ -250,48 +259,56 @@ bool RenderSystem::loadLights(int numLights){
             }
 
             if (light.needUpdateShadowMap){
-                if (light.type == LightType::POINT){
-                    light.framebuffer[0].destroyFramebuffer();
-                }
                 needUpdateShadowAtlas = true;
+                needUpdateShadowPointAtlas = true;
                 needUpdateShadowBindings = true;
                 light.needUpdateShadowMap = false;
-            }
-
-            if (light.type == LightType::POINT){
-                if (!light.framebuffer[0].isCreated())
-                    light.framebuffer[0].createFramebuffer(
-                            TextureType::TEXTURE_CUBE, light.mapResolution, light.mapResolution, 
-                            TextureFilter::NEAREST, TextureFilter::NEAREST, TextureWrap::CLAMP_TO_BORDER, TextureWrap::CLAMP_TO_BORDER, true);
-
-                if ((freeShadowCubeMap - MAX_SHADOWSMAP) < MAX_SHADOWSCUBEMAP){
-                    light.shadowMapIndex = freeShadowCubeMap++;
-                }
-            }else if (light.type == LightType::SPOT){
-                any2DShadows = true;
-                maxShadowSlotResolution = std::max(maxShadowSlotResolution, light.mapResolution);
-
-                if (freeShadowMap < MAX_SHADOWSMAP){
-                    light.shadowMapIndex = freeShadowMap++;
-                }
-            }else if (light.type == LightType::DIRECTIONAL){
-                any2DShadows = true;
-                maxShadowSlotResolution = std::max(maxShadowSlotResolution, light.mapResolution);
-
-                if ((freeShadowMap + light.numShadowCascades - 1) < MAX_SHADOWSMAP){
-                    light.shadowMapIndex = freeShadowMap;
-                    freeShadowMap += light.numShadowCascades;
-                }
             }
         }
     }
 
-    if (any2DShadows){
-        if (!ensureShadowAtlas(maxShadowSlotResolution)){
-            Log::warn("Failed to create shadow atlas");
+    for (int i = 0; i < numLights; i++){
+        LightComponent& light = lights->getComponentFromIndex(i);
+        if (!light.shadows) continue;
+
+        if (light.type == LightType::SPOT){
+            anyProjectiveShadows = true;
+            maxProjectiveSlotResolution = std::max(maxProjectiveSlotResolution, light.mapResolution);
+
+            if (freeProjectiveSlot < MAX_SHADOW_ATLAS_SLOTS){
+                light.shadowMapIndex = freeProjectiveSlot;
+                freeProjectiveSlot++;
+            }
+        }else if (light.type == LightType::DIRECTIONAL){
+            anyProjectiveShadows = true;
+            maxProjectiveSlotResolution = std::max(maxProjectiveSlotResolution, light.mapResolution);
+
+            if ((freeProjectiveSlot + light.numShadowCascades) <= MAX_SHADOW_ATLAS_SLOTS){
+                light.shadowMapIndex = freeProjectiveSlot;
+                freeProjectiveSlot += light.numShadowCascades;
+            }
+        }
+    }
+
+    for (int i = 0; i < numLights; i++){
+        LightComponent& light = lights->getComponentFromIndex(i);
+        if (!light.shadows || light.type != LightType::POINT) continue;
+
+        anyPointShadows = true;
+        maxPointSlotResolution = std::max(maxPointSlotResolution, light.mapResolution);
+
+        if ((freePointSlot + SHADOW_CUBE_FACES) <= MAX_POINT_SHADOW_ATLAS_SLOTS){
+            light.shadowMapIndex = freePointSlot;
+            freePointSlot += SHADOW_CUBE_FACES;
+        }
+    }
+
+    if (anyProjectiveShadows){
+        if (!ensureShadowAtlas(maxProjectiveSlotResolution)){
+            Log::warn("Failed to create projective shadow atlas");
             for (int i = 0; i < numLights; i++){
                 LightComponent& light = lights->getComponentFromIndex(i);
-                if (light.type != LightType::POINT){
+                if (light.shadows && light.type != LightType::POINT){
                     light.shadowMapIndex = -1;
                     light.shadows = false;
                 }
@@ -302,6 +319,24 @@ bool RenderSystem::loadLights(int numLights){
             needUpdateShadowBindings = true;
         }
         hasShadowAtlas = false;
+    }
+
+    if (anyPointShadows){
+        if (!ensureShadowPointAtlas(maxPointSlotResolution)){
+            Log::warn("Failed to create point shadow atlas");
+            for (int i = 0; i < numLights; i++){
+                LightComponent& light = lights->getComponentFromIndex(i);
+                if (light.shadows && light.type == LightType::POINT){
+                    light.shadowMapIndex = -1;
+                    light.shadows = false;
+                }
+            }
+        }
+    }else{
+        if (hasShadowPointAtlas){
+            needUpdateShadowBindings = true;
+        }
+        hasShadowPointAtlas = false;
     }
 
     return true;
@@ -328,29 +363,40 @@ void RenderSystem::processLights(int numLights, CameraComponent& camera, Transfo
 
         if (light.shadows){
             if (light.shadowMapIndex >= 0){
-                size_t numMaps = (light.type == LightType::DIRECTIONAL) ? light.numShadowCascades : 1;
-                for (int c = 0; c < numMaps; c++){
-                    if (light.type != LightType::POINT){
+                size_t numMaps = 1;
+                if (light.type == LightType::DIRECTIONAL){
+                    numMaps = light.numShadowCascades;
+                }else if (light.type == LightType::POINT){
+                    numMaps = SHADOW_CUBE_FACES;
+                }
+
+                for (int c = 0; c < (int)numMaps; c++){
+                    if (light.type == LightType::POINT){
+                        fs_point_shadows.bias_texSize_nearFar[light.shadowMapIndex+c] = Vector4(
+                            light.shadowBias,
+                            (float)shadowPointAtlasSlotResolution,
+                            light.cameras[c].nearFar.x,
+                            light.cameras[c].nearFar.y);
+                    }else{
                         vs_shadows.lightViewProjectionMatrix[light.shadowMapIndex+c] = light.cameras[c].lightViewProjectionMatrix;
 
-                        // Compute world-space normal bias: normalBias (in texels) * texelSize (world units)
                         float projScale = std::max(std::abs(light.cameras[c].lightProjectionMatrix[0][0]),
                                                    std::abs(light.cameras[c].lightProjectionMatrix[1][1]));
-                        float shadowMapResolution = (light.type == LightType::POINT)
-                            ? (float)light.mapResolution
-                            : (float)shadowAtlasSlotResolution;
-                        float texelSizeWorld = (projScale > 0.0f) ? 2.0f / (projScale * shadowMapResolution) : 0.0f;
+                        float texelSizeWorld = (projScale > 0.0f) ? 2.0f / (projScale * (float)shadowAtlasSlotResolution) : 0.0f;
                         vs_shadows.shadowParams[light.shadowMapIndex+c] = Vector4(light.shadowNormalBias * texelSizeWorld, 0.0, 0.0, 0.0);
+
+                        fs_shadows.bias_texSize_nearFar[light.shadowMapIndex+c] = Vector4(
+                            light.shadowBias,
+                            (float)shadowAtlasSlotResolution,
+                            light.cameras[c].nearFar.x,
+                            light.cameras[c].nearFar.y);
                     }
-                    fs_shadows.bias_texSize_nearFar[light.shadowMapIndex+c] = Vector4(
-                        light.shadowBias,
-                        (light.type == LightType::POINT) ? (float)light.mapResolution : (float)shadowAtlasSlotResolution,
-                        light.cameras[c].nearFar.x, light.cameras[c].nearFar.y);
                 }
-            }else{
-                light.shadows = false;
-                Log::warn("There are no shadow maps available for all lights, some light shadow will be disabled");
             }
+            // shadowMapIndex < 0 means the atlas had no free slot for this light this
+            // frame: it is passed to the shader (inCon_ouCon_shadows_cascades.z) which
+            // treats a negative index as "no shadow". The light keeps its shadow intent
+            // and reclaims a slot automatically once one frees up.
         }
 
         fs_lighting.direction_range[i] = Vector4(light.worldDirection.x, light.worldDirection.y, light.worldDirection.z, light.range);
@@ -482,17 +528,8 @@ void RenderSystem::updateSkyEnvironment(SkyComponent& sky){
     sky.needUpdateEnvironment = false;
 }
 
-TextureShaderType RenderSystem::getShadowMapCubeByIndex(int index){
-    index -= MAX_SHADOWSMAP;
-    if (index == 0){
-        return TextureShaderType::SHADOWCUBEMAP1;
-    }
-
-    return TextureShaderType::SHADOWCUBEMAP1;
-}
-
 void RenderSystem::initShadowAtlasRects(){
-    for (int s = 0; s < MAX_SHADOWSMAP; s++){
+    for (int s = 0; s < MAX_SHADOW_ATLAS_SLOTS; s++){
         int col = s % SHADOW_ATLAS_COLS;
         int row = s / SHADOW_ATLAS_COLS;
         fs_shadows.atlasRect[s] = Vector4(
@@ -503,7 +540,52 @@ void RenderSystem::initShadowAtlasRects(){
     }
 }
 
+void RenderSystem::initShadowPointAtlasRects(){
+    for (int s = 0; s < MAX_POINT_SHADOW_ATLAS_SLOTS; s++){
+        int col = s % SHADOW_POINT_ATLAS_COLS;
+        int row = s / SHADOW_POINT_ATLAS_COLS;
+        fs_point_shadows.atlasRect[s] = Vector4(
+            (float)col / (float)SHADOW_POINT_ATLAS_COLS,
+            (float)row / (float)SHADOW_POINT_ATLAS_ROWS,
+            1.0f / (float)SHADOW_POINT_ATLAS_COLS,
+            1.0f / (float)SHADOW_POINT_ATLAS_ROWS);
+    }
+}
+
+// Clamps a per-slot shadow resolution so the whole atlas (slotResolution * grid) stays
+// within the GPU's max 2D texture size (sg_query_limits().max_image_size_2d). The atlas
+// is square-tiled, so the limiting dimension is the larger grid axis. Returns the usable
+// per-slot resolution (possibly reduced, logged once when clamped), or 0 when even a
+// 1px slot cannot fit. This keeps shadow allocation succeeding at lower quality instead
+// of failing outright on GPUs with small texture caps (e.g. 4096/8192).
+unsigned int RenderSystem::clampShadowAtlasSlotResolution(unsigned int requestedResolution, int atlasCols, int atlasRows) const{
+    if (requestedResolution < 1 || atlasCols < 1 || atlasRows < 1){
+        return 0;
+    }
+
+    int maxTextureSize = sg_query_limits().max_image_size_2d;
+    if (maxTextureSize < 1){
+        maxTextureSize = 4096;
+    }
+
+    int gridMax = std::max(atlasCols, atlasRows);
+    unsigned int maxSlotResolution = (unsigned int)(maxTextureSize / gridMax);
+    if (maxSlotResolution < 1){
+        Log::warn("Shadow atlas grid %dx%d does not fit in GPU max texture size %d", atlasCols, atlasRows, maxTextureSize);
+        return 0;
+    }
+
+    if (requestedResolution > maxSlotResolution){
+        Log::warn("Shadow atlas slot resolution clamped from %u to %u (GPU max texture %d, %dx%d grid)",
+                  requestedResolution, maxSlotResolution, maxTextureSize, atlasCols, atlasRows);
+        return maxSlotResolution;
+    }
+
+    return requestedResolution;
+}
+
 bool RenderSystem::ensureShadowAtlas(unsigned int slotResolution){
+    slotResolution = clampShadowAtlasSlotResolution(slotResolution, SHADOW_ATLAS_COLS, SHADOW_ATLAS_ROWS);
     if (slotResolution < 1){
         return false;
     }
@@ -535,12 +617,53 @@ bool RenderSystem::ensureShadowAtlas(unsigned int slotResolution){
     return true;
 }
 
+bool RenderSystem::ensureShadowPointAtlas(unsigned int slotResolution){
+    slotResolution = clampShadowAtlasSlotResolution(slotResolution, SHADOW_POINT_ATLAS_COLS, SHADOW_POINT_ATLAS_ROWS);
+    if (slotResolution < 1){
+        return false;
+    }
+
+    int atlasWidth = (int)slotResolution * SHADOW_POINT_ATLAS_COLS;
+    int atlasHeight = (int)slotResolution * SHADOW_POINT_ATLAS_ROWS;
+
+    if (shadowPointAtlasFramebuffer.isCreated() && shadowPointAtlasSlotResolution == slotResolution && !needUpdateShadowPointAtlas){
+        if (!hasShadowPointAtlas){
+            needUpdateShadowBindings = true;
+        }
+        hasShadowPointAtlas = true;
+        return true;
+    }
+
+    shadowPointAtlasFramebuffer.destroyFramebuffer();
+    if (!shadowPointAtlasFramebuffer.createFramebuffer(
+            TextureType::TEXTURE_2D, atlasWidth, atlasHeight,
+            TextureFilter::NEAREST, TextureFilter::NEAREST,
+            TextureWrap::CLAMP_TO_BORDER, TextureWrap::CLAMP_TO_BORDER, true)){
+        hasShadowPointAtlas = false;
+        return false;
+    }
+
+    shadowPointAtlasSlotResolution = slotResolution;
+    needUpdateShadowPointAtlas = false;
+    hasShadowPointAtlas = true;
+    needUpdateShadowBindings = true;
+    return true;
+}
+
 Rect RenderSystem::getShadowAtlasSlotRect(int slotIndex) const{
     int col = slotIndex % SHADOW_ATLAS_COLS;
     int row = slotIndex / SHADOW_ATLAS_COLS;
     float x = (float)(col * (int)shadowAtlasSlotResolution);
     float y = (float)(row * (int)shadowAtlasSlotResolution);
     return Rect(x, y, (float)shadowAtlasSlotResolution, (float)shadowAtlasSlotResolution);
+}
+
+Rect RenderSystem::getShadowPointAtlasSlotRect(int slotIndex) const{
+    int col = slotIndex % SHADOW_POINT_ATLAS_COLS;
+    int row = slotIndex / SHADOW_POINT_ATLAS_COLS;
+    float x = (float)(col * (int)shadowPointAtlasSlotResolution);
+    float y = (float)(row * (int)shadowPointAtlasSlotResolution);
+    return Rect(x, y, (float)shadowPointAtlasSlotResolution, (float)shadowPointAtlasSlotResolution);
 }
 
 bool RenderSystem::checkPBRFrabebufferUpdate(Material& material){
@@ -662,26 +785,15 @@ void RenderSystem::loadShadowTextures(ShaderData& shaderData, ObjectRender& rend
     std::pair<int, int> slotTex(-1, -1);
 
     if (hasLights && receiveLights && hasShadows && receiveShadows){
+        // fall back to white (decoded depth ~1.0 => "nothing occludes") so a missing
+        // atlas leaves geometry fully lit instead of fully shadowed
         slotTex = shaderData.getTextureIndex(TextureShaderType::SHADOWATLAS);
         render.addTexture(slotTex, ShaderStageType::FRAGMENT,
-                          hasShadowAtlas ? &shadowAtlasFramebuffer.getColorTexture() : &emptyBlack);
+                          hasShadowAtlas ? &shadowAtlasFramebuffer.getColorTexture() : &emptyWhite);
 
-        size_t numCubeShadows = 0;
-        auto lights = scene->getComponentArray<LightComponent>();
-        for (int l = 0; l < lights->size(); l++){
-            LightComponent& light = lights->getComponentFromIndex(l);
-            if (light.shadowMapIndex >= 0 && light.type == LightType::POINT){
-                slotTex = shaderData.getTextureIndex(getShadowMapCubeByIndex(light.shadowMapIndex));
-                render.addTexture(slotTex, ShaderStageType::FRAGMENT, &light.framebuffer[0].getColorTexture());
-                numCubeShadows++;
-            }
-        }
-        if (MAX_SHADOWSCUBEMAP > numCubeShadows){
-            for (int s = numCubeShadows; s < MAX_SHADOWSCUBEMAP; s++){
-                slotTex = shaderData.getTextureIndex(getShadowMapCubeByIndex(s+MAX_SHADOWSMAP));
-                render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyCubeBlack);
-            }
-        }
+        slotTex = shaderData.getTextureIndex(TextureShaderType::SHADOWPOINTATLAS);
+        render.addTexture(slotTex, ShaderStageType::FRAGMENT,
+                          hasShadowPointAtlas ? &shadowPointAtlasFramebuffer.getColorTexture() : &emptyWhite);
     }
 }
 
@@ -1143,6 +1255,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             if (p_receiveShadows){
                 mesh.submeshes[i].slotVSShadows = shaderData.getUniformBlockIndex(UniformBlockType::VS_SHADOWS);
                 mesh.submeshes[i].slotFSShadows = shaderData.getUniformBlockIndex(UniformBlockType::FS_SHADOWS);
+                mesh.submeshes[i].slotFSPointShadows = shaderData.getUniformBlockIndex(UniformBlockType::FS_POINT_SHADOWS);
             }
         }
         if (mesh.submeshes[i].hasTextureRect){
@@ -1573,8 +1686,9 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             if (submeshLit){
                 render.applyUniformBlock(mesh.submeshes[i].slotFSLighting, sizeof(float) * (16 * MAX_LIGHTS + 20), &fs_lighting);
                 if (hasShadows && (mesh.submeshes[i].shaderProperties & (1u << 4))){
-                    render.applyUniformBlock(mesh.submeshes[i].slotVSShadows, sizeof(float) * (20 * MAX_SHADOWSMAP), &vs_shadows);
+                    render.applyUniformBlock(mesh.submeshes[i].slotVSShadows, sizeof(float) * (20 * MAX_SHADOW_ATLAS_SLOTS), &vs_shadows);
                     render.applyUniformBlock(mesh.submeshes[i].slotFSShadows, sizeof(fs_shadows_t), &fs_shadows);
+                    render.applyUniformBlock(mesh.submeshes[i].slotFSPointShadows, sizeof(fs_point_shadows_t), &fs_point_shadows);
                 }
                 // USE_SSAO (property bit 21): bind the screen-space AO texture for
                 // this view (blurred AO for the main camera, empty white otherwise)
@@ -2342,6 +2456,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
         submesh.slotVSSprite = -1;
         submesh.slotVSShadows = -1;
         submesh.slotFSShadows = -1;
+        submesh.slotFSPointShadows = -1;
         submesh.slotVSSkinning = -1;
         submesh.slotVSMorphTarget = -1;
         submesh.slotVSTerrain = -1;
@@ -3012,9 +3127,9 @@ void RenderSystem::destroySky(Entity entity, SkyComponent& sky){
 }
 
 void RenderSystem::destroyLight(LightComponent& light){
-    for (int i = 0; i < MAX_SHADOWCASCADES; i++) {
-        light.framebuffer[i].destroyFramebuffer();
-    }
+    // shadow maps live in the RenderSystem-owned atlases, so a light owns no GPU
+    // resources of its own to release here
+    light.shadowMapIndex = -1;
 }
 
 void RenderSystem::destroyCamera(CameraComponent& camera, bool entityDestroyed){
@@ -4546,7 +4661,8 @@ void RenderSystem::draw(){
         auto lights = scene->getComponentArray<LightComponent>();
         auto meshes = scene->getComponentArray<MeshComponent>();
         auto terrains = scene->getComponentArray<TerrainComponent>();
-        bool atlasSlotWritten = false;
+        bool projectiveAtlasSlotWritten = false;
+        bool pointAtlasSlotWritten = false;
         
         for (int l = 0; l < lights->size(); l++){
             LightComponent& light = lights->getComponentFromIndex(l);
@@ -4560,35 +4676,37 @@ void RenderSystem::draw(){
                 }
 
                 for (int c = 0; c < cameras; c++){
-                    size_t face = 0;
-                    CameraRender* passRender = &light.cameras[c].render;
-                    FramebufferRender* passFramebuffer = NULL;
-
-                    if (light.type == LightType::POINT){
-                        face = c;
-                        passFramebuffer = &light.framebuffer[0];
-                        passRender->setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
-                    }else if (hasShadowAtlas){
-                        int slotIndex = light.shadowMapIndex + ((light.type == LightType::DIRECTIONAL) ? c : 0);
-                        passRender = &shadowAtlasPassRender;
-                        passFramebuffer = &shadowAtlasFramebuffer;
-                        if (!atlasSlotWritten){
-                            passRender->setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
-                        }else{
-                            passRender->setLoadActionLoad();
+                    bool isPoint = light.type == LightType::POINT;
+                    if (light.shadowMapIndex < 0){
+                        continue;
+                    }
+                    if (isPoint){
+                        if (!hasShadowPointAtlas){
+                            continue;
                         }
-                        Rect slotRect = getShadowAtlasSlotRect(slotIndex);
-                        passRender->startRenderPass(passFramebuffer);
-                        passRender->applyViewport(slotRect);
-                        passRender->applyScissor(slotRect);
-                        atlasSlotWritten = true;
-                    }else{
+                    }else if (!hasShadowAtlas){
                         continue;
                     }
 
-                    if (light.type == LightType::POINT){
-                        passRender->startRenderPass(passFramebuffer, face);
+                    int slotIndex = light.shadowMapIndex;
+                    if (light.type == LightType::DIRECTIONAL || light.type == LightType::POINT){
+                        slotIndex += c;
                     }
+
+                    CameraRender* passRender = isPoint ? &shadowPointAtlasPassRender : &shadowAtlasPassRender;
+                    FramebufferRender* passFramebuffer = isPoint ? &shadowPointAtlasFramebuffer : &shadowAtlasFramebuffer;
+                    bool& atlasSlotWritten = isPoint ? pointAtlasSlotWritten : projectiveAtlasSlotWritten;
+
+                    if (!atlasSlotWritten){
+                        passRender->setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+                    }else{
+                        passRender->setLoadActionLoad();
+                    }
+                    Rect slotRect = isPoint ? getShadowPointAtlasSlotRect(slotIndex) : getShadowAtlasSlotRect(slotIndex);
+                    passRender->startRenderPass(passFramebuffer);
+                    passRender->applyViewport(slotRect);
+                    passRender->applyScissor(slotRect);
+                    atlasSlotWritten = true;
 
                     for (int i = 0; i < meshes->size(); i++){
                         MeshComponent& mesh = meshes->getComponentFromIndex(i);

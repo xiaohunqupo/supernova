@@ -1683,8 +1683,11 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     //     energy-conserving SSR-over-IBL, glossy roughness blur, debug modes).
     // v7: second UV set (HAS_UV_SET2) — per-texture UV selection via u_fs_texCoordSets.
     // v8: directional/spot shadows share u_shadowAtlas (replaces u_shadowMap1..6),
-    //     3x3 atlas (MAX_SHADOWSMAP 9), SSAO on terrain (USE_SSAO + depth HAS_TERRAIN).
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v8";
+    //     3x3 atlas, SSAO on terrain (USE_SSAO + depth HAS_TERRAIN).
+    // v9: dual shadow atlases — u_shadowAtlas (directional/spot, projective) and
+    //     u_shadowPointAtlas (point cube faces); removes the u_shadowCubeMap* samplers
+    //     and keeps each atlas within the GPU max texture size.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v9";
 }
 
 void editor::App::pushTabNotificationStyle(){

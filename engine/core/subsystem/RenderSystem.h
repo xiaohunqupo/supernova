@@ -48,15 +48,21 @@ namespace doriax{
 	} fs_fog_t;
 
 	typedef struct vs_shadows_t {
-	    Matrix4 lightViewProjectionMatrix[MAX_SHADOWSMAP];
-	    Vector4 shadowParams[MAX_SHADOWSMAP]; // normalBias in .x
+	    Matrix4 lightViewProjectionMatrix[MAX_SHADOW_ATLAS_SLOTS];
+	    Vector4 shadowParams[MAX_SHADOW_ATLAS_SLOTS]; // normalBias in .x
 	} vs_shadows_t;
 
 	typedef struct fs_shadows_t {
-        Vector4 bias_texSize_nearFar[MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP];
-        // xy = atlas origin, zw = atlas scale (directional/spot share u_shadowAtlas)
-        Vector4 atlasRect[MAX_SHADOWSMAP];
+        Vector4 bias_texSize_nearFar[MAX_SHADOW_ATLAS_SLOTS];
+        // xy = atlas origin, zw = atlas scale (directional/spot)
+        Vector4 atlasRect[MAX_SHADOW_ATLAS_SLOTS];
 	} fs_shadows_t;
+
+	typedef struct fs_point_shadows_t {
+        Vector4 bias_texSize_nearFar[MAX_POINT_SHADOW_ATLAS_SLOTS];
+        // xy = atlas origin, zw = atlas scale (point cube faces)
+        Vector4 atlasRect[MAX_POINT_SHADOW_ATLAS_SLOTS];
+	} fs_point_shadows_t;
 
 	typedef struct vs_depth_t {
 		Matrix4 modelMatrix;
@@ -158,17 +164,26 @@ namespace doriax{
 		bool hasIBL;
 		bool hasMultipleCameras;
 
-		// shared 2D shadow atlas for directional + spot lights (one sampler)
+		// 3x3 atlas for directional + spot lights
 		FramebufferRender shadowAtlasFramebuffer;
 		CameraRender shadowAtlasPassRender;
 		unsigned int shadowAtlasSlotResolution;
 		bool needUpdateShadowAtlas;
-		bool needUpdateShadowBindings;
 		bool hasShadowAtlas;
+
+		// separate atlas for point-light cube faces
+		FramebufferRender shadowPointAtlasFramebuffer;
+		CameraRender shadowPointAtlasPassRender;
+		unsigned int shadowPointAtlasSlotResolution;
+		bool needUpdateShadowPointAtlas;
+		bool hasShadowPointAtlas;
+
+		bool needUpdateShadowBindings;
 
 		fs_lighting_t fs_lighting;
 		vs_shadows_t vs_shadows;
 		fs_shadows_t fs_shadows;
+		fs_point_shadows_t fs_point_shadows;
 		fs_fog_t fs_fog;
 
 		// SSAO: per-frame fullscreen passes for the main camera. The depth pre-pass
@@ -233,10 +248,13 @@ namespace doriax{
 		bool loadAndProcessFog();
 		void releaseSkyEnvironment(SkyComponent& sky);
 		void updateSkyEnvironment(SkyComponent& sky);
-		TextureShaderType getShadowMapCubeByIndex(int index);
 		void initShadowAtlasRects();
+		void initShadowPointAtlasRects();
+		unsigned int clampShadowAtlasSlotResolution(unsigned int requestedResolution, int atlasCols, int atlasRows) const;
 		bool ensureShadowAtlas(unsigned int slotResolution);
+		bool ensureShadowPointAtlas(unsigned int slotResolution);
 		Rect getShadowAtlasSlotRect(int slotIndex) const;
+		Rect getShadowPointAtlasSlotRect(int slotIndex) const;
 		void configureLightShadowNearFar(LightComponent& light, const CameraComponent& camera);
 		Matrix4 getDirLightProjection(const Matrix4& viewMatrix, const Matrix4& sceneCameraInv, float shadowMaxDistance, const Vector3& lightDirection, const Vector3& cameraPosition);
 		bool checkPBRFrabebufferUpdate(Material& material);

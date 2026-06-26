@@ -93,31 +93,21 @@ uniform u_fs_pbrParams {
 #ifdef USE_SHADOWS
 
     uniform u_fs_shadows {
-        vec4 bias_texSize_nearFar[MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP];
-        vec4 atlasRect[MAX_SHADOWSMAP];
+        vec4 bias_texSize_nearFar[MAX_SHADOW_ATLAS_SLOTS];
+        vec4 atlasRect[MAX_SHADOW_ATLAS_SLOTS];
     } uShadows;
 
-    in vec4 v_lightProjPos[MAX_SHADOWSMAP];
+    uniform u_fs_point_shadows {
+        vec4 bias_texSize_nearFar[MAX_POINT_SHADOW_ATLAS_SLOTS];
+        vec4 atlasRect[MAX_POINT_SHADOW_ATLAS_SLOTS];
+    } uPointShadows;
+
+    in vec4 v_lightProjPos[MAX_SHADOW_ATLAS_SLOTS];
 
     uniform texture2D u_shadowAtlas;
     uniform sampler u_shadowAtlas_smp;
-
-    #if MAX_SHADOWSCUBEMAP >= 1
-    uniform textureCube u_shadowCubeMap1;
-    uniform sampler u_shadowCubeMap1_smp;
-    #endif
-    #if MAX_SHADOWSCUBEMAP >= 2
-    uniform textureCube u_shadowCubeMap2;
-    uniform sampler u_shadowCubeMap2_smp;
-    #endif
-    #if MAX_SHADOWSCUBEMAP >= 3
-    uniform textureCube u_shadowCubeMap3;
-    uniform sampler u_shadowCubeMap3_smp;
-    #endif
-    #if MAX_SHADOWSCUBEMAP >= 4
-    uniform textureCube u_shadowCubeMap4;
-    uniform sampler u_shadowCubeMap4_smp;
-    #endif
+    uniform texture2D u_shadowPointAtlas;
+    uniform sampler u_shadowPointAtlas_smp;
 #endif
 
 struct MaterialInfo{

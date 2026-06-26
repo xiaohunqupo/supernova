@@ -15,24 +15,47 @@
 #define MAX_LIGHTS 6
 #endif
 
-#ifndef MAX_SHADOWSMAP
-#define MAX_SHADOWSMAP 9
-#endif
-
-#ifndef MAX_SHADOWSCUBEMAP
-#define MAX_SHADOWSCUBEMAP 1
+#ifndef SHADOW_CUBE_FACES
+#define SHADOW_CUBE_FACES 6
 #endif
 
 #ifndef MAX_SHADOWCASCADES
 #define MAX_SHADOWCASCADES 4
 #endif
 
+// Projective shadow atlas (directional + spot). Each slot holds one 2D depth map
+// (a spot light, or a single directional cascade) and maps 1:1 to a v_lightProjPos
+// vertex varying, so the slot count is bounded by GPU vertex-output limits: keep the
+// grid small (a 6x6 / 36-slot grid overflows the varyings and breaks shader compiles).
 #ifndef SHADOW_ATLAS_COLS
 #define SHADOW_ATLAS_COLS 3
 #endif
 
 #ifndef SHADOW_ATLAS_ROWS
 #define SHADOW_ATLAS_ROWS 3
+#endif
+
+#ifndef MAX_SHADOW_ATLAS_SLOTS
+#define MAX_SHADOW_ATLAS_SLOTS (SHADOW_ATLAS_COLS * SHADOW_ATLAS_ROWS)
+#endif
+
+// Point shadow atlas (omnidirectional). Each shadow-casting point light consumes
+// SHADOW_CUBE_FACES consecutive slots (one per cube face) and is sampled only in the
+// fragment shader, so this atlas is bounded by texture size rather than varyings.
+#ifndef SHADOW_POINT_ATLAS_COLS
+#define SHADOW_POINT_ATLAS_COLS 6
+#endif
+
+#ifndef SHADOW_POINT_ATLAS_ROWS
+#define SHADOW_POINT_ATLAS_ROWS 4
+#endif
+
+#ifndef MAX_POINT_SHADOW_ATLAS_SLOTS
+#define MAX_POINT_SHADOW_ATLAS_SLOTS (SHADOW_POINT_ATLAS_COLS * SHADOW_POINT_ATLAS_ROWS)
+#endif
+
+#ifndef MAX_POINT_SHADOW_LIGHTS
+#define MAX_POINT_SHADOW_LIGHTS (MAX_POINT_SHADOW_ATLAS_SLOTS / SHADOW_CUBE_FACES)
 #endif
 
 #ifndef MAX_SUBMESHES

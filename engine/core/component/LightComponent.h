@@ -52,7 +52,8 @@ namespace doriax{
         unsigned int numShadowCascades = 3;
 
         LightCamera cameras[6];
-        FramebufferRender framebuffer[MAX_SHADOWCASCADES];
+        // base slot in the shadow atlas (projective for directional/spot, point atlas
+        // for omni); -1 when the light has no shadow allocation this frame
         int shadowMapIndex;
 
         bool needUpdateShadowCamera = false;

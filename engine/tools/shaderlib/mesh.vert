@@ -60,11 +60,11 @@ in vec3 a_position;
 
 #ifdef USE_SHADOWS
     uniform u_vs_shadows {
-        mat4 lightVPMatrix[MAX_SHADOWSMAP];
-        vec4 shadowParams[MAX_SHADOWSMAP]; // normalBias in .x
+        mat4 lightVPMatrix[MAX_SHADOW_ATLAS_SLOTS];
+        vec4 shadowParams[MAX_SHADOW_ATLAS_SLOTS]; // normalBias in .x
     };
  
-    out vec4 v_lightProjPos[MAX_SHADOWSMAP];
+    out vec4 v_lightProjPos[MAX_SHADOW_ATLAS_SLOTS];
 #endif
 
 #ifdef HAS_INSTANCING
@@ -193,7 +193,7 @@ void main() {
     #endif
 
     #ifdef USE_SHADOWS
-    for (int i = 0; i < MAX_SHADOWSMAP; ++i){
+    for (int i = 0; i < MAX_SHADOW_ATLAS_SLOTS; ++i){
         #ifdef HAS_NORMALS
             v_lightProjPos[i] = lightVPMatrix[i] * (worldPos + vec4(worldNormal * shadowParams[i].x, 0.0));
         #else

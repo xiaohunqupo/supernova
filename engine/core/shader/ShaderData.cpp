@@ -166,6 +166,8 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_vs_shadows";
     }else if (type == UniformBlockType::FS_SHADOWS){
         ustr = "u_fs_shadows";
+    }else if (type == UniformBlockType::FS_POINT_SHADOWS){
+        ustr = "u_fs_point_shadows";
     }else if (type == UniformBlockType::SKY_VS_PARAMS){
         ustr = "u_vs_skyParams";
     }else if (type == UniformBlockType::SKY_FS_PARAMS){
@@ -264,8 +266,8 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_normalTexture";
     }else if (type == TextureShaderType::SHADOWATLAS){
         texstr = "u_shadowAtlas";
-    }else if (type == TextureShaderType::SHADOWCUBEMAP1){
-        texstr = "u_shadowCubeMap1";
+    }else if (type == TextureShaderType::SHADOWPOINTATLAS){
+        texstr = "u_shadowPointAtlas";
     }else if (type == TextureShaderType::SKYCUBE){
         texstr = "u_skyTexture";
     }else if (type == TextureShaderType::IRRADIANCEMAP){
