@@ -948,10 +948,33 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         // screen-space AO only modulates ambient/indirect light, so it is only
         // compiled into lit submeshes (those with punctual and/or IBL ambient).
         // Terrain is excluded: its lit shader is already near the 16-sampler limit
-        // (material + 7 shadow + 2 IBL + terrain detail maps), so the extra AO
-        // sampler would overflow SG_MAX_SAMPLER_BINDSLOTS. (Terrain also lacks
-        // HAS_TERRAIN in the SSAO depth pre-pass, so its AO would be unreliable.)
+        // (SG_MAX_SAMPLER_BINDSLOTS). (Terrain also lacks HAS_TERRAIN in the SSAO
+        // depth pre-pass, so its AO would be unreliable.)
         bool p_ssao = scene->isSSAOEnabled() && !p_unlit && (p_punctual || p_ibl) && !terrain;
+
+        if (terrain){
+            // Terrain always binds heightmap (VS) + blend + 3 detail layers (FS). When
+            // combined with full PBR slots, IBL and shadow maps the variant can exceed
+            // Sokol's 16-sampler cap and sg_make_shader panics. Prefer keeping PBR/IBL
+            // over shadow reception on terrain.
+            int terrainSamplerSlots = 5;
+            if (!p_unlit && p_hasTexture1){
+                terrainSamplerSlots += 4;
+                if (p_hasNormalMap){
+                    terrainSamplerSlots += 1;
+                }
+            }
+            if (p_ibl){
+                terrainSamplerSlots += 2;
+            }
+            if (p_receiveShadows){
+                terrainSamplerSlots += MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP;
+            }
+            if (terrainSamplerSlots > 16){
+                p_receiveShadows = false;
+                p_shadowsPCF = false;
+            }
+        }
 
         mesh.submeshes[i].shaderProperties = ShaderPool::getMeshProperties(
                         p_unlit, p_hasTexture1, p_hasTexture2, p_punctual,
@@ -1004,7 +1027,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         }
         if ((hasLights || useIBL) && mesh.receiveLights){
             mesh.submeshes[i].slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
-            if (hasShadows && mesh.receiveShadows){
+            if (p_receiveShadows){
                 mesh.submeshes[i].slotVSShadows = shaderData.getUniformBlockIndex(UniformBlockType::VS_SHADOWS);
                 mesh.submeshes[i].slotFSShadows = shaderData.getUniformBlockIndex(UniformBlockType::FS_SHADOWS);
             }
@@ -1022,7 +1045,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         if (!loadPBRTextures(mesh.submeshes[i].material, shaderData, mesh.submeshes[i].render, mesh.receiveLights)){
             return false;
         }
-        loadShadowTextures(shaderData, mesh.submeshes[i].render, mesh.receiveLights, mesh.receiveShadows);
+        loadShadowTextures(shaderData, mesh.submeshes[i].render, mesh.receiveLights, p_receiveShadows);
 
         if (p_ibl){
             auto skyArray = scene->getComponentArray<SkyComponent>();
@@ -1438,7 +1461,7 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
 
             if (submeshLit){
                 render.applyUniformBlock(mesh.submeshes[i].slotFSLighting, sizeof(float) * (16 * MAX_LIGHTS + 20), &fs_lighting);
-                if (hasShadows && mesh.receiveShadows){
+                if (hasShadows && (mesh.submeshes[i].shaderProperties & (1u << 4))){
                     render.applyUniformBlock(mesh.submeshes[i].slotVSShadows, sizeof(float) * (20 * MAX_SHADOWSMAP), &vs_shadows);
                     render.applyUniformBlock(mesh.submeshes[i].slotFSShadows, sizeof(float) * (4 * (MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP)), &fs_shadows);
                 }
