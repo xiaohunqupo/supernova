@@ -56,6 +56,12 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     ssrSlotParams = -1;
     ssrBlurSlotParams = -1;
     compositeSlotParams = -1;
+
+    shadowAtlasSlotResolution = 0;
+    needUpdateShadowAtlas = true;
+    needUpdateShadowBindings = false;
+    hasShadowAtlas = false;
+    initShadowAtlasRects();
 }
 
 RenderSystem::~RenderSystem(){
@@ -84,6 +90,9 @@ void RenderSystem::destroy(){
 
     destroySSAO();
     destroySSR();
+    shadowAtlasFramebuffer.destroyFramebuffer();
+    shadowAtlasSlotResolution = 0;
+    hasShadowAtlas = false;
 
     auto skys = scene->getComponentArray<SkyComponent>();
     if (skys->size() > 0){
@@ -224,6 +233,8 @@ int RenderSystem::checkLightsAndShadow(){
 bool RenderSystem::loadLights(int numLights){
     int freeShadowMap = 0;
     int freeShadowCubeMap = MAX_SHADOWSMAP;
+    unsigned int maxShadowSlotResolution = 0;
+    bool any2DShadows = false;
 
     auto lights = scene->getComponentArray<LightComponent>();
     
@@ -239,10 +250,11 @@ bool RenderSystem::loadLights(int numLights){
             }
 
             if (light.needUpdateShadowMap){
-                for (int i = 0; i < light.numShadowCascades; i++) {
-                    light.framebuffer[i].destroyFramebuffer();
+                if (light.type == LightType::POINT){
+                    light.framebuffer[0].destroyFramebuffer();
                 }
-
+                needUpdateShadowAtlas = true;
+                needUpdateShadowBindings = true;
                 light.needUpdateShadowMap = false;
             }
 
@@ -256,30 +268,40 @@ bool RenderSystem::loadLights(int numLights){
                     light.shadowMapIndex = freeShadowCubeMap++;
                 }
             }else if (light.type == LightType::SPOT){
-                if (!light.framebuffer[0].isCreated())
-                    light.framebuffer[0].createFramebuffer(
-                            TextureType::TEXTURE_2D, light.mapResolution, light.mapResolution, 
-                            TextureFilter::NEAREST, TextureFilter::NEAREST, TextureWrap::CLAMP_TO_BORDER, TextureWrap::CLAMP_TO_BORDER, true);
+                any2DShadows = true;
+                maxShadowSlotResolution = std::max(maxShadowSlotResolution, light.mapResolution);
 
                 if (freeShadowMap < MAX_SHADOWSMAP){
                     light.shadowMapIndex = freeShadowMap++;
                 }
             }else if (light.type == LightType::DIRECTIONAL){
-                for (int c = 0; c < light.numShadowCascades; c++){
-                    if (!light.framebuffer[c].isCreated())
-                        light.framebuffer[c].createFramebuffer(
-                                TextureType::TEXTURE_2D, light.mapResolution, light.mapResolution, 
-                                TextureFilter::NEAREST, TextureFilter::NEAREST, TextureWrap::CLAMP_TO_BORDER, TextureWrap::CLAMP_TO_BORDER, true);
-                }
+                any2DShadows = true;
+                maxShadowSlotResolution = std::max(maxShadowSlotResolution, light.mapResolution);
 
                 if ((freeShadowMap + light.numShadowCascades - 1) < MAX_SHADOWSMAP){
                     light.shadowMapIndex = freeShadowMap;
                     freeShadowMap += light.numShadowCascades;
                 }
             }
-
         }
+    }
 
+    if (any2DShadows){
+        if (!ensureShadowAtlas(maxShadowSlotResolution)){
+            Log::warn("Failed to create shadow atlas");
+            for (int i = 0; i < numLights; i++){
+                LightComponent& light = lights->getComponentFromIndex(i);
+                if (light.type != LightType::POINT){
+                    light.shadowMapIndex = -1;
+                    light.shadows = false;
+                }
+            }
+        }
+    }else{
+        if (hasShadowAtlas){
+            needUpdateShadowBindings = true;
+        }
+        hasShadowAtlas = false;
     }
 
     return true;
@@ -314,10 +336,16 @@ void RenderSystem::processLights(int numLights, CameraComponent& camera, Transfo
                         // Compute world-space normal bias: normalBias (in texels) * texelSize (world units)
                         float projScale = std::max(std::abs(light.cameras[c].lightProjectionMatrix[0][0]),
                                                    std::abs(light.cameras[c].lightProjectionMatrix[1][1]));
-                        float texelSizeWorld = (projScale > 0.0f) ? 2.0f / (projScale * light.mapResolution) : 0.0f;
+                        float shadowMapResolution = (light.type == LightType::POINT)
+                            ? (float)light.mapResolution
+                            : (float)shadowAtlasSlotResolution;
+                        float texelSizeWorld = (projScale > 0.0f) ? 2.0f / (projScale * shadowMapResolution) : 0.0f;
                         vs_shadows.shadowParams[light.shadowMapIndex+c] = Vector4(light.shadowNormalBias * texelSizeWorld, 0.0, 0.0, 0.0);
                     }
-                    fs_shadows.bias_texSize_nearFar[light.shadowMapIndex+c] = Vector4(light.shadowBias, light.mapResolution, light.cameras[c].nearFar.x, light.cameras[c].nearFar.y);
+                    fs_shadows.bias_texSize_nearFar[light.shadowMapIndex+c] = Vector4(
+                        light.shadowBias,
+                        (light.type == LightType::POINT) ? (float)light.mapResolution : (float)shadowAtlasSlotResolution,
+                        light.cameras[c].nearFar.x, light.cameras[c].nearFar.y);
                 }
             }else{
                 light.shadows = false;
@@ -454,28 +482,6 @@ void RenderSystem::updateSkyEnvironment(SkyComponent& sky){
     sky.needUpdateEnvironment = false;
 }
 
-TextureShaderType RenderSystem::getShadowMapByIndex(int index){
-    if (index == 0){
-        return TextureShaderType::SHADOWMAP1;
-    }else if (index == 1){
-        return TextureShaderType::SHADOWMAP2;
-    }else if (index == 2){
-        return TextureShaderType::SHADOWMAP3;
-    }else if (index == 3){
-        return TextureShaderType::SHADOWMAP4;
-    }else if (index == 4){
-        return TextureShaderType::SHADOWMAP5;
-    }else if (index == 5){
-        return TextureShaderType::SHADOWMAP6;
-    }else if (index == 6){
-        return TextureShaderType::SHADOWMAP7;
-    }else if (index == 7){
-        return TextureShaderType::SHADOWMAP8;
-    }
-
-    return TextureShaderType::SHADOWMAP1;
-}
-
 TextureShaderType RenderSystem::getShadowMapCubeByIndex(int index){
     index -= MAX_SHADOWSMAP;
     if (index == 0){
@@ -483,6 +489,58 @@ TextureShaderType RenderSystem::getShadowMapCubeByIndex(int index){
     }
 
     return TextureShaderType::SHADOWCUBEMAP1;
+}
+
+void RenderSystem::initShadowAtlasRects(){
+    for (int s = 0; s < MAX_SHADOWSMAP; s++){
+        int col = s % SHADOW_ATLAS_COLS;
+        int row = s / SHADOW_ATLAS_COLS;
+        fs_shadows.atlasRect[s] = Vector4(
+            (float)col / (float)SHADOW_ATLAS_COLS,
+            (float)row / (float)SHADOW_ATLAS_ROWS,
+            1.0f / (float)SHADOW_ATLAS_COLS,
+            1.0f / (float)SHADOW_ATLAS_ROWS);
+    }
+}
+
+bool RenderSystem::ensureShadowAtlas(unsigned int slotResolution){
+    if (slotResolution < 1){
+        return false;
+    }
+
+    int atlasWidth = (int)slotResolution * SHADOW_ATLAS_COLS;
+    int atlasHeight = (int)slotResolution * SHADOW_ATLAS_ROWS;
+
+    if (shadowAtlasFramebuffer.isCreated() && shadowAtlasSlotResolution == slotResolution && !needUpdateShadowAtlas){
+        if (!hasShadowAtlas){
+            needUpdateShadowBindings = true;
+        }
+        hasShadowAtlas = true;
+        return true;
+    }
+
+    shadowAtlasFramebuffer.destroyFramebuffer();
+    if (!shadowAtlasFramebuffer.createFramebuffer(
+            TextureType::TEXTURE_2D, atlasWidth, atlasHeight,
+            TextureFilter::NEAREST, TextureFilter::NEAREST,
+            TextureWrap::CLAMP_TO_BORDER, TextureWrap::CLAMP_TO_BORDER, true)){
+        hasShadowAtlas = false;
+        return false;
+    }
+
+    shadowAtlasSlotResolution = slotResolution;
+    needUpdateShadowAtlas = false;
+    hasShadowAtlas = true;
+    needUpdateShadowBindings = true;
+    return true;
+}
+
+Rect RenderSystem::getShadowAtlasSlotRect(int slotIndex) const{
+    int col = slotIndex % SHADOW_ATLAS_COLS;
+    int row = slotIndex / SHADOW_ATLAS_COLS;
+    float x = (float)(col * (int)shadowAtlasSlotResolution);
+    float y = (float)(row * (int)shadowAtlasSlotResolution);
+    return Rect(x, y, (float)shadowAtlasSlotResolution, (float)shadowAtlasSlotResolution);
 }
 
 bool RenderSystem::checkPBRFrabebufferUpdate(Material& material){
@@ -572,37 +630,50 @@ bool RenderSystem::loadPBRTextures(Material& material, ShaderData& shaderData, O
     return true;
 }
 
+void RenderSystem::updateShadowBindings(){
+    if (!needUpdateShadowBindings){
+        return;
+    }
+
+    auto meshes = scene->getComponentArray<MeshComponent>();
+    for (int i = 0; i < meshes->size(); i++){
+        MeshComponent& mesh = meshes->getComponentFromIndex(i);
+        if (!mesh.loaded || mesh.needReload){
+            continue;
+        }
+
+        for (int s = 0; s < mesh.numSubmeshes; s++){
+            if (!(mesh.submeshes[s].shaderProperties & (1u << 4))){
+                continue;
+            }
+            if (!mesh.submeshes[s].shader){
+                continue;
+            }
+
+            ShaderData& shaderData = mesh.submeshes[s].shader.get()->shaderData;
+            loadShadowTextures(shaderData, mesh.submeshes[s].render, mesh.receiveLights, true);
+        }
+    }
+
+    needUpdateShadowBindings = false;
+}
+
 void RenderSystem::loadShadowTextures(ShaderData& shaderData, ObjectRender& render, bool receiveLights, bool receiveShadows){
     std::pair<int, int> slotTex(-1, -1);
 
     if (hasLights && receiveLights && hasShadows && receiveShadows){
-        size_t num2DShadows = 0;
+        slotTex = shaderData.getTextureIndex(TextureShaderType::SHADOWATLAS);
+        render.addTexture(slotTex, ShaderStageType::FRAGMENT,
+                          hasShadowAtlas ? &shadowAtlasFramebuffer.getColorTexture() : &emptyBlack);
+
         size_t numCubeShadows = 0;
         auto lights = scene->getComponentArray<LightComponent>();
         for (int l = 0; l < lights->size(); l++){
             LightComponent& light = lights->getComponentFromIndex(l);
-            if (light.shadowMapIndex >= 0){
-                if (light.type == LightType::POINT){
-                    slotTex = shaderData.getTextureIndex(getShadowMapCubeByIndex(light.shadowMapIndex));
-                    render.addTexture(slotTex, ShaderStageType::FRAGMENT, &light.framebuffer[0].getColorTexture());
-                    numCubeShadows++;
-                }else if (light.type == LightType::SPOT){
-                    slotTex = shaderData.getTextureIndex(getShadowMapByIndex(light.shadowMapIndex));
-                    render.addTexture(slotTex, ShaderStageType::FRAGMENT, &light.framebuffer[0].getColorTexture());
-                    num2DShadows++;
-                }else if (light.type == LightType::DIRECTIONAL){
-                    for (int c = 0; c < light.numShadowCascades; c++){
-                        slotTex = shaderData.getTextureIndex(getShadowMapByIndex(light.shadowMapIndex+c));
-                        render.addTexture(slotTex, ShaderStageType::FRAGMENT, &light.framebuffer[c].getColorTexture());
-                        num2DShadows++;
-                    }
-                }
-            }
-        }
-        if (MAX_SHADOWSMAP > num2DShadows){
-            for (int s = num2DShadows; s < MAX_SHADOWSMAP; s++){
-                slotTex = shaderData.getTextureIndex(getShadowMapByIndex(s));
-                render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyBlack);
+            if (light.shadowMapIndex >= 0 && light.type == LightType::POINT){
+                slotTex = shaderData.getTextureIndex(getShadowMapCubeByIndex(light.shadowMapIndex));
+                render.addTexture(slotTex, ShaderStageType::FRAGMENT, &light.framebuffer[0].getColorTexture());
+                numCubeShadows++;
             }
         }
         if (MAX_SHADOWSCUBEMAP > numCubeShadows){
@@ -713,6 +784,76 @@ bool RenderSystem::loadTerrainTextures(TerrainComponent& terrain, ObjectRender& 
     }
 
     return true;
+}
+
+bool RenderSystem::loadTerrainHeightTexture(TerrainComponent& terrain, ObjectRender& render, ShaderData& shaderData){
+    std::pair<int, int> slotTex = shaderData.getTextureIndex(TextureShaderType::HEIGHTMAP);
+    if (slotTex.first == -1){
+        return true;
+    }
+
+    TextureRender* textureRender = terrain.heightMap.getRender(&emptyWhite);
+    if (!textureRender || !textureRender->isCreated()){
+        return false;
+    }
+
+    render.addTexture(slotTex, ShaderStageType::VERTEX, textureRender);
+    return true;
+}
+
+bool RenderSystem::updateTerrainRenderTextures(TerrainComponent& terrain, MeshComponent& mesh){
+    if (!terrain.needUpdateTexture){
+        return true;
+    }
+
+    bool texLoaded = true;
+    for (int s = 0; s < 2; s++){
+        if (s >= mesh.numSubmeshes){
+            break;
+        }
+        if (!mesh.submeshes[s].shader){
+            texLoaded = false;
+            continue;
+        }
+        ShaderData& shaderData = mesh.submeshes[s].shader.get()->shaderData;
+        if (!loadTerrainTextures(terrain, mesh.submeshes[s].render, shaderData)){
+            texLoaded = false;
+        }
+        if (mesh.submeshes[s].depthShader){
+            ShaderData& depthShaderData = mesh.submeshes[s].depthShader.get()->shaderData;
+            if (!loadTerrainHeightTexture(terrain, mesh.submeshes[s].depthRender, depthShaderData)){
+                texLoaded = false;
+            }
+        }
+        if (mesh.submeshes[s].gbufferShader){
+            ShaderData& gbufferShaderData = mesh.submeshes[s].gbufferShader.get()->shaderData;
+            if (!loadTerrainHeightTexture(terrain, mesh.submeshes[s].gbufferRender, gbufferShaderData)){
+                texLoaded = false;
+            }
+        }
+    }
+
+    if (texLoaded){
+        terrain.needUpdateTexture = false;
+    }
+
+    return texLoaded;
+}
+
+void RenderSystem::updateAllTerrainRenderTextures(){
+    auto meshes = scene->getComponentArray<MeshComponent>();
+    for (int i = 0; i < meshes->size(); i++){
+        MeshComponent& mesh = meshes->getComponentFromIndex(i);
+        if (!mesh.loaded || mesh.needReload){
+            continue;
+        }
+
+        Entity entity = meshes->getEntity(i);
+        TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
+        if (terrain){
+            updateTerrainRenderTextures(*terrain, mesh);
+        }
+    }
 }
 
 bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipelines, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
@@ -945,36 +1086,8 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         // G-buffer can flag those pixels for the energy-conserving composite
         mesh.submeshes[i].hasIBL = p_ibl;
 
-        // screen-space AO only modulates ambient/indirect light, so it is only
-        // compiled into lit submeshes (those with punctual and/or IBL ambient).
-        // Terrain is excluded: its lit shader is already near the 16-sampler limit
-        // (SG_MAX_SAMPLER_BINDSLOTS). (Terrain also lacks HAS_TERRAIN in the SSAO
-        // depth pre-pass, so its AO would be unreliable.)
-        bool p_ssao = scene->isSSAOEnabled() && !p_unlit && (p_punctual || p_ibl) && !terrain;
-
-        if (terrain){
-            // Terrain always binds heightmap (VS) + blend + 3 detail layers (FS). When
-            // combined with full PBR slots, IBL and shadow maps the variant can exceed
-            // Sokol's 16-sampler cap and sg_make_shader panics. Prefer keeping PBR/IBL
-            // over shadow reception on terrain.
-            int terrainSamplerSlots = 5;
-            if (!p_unlit && p_hasTexture1){
-                terrainSamplerSlots += 4;
-                if (p_hasNormalMap){
-                    terrainSamplerSlots += 1;
-                }
-            }
-            if (p_ibl){
-                terrainSamplerSlots += 2;
-            }
-            if (p_receiveShadows){
-                terrainSamplerSlots += MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP;
-            }
-            if (terrainSamplerSlots > 16){
-                p_receiveShadows = false;
-                p_shadowsPCF = false;
-            }
-        }
+        // screen-space AO modulates ambient/indirect light on lit submeshes.
+        bool p_ssao = scene->isSSAOEnabled() && !p_unlit && (p_punctual || p_ibl);
 
         mesh.submeshes[i].shaderProperties = ShaderPool::getMeshProperties(
                         p_unlit, p_hasTexture1, p_hasTexture2, p_punctual,
@@ -991,7 +1104,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         if ((hasShadows && mesh.castShadows) || scene->isSSAOEnabled()){
             mesh.submeshes[i].depthShaderProperties = ShaderPool::getDepthMeshProperties(
                 mesh.submeshes[i].textureShadow, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget,
-                mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent, false, (instmesh)?true:false);
+                mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent, (terrain)?true:false, (instmesh)?true:false);
             mesh.submeshes[i].depthShader = ShaderPool::get(ShaderType::DEPTH, mesh.submeshes[i].depthShaderProperties);
             if (!mesh.submeshes[i].depthShader->isCreated())
                 return false;
@@ -1156,6 +1269,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             if (terrain){
                 mesh.submeshes[i].slotVSDepthTerrain = depthShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_TERRAIN_VS_PARAMS);
 
+                if (!loadTerrainHeightTexture(*terrain, depthRender, depthShaderData)){
+                    return false;
+                }
+
                 // shadow depth pass always renders the main camera's selection (view 0)
                 for (auto const &attr : terrain->views[0].nodesbuffer[i].getAttributes()) {
                     depthRender.addAttribute(depthShaderData.getAttrIndex(attr.first), terrain->views[0].nodesbuffer[i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->views[0].nodesbuffer[i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
@@ -1264,6 +1381,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             if (terrain){
                 mesh.submeshes[i].slotVSGBufferTerrain = gbufferShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_TERRAIN_VS_PARAMS);
 
+                if (!loadTerrainHeightTexture(*terrain, gbufferRender, gbufferShaderData)){
+                    return false;
+                }
+
                 for (auto const &attr : terrain->views[0].nodesbuffer[i].getAttributes()) {
                     gbufferRender.addAttribute(gbufferShaderData.getAttrIndex(attr.first), terrain->views[0].nodesbuffer[i].getRender(), attr.second.getElements(), attr.second.getDataType(), terrain->views[0].nodesbuffer[i].getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
                 }
@@ -1364,7 +1485,11 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 }
 
 bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraComponent& camera, Transform& camTransform, bool renderToTexture, InstancedMeshComponent* instmesh, TerrainComponent* terrain, int terrainView){
-    if (mesh.loaded){
+    if (mesh.loaded && !mesh.needReload){
+
+        if (terrain && terrain->needUpdateTexture){
+            return false;
+        }
 
         if (mesh.worldAABB != AABB::ZERO && !isInsideCamera(camera, mesh.worldAABB)) {
             return false;
@@ -1403,20 +1528,6 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             }
 
             terrain->views[terrainView].needUpdateNodesBuffer = false;
-        }
-
-        if (terrain && terrain->needUpdateTexture){
-            bool texLoaded = true;
-            for (int s = 0; s < 2; s++){
-                ShaderData& shaderData = mesh.submeshes[s].shader.get()->shaderData;
-                if (!loadTerrainTextures(*terrain, mesh.submeshes[s].render, shaderData)){
-                    texLoaded = false;
-                }
-            }
-
-            if (texLoaded){
-                terrain->needUpdateTexture = false;
-            }
         }
 
         for (int i = 0; i < mesh.numSubmeshes; i++){
@@ -1463,7 +1574,7 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
                 render.applyUniformBlock(mesh.submeshes[i].slotFSLighting, sizeof(float) * (16 * MAX_LIGHTS + 20), &fs_lighting);
                 if (hasShadows && (mesh.submeshes[i].shaderProperties & (1u << 4))){
                     render.applyUniformBlock(mesh.submeshes[i].slotVSShadows, sizeof(float) * (20 * MAX_SHADOWSMAP), &vs_shadows);
-                    render.applyUniformBlock(mesh.submeshes[i].slotFSShadows, sizeof(float) * (4 * (MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP)), &fs_shadows);
+                    render.applyUniformBlock(mesh.submeshes[i].slotFSShadows, sizeof(fs_shadows_t), &fs_shadows);
                 }
                 // USE_SSAO (property bit 21): bind the screen-space AO texture for
                 // this view (blurred AO for the main camera, empty white otherwise)
@@ -1525,7 +1636,11 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
 
 bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_depth_t vsDepthParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain, bool forSSAO){
     // shadow passes only draw casters; the SSAO depth pre-pass draws every opaque mesh
-    if (mesh.loaded && (mesh.castShadows || forSSAO)){
+    if (mesh.loaded && !mesh.needReload && (mesh.castShadows || forSSAO)){
+
+        if (terrain && terrain->needUpdateTexture){
+            return false;
+        }
 
         if (mesh.worldAABB != AABB::ZERO && !isInsideCamera(cameraFar, frustumPlanes, mesh.worldAABB)) {
             return false;
@@ -1549,6 +1664,10 @@ bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, con
             unsigned int instanceCount = 1;
             if (instmesh){
                 instanceCount = instmesh->numVisible;
+            }
+            if (terrain){
+                instanceCount = terrain->views[0].nodesbuffer[i].getCount();
+                depthRender.replaceVertexBuffer(terrain->views[0].nodesbuffer[i].getRender(), terrain->views[0].nodesbuffer[i].getRender());
             }
 
             //model, mvp matrix
@@ -1825,8 +1944,12 @@ bool RenderSystem::ensureGBufferFramebuffer(unsigned int width, unsigned int hei
 }
 
 bool RenderSystem::drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_gbuffer_t vsGBufferParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
-    if (!mesh.loaded)
+    if (!mesh.loaded || mesh.needReload)
         return true;
+
+    if (terrain && terrain->needUpdateTexture){
+        return false;
+    }
 
     if (mesh.worldAABB != AABB::ZERO && !isInsideCamera(cameraFar, frustumPlanes, mesh.worldAABB)) {
         return false;
@@ -1878,6 +2001,8 @@ bool RenderSystem::drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, c
         if (terrain){
             terrain->eyePos = terrain->views[0].nodesEyePos;
             gbufferRender.applyUniformBlock(mesh.submeshes[i].slotVSGBufferTerrain, sizeof(float) * 8, &(terrain->eyePos));
+            instanceCount = terrain->views[0].nodesbuffer[i].getCount();
+            gbufferRender.replaceVertexBuffer(terrain->views[0].nodesbuffer[i].getRender(), terrain->views[0].nodesbuffer[i].getRender());
         }
 
         gbufferRender.draw(mesh.submeshes[i].vertexCount, instanceCount);
@@ -2247,7 +2372,16 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
         mesh.eBuffers[i].getRender()->destroyBuffer();
     }
 
-    SystemRender::addQueueCommand(&changeDestroy, new check_load_t{scene, entity});
+    if (mesh.needReload){
+        // Reload destroys GPU objects immediately but keeps CPU-side assets; reset
+        // load state synchronously so update() can call loadMesh in the same frame.
+        // Queuing changeDestroy would leave mesh.loaded true until later, so draw()
+        // could run with stale bindings and trip Sokol validation.
+        mesh.loaded = false;
+        mesh.loadCalled = false;
+    }else{
+        SystemRender::addQueueCommand(&changeDestroy, new check_load_t{scene, entity});
+    }
 }
 
 bool RenderSystem::loadUI(Entity entity, UIComponent& ui, uint8_t pipelines, bool isText){
@@ -4404,11 +4538,15 @@ void RenderSystem::draw(){
     auto transforms = scene->getComponentArray<Transform>();
     auto cameras = scene->getComponentArray<CameraComponent>();
 
+    updateShadowBindings();
+    updateAllTerrainRenderTextures();
+
     //---------Depth shader----------
     if (hasShadows){
         auto lights = scene->getComponentArray<LightComponent>();
         auto meshes = scene->getComponentArray<MeshComponent>();
         auto terrains = scene->getComponentArray<TerrainComponent>();
+        bool atlasSlotWritten = false;
         
         for (int l = 0; l < lights->size(); l++){
             LightComponent& light = lights->getComponentFromIndex(l);
@@ -4423,14 +4561,35 @@ void RenderSystem::draw(){
 
                 for (int c = 0; c < cameras; c++){
                     size_t face = 0;
-                    size_t fb = c;
+                    CameraRender* passRender = &light.cameras[c].render;
+                    FramebufferRender* passFramebuffer = NULL;
+
                     if (light.type == LightType::POINT){
                         face = c;
-                        fb = 0;
+                        passFramebuffer = &light.framebuffer[0];
+                        passRender->setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+                    }else if (hasShadowAtlas){
+                        int slotIndex = light.shadowMapIndex + ((light.type == LightType::DIRECTIONAL) ? c : 0);
+                        passRender = &shadowAtlasPassRender;
+                        passFramebuffer = &shadowAtlasFramebuffer;
+                        if (!atlasSlotWritten){
+                            passRender->setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+                        }else{
+                            passRender->setLoadActionLoad();
+                        }
+                        Rect slotRect = getShadowAtlasSlotRect(slotIndex);
+                        passRender->startRenderPass(passFramebuffer);
+                        passRender->applyViewport(slotRect);
+                        passRender->applyScissor(slotRect);
+                        atlasSlotWritten = true;
+                    }else{
+                        continue;
                     }
-                    light.cameras[c].render.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
 
-                    light.cameras[c].render.startRenderPass(&light.framebuffer[fb], face);
+                    if (light.type == LightType::POINT){
+                        passRender->startRenderPass(passFramebuffer, face);
+                    }
+
                     for (int i = 0; i < meshes->size(); i++){
                         MeshComponent& mesh = meshes->getComponentFromIndex(i);
                         Entity entity = meshes->getEntity(i);
@@ -4470,7 +4629,7 @@ void RenderSystem::draw(){
                         }
                     }
 
-                    light.cameras[c].render.endRenderPass();
+                    passRender->endRenderPass();
                 }
             }
         }

@@ -262,22 +262,8 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_occlusionTexture";
     }else if (type == TextureShaderType::NORMAL){
         texstr = "u_normalTexture";
-    }else if (type == TextureShaderType::SHADOWMAP1){
-        texstr = "u_shadowMap1";
-    }else if (type == TextureShaderType::SHADOWMAP2){
-        texstr = "u_shadowMap2";
-    }else if (type == TextureShaderType::SHADOWMAP3){
-        texstr = "u_shadowMap3";
-    }else if (type == TextureShaderType::SHADOWMAP4){
-        texstr = "u_shadowMap4";
-    }else if (type == TextureShaderType::SHADOWMAP5){
-        texstr = "u_shadowMap5";
-    }else if (type == TextureShaderType::SHADOWMAP6){
-        texstr = "u_shadowMap6";
-    }else if (type == TextureShaderType::SHADOWMAP7){
-        texstr = "u_shadowMap7";
-    }else if (type == TextureShaderType::SHADOWMAP8){
-        texstr = "u_shadowMap8";
+    }else if (type == TextureShaderType::SHADOWATLAS){
+        texstr = "u_shadowAtlas";
     }else if (type == TextureShaderType::SHADOWCUBEMAP1){
         texstr = "u_shadowCubeMap1";
     }else if (type == TextureShaderType::SKYCUBE){

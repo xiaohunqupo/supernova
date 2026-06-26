@@ -54,6 +54,8 @@ namespace doriax{
 
 	typedef struct fs_shadows_t {
         Vector4 bias_texSize_nearFar[MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP];
+        // xy = atlas origin, zw = atlas scale (directional/spot share u_shadowAtlas)
+        Vector4 atlasRect[MAX_SHADOWSMAP];
 	} fs_shadows_t;
 
 	typedef struct vs_depth_t {
@@ -156,6 +158,14 @@ namespace doriax{
 		bool hasIBL;
 		bool hasMultipleCameras;
 
+		// shared 2D shadow atlas for directional + spot lights (one sampler)
+		FramebufferRender shadowAtlasFramebuffer;
+		CameraRender shadowAtlasPassRender;
+		unsigned int shadowAtlasSlotResolution;
+		bool needUpdateShadowAtlas;
+		bool needUpdateShadowBindings;
+		bool hasShadowAtlas;
+
 		fs_lighting_t fs_lighting;
 		vs_shadows_t vs_shadows;
 		fs_shadows_t fs_shadows;
@@ -223,17 +233,23 @@ namespace doriax{
 		bool loadAndProcessFog();
 		void releaseSkyEnvironment(SkyComponent& sky);
 		void updateSkyEnvironment(SkyComponent& sky);
-		TextureShaderType getShadowMapByIndex(int index);
 		TextureShaderType getShadowMapCubeByIndex(int index);
+		void initShadowAtlasRects();
+		bool ensureShadowAtlas(unsigned int slotResolution);
+		Rect getShadowAtlasSlotRect(int slotIndex) const;
 		void configureLightShadowNearFar(LightComponent& light, const CameraComponent& camera);
 		Matrix4 getDirLightProjection(const Matrix4& viewMatrix, const Matrix4& sceneCameraInv, float shadowMaxDistance, const Vector3& lightDirection, const Vector3& cameraPosition);
 		bool checkPBRFrabebufferUpdate(Material& material);
 		bool checkPBRTextures(Material& material, bool receiveLights);
 		bool loadPBRTextures(Material& material, ShaderData& shaderData, ObjectRender& render, bool receiveLights);
 		void loadShadowTextures(ShaderData& shaderData, ObjectRender& render, bool receiveLights, bool receiveShadow);
+		void updateShadowBindings();
 		bool loadDepthTexture(Material& material, ShaderData& shaderData, ObjectRender& render);
 		bool loadGBufferTextures(Material& material, ShaderData& shaderData, ObjectRender& render);
 		bool loadTerrainTextures(TerrainComponent& terrain, ObjectRender& render, ShaderData& shaderData);
+		bool loadTerrainHeightTexture(TerrainComponent& terrain, ObjectRender& render, ShaderData& shaderData);
+		bool updateTerrainRenderTextures(TerrainComponent& terrain, MeshComponent& mesh);
+		void updateAllTerrainRenderTextures();
 		Rect getScissorRect(UILayoutComponent& layout, ImageComponent& img, Transform& transform, CameraComponent& camera);
 
 		// terrain

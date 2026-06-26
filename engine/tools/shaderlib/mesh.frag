@@ -94,42 +94,13 @@ uniform u_fs_pbrParams {
 
     uniform u_fs_shadows {
         vec4 bias_texSize_nearFar[MAX_SHADOWSMAP + MAX_SHADOWSCUBEMAP];
+        vec4 atlasRect[MAX_SHADOWSMAP];
     } uShadows;
 
     in vec4 v_lightProjPos[MAX_SHADOWSMAP];
 
-    #if MAX_SHADOWSMAP >= 1
-    uniform texture2D u_shadowMap1;
-    uniform sampler u_shadowMap1_smp;
-    #endif
-    #if MAX_SHADOWSMAP >= 2
-    uniform texture2D u_shadowMap2;
-    uniform sampler u_shadowMap2_smp;
-    #endif
-    #if MAX_SHADOWSMAP >= 3
-    uniform texture2D u_shadowMap3;
-    uniform sampler u_shadowMap3_smp;
-    #endif
-    #if MAX_SHADOWSMAP >= 4
-    uniform texture2D u_shadowMap4;
-    uniform sampler u_shadowMap4_smp;
-    #endif
-    #if MAX_SHADOWSMAP >= 5
-    uniform texture2D u_shadowMap5;
-    uniform sampler u_shadowMap5_smp;
-    #endif
-    #if MAX_SHADOWSMAP >= 6
-    uniform texture2D u_shadowMap6;
-    uniform sampler u_shadowMap6_smp;
-    #endif
-    #if MAX_SHADOWSMAP >= 7
-    uniform texture2D u_shadowMap7;
-    uniform sampler u_shadowMap7_smp;
-    #endif
-    #if MAX_SHADOWSMAP >= 8
-    uniform texture2D u_shadowMap8;
-    uniform sampler u_shadowMap8_smp;
-    #endif
+    uniform texture2D u_shadowAtlas;
+    uniform sampler u_shadowAtlas_smp;
 
     #if MAX_SHADOWSCUBEMAP >= 1
     uniform textureCube u_shadowCubeMap1;

@@ -3,6 +3,7 @@ struct Shadow{
     float minBias;
     vec2 mapSize;
     vec2 nearFar;
+    vec4 atlasRect;
 
     vec4 lightProjPos;
 };
@@ -15,12 +16,13 @@ Shadow getShadow2DConf(int index){
                 uShadows.bias_texSize_nearFar[i].x / 10.0,
                 uShadows.bias_texSize_nearFar[i].yy,
                 uShadows.bias_texSize_nearFar[i].zw,
+                uShadows.atlasRect[i],
                 v_lightProjPos[i]
             );
         }
     }
 
-    return Shadow(0.0, 0.0, vec2(0.0), vec2(0.0), vec4(0.0));
+    return Shadow(0.0, 0.0, vec2(0.0), vec2(0.0), vec4(0.0), vec4(0.0));
 }
 
 Shadow getShadowCubeConf(int index){
@@ -31,50 +33,19 @@ Shadow getShadowCubeConf(int index){
                 uShadows.bias_texSize_nearFar[i].x / 10.0,
                 uShadows.bias_texSize_nearFar[i].yy,
                 uShadows.bias_texSize_nearFar[i].zw,
+                vec4(0.0, 0.0, 1.0, 1.0),
                 vec4(0.0)
             );
         }
     }
 
-    return Shadow(0.0, 0.0, vec2(0.0), vec2(0.0), vec4(0.0));
+    return Shadow(0.0, 0.0, vec2(0.0), vec2(0.0), vec4(0.0, 0.0, 1.0, 1.0), vec4(0.0));
 }
 
 vec4 getShadowMap(int index, vec2 coords) {
-    if (index == 0){
-        #if MAX_SHADOWSMAP >= 1
-        return texture(sampler2D(u_shadowMap1, u_shadowMap1_smp), coords);
-        #endif
-    }else if (index == 1){
-        #if MAX_SHADOWSMAP >= 2
-        return texture(sampler2D(u_shadowMap2, u_shadowMap2_smp), coords);
-        #endif
-    }else if (index == 2){
-        #if MAX_SHADOWSMAP >= 3
-        return texture(sampler2D(u_shadowMap3, u_shadowMap3_smp), coords);
-        #endif
-    }else if (index == 3){
-        #if MAX_SHADOWSMAP >= 4
-        return texture(sampler2D(u_shadowMap4, u_shadowMap4_smp), coords);
-        #endif
-    }else if (index == 4){
-        #if MAX_SHADOWSMAP >= 5
-        return texture(sampler2D(u_shadowMap5, u_shadowMap5_smp), coords);
-        #endif
-    }else if (index == 5){
-        #if MAX_SHADOWSMAP >= 6
-        return texture(sampler2D(u_shadowMap6, u_shadowMap6_smp), coords);
-        #endif
-    }else if (index == 6){
-        #if MAX_SHADOWSMAP >= 7
-        return texture(sampler2D(u_shadowMap7, u_shadowMap7_smp), coords);
-        #endif
-    }else if (index == 7){
-        #if MAX_SHADOWSMAP >= 8
-        return texture(sampler2D(u_shadowMap8, u_shadowMap8_smp), coords);
-        #endif
-    }
-
-    return vec4(0.0);
+    vec4 rect = uShadows.atlasRect[index];
+    vec2 atlasUV = rect.xy + coords * rect.zw;
+    return texture(sampler2D(u_shadowAtlas, u_shadowAtlas_smp), atlasUV);
 }
 
 vec4 getShadowCubeMap(int index, vec3 coords) {
@@ -119,6 +90,7 @@ float shadowCalculationAux(int shadowMapIndex, Shadow shadowConf, float NdotL){
 
     #ifdef USE_SHADOWS_PCF
 
+        // proj_coords.xy is slot-local [0,1]; getShadowMap() applies atlasRect scale.
         vec2 texel_size = 1.0 / shadowConf.mapSize;
         for(int x = -1; x <= 1; ++x) {
             for(int y = -1; y <= 1; ++y) {

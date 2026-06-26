@@ -16,7 +16,7 @@
 #endif
 
 #ifndef MAX_SHADOWSMAP
-#define MAX_SHADOWSMAP 6
+#define MAX_SHADOWSMAP 9
 #endif
 
 #ifndef MAX_SHADOWSCUBEMAP
@@ -25,6 +25,14 @@
 
 #ifndef MAX_SHADOWCASCADES
 #define MAX_SHADOWCASCADES 4
+#endif
+
+#ifndef SHADOW_ATLAS_COLS
+#define SHADOW_ATLAS_COLS 3
+#endif
+
+#ifndef SHADOW_ATLAS_ROWS
+#define SHADOW_ATLAS_ROWS 3
 #endif
 
 #ifndef MAX_SUBMESHES

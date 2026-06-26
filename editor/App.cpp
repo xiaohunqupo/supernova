@@ -1682,7 +1682,9 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     // v6: SSR (G-buffer geometry pass + ssr/ssr_blur/composite fullscreen shaders;
     //     energy-conserving SSR-over-IBL, glossy roughness blur, debug modes).
     // v7: second UV set (HAS_UV_SET2) — per-texture UV selection via u_fs_texCoordSets.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v7";
+    // v8: directional/spot shadows share u_shadowAtlas (replaces u_shadowMap1..6),
+    //     3x3 atlas (MAX_SHADOWSMAP 9), SSAO on terrain (USE_SSAO + depth HAS_TERRAIN).
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v8";
 }
 
 void editor::App::pushTabNotificationStyle(){
