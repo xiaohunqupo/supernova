@@ -243,7 +243,7 @@ void ScriptCreateDialog::writeFiles(const fs::path& headerPath,
                     c << "    // Example: Increment counter every frame\n";
                     c << "    counter++;\n";
                     c << "    if (counter % 60 == 0) {\n";
-                    c << "        printf(\"Counter: %d\\n\", counter);\n";
+                    c << "        Log::print(\"Counter: %d\\n\", counter);\n";
                     c << "    }\n";
                     c << "}\n\n";
                 }
@@ -290,7 +290,7 @@ void ScriptCreateDialog::writeFiles(const fs::path& headerPath,
             f << "    if not self.isActive then return end\n\n";
             f << "    self.counter = self.counter + 1\n";
             f << "    if self.counter % 60 == 0 then\n";
-            f << "        print(\"[\" .. tostring(self.entity) .. \"] Counter: \" .. self.counter)\n";
+            f << "        Log.print(\"[\" .. tostring(self.entity) .. \"] Counter: \" .. self.counter)\n";
             f << "    end\n";
             f << "end\n\n";
 
