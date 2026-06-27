@@ -63,6 +63,12 @@ double Engine::updateTimeCount = 0;
 double Engine::deltatime = 0;
 float Engine::framerate = 0;
 
+// Upper bound for the delta time exposed to gameplay and the update loop.
+// Mirrors Unity's Time.maximumDeltaTime and Godot's max-step clamp: a frame that
+// stalls (scene load, debugger break, alt-tab) is clamped so scripts and physics
+// never receive a giant step that teleports objects or triggers the spiral of death.
+double Engine::maxDeltatime = 0.25;
+
 double Engine::updateTime = 1.0 / 60.0; //60Hz
 
 std::atomic<bool> Engine::viewLoaded = false;
@@ -465,6 +471,15 @@ float Engine::getDeltatime(){
     return deltatime;
 }
 
+float Engine::getMaxDeltatime(){
+    return (float)maxDeltatime;
+}
+
+void Engine::setMaxDeltatime(float seconds){
+    if (seconds > 0.0f)
+        maxDeltatime = seconds;
+}
+
 double Engine::getSystemTime(){
     return stm_sec(stm_now());
 }
@@ -761,8 +776,13 @@ void Engine::systemDraw(){
     const int MAX_UPDATES_PER_FRAME = 100;
 
     //Deltatime in seconds
-    deltatime = stm_sec(stm_laptime(&lastTime));
-    framerate = 1 / deltatime;
+    double rawDelta = stm_sec(stm_laptime(&lastTime));
+    framerate = (rawDelta > 0.0) ? (float)(1.0 / rawDelta) : 0.0f;
+
+    // Cap the delta exposed to gameplay (Engine::getDeltatime) and the update loop.
+    // Anything bigger than maxDeltatime gets clamped; the simulation effectively
+    // skips the lost time instead of teleporting objects on a stalled frame.
+    deltatime = (rawDelta > maxDeltatime) ? maxDeltatime : rawDelta;
 
     drawSemaphore.acquire();
 
@@ -770,10 +790,7 @@ void Engine::systemDraw(){
 
     // avoid increment updateTimeCount after resume
     if (!paused) {
-        // Cap delta to prevent the spiral of death after long stalls (loading, debugger pause, alt-tab).
-        // Anything bigger gets discarded; the simulation effectively skips the lost time.
-        const double DELTA_CAP = 0.25;
-        double frameDelta = (deltatime > DELTA_CAP) ? DELTA_CAP : deltatime;
+        double frameDelta = deltatime;
 
         // 1) Fixed-timestep phase (deterministic). Runs zero or more times per frame.
         //    Used for physics, networking, and any subsystem overriding fixedUpdate().

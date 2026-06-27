@@ -219,6 +219,7 @@ namespace doriax {
         static double updateTimeCount;
         
         static double deltatime;
+        static double maxDeltatime;
         static float framerate;
         
         static double updateTime;
@@ -318,6 +319,11 @@ namespace doriax {
         static bool isOpenGL();
         static float getFramerate();
         static float getDeltatime();
+
+        // Upper bound (in seconds) for the value returned by getDeltatime() and used
+        // by the update loop. Equivalent to Unity's Time.maximumDeltaTime. Default 0.25.
+        static float getMaxDeltatime();
+        static void setMaxDeltatime(float seconds);
 
         // Monotonic wall-clock time in seconds, independent of scene pause / update loop.
         static double getSystemTime();

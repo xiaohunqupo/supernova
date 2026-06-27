@@ -75,6 +75,13 @@ namespace doriax {
         Vector3 crossProduct( const Vector3& v ) const;
         Vector3 midPoint( const Vector3& v ) const;
 
+        // Move toward target by at most maxDistanceDelta, never overshooting it.
+        // Frame-rate independent stepping: pass speed * deltaTime as maxDistanceDelta.
+        Vector3 moveTowards( const Vector3& target, float maxDistanceDelta ) const;
+
+        // Linear interpolation from this vector toward target (t in [0, 1]).
+        Vector3 lerp( const Vector3& target, float t ) const;
+
         void makeFloor( const Vector3& v );
         void makeCeil( const Vector3& v );
 

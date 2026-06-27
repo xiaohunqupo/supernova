@@ -188,11 +188,12 @@ void ScriptCreateDialog::writeFiles(const fs::path& headerPath,
                     c << "void " << classOrModuleName << "::onUpdate() {\n";
                     c << "    if (!isActive) return;\n\n";
                     if (hasTransform){
-                        c << "    // Example: Move towards target position at 'speed' units per second\n";
+                        c << "    // Example: move toward the target at 'speed' units per second.\n";
+                        c << "    // moveTowards() clamps the step to the remaining distance, so it\n";
+                        c << "    // never overshoots - even on the first frame where deltaTime is large.\n";
                         c << "    float deltaTime = Engine::getDeltatime();\n";
                         c << "    Vector3 currentPos = getPosition();\n";
-                        c << "    Vector3 direction = (targetPosition - currentPos).normalize();\n";
-                        c << "    setPosition(currentPos + direction * speed * deltaTime);\n";
+                        c << "    setPosition(currentPos.moveTowards(targetPosition, speed * deltaTime));\n";
                         if (isMesh){
                             c << "    setColor(meshColor);\n";
                         }

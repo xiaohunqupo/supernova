@@ -202,6 +202,18 @@ Vector3 Vector3::midPoint( const Vector3& v ) const{
     return Vector3( ( x + v.x ) * 0.5f, ( y + v.y ) * 0.5f, ( z + v.z ) * 0.5f );
 }
 
+Vector3 Vector3::moveTowards( const Vector3& target, float maxDistanceDelta ) const {
+    Vector3 delta = target - *this;
+    float dist = delta.length();
+    if (dist <= maxDistanceDelta || dist < 1e-6f)
+        return target;
+    return *this + delta * (maxDistanceDelta / dist);
+}
+
+Vector3 Vector3::lerp( const Vector3& target, float t ) const {
+    return *this + (target - *this) * t;
+}
+
 void Vector3::makeFloor( const Vector3& v ){
     if( v.x < x ) x = v.x;
     if( v.y < y ) y = v.y;
