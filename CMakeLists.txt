@@ -42,13 +42,10 @@ set(EDITOR_DIR editor)
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-find_package(CURL QUIET)
-if(NOT CURL_FOUND)
-    find_program(DORIAX_CURL_EXECUTABLE curl)
-    if(NOT DORIAX_CURL_EXECUTABLE)
-        message(FATAL_ERROR "Doriax AI assistant requires either libcurl development files or the curl command-line tool.")
-    endif()
-    message(STATUS "libcurl development files not found; AI HTTP client will use curl CLI fallback: ${DORIAX_CURL_EXECUTABLE}")
+# The AI HTTP client uses the native WinHTTP backend on Windows (no external
+# dependency) and libcurl everywhere else (see editor/ai/HttpClient.cpp).
+if(NOT WIN32)
+    find_package(CURL REQUIRED)
 endif()
 
 set(BACKEND_SOURCES)
@@ -328,10 +325,10 @@ function(configure_doriax_editor_target target_name)
         yaml-cpp
     )
 
-    if(CURL_FOUND)
-        target_link_libraries(${target_name} PRIVATE CURL::libcurl)
+    if(WIN32)
+        target_link_libraries(${target_name} PRIVATE winhttp)
     else()
-        target_compile_definitions(${target_name} PRIVATE DORIAX_AI_USE_CURL_CLI)
+        target_link_libraries(${target_name} PRIVATE CURL::libcurl)
     endif()
 
     set_target_properties(

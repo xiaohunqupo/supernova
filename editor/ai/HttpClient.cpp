@@ -1,12 +1,18 @@
 #include "HttpClient.h"
 
-#include <cstdio>
+#include <cctype>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <sstream>
 
-#ifndef DORIAX_AI_USE_CURL_CLI
-#include <curl/curl.h>
+#ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN
+    #define NOMINMAX
+    #include <windows.h>
+    #include <winhttp.h>
+#else
+    #include <curl/curl.h>
 #endif
 
 namespace fs = std::filesystem;
@@ -15,24 +21,173 @@ namespace doriax::editor::ai {
 
 namespace {
 
-#ifndef DORIAX_AI_USE_CURL_CLI
+// Receives response body bytes as they arrive; return false to signal a write
+// failure. Both send() (string sink) and downloadToFile() (file sink) reuse the
+// single backend performRequest() below through this.
+using BodySink = std::function<bool(const char*, size_t)>;
 
-size_t writeStringCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
-    auto* text = static_cast<std::string*>(userdata);
-    const size_t total = size * nmemb;
-    text->append(ptr, total);
-    return total;
+#ifdef _WIN32
+
+// ---------------------------------------------------------------------------
+// WinHTTP backend (native on Windows; no libcurl or curl CLI dependency)
+// ---------------------------------------------------------------------------
+
+std::wstring toWide(const std::string& utf8) {
+    if (utf8.empty()) return {};
+    const int len = MultiByteToWideChar(CP_UTF8, 0, utf8.data(),
+                                        static_cast<int>(utf8.size()), nullptr, 0);
+    std::wstring wide(static_cast<size_t>(len), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()),
+                        wide.data(), len);
+    return wide;
 }
 
-size_t writeFileCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
-    auto* file = static_cast<std::ofstream*>(userdata);
+std::string winHttpError(const char* context) {
+    return std::string(context) + " (WinHTTP error " + std::to_string(GetLastError()) + ")";
+}
+
+// RAII wrapper so every error path closes its handles automatically.
+struct Handle {
+    HINTERNET h = nullptr;
+    Handle() = default;
+    explicit Handle(HINTERNET handle) : h(handle) {}
+    ~Handle() { if (h) WinHttpCloseHandle(h); }
+    Handle(const Handle&) = delete;
+    Handle& operator=(const Handle&) = delete;
+    operator HINTERNET() const { return h; }
+    explicit operator bool() const { return h != nullptr; }
+};
+
+HttpResponse performRequest(const HttpRequest& request,
+                            const BodySink& sink,
+                            const std::atomic<bool>* cancel) {
+    HttpResponse response;
+
+    Handle session(WinHttpOpen(L"DoriaxEditorAI/1.0",
+                               WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+    if (!session) {
+        response.error = winHttpError("WinHttpOpen failed");
+        return response;
+    }
+
+    const DWORD timeoutMs = static_cast<DWORD>(request.timeoutSeconds) * 1000;
+    WinHttpSetTimeouts(session, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
+
+    // AI endpoints require modern TLS; pre-22H2 Windows still defaults WinHTTP
+    // to TLS 1.0/1.1, so opt in explicitly.
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+#ifdef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
+    protocols |= WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+#endif
+    WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
+    const std::wstring url = toWide(request.url);
+    URL_COMPONENTS parts{};
+    parts.dwStructSize = sizeof(parts);
+    parts.dwHostNameLength = static_cast<DWORD>(-1);
+    parts.dwUrlPathLength = static_cast<DWORD>(-1);
+    parts.dwExtraInfoLength = static_cast<DWORD>(-1);
+    if (!WinHttpCrackUrl(url.c_str(), 0, 0, &parts)) {
+        response.error = winHttpError("WinHttpCrackUrl failed");
+        return response;
+    }
+    const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
+    std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength + parts.dwExtraInfoLength);
+    if (path.empty()) path = L"/";
+    const bool secure = parts.nScheme == INTERNET_SCHEME_HTTPS;
+
+    Handle connect(WinHttpConnect(session, host.c_str(), parts.nPort, 0));
+    if (!connect) {
+        response.error = winHttpError("WinHttpConnect failed");
+        return response;
+    }
+
+    const std::wstring method = toWide(request.method);
+    Handle req(WinHttpOpenRequest(connect, method.c_str(), path.c_str(), nullptr,
+                                  WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                  secure ? WINHTTP_FLAG_SECURE : 0));
+    if (!req) {
+        response.error = winHttpError("WinHttpOpenRequest failed");
+        return response;
+    }
+
+    std::wstring headerBlock;
+    for (const auto& header : request.headers) {
+        if (!headerBlock.empty()) headerBlock += L"\r\n";
+        headerBlock += toWide(header);
+    }
+
+    if (cancel && cancel->load()) {
+        response.error = "Request cancelled";
+        return response;
+    }
+
+    if (!WinHttpSendRequest(req,
+            headerBlock.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : headerBlock.c_str(),
+            headerBlock.empty() ? 0 : static_cast<DWORD>(-1),
+            request.body.empty() ? WINHTTP_NO_REQUEST_DATA
+                                 : const_cast<char*>(request.body.data()),
+            static_cast<DWORD>(request.body.size()),
+            static_cast<DWORD>(request.body.size()), 0)) {
+        response.error = winHttpError("WinHttpSendRequest failed");
+        return response;
+    }
+
+    if (!WinHttpReceiveResponse(req, nullptr)) {
+        response.error = winHttpError("WinHttpReceiveResponse failed");
+        return response;
+    }
+
+    DWORD statusCode = 0;
+    DWORD statusSize = sizeof(statusCode);
+    WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &statusSize,
+                        WINHTTP_NO_HEADER_INDEX);
+    response.status = statusCode;
+
+    while (true) {
+        if (cancel && cancel->load()) {
+            response.error = "Request cancelled";
+            break;
+        }
+        DWORD available = 0;
+        if (!WinHttpQueryDataAvailable(req, &available)) {
+            response.error = winHttpError("WinHttpQueryDataAvailable failed");
+            break;
+        }
+        if (available == 0) break;
+
+        std::string buffer(available, '\0');
+        DWORD read = 0;
+        if (!WinHttpReadData(req, buffer.data(), available, &read)) {
+            response.error = winHttpError("WinHttpReadData failed");
+            break;
+        }
+        if (read == 0) break;
+        if (!sink(buffer.data(), read)) {
+            response.error = "Failed to write response body";
+            break;
+        }
+    }
+
+    return response;
+}
+
+#else
+
+// ---------------------------------------------------------------------------
+// libcurl backend (Linux, macOS, and other non-Windows platforms)
+// ---------------------------------------------------------------------------
+
+size_t writeCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
+    const auto* sink = static_cast<const BodySink*>(userdata);
     const size_t total = size * nmemb;
-    file->write(ptr, static_cast<std::streamsize>(total));
-    return file->good() ? total : 0;
+    return (*sink)(ptr, total) ? total : 0;
 }
 
 int progressCallback(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
-    auto* cancel = static_cast<const std::atomic<bool>*>(clientp);
+    const auto* cancel = static_cast<const std::atomic<bool>*>(clientp);
     return (cancel && cancel->load()) ? 1 : 0;
 }
 
@@ -44,12 +199,16 @@ curl_slist* buildHeaders(const std::vector<std::string>& headers) {
     return list;
 }
 
-HttpResponse configureAndPerform(CURL* curl,
-                                 const HttpRequest& request,
-                                 void* writeData,
-                                 size_t (*writeCallback)(char*, size_t, size_t, void*),
-                                 const std::atomic<bool>* cancel) {
+HttpResponse performRequest(const HttpRequest& request,
+                            const BodySink& sink,
+                            const std::atomic<bool>* cancel) {
     HttpResponse response;
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        response.error = "Failed to initialize libcurl";
+        return response;
+    }
+
     curl_slist* headers = buildHeaders(request.headers);
 
     curl_easy_setopt(curl, CURLOPT_URL, request.url.c_str());
@@ -58,24 +217,21 @@ HttpResponse configureAndPerform(CURL* curl,
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, request.timeoutSeconds);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "DoriaxEditorAI/1.0");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, writeData);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progressCallback);
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancel);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-
     if (headers) {
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     }
-
     if (request.method == "POST") {
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request.body.c_str());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(request.body.size()));
     }
 
-    CURLcode result = curl_easy_perform(curl);
+    const CURLcode result = curl_easy_perform(curl);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response.status);
-
     if (result != CURLE_OK) {
         response.error = curl_easy_strerror(result);
     }
@@ -83,101 +239,7 @@ HttpResponse configureAndPerform(CURL* curl,
     if (headers) {
         curl_slist_free_all(headers);
     }
-    return response;
-}
-
-#else
-
-std::string shellQuote(const std::string& value) {
-    std::string out = "'";
-    for (char c : value) {
-        if (c == '\'') {
-            out += "'\"'\"'";
-        } else {
-            out += c;
-        }
-    }
-    out += "'";
-    return out;
-}
-
-fs::path tempPath(const std::string& name) {
-    static std::atomic<uint64_t> counter{0};
-    return fs::temp_directory_path() / ("doriax_ai_" + name + "_" +
-        std::to_string(static_cast<unsigned long long>(std::time(nullptr))) + "_" +
-        std::to_string(counter.fetch_add(1)));
-}
-
-bool readFile(const fs::path& path, std::string& out) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
-    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    return true;
-}
-
-long readStatus(const fs::path& path) {
-    std::string text;
-    if (!readFile(path, text)) return 0;
-    try {
-        return std::stol(text);
-    } catch (...) {
-        return 0;
-    }
-}
-
-// Writes the URL and headers into a curl --config file (mode 0600) so secrets
-// (API keys in Authorization/x-api-key headers, or the Gemini key in the URL
-// query string) never appear in argv, where other local processes could read
-// them via /proc. The config path itself is not sensitive.
-bool writeCurlConfig(const fs::path& path,
-                     const std::string& url,
-                     const std::vector<std::string>& headers) {
-    std::ofstream out(path, std::ios::trunc);
-    if (!out) {
-        return false;
-    }
-    std::error_code ec;
-    fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write,
-                    fs::perm_options::replace, ec);
-
-    auto escape = [](const std::string& value) {
-        std::string escaped;
-        for (char c : value) {
-            if (c == '\\' || c == '"') escaped += '\\';
-            escaped += c;
-        }
-        return escaped;
-    };
-
-    out << "url = \"" << escape(url) << "\"\n";
-    for (const auto& header : headers) {
-        out << "header = \"" << escape(header) << "\"\n";
-    }
-    return out.good();
-}
-
-std::string buildCurlBase(long timeoutSeconds, const fs::path& configFile) {
-    std::ostringstream cmd;
-    cmd << "curl -L -sS --max-redirs 5 --max-time " << timeoutSeconds
-        << " -A " << shellQuote("DoriaxEditorAI/1.0")
-        << " --config " << shellQuote(configFile.string())
-        << " -w " << shellQuote("%{http_code}")
-        << " -o ";
-    return cmd.str();
-}
-
-HttpResponse runCurlCommand(const std::string& cmd,
-                            const fs::path& bodyFile,
-                            const fs::path& statusFile) {
-    HttpResponse response;
-    int rc = std::system(cmd.c_str());
-    response.status = readStatus(statusFile);
-    readFile(bodyFile, response.body);
-    if (rc != 0) {
-        response.error = "curl command failed";
-    }
-    std::error_code ec;
-    fs::remove(statusFile, ec);
+    curl_easy_cleanup(curl);
     return response;
 }
 
@@ -190,48 +252,19 @@ HttpResponse HttpClient::send(const HttpRequest& request, const std::atomic<bool
         return {0, {}, "Request cancelled"};
     }
 
-#ifndef DORIAX_AI_USE_CURL_CLI
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        return {0, {}, "Failed to initialize libcurl"};
-    }
-
     std::string body;
-    HttpResponse response = configureAndPerform(curl, request, &body, writeStringCallback, cancel);
+    HttpResponse response = performRequest(request,
+        [&body](const char* data, size_t size) {
+            body.append(data, size);
+            return true;
+        },
+        cancel);
     response.body = std::move(body);
-    curl_easy_cleanup(curl);
-    return response;
-#else
-    fs::path bodyFile = tempPath("response");
-    fs::path statusFile = tempPath("status");
-    fs::path requestBodyFile = tempPath("request");
-    fs::path configFile = tempPath("config");
 
-    if (!writeCurlConfig(configFile, request.url, request.headers)) {
-        return {0, {}, "Failed to prepare curl request"};
-    }
-
-    std::ostringstream cmd;
-    cmd << buildCurlBase(request.timeoutSeconds, configFile)
-        << shellQuote(bodyFile.string());
-    if (request.method == "POST") {
-        std::ofstream bodyOut(requestBodyFile, std::ios::binary | std::ios::trunc);
-        bodyOut << request.body;
-        bodyOut.close();
-        cmd << " -X POST --data-binary @" << shellQuote(requestBodyFile.string());
-    }
-    cmd << " > " << shellQuote(statusFile.string());
-
-    HttpResponse response = runCurlCommand(cmd.str(), bodyFile, statusFile);
-    std::error_code ec;
-    fs::remove(bodyFile, ec);
-    fs::remove(requestBodyFile, ec);
-    fs::remove(configFile, ec);
     if (cancel && cancel->load()) {
         response.error = "Request cancelled";
     }
     return response;
-#endif
 }
 
 HttpResponse HttpClient::get(const std::string& url,
@@ -259,15 +292,9 @@ HttpResponse HttpClient::downloadToFile(const std::string& url,
         }
     }
 
-#ifndef DORIAX_AI_USE_CURL_CLI
     std::ofstream file(destination, std::ios::binary | std::ios::trunc);
     if (!file) {
         return {0, {}, "Failed to open destination file"};
-    }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        return {0, {}, "Failed to initialize libcurl"};
     }
 
     HttpRequest request;
@@ -276,54 +303,25 @@ HttpResponse HttpClient::downloadToFile(const std::string& url,
     request.headers = headers;
     request.timeoutSeconds = 300;
 
-    HttpResponse response = configureAndPerform(curl, request, &file, writeFileCallback, cancel);
-    curl_easy_cleanup(curl);
+    HttpResponse response = performRequest(request,
+        [&file](const char* data, size_t size) {
+            file.write(data, static_cast<std::streamsize>(size));
+            return static_cast<bool>(file);
+        },
+        cancel);
     file.close();
-#else
-    fs::path statusFile = tempPath("status");
-    fs::path configFile = tempPath("config");
-    if (!writeCurlConfig(configFile, url, headers)) {
-        return {0, {}, "Failed to prepare curl request"};
-    }
-    std::ostringstream cmd;
-    cmd << buildCurlBase(300, configFile)
-        << shellQuote(destination.string())
-        << " > " << shellQuote(statusFile.string());
-    int rc = std::system(cmd.str().c_str());
-    HttpResponse response;
-    response.status = readStatus(statusFile);
-    if (rc != 0) {
-        response.error = "curl command failed";
-    }
-    std::error_code statusEc;
-    fs::remove(statusFile, statusEc);
-    fs::remove(configFile, statusEc);
-#endif
 
+    if (cancel && cancel->load()) {
+        response.error = "Request cancelled";
+    }
     if (!response.error.empty() || response.status < 200 || response.status >= 300) {
         std::error_code ec;
         fs::remove(destination, ec);
-    }
-    if (cancel && cancel->load()) {
-        response.error = "Request cancelled";
     }
     return response;
 }
 
 std::string HttpClient::urlEncode(const std::string& value) {
-#ifndef DORIAX_AI_USE_CURL_CLI
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        return value;
-    }
-    char* encoded = curl_easy_escape(curl, value.c_str(), static_cast<int>(value.size()));
-    std::string out = encoded ? encoded : value;
-    if (encoded) {
-        curl_free(encoded);
-    }
-    curl_easy_cleanup(curl);
-    return out;
-#else
     std::ostringstream encoded;
     encoded << std::hex << std::uppercase;
     for (unsigned char c : value) {
@@ -334,7 +332,6 @@ std::string HttpClient::urlEncode(const std::string& value) {
         }
     }
     return encoded.str();
-#endif
 }
 
 } // namespace doriax::editor::ai
