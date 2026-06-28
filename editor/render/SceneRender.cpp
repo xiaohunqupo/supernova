@@ -1,7 +1,7 @@
 #include "SceneRender.h"
 
 #include "resources/icons/camera-icon_png.h"
-#include "resources/icons/sound-icon_png.h"
+#include "resources/icons/audio-source-icon_png.h"
 
 #include "Backend.h"
 #include "Project.h"
@@ -1529,7 +1529,7 @@ void editor::SceneRender::setupCameraIcon(CameraObjects& co){
 
 void editor::SceneRender::setupSoundIcon(SoundObjects& so){
     TextureData iconData;
-    iconData.loadTextureFromMemory(sound_icon_png, sound_icon_png_len);
+    iconData.loadTextureFromMemory(audio_source_icon_png, audio_source_icon_png_len);
     so.icon->setTexture("editor:resources:sound_icon", iconData);
     so.icon->setSize(128, 128);
     so.icon->setReceiveLights(false);
