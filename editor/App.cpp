@@ -50,6 +50,7 @@ ImVec4 editor::App::ThemeColors::DisabledGreenText;
 ImFont* editor::App::codeFont = nullptr;
 
 editor::App::App(){
+    mainThreadId = std::this_thread::get_id();
     propertiesWindow = new Properties(&project);
     outputWindow = new OutputWindow();
     sceneWindow = new SceneWindow(&project);
@@ -934,6 +935,8 @@ ImFont* editor::App::getCodeFont() {
 }
 
 void editor::App::setup() {
+    mainThreadId = std::this_thread::get_id();
+
     // Initialize application settings
     initializeSettings();
 
@@ -1882,6 +1885,10 @@ void editor::App::processMainThreadTasks() {
         tasks.pop();
         if (task) task();
     }
+}
+
+bool editor::App::isMainThread() const {
+    return std::this_thread::get_id() == mainThreadId;
 }
 
 void editor::App::initializeSettings() {

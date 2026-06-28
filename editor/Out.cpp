@@ -8,8 +8,14 @@ using namespace doriax::editor;
 OutputWindow* Out::outputWindow = nullptr;
 
 void Out::logMessage(LogType type, const std::string& message, const char* fallbackPrefix, std::ostream& fallbackStream) {
-    if (Out::getOutputWindow()) {
-        getEditorHost().enqueueMainThreadTask([type, message]() {
+    if (OutputWindow* window = Out::getOutputWindow()) {
+        EditorHost& host = getEditorHost();
+        if (host.isMainThread()) {
+            window->addLog(type, message);
+            return;
+        }
+
+        host.enqueueMainThreadTask([type, message]() {
             if (OutputWindow* window = Out::getOutputWindow()) {
                 window->addLog(type, message);
             }

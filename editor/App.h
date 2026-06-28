@@ -27,6 +27,7 @@
 
 #include <mutex>
 #include <queue>
+#include <thread>
 
 namespace doriax::editor{
 
@@ -63,6 +64,7 @@ namespace doriax::editor{
 
         std::mutex mainThreadTaskMutex;
         std::queue<std::function<void()>> mainThreadTasks;
+        std::thread::id mainThreadId;
 
         ImGuiID dockspace_id;
         ImGuiID dock_id_middle_top;
@@ -145,6 +147,7 @@ namespace doriax::editor{
 
     public:
         void processMainThreadTasks() override;
+        bool isMainThread() const override;
 
     public:
 

@@ -13,6 +13,10 @@ void EditorHost::enqueueMainThreadTask(std::function<void()> task) {
 void EditorHost::processMainThreadTasks() {
 }
 
+bool EditorHost::isMainThread() const {
+    return true;
+}
+
 void EditorHost::addNewSceneToDock(uint32_t) {
 }
 

@@ -15,6 +15,7 @@ namespace doriax::editor {
 
         virtual void enqueueMainThreadTask(std::function<void()> task);
         virtual void processMainThreadTasks();
+        virtual bool isMainThread() const;
 
         virtual void addNewSceneToDock(uint32_t sceneId);
         virtual void clearSceneWindowState(uint32_t sceneId);
