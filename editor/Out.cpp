@@ -1,10 +1,23 @@
 #include "Out.h"
+#include "EditorHost.h"
 #include <cstdarg>
 #include <iostream>
 
 using namespace doriax::editor;
 
 OutputWindow* Out::outputWindow = nullptr;
+
+void Out::logMessage(LogType type, const std::string& message, const char* fallbackPrefix, std::ostream& fallbackStream) {
+    if (Out::getOutputWindow()) {
+        getEditorHost().enqueueMainThreadTask([type, message]() {
+            if (OutputWindow* window = Out::getOutputWindow()) {
+                window->addLog(type, message);
+            }
+        });
+    } else {
+        fallbackStream << fallbackPrefix << message << std::endl;
+    }
+}
 
 void Out::setOutputWindow(OutputWindow* outputWindow) {
     Out::outputWindow = outputWindow;
@@ -15,43 +28,23 @@ OutputWindow* Out::getOutputWindow() {
 }
 
 void Out::info(const std::string& message) {
-    if (outputWindow) {
-        outputWindow->addLog(LogType::Info, message);
-    } else {
-        std::cout << "[INFO] " << message << std::endl;
-    }
+    logMessage(LogType::Info, message, "[INFO] ", std::cout);
 }
 
 void Out::success(const std::string& message) {
-    if (outputWindow) {
-        outputWindow->addLog(LogType::Success, message);
-    } else {
-        std::cout << "[SUCCESS] " << message << std::endl;
-    }
+    logMessage(LogType::Success, message, "[SUCCESS] ", std::cout);
 }
 
 void Out::warning(const std::string& message) {
-    if (outputWindow) {
-        outputWindow->addLog(LogType::Warning, message);
-    } else {
-        std::cout << "[WARNING] " << message << std::endl;
-    }
+    logMessage(LogType::Warning, message, "[WARNING] ", std::cout);
 }
 
 void Out::error(const std::string& message) {
-    if (outputWindow) {
-        outputWindow->addLog(LogType::Error, message);
-    } else {
-        std::cerr << "[ERROR] " << message << std::endl;
-    }
+    logMessage(LogType::Error, message, "[ERROR] ", std::cerr);
 }
 
 void Out::build(const std::string& message) {
-    if (outputWindow) {
-        outputWindow->addLog(LogType::Build, message);
-    } else {
-        std::cerr << "[BUILD] " << message << std::endl;
-    }
+    logMessage(LogType::Build, message, "[BUILD] ", std::cerr);
 }
 
 void Out::editor_assert(bool condition, const std::string& message) {

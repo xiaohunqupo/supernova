@@ -42,6 +42,7 @@ OutputWindow::OutputWindow() {
     autoScroll = true; // default: stick to bottom
     autoScrollLockedButton = autoScroll;
     lastScrollY = 0.0f;      // initialize scroll tracking
+    userScrollInputPending = false;
     pendingScrollToBottom = false;
     for (int i = 0; i < 5; i++) {
         typeFilters[i] = true;
@@ -84,6 +85,7 @@ void OutputWindow::clear() {
     hasStoredSelection = false;
     isSelecting = false;
     lastScrollY = 0.0f;
+    userScrollInputPending = false;
     pendingScrollToBottom = false;
 }
 
@@ -892,29 +894,48 @@ void OutputWindow::show() {
     if (pendingScrollToBottom) {
         const float maxScrollY = ImGui::GetScrollMaxY();
         ImGui::SetScrollY(maxScrollY);
+        autoScroll = true;
         lastScrollY = maxScrollY;
+        userScrollInputPending = false;
         pendingScrollToBottom = false;
     }
 
-    // Detect manual scrolling and disable auto-scroll if user scrolled away from bottom
+    // Detect manual scrolling and disable auto-scroll if user scrolled away from bottom.
+    // ImGui scroll targets are applied on the next Begin(), so content growth or a
+    // previous SetScrollY() can move the scroll without being user intent.
     float currentScrollY = ImGui::GetScrollY();
     float maxScrollY = ImGui::GetScrollMaxY();
+    ImGuiContext& g = *GImGui;
+    ImGuiWindow* outputChild = ImGui::GetCurrentWindow();
+    const ImGuiID scrollbarYId = ImGui::GetWindowScrollbarID(outputChild, ImGuiAxis_Y);
+    const bool scrollbarActive = (g.ActiveId == scrollbarYId || g.ActiveIdPreviousFrame == scrollbarYId);
+    const bool outputHovered = ImGui::IsWindowHovered(
+        ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+    const bool mouseWheelScroll = outputHovered && (fabsf(io.MouseWheel) > 0.0f);
+    const bool keyPageUp = winFocused && ImGui::IsKeyPressed(ImGuiKey_PageUp, false);
+    const bool keyPageDown = winFocused && ImGui::IsKeyPressed(ImGuiKey_PageDown, false);
+    const bool keyHome = winFocused && ImGui::IsKeyPressed(ImGuiKey_Home, false);
+    const bool keyEnd = winFocused && ImGui::IsKeyPressed(ImGuiKey_End, false);
+    const bool keyboardScroll = keyPageUp || keyPageDown || keyHome || keyEnd;
+    const bool userScrollInput = mouseWheelScroll || keyboardScroll || scrollbarActive;
+    const bool userWantsAwayFromBottom = (outputHovered && io.MouseWheel > 0.0f) || keyPageUp || keyHome;
+    const bool scrollMoved = fabsf(currentScrollY - lastScrollY) > 0.5f;
 
-    // Check if user manually scrolled
-    if (!isSelecting && fabsf(currentScrollY - lastScrollY) > 0.1f) {
-        if (currentScrollY < maxScrollY - 1.0f) {
-            // User manually scrolled away from bottom, disable auto-scroll
-            autoScroll = false;
-        } else if (currentScrollY >= maxScrollY - 1.0f) {
-            // User manually scrolled back to bottom, re-enable auto-scroll
-            autoScroll = true;
-        }
+    if (!isSelecting && autoScrollLockedButton && userWantsAwayFromBottom && currentScrollY > 0.0f) {
+        autoScroll = false;
     }
+    if (!isSelecting && scrollMoved && (userScrollInput || userScrollInputPending || !autoScroll)) {
+        autoScroll = (currentScrollY >= maxScrollY - 1.0f);
+    } else if (!isSelecting && !autoScroll && currentScrollY >= maxScrollY - 1.0f) {
+        autoScroll = true;
+    }
+    userScrollInputPending = userScrollInput && !scrollMoved;
 
     // Auto-scroll: pin to bottom if locked (avoid fighting user drag-selection)
     if (autoScroll && autoScrollLockedButton && !isSelecting) {
         ImGui::SetScrollY(maxScrollY);
         currentScrollY = maxScrollY; // update current position after auto-scroll
+        userScrollInputPending = false;
     }
 
     // Store current scroll position for next frame comparison

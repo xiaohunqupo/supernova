@@ -2,6 +2,7 @@
 #define OUT_H
 
 #include "window/OutputWindow.h"
+#include <iosfwd>
 #include <string>
 #include <memory>
 
@@ -9,6 +10,7 @@ namespace doriax::editor {
     class Out {
     private:
         static OutputWindow* outputWindow;
+        static void logMessage(LogType type, const std::string& message, const char* fallbackPrefix, std::ostream& fallbackStream);
 
         // Helper method for formatting with no arguments
         static std::string formatMessage(const char* fmt) {

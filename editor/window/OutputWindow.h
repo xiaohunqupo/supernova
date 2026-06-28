@@ -43,6 +43,7 @@ namespace doriax::editor {
         bool autoScroll;                // when true, keep pinned to bottom
         bool autoScrollLockedButton;    // the button state
         float lastScrollY;              // track last scroll position to detect manual scrolling
+        bool userScrollInputPending;    // scroll input may be applied by ImGui on the next Begin()
         bool pendingScrollToBottom;       // one-shot scroll from context menu
 
         // Search options
