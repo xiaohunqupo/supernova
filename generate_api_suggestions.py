@@ -273,9 +273,39 @@ def _simplify_param(param):
     return p
 
 
+def _simplify_return_type(ret):
+    """Reduce a C++ return type to a bare type name, or '' to omit it.
+
+    Returns '' for void and for anything that doesn't look like a clean type,
+    so a misparsed signature never injects garbage into a suggestion detail.
+    """
+    if not ret:
+        return ''
+    t = re.sub(r'\b(?:virtual|inline|static|constexpr|noexcept|const)\b', ' ', ret)
+    t = re.sub(r'\bstd::', '', t)
+    t = re.sub(r'[&*]+', ' ', t)
+    t = re.sub(r'\s+', ' ', t).strip()
+    if not t or t == 'void':
+        return ''
+    # Reject control-flow/statement keywords that leak in when the method regex
+    # accidentally matches a call inside an inline body (e.g. 'return Foo(...)').
+    if t.split()[0] in _RETURN_TYPE_REJECT:
+        return ''
+    # Only accept identifier-like types (incl. templates/scopes), never stray tokens.
+    if not re.match(r'^[A-Za-z_][A-Za-z0-9_:<>, ]*$', t):
+        return ''
+    return t
+
+
+_RETURN_TYPE_REJECT = {
+    'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'do',
+    'break', 'continue', 'goto', 'using', 'typedef', 'friend', 'template',
+}
+
+
 def _simplify_params(params_str):
     """Simplify a full parameter list string."""
-    if not params_str.strip():
+    if not params_str.strip() or params_str.strip() == 'void':
         return ''
     params = params_str.split(',')
     simplified = []
@@ -368,9 +398,10 @@ def parse_cpp_headers(base_dir):
                     if (class_name, method_name) in EXCLUDED_HEADER_METHODS:
                         continue
                     params = _simplify_params(params_raw)
+                    returns = _simplify_return_type(ret_type)
                     if method_name not in class_methods[class_name]:
                         class_methods[class_name][method_name] = []
-                    class_methods[class_name][method_name].append(params)
+                    class_methods[class_name][method_name].append((params, returns))
 
     return class_methods
 
@@ -509,21 +540,29 @@ def main():
 
     cpp_methods = parse_cpp_headers(engine_core_dir)
 
-    # Build a lookup of all method param signatures: (class, method) -> params_str
-    cpp_signatures = {}  # (class_name, method_name) -> shortest params string
+    def _format_detail(parent, name, sep, overload):
+        """Build a 'Parent<sep>name(params) -> Return' detail from a (params, return) pair."""
+        params, returns = overload
+        detail = f'{parent}{sep}{name}({params})'
+        if returns:
+            detail += f' -> {returns}'
+        return detail
+
+    # Build a lookup of all method signatures: (class, method) -> (params, return)
+    cpp_signatures = {}  # (class_name, method_name) -> shortest (params, return) overload
     for cls, methods_dict in cpp_methods.items():
         for method_name, overloads in methods_dict.items():
             # Pick the shortest overload as primary detail (most common / simplest)
-            shortest = min(overloads, key=len) if overloads else ''
+            shortest = min(overloads, key=lambda o: len(o[0])) if overloads else ('', '')
             cpp_signatures[(cls, method_name)] = shortest
 
-    # Update existing LuaBridge method symbols with param info from C++ headers
+    # Update existing LuaBridge method symbols with param + return info from C++ headers
     for s in all_symbols:
         if s.kind in ('Method', 'StaticMethod') and s.parent:
             sig = cpp_signatures.get((s.parent, s.name))
             if sig is not None:
                 sep = '.' if s.kind == 'StaticMethod' else ':'
-                s.detail = f'{s.parent}{sep}{s.name}({sig})'
+                s.detail = _format_detail(s.parent, s.name, sep, sig)
 
     # Find all classes from LuaBridge and append C++ methods not already present
     lua_classes = {s.name for s in all_symbols if s.kind == 'Class'}
@@ -533,10 +572,10 @@ def main():
         methods_dict = cpp_methods.get(cls, {})
         for method_name, overloads in methods_dict.items():
             if (method_name, cls) not in existing_methods:
-                shortest = min(overloads, key=len) if overloads else ''
+                shortest = min(overloads, key=lambda o: len(o[0])) if overloads else ('', '')
                 cpp_symbols.append(APISymbol(
                     method_name, 'Method',
-                    f'{cls}:{method_name}({shortest})', cls
+                    _format_detail(cls, method_name, ':', shortest), cls
                 ))
     all_symbols.extend(cpp_symbols)
 

@@ -92,6 +92,94 @@ std::string luaCallHint(const std::string& detail, const std::string& parent) {
     return {};
 }
 
+// Script-authoring macros live in engine headers (ScriptProperty.h, FunctionSubscribe.h),
+// not in the LuaBridge bindings, so the generated suggestions never include them. Curate
+// them here so search_engine_api can surface the exact macro and signature for C++ scripts.
+const std::vector<doriax::editor::EngineAPISymbol>& getScriptMacroSymbols() {
+    static const std::vector<doriax::editor::EngineAPISymbol> macros = {
+        {"DPROPERTY", "Macro",
+         "DPROPERTY(\"Display Name\") on the line above a public member exposes it as an editor property; "
+         "DPROPERTY(\"Display Name\", Type) also forces the editor type. Types: Bool, Int, Float, String, "
+         "Vector2, Vector3, Vector4, Color3, Color4, EntityReference. From \"ScriptProperty.h\".",
+         ""},
+        {"REGISTER_ENGINE_EVENT", "Macro",
+         "REGISTER_ENGINE_EVENT(onUpdate); in the constructor subscribes to a global Engine event; the class "
+         "must declare a method named exactly like the event, e.g. void onUpdate(). Engine events: onUpdate, "
+         "onFixedUpdate, onDraw, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onTouchStart, onTouchMove, "
+         "onTouchEnd. Available via \"Engine.h\".",
+         ""},
+        {"UNREGISTER_ENGINE_EVENT", "Macro",
+         "UNREGISTER_ENGINE_EVENT(onUpdate); in the destructor; pair one with every REGISTER_ENGINE_EVENT.",
+         ""},
+        {"REGISTER_COMPONENT_EVENT", "Macro",
+         "REGISTER_COMPONENT_EVENT(ComponentType, eventName, methodName); in the constructor subscribes "
+         "this->methodName to a component's event, e.g. REGISTER_COMPONENT_EVENT(ButtonComponent, onPress, handlePress). "
+         "The method signature must match the event. Search the component (e.g. ButtonComponent, UIComponent) for its "
+         "event member names. Destructor counterpart: UNREGISTER_COMPONENT_EVENT(ComponentType, eventName, methodName).",
+         ""},
+        {"UNREGISTER_COMPONENT_EVENT", "Macro",
+         "UNREGISTER_COMPONENT_EVENT(ComponentType, eventName, methodName); in the destructor; mirrors "
+         "REGISTER_COMPONENT_EVENT.",
+         ""},
+        {"REGISTER_UI_EVENT", "Macro",
+         "REGISTER_UI_EVENT(eventName, methodName); shortcut for REGISTER_COMPONENT_EVENT(UIComponent, ...). "
+         "UIComponent events: onClick, onDoubleClick, onPointerDown, onPointerUp, onPointerMove, onPointerEnter, "
+         "onPointerLeave, onGetFocus, onLostFocus, onDragStart, onDrag, onDragEnd. Pointer/click handlers take "
+         "(float x, float y); focus handlers take no args. Destructor counterpart: UNREGISTER_UI_EVENT(eventName, methodName).",
+         ""},
+        {"REGISTER_BUTTON_EVENT", "Macro",
+         "REGISTER_BUTTON_EVENT(eventName, methodName); shortcut for REGISTER_COMPONENT_EVENT(ButtonComponent, ...). "
+         "ButtonComponent events: onPress, onRelease (handlers take no args). For a click use REGISTER_UI_EVENT(onClick, ...). "
+         "Destructor counterpart: UNREGISTER_BUTTON_EVENT(eventName, methodName).",
+         ""},
+        {"REGISTER_SCROLLBAR_EVENT", "Macro",
+         "REGISTER_SCROLLBAR_EVENT(eventName, methodName); shortcut for REGISTER_COMPONENT_EVENT(ScrollbarComponent, ...). "
+         "ScrollbarComponent event: onChange (handler takes float value). Destructor counterpart: "
+         "UNREGISTER_SCROLLBAR_EVENT(eventName, methodName).",
+         ""},
+        {"REGISTER_PANEL_EVENT", "Macro",
+         "REGISTER_PANEL_EVENT(eventName, methodName); shortcut for REGISTER_COMPONENT_EVENT(PanelComponent, ...). "
+         "PanelComponent events: onMove (no args), onResize (int width, int height). Destructor counterpart: "
+         "UNREGISTER_PANEL_EVENT(eventName, methodName).",
+         ""},
+        {"REGISTER_EVENT", "Macro",
+         "REGISTER_EVENT(eventObject, methodName); generic subscribe of this->methodName to any FunctionSubscribe "
+         "event object; pair with UNREGISTER_EVENT(eventObject, methodName) in the destructor.",
+         ""},
+    };
+    return macros;
+}
+
+// Lua script helpers that are registered as globals (lua_setglobal) or are table
+// conventions, not LuaBridge class members, so the generated suggestions never include
+// them. Curate them here so search_engine_api surfaces them for Lua scripts. These are
+// the Lua analog of the C++ script macros above.
+const std::vector<doriax::editor::EngineAPISymbol>& getLuaGlobalSymbols() {
+    static const std::vector<doriax::editor::EngineAPISymbol> globals = {
+        {"RegisterEngineEvent", "LuaGlobal",
+         "Lua global script helper. In :init() call RegisterEngineEvent(self, \"onUpdate\") to subscribe to a "
+         "global Engine event, and define a matching function Name:onUpdate(...) end. Engine events: onUpdate, "
+         "onFixedUpdate, onDraw, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onTouchStart, onTouchMove, "
+         "onTouchEnd. No manual unregister is needed; the engine cleans up when the script is destroyed.",
+         ""},
+        {"RegisterEvent", "LuaGlobal",
+         "Lua global script helper. RegisterEvent(self, eventObject, \"methodName\") subscribes self:methodName to any "
+         "engine event object (a FunctionSubscribe with :add), and define function Name:methodName(...) end. For "
+         "component/UI events get the event object from a runtime wrapper, e.g. local b = Button(self.scene, self.entity); "
+         "RegisterEvent(self, b:getButtonComponent().onPress, \"onPress\"). The handler arg count must match the event "
+         "(ButtonComponent onPress/onRelease take none; UIComponent onClick/onPointer* take x, y; ScrollbarComponent "
+         "onChange takes a value).",
+         ""},
+        {"properties", "LuaScript",
+         "Lua editor property declaration. In the returned module table set "
+         "properties = { { name = \"speed\", displayName = \"Speed\", type = \"float\", default = 5.0 } }. Accepted "
+         "type strings: bool, int, float, string, vector2, vector3, vector4, color3, color4, entity. Each property is "
+         "read and written at runtime as self.<name>, e.g. self.speed.",
+         ""},
+    };
+    return globals;
+}
+
 } // namespace
 
 Json AiEngineApiContext::search(const std::string& query,
@@ -104,11 +192,12 @@ Json AiEngineApiContext::search(const std::string& query,
     const auto inheritance = buildInheritanceMap();
 
     std::vector<ScoredSymbol> scored;
-    for (const auto& symbol : doriax::editor::getEngineAPISymbols()) {
-        const std::string name = symbol.name ? symbol.name : "";
-        const std::string kind = symbol.kind ? symbol.kind : "";
-        const std::string detail = symbol.detail ? symbol.detail : "";
-        const std::string parent = symbol.parent ? symbol.parent : "";
+    auto consider = [&](const char* symName, const char* symKind,
+                        const char* symDetail, const char* symParent) {
+        const std::string name = symName ? symName : "";
+        const std::string kind = symKind ? symKind : "";
+        const std::string detail = symDetail ? symDetail : "";
+        const std::string parent = symParent ? symParent : "";
 
         const std::string nameLower = lower(name);
         const std::string kindLower = lower(kind);
@@ -118,7 +207,7 @@ Json AiEngineApiContext::search(const std::string& query,
         if (!parentLower.empty() &&
             nameLower != parentLower &&
             !isSameOrBaseClass(parentSymbolLower, parentLower, inheritance)) {
-            continue;
+            return;
         }
 
         int score = 0;
@@ -157,7 +246,7 @@ Json AiEngineApiContext::search(const std::string& query,
         }
 
         if (score <= 0) {
-            continue;
+            return;
         }
 
         scored.push_back({
@@ -169,6 +258,16 @@ Json AiEngineApiContext::search(const std::string& query,
                 {"detail", detail}
             }
         });
+    };
+
+    for (const auto& symbol : doriax::editor::getEngineAPISymbols()) {
+        consider(symbol.name, symbol.kind, symbol.detail, symbol.parent);
+    }
+    for (const auto& macro : getScriptMacroSymbols()) {
+        consider(macro.name, macro.kind, macro.detail, macro.parent);
+    }
+    for (const auto& global : getLuaGlobalSymbols()) {
+        consider(global.name, global.kind, global.detail, global.parent);
     }
 
     std::sort(scored.begin(), scored.end(), [](const ScoredSymbol& a, const ScoredSymbol& b) {
@@ -193,7 +292,9 @@ Json AiEngineApiContext::search(const std::string& query,
         {"query", query},
         {"parent", parentFilter},
         {"results", results},
-        {"usage_note", "Lua instance methods use ':' as shown in detail. Construct wrappers with signatures returned here, e.g. Shape(self.scene, self.entity). For color on Mesh/Shape, Lua uses setColor with RGBA floats or Vector4; C++ cpp_subclass scripts inherit Mesh and call setColor(1,0,0,1) with flat headers like \"Mesh.h\". Register engine callbacks in the constructor and unregister them in the destructor. Read lua_call_hint when present."}
+        {"detail_format", "detail reads Parent<sep>name(params) -> ReturnType. The ':' separator marks an instance method, '.' a static method, and the part after '->' is the C++ return type (absent when it returns void). Param entries are 'Type name'. For kind 'Macro' (C++ script macros like DPROPERTY and REGISTER_*/UNREGISTER_* event subscriptions), 'LuaGlobal' (global Lua helpers like RegisterEngineEvent/RegisterEvent), and 'LuaScript' (Lua script-table conventions), the detail is the usage description; follow it verbatim."},
+        {"language_mapping", "Lua: instance methods obj:method(args), static/namespaced Class.method(args), and bound properties Class.prop (e.g. Engine.deltatime). C++: instance methods obj.method(args) or a bare method(args)/this->method(args) inside a cpp_subclass, static/namespaced Class::method(args) (e.g. Engine::getDeltatime()), and use getters/setters not the Lua property shortcut."},
+        {"usage_note", "Construct wrappers with the signatures returned here, e.g. Shape(self.scene, self.entity). For color on Mesh/Shape, Lua uses setColor with RGBA floats or Vector4; C++ cpp_subclass scripts inherit Mesh and call setColor(1,0,0,1) with flat headers like \"Mesh.h\". In C++ register engine callbacks with REGISTER_ENGINE_EVENT in the constructor and unregister with UNREGISTER_ENGINE_EVENT in the destructor; in Lua register with RegisterEngineEvent(self, \"onUpdate\") in :init() with no manual unregister. Read lua_call_hint when present."}
     };
 }
 

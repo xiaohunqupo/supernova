@@ -386,8 +386,15 @@ std::string doriaxLuaScriptGuide(const std::string& className) {
     return "Doriax Lua scripts are returned tables, not Dori.Script objects. "
            "Use: local " + className + " = { properties = {} }; "
            "function " + className + ":init() ... end; return " + className + ". "
+           "Editor-exposed properties go in the properties array as { name = \"speed\", displayName = \"Speed\", type = \"float\", default = 5.0 } "
+           "(type strings: bool, int, float, string, vector2, vector3, vector4, color3, color4, entity); at runtime read/write them as self.<name>, e.g. self.speed. "
            "The engine injects self.scene and self.entity; self.entity is a numeric Entity id, not an object receiver. For an existing cube/shape, "
            "use local shape = Shape(self.scene, self.entity); shape:setColor(1.0, 0.0, 0.0, 1.0). "
+           "Per-frame and input logic must be registered in :init() with the global RegisterEngineEvent(self, \"onUpdate\") and a matching function " + className + ":onUpdate() ... end; "
+           "valid event names: onUpdate, onFixedUpdate, onDraw, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onTouchStart, onTouchMove, onTouchEnd. "
+           "For component/UI events use the global RegisterEvent(self, eventObject, \"method\"), getting the event object from a wrapper, e.g. local b = Button(self.scene, self.entity); RegisterEvent(self, b:getButtonComponent().onPress, \"onPress\"). "
+           "Engine state uses Lua properties, e.g. local dt = Engine.deltatime (not getDeltatime). No manual unregister is needed; the engine cleans up events when the script is destroyed. "
+           "To print or log, use Log.print(\"text \" .. tostring(value)) (Log.warn/Log.error for severity), not bare print(). "
            "Use search_engine_api for real signatures before writing engine API code.";
 }
 
@@ -407,8 +414,10 @@ std::string doriaxCppScriptGuide(ScriptType type, const std::string& parentClass
               << "Register frame callbacks with REGISTER_ENGINE_EVENT(onUpdate) in the constructor and unregister them in the destructor when using onUpdate(). "
               << "For mesh/cube color on a Mesh entity, prefer cpp_subclass extending Mesh (or Shape), not ScriptBase.";
     }
-    guide << " Call search_engine_api for real signatures before writing engine API code. "
-          << "DPROPERTY macros are optional; removing them clears stale editor properties automatically.";
+    guide << " To print or log, include \"Log.h\" and call Log::print(\"pos %f %f %f\", p.x, p.y, p.z) (Log::warn/Log::error for severity); Engine has no log method, and do not use printf or std::cout. "
+          << "For component/UI events (button press, click, scrollbar change, etc.) subscribe in the constructor with REGISTER_COMPONENT_EVENT(Component, event, method) or its shortcuts REGISTER_UI_EVENT/REGISTER_BUTTON_EVENT/REGISTER_SCROLLBAR_EVENT/REGISTER_PANEL_EVENT, and pair each with its UNREGISTER_* in the destructor; search_engine_api for the exact macro and the component's event names. "
+          << "Call search_engine_api for real signatures before writing engine API code. "
+          << "DPROPERTY(\"Name\") exposes a public member as an editor property (optional; removing it clears stale editor properties); DPROPERTY(\"Name\", Type) forces the editor type such as Color3/Color4.";
     return guide.str();
 }
 
@@ -432,7 +441,9 @@ std::string validateDoriaxLuaScriptContent(const std::string& content) {
         {"getcomponent", "Doriax Lua scripts should use runtime wrappers returned by search_engine_api, not getComponent()."},
         {"set_property", "Doriax Lua scripts should call runtime APIs, not editor-style set_property()."},
         {"setproperty", "Doriax Lua scripts should call runtime APIs, not editor-style setProperty()."},
-        {"vector4.new", "Doriax Lua constructors use Vector4(...), not Vector4.new(...)."}
+        {"vector4.new", "Doriax Lua constructors use Vector4(...), not Vector4.new(...)."},
+        {"engine.log", "Engine has no log method. To print, use Log.print(\"text \" .. tostring(value)) (Log.warn/Log.error for severity)."},
+        {"engine:log", "Engine has no log method. To print, use Log.print(\"text \" .. tostring(value)) (Log.warn/Log.error for severity)."}
     };
 
     for (const auto& pattern : patterns) {
@@ -462,7 +473,8 @@ std::string validateDoriaxCppScriptContent(const std::string& content) {
         {"oninit(", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onInit()."},
         {"void oninit", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onInit()."},
         {"on_start", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not on_start()."},
-        {"onstart(", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onStart()."}
+        {"onstart(", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onStart()."},
+        {"engine::log", "Engine has no log method. Include \"Log.h\" and use Log::print(\"value %f\", x) (Log::warn/Log::error for severity)."}
     };
 
     for (const auto& pattern : patterns) {
