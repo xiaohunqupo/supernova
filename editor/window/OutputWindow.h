@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <vector>
 #include <string>
 #include "imgui.h"
@@ -25,8 +26,11 @@ namespace doriax::editor {
         ImGuiTextFilter filter;
         ImVector<int> lineOffsets;           // Start index of each line in buf (size = lines + 1)
         std::vector<LogData> logs;
+        size_t storedLogLineCount;           // Raw log lines kept before wrapping/filtering
         std::vector<LogType> lineTypes;      // One per displayed line
         std::vector<char> lineHardBreak;     // 1 if displayed line ends with a hard newline, 0 if soft-wrapped
+
+        static constexpr size_t MAX_STORED_LOG_LINES = 10000;
 
         bool needsRebuild;
         float menuWidth;
@@ -56,6 +60,10 @@ namespace doriax::editor {
         bool isWindowVisible;
 
         void rebuildBuffer(float wrapWidth); // accept wrap width
+        static size_t countRawLines(const std::string& message);
+        static size_t trimLeadingRawLines(std::string& message, size_t linesToTrim);
+        bool enforceStoredLineLimit();
+        void resetDisplayBuffer();
 
         // Helpers for selection
         int clampIndexToCodepointBoundary(int idx) const;

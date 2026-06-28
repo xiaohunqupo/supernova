@@ -35,6 +35,7 @@ static ImVec4 GetLogTypeColor(LogType type) {
 OutputWindow::OutputWindow() {
     needsRebuild = false;
     menuWidth = 0;
+    storedLogLineCount = 0;
     selectionStart = -1;
     selectionEnd = -1;
     hasStoredSelection = false;
@@ -74,19 +75,86 @@ bool OutputWindow::isOpen() const {
 }
 
 void OutputWindow::clear() {
-    buf.clear();
+    resetDisplayBuffer();
     logs.clear();
+    storedLogLineCount = 0;
+    needsRebuild = false;
+    lastScrollY = 0.0f;
+    userScrollInputPending = false;
+    pendingScrollToBottom = false;
+}
+
+void OutputWindow::resetDisplayBuffer() {
+    buf.clear();
     lineOffsets.clear();
     lineOffsets.push_back(0);
     lineTypes.clear();
     lineHardBreak.clear();
-    needsRebuild = false;
     selectionStart = selectionEnd = -1;
     hasStoredSelection = false;
     isSelecting = false;
-    lastScrollY = 0.0f;
-    userScrollInputPending = false;
-    pendingScrollToBottom = false;
+}
+
+size_t OutputWindow::countRawLines(const std::string& message) {
+    size_t lines = 1;
+    for (char c : message) {
+        if (c == '\n') {
+            lines++;
+        }
+    }
+    return lines;
+}
+
+size_t OutputWindow::trimLeadingRawLines(std::string& message, size_t linesToTrim) {
+    size_t removed = 0;
+    size_t eraseEnd = 0;
+
+    while (removed < linesToTrim) {
+        const size_t newline = message.find('\n', eraseEnd);
+        removed++;
+        if (newline == std::string::npos) {
+            message.clear();
+            return removed;
+        }
+        eraseEnd = newline + 1;
+    }
+
+    message.erase(0, eraseEnd);
+    return removed;
+}
+
+bool OutputWindow::enforceStoredLineLimit() {
+    if (storedLogLineCount <= MAX_STORED_LOG_LINES) {
+        return false;
+    }
+
+    bool trimmed = false;
+    size_t eraseCount = 0;
+
+    while (storedLogLineCount > MAX_STORED_LOG_LINES && eraseCount < logs.size()) {
+        const size_t excess = storedLogLineCount - MAX_STORED_LOG_LINES;
+        const size_t frontLines = countRawLines(logs[eraseCount].message);
+
+        if (frontLines <= excess) {
+            storedLogLineCount -= frontLines;
+            eraseCount++;
+            trimmed = true;
+            continue;
+        }
+
+        storedLogLineCount -= trimLeadingRawLines(logs[eraseCount].message, excess);
+        trimmed = true;
+        break;
+    }
+
+    if (eraseCount > 0) {
+        logs.erase(logs.begin(), logs.begin() + static_cast<std::ptrdiff_t>(eraseCount));
+    }
+
+    if (trimmed) {
+        resetDisplayBuffer();
+    }
+    return trimmed;
 }
 
 void OutputWindow::addLog(LogType type, const char* fmt, ...) {
@@ -103,11 +171,17 @@ void OutputWindow::addLog(LogType type, const std::string& message) {
     // Store the raw log entry
     LogData logEntry{type, message, getElapsedSeconds()};
     logs.push_back(logEntry);
+    storedLogLineCount += countRawLines(message);
+    const bool trimmed = enforceStoredLineLimit();
 
     // Mark that we need to rebuild
     needsRebuild = true;
     if (!isWindowVisible) {
         hasNotification = true;
+    }
+
+    if (trimmed) {
+        return;
     }
 
     // Basic formatting for initial display (append quickly for incremental feel)
