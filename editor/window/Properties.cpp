@@ -3103,8 +3103,14 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         bool isCameraTexture = CameraTextureLink::isCameraTexture(newValue);
 
+        // Detect an SVG source so we can offer a rasterization-scale button. The scale is
+        // carried in the texture path as "<path>?svgScale=N".
+        float svgCurrentScale = 1.0f;
+        std::string svgCleanPath = TextureData::parseSvgScalePath(newValue.getPath(), &svgCurrentScale);
+        bool isSvgTexture = !isCameraTexture && TextureData::hasSvgExtension(svgCleanPath.c_str());
+
         float thumbSize = ImGui::GetFrameHeight() * 3;
-        Texture* thumbTexture = findThumbnail(newValue.getPath());
+        Texture* thumbTexture = findThumbnail(TextureData::parseSvgScalePath(newValue.getPath()));
         if (thumbTexture) {
             ImU32 border_col = ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
             if (dif){
@@ -3126,16 +3132,22 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         }
 
         ImVec2 texButtonSize = ImGui::CalcItemSize(ImVec2(0, 0), ImGui::GetFrameHeight(), ImGui::GetFrameHeight());
-        // reserve: two buttons, two gaps between items and one trailing gap on the right
-        float texButtonsReserve = texButtonSize.x * 2 + ImGui::GetStyle().ItemSpacing.x * 3;
+        // reserve room for the action buttons (file + camera, plus an SVG-scale button for
+        // vector sources), with one gap between each item and a trailing gap on the right
+        int texButtonCount = isSvgTexture ? 3 : 2;
+        float texButtonsReserve = texButtonSize.x * texButtonCount + ImGui::GetStyle().ItemSpacing.x * (texButtonCount + 1);
         ImGui::BeginChild("textureframe", ImVec2(-texButtonsReserve, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2),
             false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         std::string texName = newValue.getId();
         if (isCameraTexture) {
             texName = std::string(ICON_FA_VIDEO) + " " + CameraTextureLink::cameraName(sceneProject->scene, newValue);
-        } else if (std::filesystem::exists(texName)) {
-            texName = std::filesystem::path(texName).filename().string();
+        } else {
+            // Never show the "?svgScale=" suffix in the slot; display the clean path/name.
+            texName = TextureData::parseSvgScalePath(texName);
+            if (std::filesystem::exists(texName)) {
+                texName = std::filesystem::path(texName).filename().string();
+            }
         }
         if (texName.empty()) {
             texName = "< Not set >";
@@ -3192,6 +3204,14 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         }
         ImGui::SetItemTooltip("Camera as source (render to texture)");
 
+        if (isSvgTexture) {
+            ImGui::SameLine();
+            if (ImGui::Button(ICON_FA_VECTOR_SQUARE, texButtonSize)) {
+                ImGui::OpenPopup("svgscalepopup");
+            }
+            ImGui::SetItemTooltip("SVG scale: %gx", svgCurrentScale);
+        }
+
         ImGui::PopStyleVar();
 
         if (ImGui::BeginPopup("cameratexturepopup")) {
@@ -3213,6 +3233,52 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             }
             if (!hasCamera) {
                 ImGui::TextDisabled("No camera in scene");
+            }
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopup("svgscalepopup")) {
+            ImGui::TextUnformatted("SVG Scale");
+            ImGui::Separator();
+
+            auto applyScale = [&](float scale){
+                std::string newPath = TextureData::buildSvgScalePath(svgCleanPath, scale);
+                if (newPath != newValue.getPath()) {
+                    Texture texture(newPath);
+                    for (Entity& entity : entities){
+                        cmd = new PropertyCmd<Texture>(project, sceneProject->id, entity, cpType, id, texture, settings.onValueChanged);
+                        CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+                        finishProperty = true;
+                    }
+                }
+            };
+
+            // Holds the in-progress drag value so the scale is committed only on release:
+            // each distinct scale rasterizes a new texture, so we avoid spamming the cache.
+            static std::map<std::string, float> svgScaleEditing;
+            const std::string editKey = std::to_string(static_cast<int>(cpType)) + ":" + id;
+            auto editIt = svgScaleEditing.find(editKey);
+            float editScale = (editIt != svgScaleEditing.end()) ? editIt->second : svgCurrentScale;
+
+            ImGui::SetNextItemWidth(140);
+            if (ImGui::DragFloat("##svgscaledrag", &editScale, 0.05f, 0.1f, 16.0f, "%.2fx")) {
+                svgScaleEditing[editKey] = editScale;
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                svgScaleEditing.erase(editKey);
+                applyScale(editScale);
+            }
+
+            ImGui::Separator();
+            struct ScalePreset { const char* label; float value; };
+            static const ScalePreset presets[] = {
+                {"0.5x", 0.5f}, {"1x", 1.0f}, {"2x", 2.0f}, {"3x", 3.0f}, {"4x", 4.0f}
+            };
+            for (const ScalePreset& preset : presets) {
+                bool selected = std::fabs(svgCurrentScale - preset.value) < 1e-4f;
+                if (ImGui::MenuItem(preset.label, nullptr, selected)) {
+                    applyScale(preset.value);
+                }
             }
             ImGui::EndPopup();
         }

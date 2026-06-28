@@ -11,14 +11,102 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <string>
+#include <vector>
 #include "stb_image.h"
 #if RESIZE_WITH_STB
 #include "stb_image_resize2.h"
 #endif
+#define NANOSVG_IMPLEMENTATION
+#include "nanosvg.h"
+#define NANOSVGRAST_IMPLEMENTATION
+#include "nanosvgrast.h"
 #include "Log.h"
 #include "Texture.h"
 
 using namespace doriax;
+
+bool TextureData::hasSvgExtension(const char* filename) {
+    if (!filename) {
+        return false;
+    }
+
+    std::string path(filename);
+    std::string extension;
+    const size_t dotPos = path.find_last_of('.');
+    if (dotPos != std::string::npos) {
+        extension = path.substr(dotPos);
+    }
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return extension == ".svg";
+}
+
+static const std::string SVG_SCALE_MARKER = "?svgScale=";
+
+std::string TextureData::parseSvgScalePath(const std::string& path, float* outScale) {
+    const size_t pos = path.find(SVG_SCALE_MARKER);
+    if (pos == std::string::npos) {
+        return path;
+    }
+
+    if (outScale) {
+        try {
+            *outScale = std::stof(path.substr(pos + SVG_SCALE_MARKER.size()));
+        } catch (...) {
+            // Malformed suffix: leave the caller's scale untouched.
+        }
+    }
+    return path.substr(0, pos);
+}
+
+std::string TextureData::buildSvgScalePath(const std::string& cleanPath, float scale) {
+    // No suffix for the default scale (or invalid values): keep the path clean.
+    if (!(scale > 0.0f) || std::fabs(scale - 1.0f) < 1e-4f) {
+        return cleanPath;
+    }
+
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%g", scale);
+    return cleanPath + SVG_SCALE_MARKER + buffer;
+}
+
+bool TextureData::looksLikeSvg(Data* filedata) {
+    if (!filedata || !filedata->getMemPtr() || filedata->length() == 0) {
+        return false;
+    }
+
+    const unsigned int inspectLength = std::min<unsigned int>(filedata->length(), 1024);
+    unsigned char* mem = filedata->getMemPtr();
+
+    // Skip an optional UTF-8 BOM so it doesn't hide the first real character.
+    unsigned int start = 0;
+    if (inspectLength >= 3 && mem[0] == 0xEF && mem[1] == 0xBB && mem[2] == 0xBF) {
+        start = 3;
+    }
+    // Skip leading whitespace.
+    while (start < inspectLength && std::isspace(mem[start])) {
+        start++;
+    }
+
+    // A valid SVG/XML document always begins with '<' (e.g. "<?xml", "<!--",
+    // "<!DOCTYPE", or "<svg"). Requiring this avoids misrouting a binary raster
+    // image to the SVG decoder just because the bytes "<svg" appear in its metadata.
+    if (start >= inspectLength || mem[start] != '<') {
+        return false;
+    }
+
+    std::string header;
+    header.reserve(inspectLength - start);
+    for (unsigned int i = start; i < inspectLength; i++) {
+        header.push_back(static_cast<char>(std::tolower(mem[i])));
+    }
+
+    return header.find("<svg") != std::string::npos;
+}
 
 TextureData::TextureData() {
     this->width = 0;
@@ -31,8 +119,10 @@ TextureData::TextureData() {
     this->data = NULL;
 
     this->transparent = false;
-    
+
     this->dataOwned = false;
+
+    this->svgScale = 1.0f;
 }
 
 TextureData::TextureData(int width, int height, unsigned int size, ColorFormat color_format, int channels, void* data){
@@ -46,8 +136,10 @@ TextureData::TextureData(int width, int height, unsigned int size, ColorFormat c
     this->data = data;
 
     this->transparent = false;
-    
+
     this->dataOwned = false;
+
+    this->svgScale = 1.0f;
 }
 
 TextureData::TextureData(const char* filename) : TextureData(){
@@ -103,6 +195,14 @@ bool TextureData::loadTexture(Data* filedata) {
 
     if (dataOwned && data)
         releaseImageData();
+
+    if (looksLikeSvg(filedata)) {
+        if (!loadSvgTexture(filedata)) {
+            Log::error("Error loading SVG texture");
+            return false;
+        }
+        return true;
+    }
     
     //----- Start std_image read texture
     stbi_info_from_memory((stbi_uc const *)filedata->getMemPtr(), filedata->length(), &width, &height, &channels);
@@ -146,24 +246,108 @@ bool TextureData::loadTexture(Data* filedata) {
     return true;
 }
 
+bool TextureData::loadSvgTexture(Data* filedata) {
+    if (!filedata || !filedata->getMemPtr() || filedata->length() == 0) {
+        return false;
+    }
+
+    // A non-positive or non-finite scale falls back to the SVG's intrinsic size.
+    float scale = svgScale;
+    if (!(scale > 0.0f) || !std::isfinite(scale)) {
+        scale = 1.0f;
+    }
+
+    std::vector<char> svgData(filedata->length() + 1);
+    memcpy(svgData.data(), filedata->getMemPtr(), filedata->length());
+    svgData[filedata->length()] = '\0';
+
+    NSVGimage* image = nsvgParse(svgData.data(), "px", 96.0f);
+    if (!image || image->width <= 0.0f || image->height <= 0.0f) {
+        if (image) {
+            nsvgDelete(image);
+        }
+        return false;
+    }
+
+    // Cap the rasterized size to a GPU-friendly bound. This also prevents the
+    // int cast below from overflowing when svgScale is unreasonably large.
+    const float maxRasterDim = 16384.0f;
+    const float scaledWidth = std::ceil(image->width * scale);
+    const float scaledHeight = std::ceil(image->height * scale);
+    if (scaledWidth > maxRasterDim || scaledHeight > maxRasterDim) {
+        Log::error("SVG rasterization size too large (%.0f x %.0f) for scale %.2f", scaledWidth, scaledHeight, scale);
+        nsvgDelete(image);
+        return false;
+    }
+
+    const int rasterWidth = std::max(1, static_cast<int>(scaledWidth));
+    const int rasterHeight = std::max(1, static_cast<int>(scaledHeight));
+    const size_t rasterSize = static_cast<size_t>(rasterWidth) * static_cast<size_t>(rasterHeight) * 4;
+
+    unsigned char* rasterData = static_cast<unsigned char*>(malloc(rasterSize));
+    if (!rasterData) {
+        nsvgDelete(image);
+        return false;
+    }
+    memset(rasterData, 0, rasterSize);
+
+    NSVGrasterizer* rasterizer = nsvgCreateRasterizer();
+    if (!rasterizer) {
+        free(rasterData);
+        nsvgDelete(image);
+        return false;
+    }
+
+    nsvgRasterize(rasterizer, image, 0.0f, 0.0f, scale, rasterData, rasterWidth, rasterHeight, rasterWidth * 4);
+
+    nsvgDeleteRasterizer(rasterizer);
+    nsvgDelete(image);
+
+    data = rasterData;
+    width = rasterWidth;
+    height = rasterHeight;
+    originalWidth = rasterWidth;
+    originalHeight = rasterHeight;
+    channels = 4;
+    color_format = ColorFormat::RGBA;
+    size = static_cast<unsigned int>(rasterSize);
+    transparent = hasAlpha();
+
+    return true;
+}
+
 bool TextureData::loadTextureFromFile(const char* filename) {
+    // A texture path may carry a rasterization scale as "<path>?svgScale=<value>".
+    // Split it off here: load from the clean path, and let an embedded scale
+    // override the current svgScale setting.
+    float parsedScale = svgScale;
+    std::string cleanPath = parseSvgScalePath(filename ? filename : "", &parsedScale);
+    svgScale = parsedScale;
+
     Data filedata;
 
-    int res = filedata.open(filename);
+    int res = filedata.open(cleanPath.c_str());
 
     if (res==FileErrors::FILE_NOT_FOUND){
-        Log::error("Texture file not found: %s", filename);
+        Log::error("Texture file not found: %s", cleanPath.c_str());
         return false;
     }
     if (res==FileErrors::INVALID_PARAMETER){
-        Log::error("Texture file path is invalid: %s", filename);
+        Log::error("Texture file path is invalid: %s", cleanPath.c_str());
         return false;
     }
 
-    bool result = loadTexture(&filedata);
+    bool result = false;
+    if (hasSvgExtension(cleanPath.c_str())) {
+        if (dataOwned && data)
+            releaseImageData();
+        result = loadSvgTexture(&filedata);
+    } else {
+        result = loadTexture(&filedata);
+    }
 
     if (!result){
-        Log::error("Texture file not loaded: %s", filename);
+        Log::error("Texture file not loaded: %s", cleanPath.c_str());
     }
 
     return result;
@@ -300,6 +484,8 @@ void TextureData::copy ( const TextureData& v ){
     this->dataOwned = v.dataOwned;
 
     this->transparent = v.transparent;
+
+    this->svgScale = v.svgScale;
 
     this->data = v.data;
 }
@@ -502,6 +688,14 @@ void TextureData::setDataOwned(bool dataOwned){
 
 bool TextureData::getDataOwned() const{
     return this->dataOwned;
+}
+
+void TextureData::setSVGScale(float svgScale){
+    this->svgScale = svgScale;
+}
+
+float TextureData::getSVGScale() const{
+    return this->svgScale;
 }
 
 int TextureData::getWidth(){

@@ -39,11 +39,91 @@
 #include <chrono>
 #include <mutex>
 #include <atomic>
-#include "stb_image.h"
+#include <algorithm>
 #include "stb_image_write.h"
 #include "stb_image_resize2.h"
 
 using namespace doriax;
+
+unsigned char editor::ResourcesWindow::textureByteAt(TextureData& data, size_t pixel, int channel, int bytesPerChannel) {
+    if (bytesPerChannel == 2) {
+        const unsigned short* src = static_cast<const unsigned short*>(data.getData());
+        return static_cast<unsigned char>(src[pixel * data.getChannels() + channel] >> 8);
+    }
+
+    const unsigned char* src = static_cast<const unsigned char*>(data.getData());
+    return src[pixel * data.getChannels() + channel];
+}
+
+bool editor::ResourcesWindow::writeImageThumbnail(const fs::path& sourcePath, const fs::path& thumbnailPath) {
+    TextureData sourceData;
+    if (!sourceData.loadTextureFromFile(sourcePath.string().c_str()) || !sourceData.getData()) {
+        return false;
+    }
+
+    const int width = sourceData.getWidth();
+    const int height = sourceData.getHeight();
+    const int channels = sourceData.getChannels();
+    const int bytesPerChannel = TextureData::getBytesPerChannel(sourceData.getColorFormat());
+    if (width <= 0 || height <= 0 || channels <= 0) {
+        sourceData.releaseImageData();
+        return false;
+    }
+
+    std::vector<unsigned char> rgbaData(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            const size_t srcPixel = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
+            const size_t dstPixel = srcPixel * 4;
+
+            if (channels == 1) {
+                const unsigned char value = textureByteAt(sourceData, srcPixel, 0, bytesPerChannel);
+                rgbaData[dstPixel + 0] = value;
+                rgbaData[dstPixel + 1] = value;
+                rgbaData[dstPixel + 2] = value;
+                rgbaData[dstPixel + 3] = 255;
+            } else if (channels == 2) {
+                const unsigned char value = textureByteAt(sourceData, srcPixel, 0, bytesPerChannel);
+                rgbaData[dstPixel + 0] = value;
+                rgbaData[dstPixel + 1] = value;
+                rgbaData[dstPixel + 2] = value;
+                rgbaData[dstPixel + 3] = textureByteAt(sourceData, srcPixel, 1, bytesPerChannel);
+            } else {
+                rgbaData[dstPixel + 0] = textureByteAt(sourceData, srcPixel, 0, bytesPerChannel);
+                rgbaData[dstPixel + 1] = textureByteAt(sourceData, srcPixel, 1, bytesPerChannel);
+                rgbaData[dstPixel + 2] = textureByteAt(sourceData, srcPixel, 2, bytesPerChannel);
+                rgbaData[dstPixel + 3] = channels >= 4 ? textureByteAt(sourceData, srcPixel, 3, bytesPerChannel) : 255;
+            }
+        }
+    }
+
+    int maxThumbSize = THUMBNAIL_SIZE;
+    float scale = (width > height) ?
+        static_cast<float>(maxThumbSize) / static_cast<float>(width) :
+        static_cast<float>(maxThumbSize) / static_cast<float>(height);
+
+    int newWidth = std::max(1, static_cast<int>(width * scale));
+    int newHeight = std::max(1, static_cast<int>(height * scale));
+
+    std::vector<unsigned char> thumbData(static_cast<size_t>(newWidth) * static_cast<size_t>(newHeight) * 4);
+    stbir_resize_uint8_linear(
+        rgbaData.data(),
+        width,
+        height,
+        0,
+        thumbData.data(),
+        newWidth,
+        newHeight,
+        0,
+        STBIR_RGBA
+    );
+
+    fs::create_directories(thumbnailPath.parent_path());
+    const bool written = stbi_write_png(thumbnailPath.string().c_str(), newWidth, newHeight, 4, thumbData.data(), newWidth * 4) != 0;
+
+    sourceData.releaseImageData();
+    return written;
+}
 
 editor::FileType editor::ResourcesWindow::classifyThumbnailFileType(const fs::path& filePath) {
     const std::string extension = filePath.extension().string();
@@ -1554,61 +1634,19 @@ void editor::ResourcesWindow::thumbnailWorker() {
 
         // Generate thumbnail
         if (thumbFile.type == FileType::IMAGE) {
-            int width, height, channels;
-            unsigned char* data = stbi_load(thumbFile.path.string().c_str(), &width, &height, &channels, 4);
-            if (data) {
-                // Define maximum thumbnail dimension
-                int maxThumbSize = THUMBNAIL_SIZE;
+            fs::path thumbnailPath = project->getThumbnailPath(thumbFile.path);
+            bool thumbnailWritten = writeImageThumbnail(thumbFile.path, thumbnailPath);
 
-                // Calculate scaling factor to fit within maxThumbSize while preserving aspect ratio
-                float scale = (width > height) ? 
-                    (float)maxThumbSize / width : 
-                    (float)maxThumbSize / height;
-
-                // Calculate the new dimensions
-                int newWidth = static_cast<int>(width * scale);
-                int newHeight = static_cast<int>(height * scale);
-
-                // Ensure dimensions are at least 1 pixel
-                newWidth = std::max(1, newWidth);
-                newHeight = std::max(1, newHeight);
-
-                // Create a buffer for the resized image
-                unsigned char* thumbData = new unsigned char[newWidth * newHeight * 4];
-
-                // Resize the image while preserving aspect ratio
-                stbir_resize_uint8_linear(
-                    data,                   // input
-                    width,                  // input width
-                    height,                 // input height
-                    0,                      // input stride in bytes (0 = width * channels)
-                    thumbData,              // output
-                    newWidth,               // output width
-                    newHeight,              // output height
-                    0,                      // output stride in bytes (0 = width * channels)
-                    STBIR_RGBA              // number of channels (RGBA = 4)
-                );
-
-                // Save the thumbnail
-                fs::path thumbnailPath = project->getThumbnailPath(thumbFile.path);
-                fs::create_directories(thumbnailPath.parent_path());
-                stbi_write_png(thumbnailPath.string().c_str(), newWidth, newHeight, 4, thumbData, newWidth * 4);
-
-                // Clean up
-                delete[] thumbData;
-                stbi_image_free(data);
-
-                // Notify main thread that thumbnail is ready
+            if (thumbnailWritten) {
                 {
                     std::lock_guard<std::mutex> lock(completedThumbnailMutex);
                     completedThumbnailQueue.push(thumbFile);
                 }
-                {
-                    std::lock_guard<std::mutex> lock(thumbnailMutex);
-                    pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
-                }
             } else {
-                std::cerr << "Failed to load image for thumbnail: " << thumbFile.path.string() << " - " << stbi_failure_reason() << std::endl;
+                std::cerr << "Failed to generate image thumbnail: " << thumbFile.path.string() << std::endl;
+            }
+
+            {
                 std::lock_guard<std::mutex> lock(thumbnailMutex);
                 pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
             }

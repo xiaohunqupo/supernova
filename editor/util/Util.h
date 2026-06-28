@@ -15,7 +15,7 @@ namespace doriax::editor{
     public:
 
         inline static std::string getImageExtensions() {
-             return "png,jpg,jpeg,bmp,tga,gif,hdr,psd,pic,pnm";
+             return "png,jpg,jpeg,bmp,tga,gif,hdr,psd,pic,pnm,svg";
         }
 
         inline static std::string getFontExtensions() {
@@ -44,7 +44,7 @@ namespace doriax::editor{
 
         inline static bool isImageFile(const std::string& path) {
             static const std::unordered_set<std::string> imageExtensions = {
-                ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".gif", ".hdr", ".psd", ".pic", ".pnm"
+                ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".gif", ".hdr", ".psd", ".pic", ".pnm", ".svg"
             };
 
             std::string ext = std::filesystem::path(path).extension().string();

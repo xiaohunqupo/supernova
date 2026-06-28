@@ -461,6 +461,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addFunction("flipVertical", &TextureData::flipVertical)
         .addFunction("getColorComponent", &TextureData::getColorComponent)
         .addProperty("dataOwned", &TextureData::getDataOwned, &TextureData::setDataOwned)
+        .addProperty("svgScale", &TextureData::getSVGScale, &TextureData::setSVGScale)
         .addFunction("getWidth", &TextureData::getWidth)
         .addFunction("getHeight", &TextureData::getHeight)
         .addFunction("getOriginalWidth", &TextureData::getOriginalWidth)

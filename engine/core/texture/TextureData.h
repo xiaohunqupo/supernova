@@ -8,6 +8,8 @@
 #include "render/Render.h"
 #include "io/Data.h"
 
+#include <string>
+
 namespace doriax {
 
     class DORIAX_API TextureData {
@@ -25,10 +27,15 @@ namespace doriax {
         void* data;
 
         bool transparent;
-        
+
         bool dataOwned;
-        
+
+        // Rasterization scale applied to vector (.svg) sources only. Default 1.0.
+        float svgScale;
+
         int getNearestPowerOfTwo(int size);
+        static bool looksLikeSvg(Data* filedata);
+        bool loadSvgTexture(Data* filedata);
 
     public:
 
@@ -46,6 +53,17 @@ namespace doriax {
         bool loadTexture(Data* filedata);
         bool loadTextureFromFile(const char* filename);
         bool loadTextureFromMemory(unsigned char* data, unsigned int dataLength);
+
+        static bool hasSvgExtension(const char* filename);
+
+        // SVG rasterization scale can be carried in a texture path/id as
+        // "<path>?svgScale=<value>" so it survives serialization on a Texture reference.
+        // parseSvgScalePath returns the clean filesystem path and, when outScale is given,
+        // writes the parsed scale into it (left untouched when no suffix is present).
+        static std::string parseSvgScalePath(const std::string& path, float* outScale = nullptr);
+        // buildSvgScalePath appends the suffix when scale meaningfully differs from 1.0,
+        // otherwise returns cleanPath unchanged.
+        static std::string buildSvgScalePath(const std::string& cleanPath, float scale);
 
         static bool loadCubeMapFromSingleFile(const char* filename, std::array<TextureData, 6>& data);
 
@@ -67,6 +85,11 @@ namespace doriax {
         
         void setDataOwned(bool dataOwned);
         bool getDataOwned() const;
+
+        // Rasterization scale for vector (.svg) sources: 2.0 = twice the intrinsic
+        // resolution. Set before loading. No effect on raster images. Default 1.0.
+        void setSVGScale(float svgScale);
+        float getSVGScale() const;
 
         int getWidth();
         int getHeight();

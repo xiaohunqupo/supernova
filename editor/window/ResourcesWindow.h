@@ -174,6 +174,8 @@ namespace doriax::editor {
         void pasteFiles(const fs::path& targetDirectory);
         static FileType classifyThumbnailFileType(const fs::path& filePath);
         static std::string thumbnailRequestKey(const fs::path& filePath);
+        static unsigned char textureByteAt(TextureData& data, size_t pixel, int channel, int bytesPerChannel);
+        static bool writeImageThumbnail(const fs::path& sourcePath, const fs::path& thumbnailPath);
 
         void queueThumbnailGeneration(const fs::path& filePath, FileType type, bool forceRegenerate = false);
         void thumbnailWorker();
