@@ -1308,6 +1308,8 @@
 		1789660A2F1D764600E89E52 /* ShaderDataSerializer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderDataSerializer.h; sourceTree = "<group>"; };
 		1789660B2F1D764600E89E52 /* ShaderDataSerializer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ShaderDataSerializer.cpp; sourceTree = "<group>"; };
 		17A4DD6C2F5E4F8800C1BFC6 /* HybridArray.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HybridArray.h; sourceTree = "<group>"; };
+		17BFFB722FF201F9008F5B7C /* nanosvg.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = nanosvg.h; sourceTree = "<group>"; };
+		17BFFB732FF201F9008F5B7C /* nanosvgrast.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = nanosvgrast.h; sourceTree = "<group>"; };
 		17C554F62FB903B0008804C2 /* ModelPool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ModelPool.h; sourceTree = "<group>"; };
 		17C554F72FB903B0008804C2 /* ModelPool.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ModelPool.cpp; sourceTree = "<group>"; };
 		17FB42722FDDA6E3002F919C /* MirrorComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MirrorComponent.h; sourceTree = "<group>"; };
@@ -2550,6 +2552,15 @@
 			path = manager;
 			sourceTree = "<group>";
 		};
+		17BFFB742FF201F9008F5B7C /* nanosvg */ = {
+			isa = PBXGroup;
+			children = (
+				17BFFB722FF201F9008F5B7C /* nanosvg.h */,
+				17BFFB732FF201F9008F5B7C /* nanosvgrast.h */,
+			);
+			path = nanosvg;
+			sourceTree = "<group>";
+		};
 		7105A55B28B305B20092EA05 /* binding */ = {
 			isa = PBXGroup;
 			children = (
@@ -3628,11 +3639,12 @@
 		7162FC9625962A0E0075B97D /* libs */ = {
 			isa = PBXGroup;
 			children = (
-				7105CAE32AD61DA4007C91BA /* joltphysics */,
 				71E823872A9C209500C8E6F2 /* box2d */,
+				7105CAE32AD61DA4007C91BA /* joltphysics */,
 				71F97B56262D1EF200CD6F2B /* json */,
 				71BE604125B1C55B006D6E02 /* lua */,
 				71FCE4C328E0FA31003C5217 /* luabridge3 */,
+				17BFFB742FF201F9008F5B7C /* nanosvg */,
 				7162FC9725962A0E0075B97D /* sokol */,
 				717AD7BA290B5DF2007D7DB5 /* soloud */,
 				71BE61B925B1DA3E006D6E02 /* stb */,
