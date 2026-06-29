@@ -54,6 +54,7 @@ editor::App::App(){
     propertiesWindow = new Properties(&project);
     outputWindow = new OutputWindow();
     sceneWindow = new SceneWindow(&project);
+    propertiesWindow->setSceneWindow(sceneWindow);
     structureWindow = new Structure(&project, sceneWindow);
     codeEditor = new CodeEditor(&project);
     resourcesWindow = new ResourcesWindow(&project, codeEditor);

@@ -6076,6 +6076,13 @@ void editor::Project::start(uint32_t sceneId) {
 
     editor::getEditorHost().stopTransientPreviews();
 
+    // Exit any editor camera preview before starting: covers the owned-runtime path
+    // where the source scene's render never enters play mode, so stopping wouldn't
+    // otherwise drop the user back out of the preview view.
+    if (sceneProject->sceneRender){
+        sceneProject->sceneRender->clearPreviewCamera();
+    }
+
     sceneProject->playState = ScenePlayState::LOADING;
     editor::getEditorHost().saveAllCodeEditors();
 

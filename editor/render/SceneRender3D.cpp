@@ -1541,7 +1541,9 @@ void editor::SceneRender3D::hideAllGizmos(){
 void editor::SceneRender3D::activate(){
     SceneRender::activate();
 
-    Engine::addSceneLayer(viewgizmo.getScene());
+    if (!isPreviewCameraActive()){
+        Engine::addSceneLayer(viewgizmo.getScene());
+    }
 }
 
 void editor::SceneRender3D::updateSelLines(std::vector<OBB> obbs){
@@ -1590,7 +1592,7 @@ void editor::SceneRender3D::updateSelLines(std::vector<OBB> obbs){
 void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<Entity> entities, Entity mainCamera, const SceneDisplaySettings& settings){
     SceneRender::update(selEntities, entities, mainCamera, settings);
 
-    if (isPlaying){
+    if (isPlaying || isPreviewCameraActive()){
         return;
     }
 

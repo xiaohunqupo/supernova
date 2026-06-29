@@ -74,6 +74,8 @@ namespace doriax::editor {
         void clearSceneState(uint32_t sceneId);
 
         void focusOnEntities(SceneProject* sceneProject, const std::vector<Entity>& entities);
+        bool viewThroughCamera(uint32_t sceneId, Entity cameraEntity);
+        void stopViewingCamera(uint32_t sceneId);
 
         int getWidth(uint32_t sceneId) const;
         int getHeight(uint32_t sceneId) const;

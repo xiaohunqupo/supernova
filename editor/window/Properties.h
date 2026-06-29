@@ -17,6 +17,8 @@
 
 namespace doriax::editor{
 
+    class SceneWindow;
+
     enum class RowPropertyType{
         Label,
         Bool,
@@ -72,6 +74,7 @@ namespace doriax::editor{
     class Properties{
     private:
         Project* project;
+        SceneWindow* sceneWindow = nullptr;
         Command* cmd;
 
         bool windowOpen;
@@ -326,6 +329,8 @@ namespace doriax::editor{
         static constexpr const char* WINDOW_NAME = "Properties";
 
         Properties(Project* project);
+
+        void setSceneWindow(SceneWindow* sceneWindow);
 
         void show();
         void stopTransientPreviews();

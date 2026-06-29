@@ -30,6 +30,7 @@ editor::SceneRender::SceneRender(Scene* scene, bool use2DGizmos, bool enableView
 
     this->scene = scene;
     this->camera = new Camera(scene);
+    this->previewCameraEntity = NULL_ENTITY;
 
     this->multipleEntitiesSelected = false;
     // displaySettings initialised with struct defaults
@@ -416,13 +417,21 @@ void editor::SceneRender::hideAllGizmos(){
 void editor::SceneRender::setPlayMode(bool isPlaying){
     this->isPlaying = isPlaying;
     if (isPlaying){
+        // Play mode owns the scene camera (the game main camera), so drop any editor
+        // camera preview. This keeps the invariant "playing => no preview" and avoids
+        // dropping the user back into preview view when the scene is stopped.
+        previewCameraEntity = NULL_ENTITY;
         hideAllGizmos();
     }else{
-        scene->setCamera(camera);
+        syncSceneCamera();
     }
 }
 
 void editor::SceneRender::activate(){
+    if (!isPlaying){
+        syncSceneCamera();
+    }
+
     Engine::setFramebuffer(&framebuffer);
     Engine::setScene(scene);
 
@@ -445,6 +454,10 @@ void editor::SceneRender::updateSize(int width, int height){
 }
 
 void editor::SceneRender::updateRenderSystem(){
+    if (!isPlaying){
+        syncSceneCamera();
+    }
+
     // Meshes and UIs are created in update, without this can affect worldAABB
     scene->getSystem<MeshSystem>()->update(0);
     scene->getSystem<UISystem>()->update(0);
@@ -455,6 +468,12 @@ void editor::SceneRender::updateRenderSystem(){
 void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<Entity> entities, Entity mainCamera, const SceneDisplaySettings& settings){
     displaySettings = settings;
     if (isPlaying){
+        return;
+    }
+
+    syncSceneCamera();
+    if (isPreviewCameraActive()){
+        hideAllGizmos();
         return;
     }
 
@@ -1345,6 +1364,66 @@ TextureRender& editor::SceneRender::getTexture(){
 
 Camera* editor::SceneRender::getCamera(){
     return camera;
+}
+
+bool editor::SceneRender::isPreviewCameraUsable(Entity entity){
+    return entity != NULL_ENTITY
+        && scene
+        && scene->isEntityCreated(entity)
+        && scene->findComponent<CameraComponent>(entity)
+        && scene->findComponent<Transform>(entity);
+}
+
+Entity editor::SceneRender::getActiveCameraEntity(){
+    if (isPreviewCameraUsable(previewCameraEntity)){
+        return previewCameraEntity;
+    }
+
+    previewCameraEntity = NULL_ENTITY;
+    return camera->getEntity();
+}
+
+void editor::SceneRender::syncSceneCamera(){
+    Entity activeCamera = getActiveCameraEntity();
+    if (scene && activeCamera != NULL_ENTITY && scene->getCamera() != activeCamera){
+        scene->setCamera(activeCamera);
+    }
+}
+
+bool editor::SceneRender::setPreviewCamera(Entity entity){
+    if (!isPreviewCameraUsable(entity)){
+        return false;
+    }
+
+    previewCameraEntity = entity;
+    if (!isPlaying){
+        syncSceneCamera();
+    }
+    hideAllGizmos();
+    return true;
+}
+
+void editor::SceneRender::clearPreviewCamera(){
+    previewCameraEntity = NULL_ENTITY;
+    if (!isPlaying){
+        syncSceneCamera();
+    }
+}
+
+Entity editor::SceneRender::getPreviewCameraEntity() const{
+    return previewCameraEntity;
+}
+
+bool editor::SceneRender::isPreviewCameraActive(){
+    // Self-healing query: if the previewed camera entity was destroyed or lost its
+    // required components, clear it here so callers (and the UI) fall back to the
+    // editor camera on the same frame.
+    if (isPreviewCameraUsable(previewCameraEntity)){
+        return true;
+    }
+
+    previewCameraEntity = NULL_ENTITY;
+    return false;
 }
 
 editor::ToolsLayer* editor::SceneRender::getToolsLayer(){

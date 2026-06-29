@@ -106,6 +106,34 @@ void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
         closeSceneQueue.end());
 }
 
+bool editor::SceneWindow::viewThroughCamera(uint32_t sceneId, Entity cameraEntity) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene || !sceneProject->sceneRender) {
+        return false;
+    }
+    if (sceneProject->playState != ScenePlayState::STOPPED) {
+        return false;
+    }
+    if (!sceneProject->sceneRender->setPreviewCamera(cameraEntity)) {
+        return false;
+    }
+
+    project->setSelectedSceneId(sceneId);
+    sceneProject->needUpdateRender = true;
+    focusSceneWindow(*sceneProject);
+    return true;
+}
+
+void editor::SceneWindow::stopViewingCamera(uint32_t sceneId) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->sceneRender) {
+        return;
+    }
+
+    sceneProject->sceneRender->clearPreviewCamera();
+    sceneProject->needUpdateRender = true;
+}
+
 void editor::SceneWindow::focusSceneWindow(const SceneProject& sceneProject) const {
     const std::string windowTitle = getWindowTitle(sceneProject);
     ImGui::SetWindowFocus(windowTitle.c_str());
@@ -703,6 +731,13 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
     } else if (playKeysSceneId == sceneProject->id) {
         // Play stopped or paused with keys still held
         releasePlayKeys(mods);
+    }
+
+    if (sceneProject->playState == ScenePlayState::STOPPED && sceneProject->sceneRender->isPreviewCameraActive()) {
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            stopViewingCamera(sceneProject->id);
+        }
+        return;
     }
 
     size_t sceneId = sceneProject->id;
@@ -1363,6 +1398,11 @@ void editor::SceneWindow::show() {
             bool isSaving = (sceneProject.playState == ScenePlayState::SAVING);
             bool isLoading = (sceneProject.playState == ScenePlayState::LOADING);
             bool isCancelling = (sceneProject.playState == ScenePlayState::CANCELLING);
+            bool isCameraPreview = isStopped && sceneProject.sceneRender->isPreviewCameraActive();
+            Entity previewCameraEntity = isCameraPreview ? sceneProject.sceneRender->getPreviewCameraEntity() : NULL_ENTITY;
+            if (isCameraPreview) {
+                sceneProject.needUpdateRender = true;
+            }
 
             // Full-height toolbar vertically centered on a text-height row, overlapping the
             // spacing above/below (same layout pattern as the code editor status row)
@@ -1629,6 +1669,27 @@ void editor::SceneWindow::show() {
                 ImGui::Dummy(ImVec2(1, 20));
             }
 
+            if (isCameraPreview) {
+                ImGui::SameLine(0, 10);
+                ImGui::Dummy(ImVec2(1, 20));
+                ImGui::SameLine(0, 10);
+
+                std::string cameraName = sceneProject.scene->getEntityName(previewCameraEntity);
+                if (cameraName.empty()) {
+                    cameraName = "Camera";
+                }
+
+                ImGui::Text("%s %s", ICON_FA_VIDEO, cameraName.c_str());
+                ImGui::SetItemTooltip("Viewing through this camera");
+                ImGui::SameLine();
+                std::string stopPreviewButtonId = std::string(ICON_FA_XMARK) + "##StopCameraPreview" + std::to_string(sceneProject.id);
+                if (ImGui::Button(stopPreviewButtonId.c_str())) {
+                    stopViewingCamera(sceneProject.id);
+                    isCameraPreview = false;
+                }
+                ImGui::SetItemTooltip("Exit camera preview (Esc)");
+            }
+
             ImGui::SetCursorPosY(toolbarRowY + ImGui::GetTextLineHeightWithSpacing());
 
             ImGui::BeginChild(("Canvas" + std::to_string(sceneProject.id)).c_str());
@@ -1645,7 +1706,7 @@ void editor::SceneWindow::show() {
 
                 ImGui::Image((ImTextureID)(intptr_t)sceneProject.sceneRender->getTexture().getGLHandler(), ImGui::GetContentRegionAvail());
 
-                if (sceneProject.playState == ScenePlayState::STOPPED){
+                if (sceneProject.playState == ScenePlayState::STOPPED && !isCameraPreview){
                     if (ImGui::IsWindowHovered()) {
                         CursorSelected cursorSelected = sceneProject.sceneRender->getCursorSelected();
                         if (cursorSelected == CursorSelected::HAND) {
@@ -1670,7 +1731,7 @@ void editor::SceneWindow::show() {
                 }
 
                 // Viewport gizmo click-to-snap (3D scenes only)
-                if (sceneProject.sceneType == SceneType::SCENE_3D && sceneProject.playState == ScenePlayState::STOPPED) {
+                if (sceneProject.sceneType == SceneType::SCENE_3D && sceneProject.playState == ScenePlayState::STOPPED && !isCameraPreview) {
                     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                         ImVec2 windowPos = ImGui::GetWindowPos();
                         ImGuiIO& io = ImGui::GetIO();

@@ -1,4 +1,5 @@
 #include "Properties.h"
+#include "SceneWindow.h"
 
 #include "imgui_internal.h"
 
@@ -628,6 +629,10 @@ editor::Properties::Properties(Project* project){
     this->windowOpen = true;
     this->focusRequested = false;
     this->finishProperty = false;
+}
+
+void editor::Properties::setSceneWindow(SceneWindow* sceneWindow){
+    this->sceneWindow = sceneWindow;
 }
 
 void editor::Properties::setOpen(bool open){
@@ -6188,6 +6193,33 @@ void editor::Properties::drawCameraComponent(ComponentType cpType, SceneProject*
     //propertyRow(RowPropertyType::Bool, cpType, "renderToTexture", "Render To Texture", sceneProject, entities, defaultSettings);
     //propertyRow(RowPropertyType::Bool, cpType, "transparentSort", "Transparent Sort", sceneProject, entities, defaultSettings);
     propertyRow(RowPropertyType::Bool, cpType, "autoResize", "Auto Resize", sceneProject, entities, defaultSettings);
+
+    if (entities.size() == 1 && sceneProject->sceneRender && sceneWindow) {
+        Entity cameraEntity = entities[0];
+        bool previewingThisCamera = sceneProject->sceneRender->isPreviewCameraActive()
+            && sceneProject->sceneRender->getPreviewCameraEntity() == cameraEntity;
+        bool canPreviewCamera = sceneProject->playState == ScenePlayState::STOPPED
+            && scene->findComponent<Transform>(cameraEntity);
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Preview");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::BeginDisabled(!canPreviewCamera);
+        if (previewingThisCamera) {
+            if (ImGui::Button(ICON_FA_XMARK" Exit")) {
+                sceneWindow->stopViewingCamera(sceneProject->id);
+            }
+        } else {
+            if (ImGui::Button(ICON_FA_VIDEO" View")) {
+                sceneWindow->viewThroughCamera(sceneProject->id, cameraEntity);
+            }
+        }
+        ImGui::EndDisabled();
+        if (!canPreviewCamera && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip(sceneProject->playState == ScenePlayState::STOPPED ? "Camera transform unavailable" : "Stop the scene to preview cameras");
+        }
+    }
 
     endTable();
 }

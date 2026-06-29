@@ -608,7 +608,7 @@ void editor::SceneRender2D::updateSelLines(std::vector<OBB> obbs){
 void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<Entity> entities, Entity mainCamera, const SceneDisplaySettings& settings){
     SceneRender::update(selEntities, entities, mainCamera, settings);
 
-    if (isPlaying){
+    if (isPlaying || isPreviewCameraActive()){
         return;
     }
 

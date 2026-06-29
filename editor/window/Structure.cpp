@@ -1581,6 +1581,24 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                     if (!canMoveToEditorView && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                         ImGui::SetTooltip(node.isLocked ? "Camera is locked" : "Editor camera unavailable");
                     }
+                    bool previewingThisCamera = sceneProject->sceneRender
+                        && sceneProject->sceneRender->isPreviewCameraActive()
+                        && sceneProject->sceneRender->getPreviewCameraEntity() == node.id;
+                    bool canPreviewCamera = node.hasTransform
+                        && sceneProject->playState == ScenePlayState::STOPPED
+                        && sceneProject->sceneRender;
+                    if (previewingThisCamera) {
+                        if (ImGui::MenuItem(ICON_FA_XMARK"  Exit Camera Preview", nullptr, false, canPreviewCamera)) {
+                            sceneWindow->stopViewingCamera(sceneProject->id);
+                        }
+                    } else {
+                        if (ImGui::MenuItem(ICON_FA_VIDEO"  View Through Camera", nullptr, false, canPreviewCamera)) {
+                            sceneWindow->viewThroughCamera(sceneProject->id, node.id);
+                        }
+                    }
+                    if (!canPreviewCamera && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip(sceneProject->playState == ScenePlayState::STOPPED ? "Camera transform unavailable" : "Stop the scene to preview cameras");
+                    }
                     if (node.isMainCamera) {
                         if (ImGui::MenuItem(ICON_FA_EYE_SLASH"  Unset as Main Camera", nullptr, false, node.isMainCamera)) {
                             CommandHandle::get(project->getSelectedSceneId())->addCommand(new SetMainCameraCmd(project, project->getSelectedSceneId(), NULL_ENTITY));

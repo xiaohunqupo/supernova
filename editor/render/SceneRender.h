@@ -106,6 +106,9 @@ namespace doriax::editor{
         static bool gizmo2DSideUsesNegativeX(Gizmo2DSideSelected side);
         static bool gizmo2DSideUsesNegativeY(Gizmo2DSideSelected side);
         static Vector2 lockObject2DAspectRatio(const Vector2& startSize, const Vector2& candidateSize);
+        bool isPreviewCameraUsable(Entity entity);
+        Entity getActiveCameraEntity();
+        void syncSceneCamera();
 
     protected:
         void updateCameraFrustum(CameraObjects& co, const CameraComponent& cameraComponent, bool isMainCamera, bool fixedSizeFrustum = true);
@@ -116,6 +119,7 @@ namespace doriax::editor{
         Scene* scene;
         Camera* camera;
         Framebuffer framebuffer;
+        Entity previewCameraEntity;
 
         Lines* selLines;
         Lines* terrainBrushLines;
@@ -160,6 +164,10 @@ namespace doriax::editor{
 
         TextureRender& getTexture();
         Camera* getCamera();
+        bool setPreviewCamera(Entity entity);
+        void clearPreviewCamera();
+        Entity getPreviewCameraEntity() const;
+        bool isPreviewCameraActive();
         ToolsLayer* getToolsLayer();
         UILayer* getUILayer();
 
