@@ -1375,11 +1375,12 @@ bool editor::SceneRender::isPreviewCameraUsable(Entity entity){
 }
 
 Entity editor::SceneRender::getActiveCameraEntity(){
-    if (isPreviewCameraUsable(previewCameraEntity)){
+    // isPreviewCameraActive() self-heals a stale preview entity, so this falls back
+    // to the editor camera whenever the preview is no longer usable.
+    if (isPreviewCameraActive()){
         return previewCameraEntity;
     }
 
-    previewCameraEntity = NULL_ENTITY;
     return camera->getEntity();
 }
 
@@ -1399,7 +1400,8 @@ bool editor::SceneRender::setPreviewCamera(Entity entity){
     if (!isPlaying){
         syncSceneCamera();
     }
-    hideAllGizmos();
+    // Gizmos are hidden by update() every frame while the preview is active, which
+    // runs before the scene is drawn, so there's no need to hide them here too.
     return true;
 }
 

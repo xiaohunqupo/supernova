@@ -74,7 +74,7 @@ namespace doriax::editor{
     class Properties{
     private:
         Project* project;
-        SceneWindow* sceneWindow = nullptr;
+        SceneWindow* sceneWindow;
         Command* cmd;
 
         bool windowOpen;

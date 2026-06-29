@@ -624,6 +624,7 @@ std::string editor::Properties::formatPropertyLabelValue(const PropertyData& pro
 
 editor::Properties::Properties(Project* project){
     this->project = project;
+    this->sceneWindow = nullptr;
     this->cmd = nullptr;
 
     this->windowOpen = true;
