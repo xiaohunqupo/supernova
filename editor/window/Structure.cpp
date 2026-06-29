@@ -13,6 +13,7 @@
 #include "command/type/DuplicateEntityCmd.h"
 #include "command/type/AddComponentCmd.h"
 #include "command/type/MultiPropertyCmd.h"
+#include "command/type/ObjectTransformCmd.h"
 #include "component/InstancedMeshComponent.h"
 #include "command/type/ImportEntityBundleCmd.h"
 #include "command/type/RemoveEntityFromBundleCmd.h"
@@ -269,6 +270,116 @@ void editor::Structure::clearSubSelectionForEntity(uint32_t sceneId, Entity enti
 void editor::Structure::resetEntitySelectionAnchor() {
     selectionAnchorSceneId = NULL_PROJECT_SCENE;
     selectionAnchorEntity = NULL_ENTITY;
+}
+
+void editor::Structure::moveCameraToEditorView(Entity cameraEntity) {
+    SceneProject* sceneProject = project->getSelectedScene();
+    if (!sceneProject || !sceneProject->scene || !sceneProject->sceneRender) {
+        return;
+    }
+
+    Scene* scene = sceneProject->scene;
+    Camera* editorCamera = sceneProject->sceneRender->getCamera();
+    if (!editorCamera) {
+        return;
+    }
+
+    Transform* targetTransform = scene->findComponent<Transform>(cameraEntity);
+    CameraComponent* targetCamera = scene->findComponent<CameraComponent>(cameraEntity);
+    if (!targetTransform || !targetCamera) {
+        return;
+    }
+
+    editorCamera->updateTransform();
+    editorCamera->updateCamera();
+
+    Vector3 editorWorldPosition = editorCamera->getWorldPosition();
+    Vector3 editorWorldTarget = editorCamera->getWorldTarget();
+
+    Vector3 backDirection = editorWorldPosition - editorWorldTarget;
+    if (!backDirection.isValid() || backDirection.squaredLength() <= 1e-8f) {
+        backDirection = editorCamera->getWorldDirection();
+    }
+    if (!backDirection.isValid() || backDirection.squaredLength() <= 1e-8f) {
+        return;
+    }
+    backDirection.normalize();
+
+    Vector3 desiredWorldUp = editorCamera->getWorldUp();
+    if (!desiredWorldUp.isValid() || desiredWorldUp.squaredLength() <= 1e-8f) {
+        desiredWorldUp = Vector3::UNIT_Y;
+    }
+    desiredWorldUp.normalize();
+
+    Vector3 rightDirection = desiredWorldUp.crossProduct(backDirection);
+    if (!rightDirection.isValid() || rightDirection.squaredLength() <= 1e-8f) {
+        rightDirection = editorCamera->getWorldRight();
+    }
+    if (!rightDirection.isValid() || rightDirection.squaredLength() <= 1e-8f) {
+        rightDirection = backDirection.perpendicular();
+    }
+    if (!rightDirection.isValid() || rightDirection.squaredLength() <= 1e-8f) {
+        return;
+    }
+    rightDirection.normalize();
+
+    desiredWorldUp = backDirection.crossProduct(rightDirection);
+    if (!desiredWorldUp.isValid() || desiredWorldUp.squaredLength() <= 1e-8f) {
+        return;
+    }
+    desiredWorldUp.normalize();
+
+    Quaternion desiredWorldRotation(rightDirection, desiredWorldUp, backDirection);
+    desiredWorldRotation.normalize();
+
+    Vector3 newPosition = editorWorldPosition;
+    Quaternion newRotation = desiredWorldRotation;
+    Transform* parentTransform = scene->findComponent<Transform>(targetTransform->parent);
+    if (parentTransform) {
+        newPosition = parentTransform->modelMatrix.inverse() * editorWorldPosition;
+        newRotation = parentTransform->worldRotation.inverse() * desiredWorldRotation;
+        newRotation.normalize();
+    }
+
+    auto command = new MultiPropertyCmd();
+    command->addCommand(std::make_unique<ObjectTransformCmd>(
+        project,
+        sceneProject->id,
+        cameraEntity,
+        newPosition,
+        newRotation,
+        targetTransform->scale
+    ));
+
+    if (targetCamera->useTarget) {
+        Vector3 newTarget = editorWorldTarget;
+        Vector3 newUp = desiredWorldUp;
+
+        if (parentTransform) {
+            Matrix4 newLocalMatrix = Matrix4::translateMatrix(newPosition)
+                * newRotation.getRotationMatrix()
+                * Matrix4::scaleMatrix(targetTransform->scale);
+            Matrix4 newWorldMatrix = parentTransform->modelMatrix * newLocalMatrix;
+            Matrix4 inverseNewWorldMatrix = newWorldMatrix.inverse();
+
+            newTarget = (inverseNewWorldMatrix * editorWorldTarget) + newPosition;
+
+            Vector3 worldOrigin = newWorldMatrix * Vector3::ZERO;
+            Vector3 localOrigin = inverseNewWorldMatrix * worldOrigin;
+            Vector3 localUpPoint = inverseNewWorldMatrix * (worldOrigin + desiredWorldUp);
+            newUp = localUpPoint - localOrigin;
+            if (!newUp.isValid() || newUp.squaredLength() <= 1e-8f) {
+                newUp = targetCamera->up;
+            } else {
+                newUp.normalize();
+            }
+        }
+
+        command->addPropertyCmd<Vector3>(project, sceneProject->id, cameraEntity, ComponentType::CameraComponent, "target", newTarget);
+        command->addPropertyCmd<Vector3>(project, sceneProject->id, cameraEntity, ComponentType::CameraComponent, "up", newUp);
+    }
+
+    CommandHandle::get(sceneProject->id)->addCommandNoMerge(command);
 }
 
 editor::Structure::Structure(Project* project, SceneWindow* sceneWindow){
@@ -1458,8 +1569,18 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
 
             if (!entityDeleted && !node.isScene) {
                 SceneProject* sceneProject = project->getSelectedScene();
-                if (sceneProject->scene->getSignature(node.id).test(sceneProject->scene->getComponentId<CameraComponent>())) {
+                if (sceneProject && sceneProject->scene
+                    && sceneProject->scene->getSignature(node.id).test(sceneProject->scene->getComponentId<CameraComponent>())) {
                     ImGui::Separator();
+                    bool canMoveToEditorView = !node.isLocked && node.hasTransform
+                        && sceneProject->sceneRender
+                        && sceneProject->sceneRender->getCamera();
+                    if (ImGui::MenuItem(ICON_FA_CAMERA"  Move to Editor View", nullptr, false, canMoveToEditorView)) {
+                        moveCameraToEditorView(node.id);
+                    }
+                    if (!canMoveToEditorView && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip(node.isLocked ? "Camera is locked" : "Editor camera unavailable");
+                    }
                     if (node.isMainCamera) {
                         if (ImGui::MenuItem(ICON_FA_EYE_SLASH"  Unset as Main Camera", nullptr, false, node.isMainCamera)) {
                             CommandHandle::get(project->getSelectedSceneId())->addCommand(new SetMainCameraCmd(project, project->getSelectedSceneId(), NULL_ENTITY));

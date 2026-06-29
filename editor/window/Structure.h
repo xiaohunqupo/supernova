@@ -75,6 +75,7 @@ namespace doriax::editor{
         void applyEntitySelection(uint32_t sceneId, Entity entity, bool shiftPressed, bool ctrlPressed);
         void clearSubSelectionForEntity(uint32_t sceneId, Entity entity);
         void resetEntitySelectionAnchor();
+        void moveCameraToEditorView(Entity cameraEntity);
 
         void showNewEntityMenu(bool isScene, Entity parent, bool addToBundle);
         void showIconMenu();
