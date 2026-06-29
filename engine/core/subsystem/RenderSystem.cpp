@@ -1234,8 +1234,21 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             if (!mesh.submeshes[i].gbufferShader->isCreated())
                 return false;
         }
-        if (!mesh.submeshes[i].shader->isCreated())
-            return false;
+        if (!mesh.submeshes[i].shader->isCreated()){
+            // A custom shader that failed to compile falls back to the built-in shader so
+            // the object stays visible and the mesh finishes loading (otherwise needReload
+            // stays set and we retry forever). The fork is retried after its source changes
+            // (invalidateCustomShaders clears the failure and re-flags needReload).
+            if (mesh.submeshes[i].customShaderId != 0 &&
+                ShaderPool::isShaderBuildFailed(ShaderType::MESH, mesh.submeshes[i].shaderProperties, mesh.submeshes[i].customShaderId)){
+                Log::error("Custom shader '%s' failed to compile; rendering '%s' with the built-in shader",
+                           mesh.customShader.c_str(), scene->getEntityName(entity).c_str());
+                mesh.submeshes[i].customShaderId = 0;
+                mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties, 0);
+            }
+            if (!mesh.submeshes[i].shader->isCreated())
+                return false;
+        }
         render.setShader(mesh.submeshes[i].shader.get());
         ShaderData& shaderData = mesh.submeshes[i].shader.get()->shaderData;
 
@@ -2525,8 +2538,17 @@ bool RenderSystem::loadUI(Entity entity, UIComponent& ui, uint8_t pipelines, boo
     ui.shaderProperties = ShaderPool::getUIProperties(p_hasTexture, p_hasFontAtlasTexture, false, p_vertexColorVec4);
     ui.customShaderId = ShaderPool::registerCustomShader(ui.customShader);
     ui.shader = ShaderPool::get(ShaderType::UI, ui.shaderProperties, ui.customShaderId);
-    if (!ui.shader->isCreated())
-        return false;
+    if (!ui.shader->isCreated()){
+        // A custom shader that failed to compile falls back to the built-in shader (so the
+        // object stays visible and loading finishes); retried after its source changes.
+        if (ui.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::UI, ui.shaderProperties, ui.customShaderId)){
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", ui.customShader.c_str());
+            ui.customShaderId = 0;
+            ui.shader = ShaderPool::get(ShaderType::UI, ui.shaderProperties, 0);
+        }
+        if (!ui.shader->isCreated())
+            return false;
+    }
     render.setShader(ui.shader.get());
     ShaderData& shaderData = ui.shader.get()->shaderData;
 
@@ -2701,8 +2723,17 @@ bool RenderSystem::loadPoints(Entity entity, PointsComponent& points, uint8_t pi
     points.shaderProperties = ShaderPool::getPointsProperties(p_hasTexture, false, true, p_hasTextureRect);
     points.customShaderId = ShaderPool::registerCustomShader(points.customShader);
     points.shader = ShaderPool::get(ShaderType::POINTS, points.shaderProperties, points.customShaderId);
-    if (!points.shader->isCreated())
-        return false;
+    if (!points.shader->isCreated()){
+        // A custom shader that failed to compile falls back to the built-in shader (so the
+        // object stays visible and loading finishes); retried after its source changes.
+        if (points.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::POINTS, points.shaderProperties, points.customShaderId)){
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", points.customShader.c_str());
+            points.customShaderId = 0;
+            points.shader = ShaderPool::get(ShaderType::POINTS, points.shaderProperties, 0);
+        }
+        if (!points.shader->isCreated())
+            return false;
+    }
     render.setShader(points.shader.get());
     ShaderData& shaderData = points.shader.get()->shaderData;
 
@@ -2765,8 +2796,17 @@ bool RenderSystem::loadLines(Entity entity, LinesComponent& lines, uint8_t pipel
     lines.shaderProperties = ShaderPool::getLinesProperties(false, true);
     lines.customShaderId = ShaderPool::registerCustomShader(lines.customShader);
     lines.shader = ShaderPool::get(ShaderType::LINES, lines.shaderProperties, lines.customShaderId);
-    if (!lines.shader->isCreated())
-        return false;
+    if (!lines.shader->isCreated()){
+        // A custom shader that failed to compile falls back to the built-in shader (so the
+        // object stays visible and loading finishes); retried after its source changes.
+        if (lines.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::LINES, lines.shaderProperties, lines.customShaderId)){
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", lines.customShader.c_str());
+            lines.customShaderId = 0;
+            lines.shader = ShaderPool::get(ShaderType::LINES, lines.shaderProperties, 0);
+        }
+        if (!lines.shader->isCreated())
+            return false;
+    }
     render.setShader(lines.shader.get());
     ShaderData& shaderData = lines.shader.get()->shaderData;
 
@@ -3021,8 +3061,17 @@ bool RenderSystem::loadSky(Entity entity, SkyComponent& sky, uint8_t pipelines){
 
     sky.customShaderId = ShaderPool::registerCustomShader(sky.customShader);
     sky.shader = ShaderPool::get(ShaderType::SKYBOX, 0, sky.customShaderId);
-    if (!sky.shader->isCreated())
-        return false;
+    if (!sky.shader->isCreated()){
+        // A custom shader that failed to compile falls back to the built-in shader (so the
+        // object stays visible and loading finishes); retried after its source changes.
+        if (sky.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::SKYBOX, 0, sky.customShaderId)){
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", sky.customShader.c_str());
+            sky.customShaderId = 0;
+            sky.shader = ShaderPool::get(ShaderType::SKYBOX, 0, 0);
+        }
+        if (!sky.shader->isCreated())
+            return false;
+    }
     render->setShader(sky.shader.get());
     ShaderData& shaderData = sky.shader.get()->shaderData;
 

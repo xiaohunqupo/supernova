@@ -142,10 +142,16 @@ public:
 
 extern const TBuiltInResource DefaultTBuiltInResource;
 
-static void output_error(const char* str, const char* header){
+static void output_error(const char* str, const char* header, std::string* sink = nullptr){
     if (str && str[0]){
         fprintf(stderr, "%s\n", header);
         fprintf(stderr, "%s\n", str);
+        if (sink){
+            sink->append(header);
+            sink->append("\n");
+            sink->append(str);
+            sink->append("\n");
+        }
     }
 }
 
@@ -497,8 +503,8 @@ bool shadercompiler::compile_to_spirv(std::vector<spirv_t>& spirvvec, const std:
         shaders.push_back(shader);
 
         bool parse_success = shader->parse(&DefaultTBuiltInResource, default_version, false, messages, *includer);
-        output_error(shader->getInfoLog(), ("File: " + inputs[i].filename).c_str());
-        output_error(shader->getInfoDebugLog(), ("File: " + inputs[i].filename).c_str());
+        output_error(shader->getInfoLog(), ("File: " + inputs[i].filename).c_str(), args.error_output);
+        output_error(shader->getInfoDebugLog(), ("File: " + inputs[i].filename).c_str(), args.error_output);
         if (!parse_success) {
             cleanup_program_shaders(program, shaders);
             return false;
@@ -508,16 +514,16 @@ bool shadercompiler::compile_to_spirv(std::vector<spirv_t>& spirvvec, const std:
     }
 
     bool link_success = program->link(messages);
-    output_error(program->getInfoLog(), "Link failed:");
-    output_error(program->getInfoDebugLog(), "Link failed:");
+    output_error(program->getInfoLog(), "Link failed:", args.error_output);
+    output_error(program->getInfoDebugLog(), "Link failed:", args.error_output);
     if (!link_success) {
         cleanup_program_shaders(program, shaders);
         return false;
     }
 
     bool map_success = program->mapIO();
-    output_error(program->getInfoLog(), "MapIO failed:");
-    output_error(program->getInfoDebugLog(), "MapIO failed:");
+    output_error(program->getInfoLog(), "MapIO failed:", args.error_output);
+    output_error(program->getInfoDebugLog(), "MapIO failed:", args.error_output);
     if (!map_success) {
         cleanup_program_shaders(program, shaders);
         return false;

@@ -3,6 +3,7 @@
 #include "lua.hpp"
 
 #include <string>
+#include <filesystem>
 
 #include "LuaBridge.h"
 #include "Out.h"
@@ -58,12 +59,27 @@ public:
     // Fills a Texture with the editor built-in default skybox cubemap.
     static void setDefaultSkyTexture(Texture& outTexture);
 
-    // Forks a built-in shader (Mesh/UI/Points/Lines/Sky) into the project's shaders/
-    // folder, copying the engine <type>.vert/.frag sources (their #includes still
-    // resolve to the engine). Picks a unique name from desiredName. Returns the
-    // project-relative base path with no extension (e.g. "shaders/myMesh"), or "" on
-    // failure.
-    static std::string forkShader(Project* project, ShaderType shaderType, const std::string& desiredName);
+    // Resolved plan for a built-in shader fork: the project-relative base path (no
+    // extension), the absolute .vert/.frag target paths, and the source contents to
+    // write. Computed without touching the filesystem so it can drive an undoable command.
+    struct ShaderForkPlan {
+        bool valid = false;
+        std::string base;                  // e.g. "shaders/myMesh"
+        std::filesystem::path vertPath;    // absolute
+        std::filesystem::path fragPath;    // absolute
+        std::string vertContent;
+        std::string fragContent;
+    };
+
+    // Plans a built-in shader fork (Mesh/UI/Points/Lines/Sky) without writing anything:
+    // resolves a unique base name from desiredName and the .vert/.frag targets + engine
+    // sources (their #includes still resolve to the engine). Returns plan.valid == false
+    // on failure.
+    static ShaderForkPlan prepareShaderFork(Project* project, ShaderType shaderType, const std::string& desiredName);
+
+    // Writes the planned fork's .vert/.frag files to disk (creating the shaders dir).
+    // Returns false on failure.
+    static bool writeShaderFork(const ShaderForkPlan& plan);
 
     // Builds a MultiPropertyCmd that removes tile at tileIndex from a TilemapComponent.
     // Returns the command (caller must add it to CommandHandle) or nullptr if invalid.

@@ -9,6 +9,7 @@
 #include "thread/ThreadPoolManager.h"
 
 #include "pool/ShaderPool.h"
+#include "util/Util.h"
 
 #include <cstring>
 #include <cstdint>
@@ -501,8 +502,8 @@ void editor::ShaderBuilder::setupBuildArgs(shadercompiler::args_t& args, ShaderK
         throw std::runtime_error("Custom shader requested without a project");
     }
 
-    std::string base = ShaderPool::getCustomShaderName(customId);
-    if (base.empty()) {
+    std::string customShader = ShaderPool::getCustomShaderName(customId);
+    if (customShader.empty()) {
         throw std::runtime_error("Unknown custom shader id");
     }
 
@@ -516,8 +517,10 @@ void editor::ShaderBuilder::setupBuildArgs(shadercompiler::args_t& args, ShaderK
         return ss.str();
     };
 
-    const std::string vertKey = base + ".vert";
-    const std::string fragKey = base + ".frag";
+    // The .vert/.frag entry points may share a base name or live in separate files.
+    const editor::Util::CustomShaderPaths customPaths = editor::Util::resolveCustomShaderPaths(customShader);
+    const std::string vertKey = customPaths.vert;
+    const std::string fragKey = customPaths.frag;
     args.fileBuffers[vertKey] = readFile(vertKey);
     args.fileBuffers[fragKey] = readFile(fragKey);
     args.vert_file = vertKey;
@@ -578,6 +581,11 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
     args.lang = shadercompiler::LANG_GLSL;
     args.version = 410;
 
+    // Capture the GLSL compiler log so failures surface in the editor output window
+    // (otherwise the details only reach stderr/app output).
+    std::string compileLog;
+    args.error_output = &compileLog;
+
     try {
         setupBuildArgs(args, shaderKey, project);
     } catch (const std::exception&) {
@@ -612,10 +620,11 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
     std::vector<shadercompiler::spirv_t> spirvvec;
     spirvvec.resize(inputs.size());
     if (!shadercompiler::compile_to_spirv(spirvvec, inputs, args)) {
-        //printf("Error compiling to SPIRV\n");
         if (trackProgress) {
             ResourceProgress::failBuild(shaderKey);
         }
+        Out::error("Shader %s failed to compile:\n%s", getShaderDisplayName(shaderKey).c_str(),
+                   compileLog.empty() ? "(no compiler output)" : compileLog.c_str());
         throw std::runtime_error("Error compiling to SPIRV");
     }
 
@@ -629,10 +638,11 @@ ShaderData editor::ShaderBuilder::buildShaderInternal(ShaderKey shaderKey, Proje
     std::vector<shadercompiler::spirvcross_t> spirvcrossvec;
     spirvcrossvec.resize(inputs.size());
     if (!shadercompiler::compile_to_lang(spirvcrossvec, spirvvec, inputs, args)) {
-        //printf("Error cross-compiling\n");
         if (trackProgress) {
             ResourceProgress::failBuild(shaderKey);
         }
+        Out::error("Shader %s failed to cross-compile:\n%s", getShaderDisplayName(shaderKey).c_str(),
+                   compileLog.empty() ? "(no compiler output)" : compileLog.c_str());
         throw std::runtime_error("Error cross-compiling");
     }
 
@@ -709,14 +719,16 @@ bool editor::ShaderBuilder::isCustomCacheStale(ShaderKey shaderKey, Project* pro
     if (ec)
         return true;
 
-    const std::string base = ShaderPool::getCustomShaderName(ShaderPool::getCustomIdFromKey(shaderKey));
-    if (base.empty())
+    const std::string customShader = ShaderPool::getCustomShaderName(ShaderPool::getCustomIdFromKey(shaderKey));
+    if (customShader.empty())
         return true;
 
     // Stale if either forked source file is newer than the cached .sdat (so saving an
-    // edit forces a rebuild + re-cache on the next get()).
-    for (const char* ext : {".vert", ".frag"}) {
-        const std::filesystem::path src = project->getProjectPath() / (base + ext);
+    // edit forces a rebuild + re-cache on the next get()). Handles both the shared-base
+    // and separate-file forms.
+    const editor::Util::CustomShaderPaths customPaths = editor::Util::resolveCustomShaderPaths(customShader);
+    for (const std::string& rel : {customPaths.vert, customPaths.frag}) {
+        const std::filesystem::path src = project->getProjectPath() / rel;
         std::error_code srcEc;
         const auto srcTime = std::filesystem::last_write_time(src, srcEc);
         if (!srcEc && srcTime > cacheTime)

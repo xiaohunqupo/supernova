@@ -14,6 +14,7 @@
 #include <string>
 #include <mutex>
 #include <cctype>
+#include <set>
 
 #ifdef SOKOL_GLCORE
 #include "glsl410.h"
@@ -99,6 +100,14 @@ shaders_t& ShaderPool::getMap(){
 std::vector<std::string>& ShaderPool::getMissingShaders(){
     static std::vector<std::string>* missingshaders = new std::vector<std::string>();
     return *missingshaders;
+};
+
+// Keys whose last build attempt failed. The editor pool stops re-invoking the builder
+// for these (the compile is expensive and spams errors every frame) until the failure is
+// cleared by remove()/destroyCustomShaders() — i.e. after the shader source changes.
+static std::set<ShaderKey>& failedShaders(){
+    static std::set<ShaderKey>* set = new std::set<ShaderKey>();
+    return *set;
 };
 
 // Custom shader registry: index = customId-1, value = project-relative base path.
@@ -467,13 +476,20 @@ std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t pr
 
     if (!shared->isCreated()) {
         if (shaderBuilderFn) {
+            // A previous attempt failed to compile: don't re-invoke the builder every
+            // frame (it recompiles and spams errors). Retried once the failure is cleared.
+            if (failedShaders().count(shaderKey)) {
+                return shared;
+            }
             ShaderBuildResult result = shaderBuilderFn(shaderKey);
             if (result.state == ResourceLoadState::Finished) {
                 shared->createShader(result.data);
+                failedShaders().erase(shaderKey);
             } else if (result.state == ResourceLoadState::Loading) {
                 // Shader is still building, do nothing
             } else if (result.state == ResourceLoadState::Failed) {
-                Log::error("Shader build failed");
+                failedShaders().insert(shaderKey);
+                Log::error("Shader build failed: %s", getShaderStr(shaderType, properties, customId).c_str());
             }
         } else {
             ShaderData tempShaderData;
@@ -498,8 +514,13 @@ std::shared_ptr<ShaderRender> ShaderPool::get(ShaderType shaderType, uint32_t pr
     return shared;
 }
 
+bool ShaderPool::isShaderBuildFailed(ShaderType shaderType, uint32_t properties, uint16_t customId){
+    return failedShaders().count(getShaderKey(shaderType, properties, customId)) > 0;
+}
+
 void ShaderPool::remove(ShaderType shaderType, uint32_t properties, uint16_t customId){
     ShaderKey shaderKey = getShaderKey(shaderType, properties, customId);
+    failedShaders().erase(shaderKey);
     if (getMap().count(shaderKey)){
         auto& shared = getMap()[shaderKey];
         if (shared.use_count() <= 1){
@@ -518,6 +539,14 @@ void ShaderPool::destroyCustomShaders(){
     for (auto& entry : getMap()){
         if (getCustomIdFromKey(entry.first) != 0 && entry.second && entry.second->isCreated()){
             entry.second->destroyShader();
+        }
+    }
+    // Forget custom-shader build failures so an edited source is retried on the next get().
+    for (auto it = failedShaders().begin(); it != failedShaders().end();){
+        if (getCustomIdFromKey(*it) != 0){
+            it = failedShaders().erase(it);
+        } else {
+            ++it;
         }
     }
 }

@@ -263,6 +263,8 @@ ProviderResponse parseChatCompletionsBody(const std::string& body) {
         return result;
     }
 
+    result.truncated = root["choices"][0].value("finish_reason", "") == "length";
+
     const Json& message = root["choices"][0].value("message", Json::object());
     if (message.contains("content") && message["content"].is_string()) {
         result.text = message["content"].get<std::string>();
@@ -356,6 +358,8 @@ ProviderResponse parseAnthropicBody(const std::string& body) {
     Json root;
     ProviderResponse result = parseErrorOrBody(body, root);
     if (!result.error.empty()) return result;
+
+    result.truncated = root.value("stop_reason", "") == "max_tokens";
 
     if (!root.contains("content") || !root["content"].is_array()) {
         return result;
@@ -490,6 +494,8 @@ ProviderResponse parseGeminiBody(const std::string& body) {
     if (!root.contains("candidates") || !root["candidates"].is_array() || root["candidates"].empty()) {
         return result;
     }
+    result.truncated = root["candidates"][0].value("finishReason", "") == "MAX_TOKENS";
+
     const Json& parts = root["candidates"][0].value("content", Json::object()).value("parts", Json::array());
     if (!parts.is_array()) {
         return result;

@@ -42,6 +42,11 @@ namespace doriax{
         static std::shared_ptr<ShaderRender> get(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
         static void remove(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
 
+        // True when the last get() build attempt for this shader failed to compile. The
+        // pool stops re-invoking the (expensive, error-spamming) builder for it until the
+        // failure is cleared by remove()/destroyCustomShaders() — i.e. after a source edit.
+        static bool isShaderBuildFailed(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
+
         static std::string getShaderStr(ShaderType shaderType, uint32_t properties, uint16_t customId = 0);
         static std::string getShaderTypeName(ShaderType shaderType, bool lowerCase = false);
         static int getShaderPropertyCount(ShaderType shaderType);

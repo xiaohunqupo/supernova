@@ -295,6 +295,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/command/type/CreateEntityBundleCmd.cpp
     ${EDITOR_DIR}/command/type/ComponentToBundleLocalCmd.cpp
     ${EDITOR_DIR}/command/type/ComponentToBundleSharedCmd.cpp
+    ${EDITOR_DIR}/command/type/ForkShaderCmd.cpp
 
     ${IMGUI_SOURCES}
     ${BACKEND_SOURCES}

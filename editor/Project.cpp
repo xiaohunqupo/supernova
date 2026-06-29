@@ -933,6 +933,110 @@ void editor::Project::cleanupModelFilePath(const std::filesystem::path& deletedP
     }
 }
 
+void editor::Project::applyCustomShaderPathChange(const std::function<bool(std::string&)>& transform) {
+    // customShader lives on every renderable component type; visit each array in a registry,
+    // apply the transform, and flag a shader reload on the entities that changed.
+    auto applyToRegistry = [&](EntityRegistry* registry) -> bool {
+        bool changed = false;
+        auto applyToArray = [&](auto arr) {
+            for (size_t i = 0; i < arr->size(); ++i) {
+                auto& comp = arr->getComponentFromIndex(i);
+                if (comp.customShader.empty())
+                    continue;
+                if (transform(comp.customShader)) {
+                    Catalog::updateEntity(registry, arr->getEntity(i), UpdateFlags_Shader_Reload);
+                    changed = true;
+                }
+            }
+        };
+        applyToArray(registry->getComponentArray<MeshComponent>());
+        applyToArray(registry->getComponentArray<UIComponent>());
+        applyToArray(registry->getComponentArray<PointsComponent>());
+        applyToArray(registry->getComponentArray<LinesComponent>());
+        applyToArray(registry->getComponentArray<SkyComponent>());
+        return changed;
+    };
+
+    for (auto& sceneProject : scenes) {
+        if (!sceneProject.scene) {
+            continue;
+        }
+        if (applyToRegistry(sceneProject.scene)) {
+            sceneProject.isModified = true;
+            sceneProject.needUpdateRender = true;
+        }
+    }
+
+    for (auto& [bundlePath, bundle] : entityBundles) {
+        if (!bundle.registry) {
+            continue;
+        }
+        if (applyToRegistry(bundle.registry.get())) {
+            bundle.isModified = true;
+            saveEntityBundleToDisk(bundlePath);
+        }
+    }
+}
+
+void editor::Project::remapShaderFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath) {
+    if (projectPath.empty()) {
+        return;
+    }
+
+    fs::path oldRelative = normalizeToProjectRelative(oldPath);
+    fs::path newRelative = normalizeToProjectRelative(newPath);
+
+    if (oldRelative.empty() || newRelative.empty()) {
+        return;
+    }
+
+    // customShader resolves to a .vert and a .frag entry point; remap each path against the
+    // rename and rebuild the value. A single-file rename of a shared-base pair naturally
+    // becomes the separate-file form; a directory rename remaps both via child match.
+    applyCustomShaderPathChange([&](std::string& customShader) -> bool {
+        Util::CustomShaderPaths paths = Util::resolveCustomShaderPaths(customShader);
+        std::string newVert = paths.vert;
+        std::string newFrag = paths.frag;
+        bool changed = false;
+        std::string updated;
+        if (remapRelativeString(oldRelative, newRelative, paths.vert, updated)) {
+            newVert = updated;
+            changed = true;
+        }
+        if (remapRelativeString(oldRelative, newRelative, paths.frag, updated)) {
+            newFrag = updated;
+            changed = true;
+        }
+        if (changed) {
+            customShader = Util::makeCustomShader(newVert, newFrag);
+        }
+        return changed;
+    });
+}
+
+void editor::Project::cleanupShaderFilePath(const std::filesystem::path& deletedPath) {
+    if (projectPath.empty()) {
+        return;
+    }
+
+    fs::path deletedRelative = normalizeToProjectRelative(deletedPath);
+    if (deletedRelative.empty()) {
+        return;
+    }
+
+    // A custom shader needs both its .vert and .frag; deleting either entry point (or the
+    // containing folder) leaves the reference dangling, so reset it to built-in. Match the
+    // deleted path against each resolved entry point (handles shared-base and separate forms).
+    applyCustomShaderPathChange([&](std::string& customShader) -> bool {
+        Util::CustomShaderPaths paths = Util::resolveCustomShaderPaths(customShader);
+        if (matchesRelativeString(deletedRelative, paths.vert) || matchesRelativeString(deletedRelative, paths.frag)) {
+            customShader.clear();
+            return true;
+        }
+        return false;
+    });
+}
+
 void editor::Project::refreshLinkedMaterials(bool force) {
     if (materialFileLinks.empty()) {
         return;

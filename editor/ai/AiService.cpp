@@ -239,7 +239,9 @@ std::string AiService::buildSystemPrompt() const {
         << "For mesh/cube behavior use cpp_subclass inheriting Mesh (or Shape) and call setColor() on this; do not use ScriptBase as if it had mesh APIs or onInit().\n"
         << "cpp_script_class inherits ScriptBase for general logic; register onUpdate with REGISTER_ENGINE_EVENT in the constructor and unregister with UNREGISTER_ENGINE_EVENT in the destructor.\n"
         << "For component/UI events (button press, click, scrollbar change) use REGISTER_COMPONENT_EVENT(Component, event, method) or shortcuts REGISTER_UI_EVENT/REGISTER_BUTTON_EVENT/REGISTER_SCROLLBAR_EVENT/REGISTER_PANEL_EVENT in the constructor, paired with UNREGISTER_* in the destructor. These macros and DPROPERTY are C++ script macros (not Lua bindings); find them with search_engine_api.\n"
-        << "To print or log from scripts use the Log class: C++ Log::print(\"pos %f %f %f\", p.x, p.y, p.z) with #include \"Log.h\" (Log::warn/Log::error for severity); Lua Log.print(\"pos \" .. tostring(p)). Engine has no log method; never use Engine::log, printf, std::cout, or bare print().\n";
+        << "To print or log from scripts use the Log class: C++ Log::print(\"pos %f %f %f\", p.x, p.y, p.z) with #include \"Log.h\" (Log::warn/Log::error for severity); Lua Log.print(\"pos \" .. tostring(p)). Engine has no log method; never use Engine::log, printf, std::cout, or bare print().\n"
+        << "Custom shaders are per-component on Mesh/UI/Points/Lines/Sky via the customShader property. To customize, call fork_shader (it copies the built-in <type>.vert/.frag into the project shaders folder and sets customShader in one undoable step). Never set customShader by hand to files that do not exist; the value is a base path with no extension (vert=base.vert, frag=base.frag) or two explicit paths joined by '|' (\"a.vert|b.frag\") when the entry points have different names. Both a .vert and a .frag are always required. Clear customShader (empty string) to reset to the built-in shader.\n"
+        << "The forked .vert/.frag are complete, compiling engine shaders with a strict structure: a #version line, #include \"includes/...\" (resolved against the engine library), #ifdef variant guards, uniform blocks, in/out varyings, and a specific fragment output variable. Editing them with write_shader_file REQUIRES first calling read_resource_file on the forked file, then making minimal targeted changes that PRESERVE the #version, #include lines, uniform blocks, in/out declarations, and the existing output variable name. Only change the shading math (usually near the end of main()). Never rewrite a shader from scratch, drop the #version/#include lines, or invent uniform, sampler, or output names — that produces compile errors (e.g. missing precision qualifier / wrong #version). If a custom shader fails to compile, the object falls back to the built-in shader and the error appears in the output window; read it, re-read the forked source, and fix minimally.\n";
     return prompt.str();
 }
 
@@ -319,6 +321,13 @@ void AiService::runProviderRequest(ProviderRequest request) {
         std::lock_guard<std::mutex> lock(mutex);
         if (!parsed.error.empty()) {
             appendAssistantMessageLocked(parsed.error);
+        } else if (parsed.toolCalls.empty() && parsed.truncated) {
+            // A truncated reply usually dropped an incomplete tool call (e.g. writing a
+            // whole file) mid-JSON, so it arrives with no usable tool call.
+            appendAssistantMessageLocked(
+                "The response hit the max output token limit (" + std::to_string(request.settings.maxOutputTokens) +
+                ") and was cut off before completing. Increase \"Max output tokens\" in AI settings (gear icon) and try again - "
+                "writing a whole file such as a shader needs a higher limit.");
         } else if (parsed.text.empty() && parsed.toolCalls.empty()) {
             appendAssistantMessageLocked("The provider returned no text or tool calls.");
         } else {

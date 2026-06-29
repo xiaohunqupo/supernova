@@ -249,6 +249,11 @@ namespace doriax::editor{
         bool remapScriptPathsInRegistry(EntityRegistry* registry, const fs::path& oldRelative,
                         const fs::path& newRelative);
         bool cleanupScriptPathsInRegistry(EntityRegistry* registry, const fs::path& deletedRelative);
+        // Applies a transform to the customShader of every renderable component (Mesh/UI/
+        // Points/Lines/Sky) across all scenes and entity bundles, flagging shader reloads
+        // and marking affected scenes/bundles modified. The transform mutates the value in
+        // place and returns whether it changed.
+        void applyCustomShaderPathChange(const std::function<bool(std::string&)>& transform);
         bool removeMissingChildSceneReferences(SceneProject& sceneProject);
         bool detachChildSceneFromParents(uint32_t childSceneId, const std::set<uint32_t>& skippedSceneIds);
 
@@ -348,11 +353,13 @@ namespace doriax::editor{
         void remapEntityBundleFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
         void remapScriptFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
         void remapModelFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
+        void remapShaderFilePath(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
         void cleanupMaterialFilePath(const std::filesystem::path& deletedPath);
         void cleanupSceneFilePath(const std::filesystem::path& deletedPath);
         void cleanupEntityBundleFilePath(const std::filesystem::path& deletedPath);
         void cleanupScriptFilePath(const std::filesystem::path& deletedPath);
         void cleanupModelFilePath(const std::filesystem::path& deletedPath);
+        void cleanupShaderFilePath(const std::filesystem::path& deletedPath);
 
         //=== end File path remapping ===
 

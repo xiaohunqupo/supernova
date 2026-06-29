@@ -35,6 +35,9 @@ bool editor::RenameFileCmd::execute(){
                 if (isDir || Util::isModelFile(extension)) {
                     project->remapModelFilePath(sourceFs, destFs);
                 }
+                if (isDir || Util::isShaderFile(extension)) {
+                    project->remapShaderFilePath(sourceFs, destFs);
+                }
             }
         }
     } catch (const fs::filesystem_error& e) {
@@ -68,6 +71,9 @@ void editor::RenameFileCmd::undo(){
                 }
                 if (isDir || Util::isModelFile(extension)) {
                     project->remapModelFilePath(sourceFs, destFs);
+                }
+                if (isDir || Util::isShaderFile(extension)) {
+                    project->remapShaderFilePath(sourceFs, destFs);
                 }
             }
         }

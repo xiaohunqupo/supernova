@@ -83,6 +83,10 @@ namespace shadercompiler{
         bool list_includes;
 
         bool optimization;
+
+        // Optional sink: when set, compiler error/info logs are appended here (in addition
+        // to stderr) so the host can surface them (e.g. in the editor output window).
+        std::string* error_output = nullptr;
     };
 
     enum stage_type_t{

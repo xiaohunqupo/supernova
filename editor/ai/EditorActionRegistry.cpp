@@ -688,6 +688,27 @@ const std::vector<ToolDefinition>& cachedTools() {
             false
         },
         {
+            "fork_shader",
+            "Fork a built-in shader for a renderable component (Mesh/UI/Points/Lines/Sky) into the project's shaders folder and point its customShader at the fork, as one undoable step. Creates <name>.vert and <name>.frag (their #include \"includes/...\" still resolve against the engine library) which you then edit with write_shader_file. This is the correct way to start a custom shader; do not set customShader to files that do not exist.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Renderable component name (MeshComponent, UIComponent, PointsComponent, LinesComponent, SkyComponent). Omit to auto-detect the entity's renderable component")}
+            }),
+            false
+        },
+        {
+            "write_shader_file",
+            "Write a custom shader source file (.vert, .frag, or a shared .glsl include) under the project shaders folder. Use after fork_shader to edit the forked entry points, or to add a .glsl include. #include \"includes/...\" still resolves against the engine shader library.",
+            objectSchema({
+                {"path", stringSchema("Existing or new safe project-relative path. Allowed extensions: .vert, .frag, .glsl")},
+                {"content", stringSchema("Complete replacement file contents")},
+                {"reason", stringSchema("Short reason shown in the approval preview")}
+            }, {"path", "content"}),
+            false
+        },
+        {
             "search_curated_assets",
             "Search curated model sources. Sketchfab search is metadata-only without user OAuth; Poly Haven API requires a unique User-Agent and may need licensing for commercial API use.",
             objectSchema({
@@ -1159,6 +1180,24 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
     if (name == "export_project" || name == "generate_shaders") {
         return hasString(arguments, "target_dir") ? ok() : fail(name + " requires target_dir.");
     }
+    if (name == "fork_shader") {
+        return hasEntitySelector(arguments) ? ok() : fail("fork_shader requires entity_id or entity_name.");
+    }
+    if (name == "write_shader_file") {
+        if (!hasString(arguments, "path")) return fail("write_shader_file requires path.");
+        if (!arguments.contains("content") || !arguments["content"].is_string()) {
+            return fail("write_shader_file requires string content.");
+        }
+        fs::path path = fs::path(arguments["path"].get<std::string>()).lexically_normal();
+        if (!PathUtils::isSafeRelativePath(path)) {
+            return fail("path must be a safe project-relative path.");
+        }
+        const std::string ext = path.extension().string();
+        if (ext != ".vert" && ext != ".frag" && ext != ".glsl") {
+            return fail("write_shader_file only supports .vert, .frag, and .glsl files.");
+        }
+        return ok();
+    }
     if (name == "create_terrain_heightmap") {
         std::string mode = arguments.value("mode", "middle");
         if (mode != "flat" && mode != "middle" && mode != "random_noise" && mode != "fractal_noise") {
@@ -1430,6 +1469,18 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "generate_shaders") {
         return "Generate shaders to " + arguments.value("target_dir", "");
+    }
+    if (name == "fork_shader") {
+        if (arguments.contains("entity_id")) {
+            return "Fork shader for entity " + std::to_string(arguments.value("entity_id", 0));
+        }
+        if (arguments.contains("entity_name")) {
+            return "Fork shader for \"" + arguments.value("entity_name", "") + "\"";
+        }
+        return "Fork custom shader";
+    }
+    if (name == "write_shader_file") {
+        return "Write shader " + arguments.value("path", "");
     }
     if (name == "create_terrain_heightmap") {
         out << "Create " << arguments.value("mode", "middle")

@@ -74,6 +74,7 @@ bool editor::DeleteFileCmd::execute(){
             project->cleanupEntityBundleFilePath(deletedPath);
             project->cleanupScriptFilePath(deletedPath);
             project->cleanupModelFilePath(deletedPath);
+            project->cleanupShaderFilePath(deletedPath);
         }
     }
 

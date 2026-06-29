@@ -89,9 +89,10 @@ void editor::ProjectUtils::setDefaultSkyTexture(Texture& outTexture) {
     outTexture.setCubeDatas("editor:resources:default_sky", skyFront, skyBack, skyLeft, skyRight, skyTop, skyBottom);
 }
 
-std::string editor::ProjectUtils::forkShader(Project* project, ShaderType shaderType, const std::string& desiredName) {
+editor::ProjectUtils::ShaderForkPlan editor::ProjectUtils::prepareShaderFork(Project* project, ShaderType shaderType, const std::string& desiredName) {
+    ShaderForkPlan plan;
     if (!project)
-        return "";
+        return plan;
 
     // Built-in entry-point sources per type (mirrors ShaderBuilder::setupShaderArgs).
     std::string typeFile;
@@ -103,24 +104,18 @@ std::string editor::ProjectUtils::forkShader(Project* project, ShaderType shader
         case ShaderType::SKYBOX: typeFile = "sky";    break;
         default:
             Out::error("Shader type cannot be forked");
-            return "";
+            return plan;
     }
 
     auto vertIt = editor::shaderMap.find(typeFile + ".vert");
     auto fragIt = editor::shaderMap.find(typeFile + ".frag");
     if (vertIt == editor::shaderMap.end() || fragIt == editor::shaderMap.end()) {
         Out::error("Built-in shader source not found: %s", typeFile.c_str());
-        return "";
+        return plan;
     }
 
     const std::filesystem::path shadersRel = project->getShaderSourcesDir();
     const std::filesystem::path shadersDir = project->getProjectPath() / shadersRel;
-    std::error_code ec;
-    std::filesystem::create_directories(shadersDir, ec);
-    if (ec) {
-        Out::error("Could not create shaders directory: %s", shadersDir.string().c_str());
-        return "";
-    }
 
     // Sanitize the requested name into a filesystem-safe token.
     std::string baseName;
@@ -139,6 +134,26 @@ std::string editor::ProjectUtils::forkShader(Project* project, ShaderType shader
         name = baseName + std::to_string(suffix++);
     }
 
+    plan.base = (shadersRel / name).generic_string();
+    plan.vertPath = shadersDir / (name + ".vert");
+    plan.fragPath = shadersDir / (name + ".frag");
+    plan.vertContent = vertIt->second;
+    plan.fragContent = fragIt->second;
+    plan.valid = true;
+    return plan;
+}
+
+bool editor::ProjectUtils::writeShaderFork(const ShaderForkPlan& plan) {
+    if (!plan.valid)
+        return false;
+
+    std::error_code ec;
+    std::filesystem::create_directories(plan.vertPath.parent_path(), ec);
+    if (ec) {
+        Out::error("Could not create shaders directory: %s", plan.vertPath.parent_path().string().c_str());
+        return false;
+    }
+
     auto writeFile = [](const std::filesystem::path& path, const std::string& content) -> bool {
         std::ofstream f(path, std::ios::trunc);
         if (!f.is_open())
@@ -147,13 +162,13 @@ std::string editor::ProjectUtils::forkShader(Project* project, ShaderType shader
         return true;
     };
 
-    if (!writeFile(shadersDir / (name + ".vert"), vertIt->second) ||
-        !writeFile(shadersDir / (name + ".frag"), fragIt->second)) {
+    if (!writeFile(plan.vertPath, plan.vertContent) ||
+        !writeFile(plan.fragPath, plan.fragContent)) {
         Out::error("Could not write forked shader files");
-        return "";
+        return false;
     }
 
-    return (shadersRel / name).generic_string();
+    return true;
 }
 
 void editor::ProjectUtils::collectModelEntities(Scene* scene, const ModelComponent& model, std::vector<Entity>& out){

@@ -265,8 +265,11 @@ namespace doriax::editor{
         void setParticleColorGradient(ComponentType cpType, SceneProject* sceneProject, Entity entity, const ParticleColorGradient& gradient);
         void drawParticleFrameList(ComponentType cpType, const std::string& propertyId, const std::string& tableId, SceneProject* sceneProject, const std::vector<Entity>& entities);
         // Shared "Shader" row for components that support forking a built-in shader
-        // (Mesh/UI/Points/Lines/Sky): Customize / Edit / Reset + .vert/.frag drag-drop.
+        // (Mesh/UI/Points/Lines/Sky): fork, edit files, open .vert/.frag, reset to built-in,
+        // plus .vert/.frag drag-drop. The .vert/.frag entry points may share a base name or
+        // live in separate files (see Util::resolveCustomShaderPaths).
         void drawCustomShaderRow(ComponentType cpType, ShaderType shaderType, SceneProject* sceneProject, std::vector<Entity> entities);
+        void drawShaderFilesPopup(ComponentType cpType, SceneProject* sceneProject, Entity shaderEntity, const std::string& currentVert, const std::string& currentFrag);
         void drawTransform(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawModelComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

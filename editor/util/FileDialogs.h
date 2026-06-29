@@ -14,7 +14,8 @@ namespace doriax::editor{
         FILE_DIALOG_IMAGE = 1 << 0,
         FILE_DIALOG_FONT = 1 << 1,
         FILE_DIALOG_MODEL = 1 << 2,
-        FILE_DIALOG_AUDIO = 1 << 3
+        FILE_DIALOG_AUDIO = 1 << 3,
+        FILE_DIALOG_SHADER = 1 << 4
     };
 
     class FileDialogs{
@@ -48,6 +49,7 @@ namespace doriax::editor{
                 std::string fontExtensions;
                 std::string modelExtensions;
                 std::string audioExtensions;
+                std::string shaderExtensions;
                 std::vector<nfdfilteritem_t> filterItems;
                 if (filterFlags & FILE_DIALOG_IMAGE) {
                     imageExtensions = Util::getImageExtensions();
@@ -64,6 +66,10 @@ namespace doriax::editor{
                 if (filterFlags & FILE_DIALOG_AUDIO) {
                     audioExtensions = Util::getAudioExtensions();
                     filterItems.push_back({ "Sound files", audioExtensions.c_str() });
+                }
+                if (filterFlags & FILE_DIALOG_SHADER) {
+                    shaderExtensions = Util::getShaderExtensions();
+                    filterItems.push_back({ "Shader files", shaderExtensions.c_str() });
                 }
 
                 if (!filterItems.empty()) {

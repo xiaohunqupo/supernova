@@ -36,7 +36,10 @@ struct Settings {
     std::string model = "gpt-4.1";
     std::string customEndpoint;
     ApprovalMode approvalMode = ApprovalMode::PreviewThenApprove;
-    int maxOutputTokens = 1200;
+    // Large enough to write a whole file (scripts, forked shaders) in one tool call; a low
+    // cap truncates the call mid-JSON and the partial call is dropped (looks like an empty
+    // reply). Output tokens are only billed when generated, so a high cap is safe.
+    int maxOutputTokens = 8192;
 };
 
 struct ToolCall {
@@ -78,6 +81,9 @@ struct ProviderResponse {
     std::string text;
     std::vector<ToolCall> toolCalls;
     std::string error;
+    // True when the model stopped because it hit the max output token limit (finish_reason
+    // "length" / stop_reason "max_tokens" / "MAX_TOKENS"); the reply is likely incomplete.
+    bool truncated = false;
 };
 
 struct HttpRequest {

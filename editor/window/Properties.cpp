@@ -21,6 +21,7 @@
 #include "command/type/RemoveComponentCmd.h"
 #include "command/type/ComponentToBundleSharedCmd.h"
 #include "command/type/ComponentToBundleLocalCmd.h"
+#include "command/type/ForkShaderCmd.h"
 #include "command/type/ScenePropertyCmd.h"
 #include "render/SceneRender2D.h"
 #include "window/Structure.h"
@@ -4576,6 +4577,15 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
     if (!shaderRef)
         return;
     const std::string currentShader = *shaderRef;
+    const std::filesystem::path projectPath = project->getProjectPath();
+
+    // The .vert/.frag entry points either share a base name (stored as "shaders/mesh")
+    // or live in separate files (stored as "shaders/mesh.vert|shaders/other.frag").
+    const Util::CustomShaderPaths paths = Util::resolveCustomShaderPaths(currentShader);
+    const bool hasCustom = !currentShader.empty();
+    const bool separate = Util::isSeparateCustomShader(currentShader);
+    const bool vertExists = hasCustom && std::filesystem::exists(projectPath / paths.vert);
+    const bool fragExists = hasCustom && std::filesystem::exists(projectPath / paths.frag);
 
     beginTable(cpType, getLabelSize("receive shadows"), "custom_shader_table");
     propertyHeader("Shader");
@@ -4584,51 +4594,212 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
         Command* shaderCmd = new PropertyCmd<std::string>(project, sceneProject->id, shaderEntity, cpType, "customShader", value);
         CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
     };
-    auto openInEditor = [&](const std::string& base) {
-        if (CodeEditor* codeEditor = Backend::getApp().getCodeEditor()) {
-            codeEditor->openFile((project->getProjectPath() / (base + ".frag")).string(), true);
-            codeEditor->openFile((project->getProjectPath() / (base + ".vert")).string(), true);
+    auto openRelative = [&](const std::string& rel) {
+        if (CodeEditor* codeEditor = Backend::getApp().getCodeEditor())
+            codeEditor->openFile((projectPath / rel).string(), true);
+    };
+    // Both .vert and .frag (sharing a base name) are required; store the base path.
+    auto useExistingBase = [&](const std::string& base) {
+        bool hasVert = std::filesystem::exists(projectPath / (base + ".vert"));
+        bool hasFrag = std::filesystem::exists(projectPath / (base + ".frag"));
+        if (!hasVert || !hasFrag) {
+            Backend::getApp().registerAlert("Error", "A custom shader needs both a .vert and a .frag file with the same base name.");
+            return;
         }
+        setCustomShader(base);
     };
 
-    ImGui::SetNextItemWidth(-1);
-    if (currentShader.empty()) {
+    if (!hasCustom)
         ImGui::TextDisabled("Built-in");
-        if (ImGui::Button("Customize##fork_custom_shader")) {
-            std::string base = ProjectUtils::forkShader(project, shaderType, sceneProject->scene->getEntityName(shaderEntity));
-            if (!base.empty()) {
-                setCustomShader(base);
-                openInEditor(base);
-            }
-        }
-        ImGui::SetItemTooltip("Fork the built-in shader into this project and edit it");
-    } else {
+    else if (separate)
+        ImGui::TextWrapped("%s, %s", paths.vert.c_str(), paths.frag.c_str());
+    else
         ImGui::TextWrapped("%s", currentShader.c_str());
-        if (ImGui::Button("Edit##edit_custom_shader")) {
-            openInEditor(currentShader);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Reset to Built-in##reset_custom_shader")) {
-            setCustomShader("");
+
+    // Icon row mirrors the ScriptComponent open-file buttons: fork, edit files,
+    // open .vert, open .frag, reset to built-in.
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x / 3.0, ImGui::GetStyle().FramePadding.y / 2.0));
+
+    ImGui::BeginDisabled(hasCustom);
+    if (ImGui::Button(ICON_FA_CODE_FORK "##fork_custom_shader")) {
+        // Fork is a single undoable step (writes .vert/.frag + sets customShader);
+        // undo deletes the forked files.
+        ForkShaderCmd* forkCmd = new ForkShaderCmd(project, sceneProject->id, shaderEntity, cpType, shaderType, sceneProject->scene->getEntityName(shaderEntity));
+        if (forkCmd->isValid()) {
+            std::string base = forkCmd->getBase();
+            CommandHandle::get(sceneProject->id)->addCommand(forkCmd);
+            openRelative(base + ".vert");
+            openRelative(base + ".frag");
+        } else {
+            delete forkCmd;
         }
     }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Fork the built-in shader into this project");
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_PEN_TO_SQUARE "##edit_custom_shader"))
+        ImGui::OpenPopup("Edit Shader Files");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Pick the .vert and .frag files (they can have different names)");
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!vertExists);
+    if (ImGui::Button(ICON_FA_FILE_CODE "##open_vert_shader"))
+        openRelative(paths.vert);
+    if (ImGui::IsItemHovered()) {
+        if (vertExists)
+            ImGui::SetTooltip("Open %s", paths.vert.c_str());
+        else if (hasCustom)
+            ImGui::SetTooltip("Vertex shader file not found");
+        else
+            ImGui::SetTooltip("Open vertex shader");
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!fragExists);
+    if (ImGui::Button(ICON_FA_FILE_LINES "##open_frag_shader"))
+        openRelative(paths.frag);
+    if (ImGui::IsItemHovered()) {
+        if (fragExists)
+            ImGui::SetTooltip("Open %s", paths.frag.c_str());
+        else if (hasCustom)
+            ImGui::SetTooltip("Fragment shader file not found");
+        else
+            ImGui::SetTooltip("Open fragment shader");
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!hasCustom);
+    if (ImGui::Button(ICON_FA_XMARK "##reset_custom_shader"))
+        setCustomShader("");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Reset to the built-in shader");
+    ImGui::EndDisabled();
+
+    ImGui::PopStyleVar();
+
+    drawShaderFilesPopup(cpType, sceneProject, shaderEntity, paths.vert, paths.frag);
 
     // Drag-drop an existing .vert/.frag from the resources window.
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("resource_files")) {
             std::vector<std::string> receivedStrings = editor::Util::getStringsFromPayload(payload);
             if (!receivedStrings.empty() && Util::isShaderFile(receivedStrings[0])) {
-                std::string rel = std::filesystem::relative(receivedStrings[0], project->getProjectPath()).generic_string();
+                std::string rel = std::filesystem::relative(receivedStrings[0], projectPath).generic_string();
                 // store the base path without the .vert/.frag extension
                 std::filesystem::path relPath(rel);
-                std::string base = (relPath.parent_path() / relPath.stem()).generic_string();
-                setCustomShader(base);
+                useExistingBase((relPath.parent_path() / relPath.stem()).generic_string());
             }
         }
         ImGui::EndDragDropTarget();
     }
 
     endTable();
+}
+
+// Popup that lets the user pick the .vert and .frag entry points independently (so they
+// can use differently-named files). Applying stores the result via Util::makeCustomShader,
+// collapsing to the shared-base shorthand when both files share a <base>.vert/.frag.
+void editor::Properties::drawShaderFilesPopup(ComponentType cpType, SceneProject* sceneProject, Entity shaderEntity, const std::string& currentVert, const std::string& currentFrag){
+    const std::filesystem::path projectPath = project->getProjectPath();
+
+    ImGui::SetNextWindowSizeConstraints(ImVec2(25 * ImGui::GetFontSize(), 0), ImVec2(FLT_MAX, FLT_MAX));
+    if (!ImGui::BeginPopup("Edit Shader Files"))
+        return;
+
+    static std::string vertEdit;
+    static std::string fragEdit;
+    if (ImGui::IsWindowAppearing()) {
+        vertEdit = currentVert;
+        fragEdit = currentFrag;
+    }
+
+    ImGui::Text("Edit Shader Files");
+    ImGui::Separator();
+
+    float secondColSize = 18 * ImGui::GetFontSize();
+    float openBtnWidth = ImGui::CalcTextSize(ICON_FA_FOLDER_OPEN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    float clearBtnWidth = ImGui::CalcTextSize(ICON_FA_XMARK).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    float btnSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+    // Picks a shader file of the required extension into the given slot.
+    auto pickSlot = [&](std::string& slotRel, const char* requiredExt) {
+        std::filesystem::path shadersDir = projectPath / project->getShaderSourcesDir();
+        std::string startDir = (std::filesystem::exists(shadersDir) ? shadersDir : projectPath).string();
+        std::string selected = FileDialogs::openFileDialog(startDir, FILE_DIALOG_SHADER);
+        if (selected.empty())
+            return;
+
+        std::string ext = std::filesystem::path(selected).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext != requiredExt) {
+            Backend::getApp().registerAlert("Error", std::string("Select a ") + requiredExt + " file.");
+            return;
+        }
+        std::error_code ec;
+        std::filesystem::path rel = std::filesystem::relative(selected, projectPath, ec);
+        if (ec || rel.string().find("..") != std::string::npos) {
+            Backend::getApp().registerAlert("Error", "Shader file must be inside the project directory.");
+            return;
+        }
+        slotRel = rel.generic_string();
+    };
+
+    auto slotRow = [&](const char* label, std::string& slotRel, const char* requiredExt, const char* idSuffix) {
+        propertyHeader(label, secondColSize);
+        ImGui::SetNextItemWidth(secondColSize - openBtnWidth - clearBtnWidth - btnSpacing * 2.0f);
+
+        char buffer[256];
+        strncpy(buffer, slotRel.c_str(), sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::InputText((std::string("##shader_slot_") + idSuffix).c_str(), buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
+        ImGui::PopStyleColor();
+        if (!slotRel.empty() && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", slotRel.c_str());
+
+        ImGui::SameLine();
+        if (ImGui::Button((std::string(ICON_FA_FOLDER_OPEN "##pick_") + idSuffix).c_str()))
+            pickSlot(slotRel, requiredExt);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(slotRel.empty());
+        if (ImGui::Button((std::string(ICON_FA_XMARK "##clear_") + idSuffix).c_str()))
+            slotRel.clear();
+        ImGui::EndDisabled();
+    };
+
+    beginTable(cpType, getLabelSize("Fragment File"), "edit_shader_files");
+    slotRow("Vertex File", vertEdit, ".vert", "vert");
+    slotRow("Fragment File", fragEdit, ".frag", "frag");
+    endTable();
+
+    ImGui::Separator();
+
+    const bool bothEmpty = vertEdit.empty() && fragEdit.empty();
+    const bool bothSet = !vertEdit.empty() && !fragEdit.empty();
+    if (!bothEmpty && !bothSet)
+        ImGui::TextDisabled("Set both a vertex and a fragment file.");
+
+    ImGui::BeginDisabled(!bothEmpty && !bothSet);
+    if (ImGui::Button("Apply##apply_shader_files")) {
+        std::string newValue = bothEmpty ? std::string() : Util::makeCustomShader(vertEdit, fragEdit);
+        std::string currentValue = (currentVert.empty() || currentFrag.empty()) ? std::string() : Util::makeCustomShader(currentVert, currentFrag);
+        if (newValue != currentValue) {
+            Command* shaderCmd = new PropertyCmd<std::string>(project, sceneProject->id, shaderEntity, cpType, "customShader", newValue);
+            CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
+        }
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel##cancel_shader_files"))
+        ImGui::CloseCurrentPopup();
+
+    ImGui::EndPopup();
 }
 
 void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){

@@ -29,6 +29,7 @@
 #include "command/type/CreateEntityBundleCmd.h"
 #include "command/type/CreateEntityCmd.h"
 #include "command/type/CreateMaterialFileCmd.h"
+#include "command/type/ForkShaderCmd.h"
 #include "command/type/DeleteEntityCmd.h"
 #include "command/type/DeleteFileCmd.h"
 #include "command/type/DuplicateEntityCmd.h"
@@ -265,6 +266,32 @@ bool hasComponent(EntityRegistry* registry, Entity entity, ComponentType compone
     if (!registry || entity == NULL_ENTITY) return false;
     std::vector<ComponentType> components = Catalog::findComponents(registry, entity);
     return std::find(components.begin(), components.end(), component) != components.end();
+}
+
+// Maps a renderable component to its forkable built-in shader type.
+bool shaderTypeForComponent(ComponentType component, ShaderType& out) {
+    switch (component) {
+        case ComponentType::MeshComponent:   out = ShaderType::MESH;   return true;
+        case ComponentType::UIComponent:     out = ShaderType::UI;     return true;
+        case ComponentType::PointsComponent: out = ShaderType::POINTS; return true;
+        case ComponentType::LinesComponent:  out = ShaderType::LINES;  return true;
+        case ComponentType::SkyComponent:    out = ShaderType::SKYBOX; return true;
+        default: return false;
+    }
+}
+
+// Picks the entity's first renderable component that supports custom shaders.
+bool detectForkableComponent(EntityRegistry* registry, Entity entity, ComponentType& component, ShaderType& shaderType) {
+    for (ComponentType candidate : {ComponentType::MeshComponent, ComponentType::UIComponent,
+                                    ComponentType::PointsComponent, ComponentType::LinesComponent,
+                                    ComponentType::SkyComponent}) {
+        if (hasComponent(registry, entity, candidate)) {
+            component = candidate;
+            shaderTypeForComponent(candidate, shaderType);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool parseSceneType(const std::string& typeName, SceneType& type) {
@@ -1141,6 +1168,8 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "revert_bundle_component") return revertBundleComponent(arguments);
     if (name == "export_project") return exportProject(arguments, cancel);
     if (name == "generate_shaders") return generateShaders(arguments, cancel);
+    if (name == "fork_shader") return forkShader(arguments);
+    if (name == "write_shader_file") return writeShaderFile(arguments);
     if (name == "create_terrain_heightmap") return createTerrainHeightmap(arguments);
     if (name == "import_project_model") return importProjectModel(arguments);
     if (name == "search_curated_assets") return searchCuratedAssets(arguments, cancel);
@@ -1591,6 +1620,8 @@ ActionResult EditorActionExecutor::setComponentProperty(const Json& arguments) {
     if (it == properties.end() || !it->second.ref) return failResult("Property not found or not editable.");
 
     std::string error;
+    if (!validateCustomShaderValue(propertyName, arguments, error)) return failResult(error);
+
     std::unique_ptr<Command> cmd(buildPropertyCommand(project, sceneId, entity, component, propertyName, it->second, arguments, error));
     if (!cmd) return failResult(error);
     CommandHandle::get(sceneId)->addCommandNoMerge(cmd.release());
@@ -2449,6 +2480,129 @@ ActionResult EditorActionExecutor::generateShaders(const Json& arguments, const 
     return okResult("Generated shaders.", Json{{"target_dir", config.targetDir.generic_string()}});
 }
 
+bool EditorActionExecutor::validateCustomShaderValue(const std::string& propertyName, const Json& args, std::string& error) const {
+    if (propertyName != "customShader") {
+        return true;
+    }
+    const std::string value = args.value("string_value", "");
+    if (value.empty()) {
+        return true; // empty resets to the built-in shader
+    }
+
+    Util::CustomShaderPaths paths = Util::resolveCustomShaderPaths(value);
+    const fs::path projectPath = project->getProjectPath();
+    if (!fs::exists(projectPath / paths.vert) || !fs::exists(projectPath / paths.frag)) {
+        error = "customShader references missing files (" + paths.vert + ", " + paths.frag +
+                "). Use fork_shader to create a fork, or write_shader_file to author the .vert/.frag, before setting customShader.";
+        return false;
+    }
+    return true;
+}
+
+ActionResult EditorActionExecutor::forkShader(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    // Resolve which renderable component to fork for, either explicit or auto-detected.
+    ComponentType component;
+    ShaderType shaderType;
+    const std::string componentArg = arguments.value("component", "");
+    if (!componentArg.empty()) {
+        if (!parseComponentType(componentArg, component)) return failResult("Unknown component type.");
+        if (!shaderTypeForComponent(component, shaderType)) {
+            return failResult("Component does not support custom shaders. Use Mesh/UI/Points/Lines/Sky.");
+        }
+        if (!hasComponent(sceneProject->scene, entity, component)) {
+            return failResult("Entity has no " + componentArg + ".");
+        }
+    } else if (!detectForkableComponent(sceneProject->scene, entity, component, shaderType)) {
+        return failResult("Entity has no shader-capable component (Mesh/UI/Points/Lines/Sky).");
+    }
+
+    // Re-forking would orphan the previous fork's files; require an explicit reset first.
+    if (std::string* current = Catalog::getPropertyRef<std::string>(sceneProject->scene, entity, component, "customShader")) {
+        if (!current->empty()) {
+            return failResult("Component already uses a custom shader (" + *current +
+                              "). Edit it with write_shader_file, or clear customShader to reset before forking again.");
+        }
+    }
+
+    const std::string desiredName = sceneProject->scene->getEntityName(entity);
+    auto* forkCmd = new ForkShaderCmd(project, sceneId, entity, component, shaderType, desiredName);
+    if (!forkCmd->isValid()) {
+        delete forkCmd;
+        return failResult("Failed to plan the shader fork (built-in source unavailable?).");
+    }
+
+    const std::string base = forkCmd->getBase();
+    CommandHandle::get(sceneId)->addCommandNoMerge(forkCmd);
+
+    // The command writes the files as part of execute(); confirm so the AI gets accurate feedback.
+    if (!fs::exists(project->getProjectPath() / (base + ".vert")) ||
+        !fs::exists(project->getProjectPath() / (base + ".frag"))) {
+        return failResult("Shader fork did not write its source files.");
+    }
+
+    if (resourcesWindow) {
+        resourcesWindow->refreshCurrentDirectory();
+    }
+    Out::info("AI forked shader: %s", base.c_str());
+
+    return okResult("Forked shader through the command history.",
+                    Json{{"custom_shader", base},
+                         {"vert_path", base + ".vert"},
+                         {"frag_path", base + ".frag"}});
+}
+
+ActionResult EditorActionExecutor::writeShaderFile(const Json& arguments) {
+    std::string error;
+    fs::path rel;
+    // A shader source may be edited (forked entry point) or newly created (shared include).
+    if (!safeRelativePath(project, arguments, "path", rel, error, false)) {
+        return failResult(error);
+    }
+
+    const std::string ext = lower(rel.extension().string());
+    if (ext != ".vert" && ext != ".frag" && ext != ".glsl") {
+        return failResult("path must point to a .vert, .frag, or .glsl shader file.");
+    }
+
+    const std::string content = arguments.value("content", "");
+    constexpr size_t kMaxShaderBytes = 2 * 1024 * 1024;
+    if (content.size() > kMaxShaderBytes) {
+        return failResult("Shader content is too large for an AI edit.");
+    }
+
+    const fs::path fullPath = project->getProjectPath() / rel;
+    std::error_code ec;
+    fs::create_directories(fullPath.parent_path(), ec);
+    std::ofstream out(fullPath, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        return failResult("Failed to open shader file for writing.");
+    }
+    out << content;
+    out.close();
+    if (!out) {
+        return failResult("Failed to write shader file.");
+    }
+
+    // Editing a forked source (or shared include) invalidates compiled shaders so the
+    // viewport recompiles them; mirrors CodeEditor saving a .vert/.frag/.glsl.
+    project->invalidateCustomShaders();
+
+    if (resourcesWindow) {
+        resourcesWindow->refreshCurrentDirectory();
+    }
+    Out::info("AI wrote shader file: %s", rel.generic_string().c_str());
+
+    return okResult("Wrote shader file.",
+                    Json{{"path", rel.generic_string()},
+                         {"bytes", content.size()}});
+}
+
 
 ActionResult EditorActionExecutor::createTerrainHeightmap(const Json& arguments) {
     uint32_t sceneId = resolveSceneId(project, arguments);
@@ -2965,6 +3119,12 @@ ActionResult EditorActionExecutor::setComponentProperties(const Json& arguments)
         if (it == props.end()) {
             delete multiCmd;
             return failResult("Property not found: " + propertyName);
+        }
+
+        std::string validationError;
+        if (!validateCustomShaderValue(propertyName, item, validationError)) {
+            delete multiCmd;
+            return failResult(validationError);
         }
 
         std::string buildError;

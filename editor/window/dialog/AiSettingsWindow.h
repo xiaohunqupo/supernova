@@ -21,7 +21,7 @@ private:
     std::array<std::array<char, 512>, kProviderCount> m_keyBuffers{};
     std::array<bool, kProviderCount> m_keySet{};
     std::array<char, 512> m_endpointBuffer{};
-    int m_maxOutputTokens = 1200;
+    int m_maxOutputTokens = 8192;
 
     void drawSettings();
     void refreshKeyState();
