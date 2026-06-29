@@ -202,32 +202,64 @@ std::string SelectableTextView::buildCopyText(int startInclusive, int endExclusi
     }
 
     const int totalLines = (lineOffsets.Size > 0) ? (lineOffsets.Size - 1) : 0;
+
+    auto lineStartIndexFn = [&](int line) -> int {
+        return (line >= 0 && line < lineOffsets.Size) ? lineOffsets[line] : 0;
+    };
+    auto lineEndIndexExclFn = [&](int line) -> int {
+        if (line < 0 || line + 1 >= lineOffsets.Size) {
+            return (int)buf.size();
+        }
+        int end = lineOffsets[line + 1];
+        if (end > 0 && end <= (int)buf.size() && buf[end - 1] == '\n') {
+            end -= 1;
+        }
+        return end;
+    };
+    auto idxToLine = [&](int idx) -> int {
+        int l = 0;
+        int r = (lineOffsets.Size > 0) ? lineOffsets.Size - 2 : -1;
+        int ans = 0;
+        while (l <= r) {
+            int m = (l + r) >> 1;
+            if (lineOffsets[m] <= idx) {
+                ans = m;
+                l = m + 1;
+            } else {
+                r = m - 1;
+            }
+        }
+        return std::max(0, std::min(ans, totalLines > 0 ? totalLines - 1 : 0));
+    };
+
     std::string out;
     out.reserve(static_cast<size_t>(b - a));
+    if (totalLines > 0) {
+        int startLine = idxToLine(a);
+        int endLine = idxToLine(std::max(a, b - 1));
+        for (int i = startLine; i <= endLine; ++i) {
+            int ls = lineStartIndexFn(i);
+            int le = lineEndIndexExclFn(i);
 
-    for (int i = 0; i < totalLines; ++i) {
-        int ls = lineOffsets[i];
-        int le = (i + 1 < lineOffsets.Size) ? lineOffsets[i + 1] : (int)buf.size();
-        if (le > 0 && le <= (int)buf.size() && buf[le - 1] == '\n') {
-            le -= 1;
-        }
+            int s0 = std::max(a, ls);
+            int e0 = std::min(b, le);
+            if (e0 > s0) {
+                out.append(buf.begin() + s0, buf.begin() + e0);
+            }
 
-        int s0 = std::max(a, ls);
-        int e0 = std::min(b, le);
-        if (e0 > s0) {
-            out.append(buf.begin() + s0, buf.begin() + e0);
-        }
-
-        // Only emit a newline for real (hard) breaks whose '\n' lies in range;
-        // soft-wrapped lines are rejoined.
-        if (i < (int)lineHardBreak.size() && lineHardBreak[i]) {
-            int nlPos = (i + 1 < lineOffsets.Size) ? lineOffsets[i + 1] - 1 : -1;
-            if (nlPos >= 0 && nlPos < (int)buf.size() && buf[nlPos] == '\n' &&
-                nlPos >= a && nlPos < b) {
-                out.push_back('\n');
+            if (i + 1 < lineOffsets.Size) {
+                int nextStart = lineOffsets[i + 1];
+                bool hadNewlineChar = (nextStart > 0 && nextStart <= (int)buf.size() &&
+                                       buf[nextStart - 1] == '\n');
+                int nlPos = hadNewlineChar ? nextStart - 1 : -1;
+                if (hadNewlineChar && i < (int)lineHardBreak.size() && lineHardBreak[i] &&
+                    nlPos >= a && nlPos < b) {
+                    out.push_back('\n');
+                }
             }
         }
     }
+
     return out;
 }
 

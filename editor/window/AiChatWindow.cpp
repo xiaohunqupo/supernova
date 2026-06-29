@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -24,10 +25,19 @@ const ImVec4 kSuccessColor(0.55f, 0.85f, 0.55f, 1.0f);
 const ImVec4 kErrorColor(0.95f, 0.55f, 0.55f, 1.0f);
 const ImVec4 kCodeColor(0.82f, 0.85f, 0.72f, 1.0f);
 
-// ImGui does not soft-wrap editable multiline inputs, so the chat composer
-// inserts line breaks as the current line reaches the input edge.
+// ImGui does not soft-wrap editable multiline inputs. The composer inserts
+// generated line breaks for display, tracks them separately from user-entered
+// newlines, and reflows them whenever the input width changes.
 struct PromptWrapContext {
     float maxLineWidth = 0.0f;
+    std::vector<int>* softWraps = nullptr;
+    std::string* displayText = nullptr;
+};
+
+struct PromptWrapResult {
+    std::string displayText;
+    std::vector<int> softWrapDisplayOffsets;
+    std::vector<int> softWrapRawOffsets;
 };
 
 bool isPromptWrapSpace(char c) {
@@ -56,70 +66,263 @@ float promptLineWidth(const char* text, int start, int end) {
     return ImGui::CalcTextSize(text + start, text + end, false).x;
 }
 
-int findPromptWrapBreak(const char* text, int len, int lineStart, int cursorPos,
-                        float maxLineWidth, bool* replaceSpace) {
-    *replaceSpace = false;
-    for (int i = cursorPos - 1; i > lineStart; --i) {
-        if (!isPromptWrapSpace(text[i])) {
-            continue;
+int findPromptWrapOffset(const std::string& text, int lineStart, int lineEnd,
+                         float maxLineWidth) {
+    int bestOffset = lineStart;
+    int bestSpaceOffset = -1;
+    const int len = static_cast<int>(text.size());
+    const char* raw = text.c_str();
+
+    for (int pos = lineStart; pos < lineEnd;) {
+        int next = nextCodepointStart(raw, len, pos);
+        if (next <= pos || next > lineEnd) {
+            next = std::min(pos + 1, lineEnd);
         }
-        if (promptLineWidth(text, lineStart, i) <= maxLineWidth) {
-            *replaceSpace = true;
-            return i;
+
+        if (promptLineWidth(raw, lineStart, next) > maxLineWidth) {
+            if (bestSpaceOffset > lineStart) {
+                return bestSpaceOffset;
+            }
+            return bestOffset > lineStart ? bestOffset : next;
+        }
+
+        if (isPromptWrapSpace(raw[pos])) {
+            bestSpaceOffset = next;
+        }
+        bestOffset = next;
+        pos = next;
+    }
+
+    return -1;
+}
+
+void sanitizePromptSoftWraps(std::vector<int>& softWraps, const std::string& displayText) {
+    std::sort(softWraps.begin(), softWraps.end());
+    softWraps.erase(std::unique(softWraps.begin(), softWraps.end()), softWraps.end());
+
+    std::vector<int> valid;
+    valid.reserve(softWraps.size());
+    for (int pos : softWraps) {
+        if (pos >= 0 && pos < static_cast<int>(displayText.size()) &&
+            displayText[static_cast<size_t>(pos)] == '\n') {
+            valid.push_back(pos);
+        }
+    }
+    softWraps.swap(valid);
+}
+
+void adjustPromptSoftWrapsForEdit(const std::string& oldDisplayText,
+                                  const std::string& currentDisplayText,
+                                  std::vector<int>& softWraps) {
+    if (oldDisplayText.empty() || oldDisplayText == currentDisplayText) {
+        sanitizePromptSoftWraps(softWraps, currentDisplayText);
+        return;
+    }
+
+    int prefix = 0;
+    const int oldLen = static_cast<int>(oldDisplayText.size());
+    const int newLen = static_cast<int>(currentDisplayText.size());
+    while (prefix < oldLen && prefix < newLen &&
+           oldDisplayText[static_cast<size_t>(prefix)] ==
+               currentDisplayText[static_cast<size_t>(prefix)]) {
+        ++prefix;
+    }
+
+    int suffix = 0;
+    while (oldLen - suffix > prefix && newLen - suffix > prefix &&
+           oldDisplayText[static_cast<size_t>(oldLen - suffix - 1)] ==
+               currentDisplayText[static_cast<size_t>(newLen - suffix - 1)]) {
+        ++suffix;
+    }
+
+    const int oldChangeEnd = oldLen - suffix;
+    const int newChangeEnd = newLen - suffix;
+    const int delta = (newChangeEnd - prefix) - (oldChangeEnd - prefix);
+
+    std::vector<int> adjusted;
+    adjusted.reserve(softWraps.size());
+    for (int pos : softWraps) {
+        if (pos < prefix) {
+            adjusted.push_back(pos);
+        } else if (pos >= oldChangeEnd) {
+            adjusted.push_back(pos + delta);
         }
     }
 
-    int best = lineStart;
-    for (int i = nextCodepointStart(text, len, lineStart);
-         i < cursorPos;
-         i = nextCodepointStart(text, len, i)) {
-        if (promptLineWidth(text, lineStart, i) > maxLineWidth) {
+    softWraps.swap(adjusted);
+    sanitizePromptSoftWraps(softWraps, currentDisplayText);
+}
+
+int promptDisplayPosToRawPos(int displayPos, const std::vector<int>& softWraps) {
+    int removed = 0;
+    for (int wrapPos : softWraps) {
+        if (wrapPos >= displayPos) {
             break;
         }
-        best = i;
+        ++removed;
     }
-    return best;
+    return std::max(0, displayPos - removed);
+}
+
+int promptRawPosToDisplayPos(int rawPos, const std::vector<int>& softWrapRawOffsets) {
+    int inserted = 0;
+    for (int wrapRawPos : softWrapRawOffsets) {
+        if (wrapRawPos > rawPos) {
+            break;
+        }
+        ++inserted;
+    }
+    return std::max(0, rawPos + inserted);
+}
+
+std::string stripPromptSoftWraps(const char* text, int len,
+                                 const std::vector<int>& softWraps) {
+    std::string raw;
+    raw.reserve(static_cast<size_t>(std::max(0, len)));
+
+    size_t wrapIndex = 0;
+    for (int i = 0; i < len; ++i) {
+        bool skipSoftWrap = wrapIndex < softWraps.size() && softWraps[wrapIndex] == i &&
+                            text[i] == '\n';
+        if (skipSoftWrap) {
+            ++wrapIndex;
+            continue;
+        }
+        raw.push_back(text[i]);
+        while (wrapIndex < softWraps.size() && softWraps[wrapIndex] <= i) {
+            ++wrapIndex;
+        }
+    }
+    return raw;
+}
+
+PromptWrapResult rewrapPromptText(const std::string& rawText, float maxLineWidth,
+                                  size_t maxDisplayBytes) {
+    PromptWrapResult result;
+    result.displayText.reserve(rawText.size());
+
+    if (rawText.empty() || maxLineWidth <= ImGui::GetFontSize() * 4.0f) {
+        result.displayText = rawText;
+        return result;
+    }
+
+    const int len = static_cast<int>(rawText.size());
+    int copyPos = 0;
+    int hardLineStart = 0;
+
+    while (hardLineStart < len) {
+        int hardLineEnd = hardLineStart;
+        while (hardLineEnd < len && rawText[static_cast<size_t>(hardLineEnd)] != '\n') {
+            ++hardLineEnd;
+        }
+
+        int visualLineStart = hardLineStart;
+        while (visualLineStart < hardLineEnd) {
+            int wrapAt = findPromptWrapOffset(rawText, visualLineStart, hardLineEnd,
+                                              maxLineWidth);
+            if (wrapAt <= visualLineStart || wrapAt >= hardLineEnd) {
+                break;
+            }
+            if (rawText.size() + result.softWrapDisplayOffsets.size() + 1 > maxDisplayBytes) {
+                break;
+            }
+
+            result.displayText.append(rawText.data() + copyPos,
+                                      static_cast<size_t>(wrapAt - copyPos));
+            result.softWrapDisplayOffsets.push_back(
+                static_cast<int>(result.displayText.size()));
+            result.softWrapRawOffsets.push_back(wrapAt);
+            result.displayText.push_back('\n');
+            copyPos = wrapAt;
+            visualLineStart = wrapAt;
+        }
+
+        if (hardLineEnd >= len) {
+            break;
+        }
+
+        result.displayText.append(rawText.data() + copyPos,
+                                  static_cast<size_t>(hardLineEnd + 1 - copyPos));
+        copyPos = hardLineEnd + 1;
+        hardLineStart = hardLineEnd + 1;
+    }
+
+    if (copyPos < len) {
+        result.displayText.append(rawText.data() + copyPos,
+                                  static_cast<size_t>(len - copyPos));
+    }
+
+    return result;
+}
+
+bool rewrapPromptBuffer(char* buffer, int bufferSize, float maxLineWidth,
+                        std::vector<int>& softWraps, std::string& displayText,
+                        int* cursorPos = nullptr, int* selectionStart = nullptr,
+                        int* selectionEnd = nullptr, int* textLen = nullptr) {
+    if (!buffer || bufferSize <= 0) {
+        return false;
+    }
+
+    int len = textLen ? *textLen : static_cast<int>(std::strlen(buffer));
+    len = std::clamp(len, 0, bufferSize - 1);
+    std::string currentDisplay(buffer, buffer + len);
+    adjustPromptSoftWrapsForEdit(displayText, currentDisplay, softWraps);
+
+    int rawCursor = cursorPos ? promptDisplayPosToRawPos(*cursorPos, softWraps) : 0;
+    int rawSelectionStart = selectionStart ? promptDisplayPosToRawPos(*selectionStart, softWraps) : 0;
+    int rawSelectionEnd = selectionEnd ? promptDisplayPosToRawPos(*selectionEnd, softWraps) : 0;
+
+    std::string rawText = stripPromptSoftWraps(currentDisplay.c_str(),
+                                               static_cast<int>(currentDisplay.size()),
+                                               softWraps);
+    PromptWrapResult wrapped = rewrapPromptText(rawText, maxLineWidth,
+                                                static_cast<size_t>(bufferSize - 1));
+
+    const bool changed = wrapped.displayText != currentDisplay;
+    if (changed) {
+        std::memcpy(buffer, wrapped.displayText.c_str(), wrapped.displayText.size());
+        buffer[wrapped.displayText.size()] = '\0';
+        if (textLen) {
+            *textLen = static_cast<int>(wrapped.displayText.size());
+        }
+        if (cursorPos) {
+            *cursorPos = std::clamp(
+                promptRawPosToDisplayPos(rawCursor, wrapped.softWrapRawOffsets),
+                0, static_cast<int>(wrapped.displayText.size()));
+        }
+        if (selectionStart) {
+            *selectionStart = std::clamp(
+                promptRawPosToDisplayPos(rawSelectionStart, wrapped.softWrapRawOffsets),
+                0, static_cast<int>(wrapped.displayText.size()));
+        }
+        if (selectionEnd) {
+            *selectionEnd = std::clamp(
+                promptRawPosToDisplayPos(rawSelectionEnd, wrapped.softWrapRawOffsets),
+                0, static_cast<int>(wrapped.displayText.size()));
+        }
+    }
+
+    softWraps = std::move(wrapped.softWrapDisplayOffsets);
+    displayText = std::move(wrapped.displayText);
+    return changed;
 }
 
 int promptWrapCallback(ImGuiInputTextCallbackData* data) {
-    if (data->EventFlag != ImGuiInputTextFlags_CallbackEdit) {
+    if (data->EventFlag != ImGuiInputTextFlags_CallbackEdit &&
+        data->EventFlag != ImGuiInputTextFlags_CallbackAlways) {
         return 0;
     }
 
-    const auto* context = static_cast<const PromptWrapContext*>(data->UserData);
-    if (!context || context->maxLineWidth <= ImGui::GetFontSize() * 4.0f) {
+    auto* context = static_cast<PromptWrapContext*>(data->UserData);
+    if (!context || !context->softWraps || !context->displayText) {
         return 0;
     }
 
-    for (int guard = 0; guard < 64; ++guard) {
-        int lineStart = data->CursorPos;
-        while (lineStart > 0 && data->Buf[lineStart - 1] != '\n') {
-            --lineStart;
-        }
-
-        if (data->CursorPos <= lineStart ||
-            promptLineWidth(data->Buf, lineStart, data->CursorPos) <= context->maxLineWidth) {
-            break;
-        }
-
-        bool replaceSpace = false;
-        int breakPos = findPromptWrapBreak(data->Buf, data->BufTextLen, lineStart,
-                                           data->CursorPos, context->maxLineWidth,
-                                           &replaceSpace);
-        if (breakPos <= lineStart || breakPos > data->CursorPos) {
-            break;
-        }
-
-        if (replaceSpace) {
-            data->Buf[breakPos] = '\n';
-            data->BufDirty = true;
-            data->SelectionStart = data->SelectionEnd = data->CursorPos;
-        } else {
-            if (data->BufTextLen + 1 >= data->BufSize) {
-                break;
-            }
-            data->InsertChars(breakPos, "\n");
-        }
+    if (rewrapPromptBuffer(data->Buf, data->BufSize, context->maxLineWidth,
+                           *context->softWraps, *context->displayText,
+                           &data->CursorPos, &data->SelectionStart,
+                           &data->SelectionEnd, &data->BufTextLen)) {
+        data->BufDirty = true;
     }
 
     return 0;
@@ -702,16 +905,23 @@ void AiChatWindow::drawComposer(float inputHeight) {
         refocusInput = false;
     }
     PromptWrapContext wrapContext{
-        std::max(0.0f, inputWidth - style.FramePadding.x * 2.0f)
+        std::max(0.0f, inputWidth - style.FramePadding.x * 2.0f),
+        &inputSoftWraps,
+        &inputDisplayText
     };
     if (ImGui::InputTextMultiline("##AiInput", inputBuffer.data(), inputBuffer.size(),
                                   ImVec2(inputWidth, inputHeight),
                                   ImGuiInputTextFlags_EnterReturnsTrue |
                                   ImGuiInputTextFlags_CtrlEnterForNewLine |
                                   ImGuiInputTextFlags_NoHorizontalScroll |
-                                  ImGuiInputTextFlags_CallbackEdit,
+                                  ImGuiInputTextFlags_CallbackEdit |
+                                  ImGuiInputTextFlags_CallbackAlways,
                                   promptWrapCallback, &wrapContext)) {
         submitted = true;
+    }
+    if (!ImGui::IsItemActive() && !submitted) {
+        rewrapPromptBuffer(inputBuffer.data(), static_cast<int>(inputBuffer.size()),
+                           wrapContext.maxLineWidth, inputSoftWraps, inputDisplayText);
     }
     if (submitted) {
         submitMessage();
@@ -725,7 +935,10 @@ void AiChatWindow::drawComposer(float inputHeight) {
         }
         ImGui::SetItemTooltip("Stop");
     } else {
-        bool hasText = inputBuffer[0] != '\0';
+        std::string promptText = stripPromptSoftWraps(
+            inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())),
+            inputSoftWraps);
+        bool hasText = !promptText.empty();
         std::string disabledReason;
         bool canSend = hasText && canSendMessage(&disabledReason);
         ImGui::BeginDisabled(!canSend);
@@ -978,11 +1191,16 @@ bool AiChatWindow::canSendMessage(std::string* reason) const {
 }
 
 void AiChatWindow::submitMessage() {
-    if (service.isBusy() || inputBuffer[0] == '\0' || !canSendMessage()) {
+    std::string promptText = stripPromptSoftWraps(
+        inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())),
+        inputSoftWraps);
+    if (service.isBusy() || promptText.empty() || !canSendMessage()) {
         return;
     }
-    if (service.sendUserMessage(inputBuffer.data())) {
+    if (service.sendUserMessage(promptText)) {
         inputBuffer.fill('\0');
+        inputSoftWraps.clear();
+        inputDisplayText.clear();
         scrollToBottom = true;
         refocusInput = true;
     }
@@ -1045,6 +1263,8 @@ void AiChatWindow::startNewChat() {
     lastObservedMessageCount = 0;
     hasNotification = false;
     inputBuffer.fill('\0');
+    inputSoftWraps.clear();
+    inputDisplayText.clear();
     scrollToBottom = false;
     // Mark the current path as handled so a fresh temp project at a reused path
     // does not auto-restore the previous chat on the next frame.
@@ -1068,6 +1288,8 @@ void AiChatWindow::loadLatestConversationForCurrentProject() {
         hasNotification = false;
         scrollToBottom = false;
         inputBuffer.fill('\0');
+        inputSoftWraps.clear();
+        inputDisplayText.clear();
     }
 
     if (projectPath.empty() || autoLoadedLatestConversation) {
@@ -1111,6 +1333,8 @@ void AiChatWindow::loadConversation(const std::string& id) {
     lastObservedMessageCount = lastSavedMessageCount;
     hasNotification = false;
     inputBuffer.fill('\0');
+    inputSoftWraps.clear();
+    inputDisplayText.clear();
     scrollToBottom = true;
 }
 

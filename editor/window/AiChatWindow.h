@@ -39,6 +39,8 @@ private:
     bool customModelPopupRequested = false;
     std::array<char, 8192> inputBuffer{};
     std::array<char, 256> customModelBuffer{};
+    std::vector<int> inputSoftWraps;
+    std::string inputDisplayText;
     std::string currentConversationId;
     std::string autoLoadedProjectPath;
     size_t lastSavedMessageCount = 0;
