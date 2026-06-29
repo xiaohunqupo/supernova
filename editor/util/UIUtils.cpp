@@ -1,6 +1,7 @@
 #include "UIUtils.h"
 #include "App.h"
 #include "external/IconsFontAwesome6.h"
+#include "window/widget/InputTextContextMenu.h"
 
 namespace doriax::editor {
 
@@ -30,6 +31,7 @@ bool UIUtils::searchInput(const char* id, std::string hint, char* buffer, size_t
     } else {
         changed = ImGui::InputTextWithHint(id, hint.c_str(), buffer, bufferSize);
     }
+    changed = InputTextContextMenu::drawForLastItem(buffer, bufferSize) || changed;
 
     ImGui::PopItemWidth();
 

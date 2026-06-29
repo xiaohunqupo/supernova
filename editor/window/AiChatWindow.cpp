@@ -6,6 +6,7 @@
 #include "ai/SecretStore.h"
 #include "external/IconsFontAwesome6.h"
 #include "window/Widgets.h"
+#include "window/widget/InputTextContextMenu.h"
 #include "imgui.h"
 
 #include <algorithm>
@@ -196,6 +197,38 @@ std::string stripPromptSoftWraps(const char* text, int len,
     return raw;
 }
 
+std::string stripPromptSoftWrapsRange(const char* text, int start, int end,
+                                      const std::vector<int>& softWraps) {
+    if (!text || end <= start) {
+        return {};
+    }
+
+    std::string raw;
+    raw.reserve(static_cast<size_t>(end - start));
+    auto wrapIt = std::lower_bound(softWraps.begin(), softWraps.end(), start);
+    for (int i = start; i < end; ++i) {
+        bool skipSoftWrap = wrapIt != softWraps.end() && *wrapIt == i && text[i] == '\n';
+        if (skipSoftWrap) {
+            ++wrapIt;
+            continue;
+        }
+        raw.push_back(text[i]);
+        while (wrapIt != softWraps.end() && *wrapIt <= i) {
+            ++wrapIt;
+        }
+    }
+    return raw;
+}
+
+std::string copyPromptContextMenuRange(const char* buffer, int start, int end,
+                                       void* userData) {
+    auto* context = static_cast<PromptWrapContext*>(userData);
+    if (!context || !context->softWraps) {
+        return std::string(buffer + start, buffer + end);
+    }
+    return stripPromptSoftWrapsRange(buffer, start, end, *context->softWraps);
+}
+
 PromptWrapResult rewrapPromptText(const std::string& rawText, float maxLineWidth,
                                   size_t maxDisplayBytes) {
     PromptWrapResult result;
@@ -305,6 +338,20 @@ bool rewrapPromptBuffer(char* buffer, int bufferSize, float maxLineWidth,
     softWraps = std::move(wrapped.softWrapDisplayOffsets);
     displayText = std::move(wrapped.displayText);
     return changed;
+}
+
+void rewrapPromptAfterContextMenuEdit(char* buffer, size_t bufferSize,
+                                      int* cursorPos, int* selectionStart,
+                                      int* selectionEnd, void* userData) {
+    auto* context = static_cast<PromptWrapContext*>(userData);
+    if (!context || !context->softWraps || !context->displayText) {
+        return;
+    }
+
+    int textLen = static_cast<int>(std::strlen(buffer));
+    rewrapPromptBuffer(buffer, static_cast<int>(bufferSize), context->maxLineWidth,
+                       *context->softWraps, *context->displayText,
+                       cursorPos, selectionStart, selectionEnd, &textLen);
 }
 
 int promptWrapCallback(ImGuiInputTextCallbackData* data) {
@@ -919,7 +966,15 @@ void AiChatWindow::drawComposer(float inputHeight) {
                                   promptWrapCallback, &wrapContext)) {
         submitted = true;
     }
-    if (!ImGui::IsItemActive() && !submitted) {
+    bool inputActive = ImGui::IsItemActive();
+    InputTextContextMenu::Options inputMenuOptions;
+    inputMenuOptions.userData = &wrapContext;
+    inputMenuOptions.copyRange = copyPromptContextMenuRange;
+    inputMenuOptions.afterEdit = rewrapPromptAfterContextMenuEdit;
+    InputTextContextMenu::drawForLastItem(inputBuffer.data(), inputBuffer.size(),
+                                          inputMenuOptions);
+
+    if (!inputActive && !submitted) {
         rewrapPromptBuffer(inputBuffer.data(), static_cast<int>(inputBuffer.size()),
                            wrapContext.maxLineWidth, inputSoftWraps, inputDisplayText);
     }

@@ -1,4 +1,5 @@
 #include "CustomTextEditor.h"
+#include "InputTextContextMenu.h"
 #include "SemanticSuggestions.h"
 #include "engine_api_suggestions.h"
 #include "external/IconsFontAwesome6.h"
@@ -3903,9 +3904,11 @@ void CustomTextEditor::renderFindDialog(const ImVec2& editorPos, const ImVec2& e
 
             ImGui::SetNextItemWidth(inputWidth);
             ImGui::InputTextWithHint("##ReplaceInput", "Replace", replaceInputBuffer, sizeof(replaceInputBuffer));
+            bool replaceInputFocused = ImGui::IsItemFocused();
+            InputTextContextMenu::drawForLastItem(replaceInputBuffer, sizeof(replaceInputBuffer));
 
-            bool replaceEnter = ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter);
-            bool replaceShiftEnter = ImGui::IsItemFocused() && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_Enter);
+            bool replaceEnter = replaceInputFocused && ImGui::IsKeyPressed(ImGuiKey_Enter);
+            bool replaceShiftEnter = replaceInputFocused && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_Enter);
 
             ImGui::SameLine();
 
