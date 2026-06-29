@@ -100,6 +100,26 @@ void AiSettingsWindow::drawSettings() {
     ImGui::TextDisabled("user config folder. The model picker lists configured providers.");
     ImGui::Spacing();
 
+    // Default-constructed settings carry the field defaults (kept in sync with AiTypes.h).
+    const ai::Settings defaults;
+
+    // Borderless rotate-left "reset to default" button placed after a label, mirroring the
+    // pattern in Properties.cpp. Returns true when clicked.
+    auto resetToDefaultButton = [](const char* id, const std::string& tooltip) -> bool {
+        ImGui::SameLine(0.0f, 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, ImGui::GetStyle().FramePadding.y));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        bool clicked = ImGui::Button((std::string(ICON_FA_ROTATE_LEFT) + "##" + id).c_str());
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(2);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", tooltip.c_str());
+        }
+        return clicked;
+    };
+
     ImGui::BeginTable("ai_settings", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp);
     ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 160);
     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
@@ -151,6 +171,9 @@ void AiSettingsWindow::drawSettings() {
     ImGui::AlignTextToFramePadding();
     ImGui::Text("Compatible endpoint");
     ImGui::SetItemTooltip("Chat Completions URL for the OpenAI-compatible provider. Empty = OpenRouter.");
+    if (m_endpointBuffer[0] != '\0' && resetToDefaultButton("reset_endpoint", "Reset to default (empty)")) {
+        m_endpointBuffer.fill('\0');
+    }
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-1);
     ImGui::InputTextWithHint("##Endpoint", "https://openrouter.ai/api/v1/chat/completions",
@@ -161,6 +184,10 @@ void AiSettingsWindow::drawSettings() {
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
     ImGui::Text("Max Output Tokens");
+    if (m_maxOutputTokens != defaults.maxOutputTokens &&
+        resetToDefaultButton("reset_maxoutput", "Reset to default (" + std::to_string(defaults.maxOutputTokens) + ")")) {
+        m_maxOutputTokens = defaults.maxOutputTokens;
+    }
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-1);
     ImGui::InputInt("##MaxOutput", &m_maxOutputTokens, 256, 1024);

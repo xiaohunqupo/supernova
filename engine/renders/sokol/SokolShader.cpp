@@ -226,7 +226,9 @@ bool SokolShader::createShader(ShaderData& shaderData){
                 img->wgsl_group1_binding_n = stage->textures[t].binding;
                 img->spirv_set1_binding_n = stage->textures[t].binding;
             }else{
-                Log::warn("Texture '%s' is not used", stage->textures[t].name.c_str());
+                // Declared but unused (e.g. a custom shader that dropped shadow sampling):
+                // benign, the bind is skipped. Debug-only to avoid spamming warnings.
+                Log::debug("Texture '%s' is declared but not used", stage->textures[t].name.c_str());
             }
         }
 
@@ -242,7 +244,9 @@ bool SokolShader::createShader(ShaderData& shaderData){
                 sampler->wgsl_group1_binding_n = stage->samplers[s].binding;
                 sampler->spirv_set1_binding_n = stage->samplers[s].binding;
             }else{
-                Log::warn("Sampler '%s' is not used", stage->samplers[s].name.c_str());
+                // Declared but unused (e.g. a custom shader that dropped shadow sampling):
+                // benign, the bind is skipped. Debug-only to avoid spamming warnings.
+                Log::debug("Sampler '%s' is declared but not used", stage->samplers[s].name.c_str());
             }
         }
 

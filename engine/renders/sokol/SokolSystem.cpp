@@ -31,6 +31,14 @@ void sokol_log(const char* tag,                // e.g. 'sg'
                     uint32_t line_nr,               // line number in sokol_gfx.h
                     const char* filename_or_null,   // source filename, may be nullptr in release mode
                     void* user_data){
+    // The GL backend warns (and logs the resource name) when the driver strips an unused
+    // uniform block or image-sampler. This is benign and expected for custom/simplified
+    // shaders that don't use every binding their variant provides, so log it at debug only.
+    if (log_item_id == SG_LOGITEM_GL_UNIFORMBLOCK_NAME_NOT_FOUND_IN_SHADER ||
+        log_item_id == SG_LOGITEM_GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER){
+        Log::debug("%s\n", message_or_null);
+        return;
+    }
     if (log_level == 0){
         Log::print("(PANIC): %s\n", message_or_null);
     }else if (log_level == 1){
