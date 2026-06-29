@@ -700,7 +700,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "write_shader_file",
-            "Write a custom shader source file (.vert, .frag, or a shared .glsl include) under the project shaders folder. Use after fork_shader to edit the forked entry points, or to add a .glsl include. #include \"includes/...\" still resolves against the engine shader library.",
+            "Write a custom shader source file (.vert, .frag, or a shared .glsl include) under the project shaders folder. Use after fork_shader to edit the forked entry points, or to add a .glsl include. Read the file first and keep ALL original texture and sampler declarations (uniform sampler2D/samplerCube/etc. and their #ifdef guards) plus the uniform blocks, #version, #include lines and output variable - the engine binds textures by fixed slot, so removing or renaming a declaration breaks the bindings. #include \"includes/...\" still resolves against the engine shader library.",
             objectSchema({
                 {"path", stringSchema("Existing or new safe project-relative path. Allowed extensions: .vert, .frag, .glsl")},
                 {"content", stringSchema("Complete replacement file contents")},
