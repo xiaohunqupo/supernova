@@ -39,6 +39,11 @@ namespace doriax::editor{
         std::list<TreeNode> children;
     };
 
+    struct EntitySelectionEntry {
+        uint32_t sceneId = NULL_PROJECT_SCENE;
+        Entity entity = NULL_ENTITY;
+    };
+
     class Structure{
     private:
 
@@ -50,13 +55,26 @@ namespace doriax::editor{
         char searchBuffer[256] = "";
 
         std::vector<uint32_t> selectedScenes;
+        std::vector<EntitySelectionEntry> visibleEntitySelectionOrder;
 
         bool windowOpen;
         bool focusRequested;
 
         Entity openParent;
+        uint32_t selectionAnchorSceneId = NULL_PROJECT_SCENE;
+        Entity selectionAnchorEntity = NULL_ENTITY;
 
         std::vector<Entity> getTopLevelSelectedEntities(Entity draggedEntity);
+        std::vector<Entity> getMovableDraggedEntities(Entity draggedEntity, const TreeNode& targetNode, InsertionType type);
+        void moveDraggedEntitiesToTarget(const std::vector<Entity>& draggedEntities, Entity target, InsertionType type);
+        void moveDraggedEntitiesToRootLevel(const std::vector<Entity>& draggedEntities, const std::unordered_set<Entity>& entitiesSet);
+        uint32_t getNodeSceneId(const TreeNode& node) const;
+        void collectVisibleEntitySelectionOrder(const TreeNode& node, bool hasSearch);
+        std::vector<Entity> getEntitySelectionRange(uint32_t sceneId, Entity startEntity, Entity endEntity) const;
+        void removeSelectedEntity(uint32_t sceneId, Entity entity);
+        void applyEntitySelection(uint32_t sceneId, Entity entity, bool shiftPressed, bool ctrlPressed);
+        void clearSubSelectionForEntity(uint32_t sceneId, Entity entity);
+        void resetEntitySelectionAnchor();
 
         void showNewEntityMenu(bool isScene, Entity parent, bool addToBundle);
         void showIconMenu();
@@ -66,7 +84,6 @@ namespace doriax::editor{
         void drawInsertionMarker(const ImVec2& p1, const ImVec2& p2);
         void handleEntityFilesDrop(const std::vector<std::string>& filePaths, Entity parent = NULL_ENTITY);
         void handleSceneFilesDropAsChildScenes(const std::vector<std::string>& filePaths, uint32_t ownerSceneId);
-        void moveEntityToRootLevel(Entity sourceEntity, const std::unordered_set<Entity>& entitiesSet);
         void showAddChildSceneMenu();
 
         // Search-related methods

@@ -35,7 +35,7 @@ using namespace doriax;
 
 std::vector<Entity> editor::Structure::getTopLevelSelectedEntities(Entity draggedEntity) {
     SceneProject* sceneProject = project->getSelectedScene();
-    if (!sceneProject) {
+    if (!sceneProject || !sceneProject->scene) {
         return {draggedEntity};
     }
 
@@ -50,7 +50,225 @@ std::vector<Entity> editor::Structure::getTopLevelSelectedEntities(Entity dragge
         result.push_back(draggedEntity);
     }
 
+    std::unordered_set<Entity> sceneEntitiesSet(sceneProject->entities.begin(), sceneProject->entities.end());
+    std::unordered_map<Entity, size_t> entityOrder;
+    size_t order = 0;
+
+    for (Entity entity : sceneProject->entities) {
+        Signature signature = sceneProject->scene->getSignature(entity);
+        if (!signature.test(sceneProject->scene->getComponentId<Transform>())) {
+            entityOrder[entity] = order++;
+        }
+    }
+
+    auto transforms = sceneProject->scene->getComponentArray<Transform>();
+    for (size_t i = 0; i < transforms->size(); i++) {
+        Entity entity = transforms->getEntity(i);
+        if (sceneEntitiesSet.find(entity) != sceneEntitiesSet.end()) {
+            entityOrder[entity] = order++;
+        }
+    }
+
+    std::stable_sort(result.begin(), result.end(), [&entityOrder](Entity a, Entity b) {
+        auto aIt = entityOrder.find(a);
+        auto bIt = entityOrder.find(b);
+        if (aIt == entityOrder.end() || bIt == entityOrder.end()) {
+            return aIt != entityOrder.end();
+        }
+        return aIt->second < bIt->second;
+    });
+
     return result;
+}
+
+std::vector<Entity> editor::Structure::getMovableDraggedEntities(Entity draggedEntity, const TreeNode& targetNode, InsertionType type) {
+    SceneProject* sceneProject = project->getSelectedScene();
+    if (!sceneProject || !sceneProject->scene) {
+        return {};
+    }
+
+    Scene* scene = sceneProject->scene;
+    std::vector<Entity> draggedEntities = getTopLevelSelectedEntities(draggedEntity);
+    std::vector<Entity> movableEntities;
+    movableEntities.reserve(draggedEntities.size());
+
+    for (Entity sourceEntity : draggedEntities) {
+        if (sourceEntity == NULL_ENTITY || !scene->isEntityCreated(sourceEntity)) {
+            return {};
+        }
+
+        Transform* sourceTransform = scene->findComponent<Transform>(sourceEntity);
+        bool sourceHasTransform = sourceTransform != nullptr;
+
+        if (targetNode.isScene) {
+            if (!sourceTransform) {
+                return {};
+            }
+            if (sourceTransform->parent == NULL_ENTITY) {
+                continue;
+            }
+            if (ProjectUtils::isEntityLocked(scene, sourceEntity)) {
+                return {};
+            }
+
+            movableEntities.push_back(sourceEntity);
+            continue;
+        }
+
+        if (sourceEntity == targetNode.id || !scene->isEntityCreated(targetNode.id)) {
+            return {};
+        }
+
+        if (sourceHasTransform != targetNode.hasTransform) {
+            return {};
+        }
+
+        if (sourceHasTransform && scene->isParentOf(sourceEntity, targetNode.id)) {
+            return {};
+        }
+
+        if (!sourceHasTransform && !targetNode.hasTransform
+            && (type == InsertionType::BEFORE || type == InsertionType::AFTER)) {
+            Entity sourceParent = ProjectUtils::getEffectiveParent(scene, sourceEntity);
+            if (sourceParent != targetNode.parent
+                && (sourceParent != NULL_ENTITY || targetNode.parent != NULL_ENTITY)) {
+                return {};
+            }
+        }
+
+        if (!ProjectUtils::canMoveLockedEntityOrder(scene, sourceEntity, targetNode.id, type)) {
+            return {};
+        }
+
+        movableEntities.push_back(sourceEntity);
+    }
+
+    return movableEntities;
+}
+
+uint32_t editor::Structure::getNodeSceneId(const TreeNode& node) const {
+    if (node.entitySceneId != 0) {
+        return node.entitySceneId;
+    }
+
+    return project->getSelectedSceneId();
+}
+
+void editor::Structure::collectVisibleEntitySelectionOrder(const TreeNode& node, bool hasSearch) {
+    if (hasSearch && !node.matchesSearch && !node.hasMatchingDescendant) {
+        return;
+    }
+
+    if (!node.isScene && !node.isChildScene) {
+        visibleEntitySelectionOrder.push_back({getNodeSceneId(node), static_cast<Entity>(node.id)});
+    }
+
+    for (const auto& child : node.children) {
+        collectVisibleEntitySelectionOrder(child, hasSearch);
+    }
+}
+
+std::vector<Entity> editor::Structure::getEntitySelectionRange(uint32_t sceneId, Entity startEntity, Entity endEntity) const {
+    int startIndex = -1;
+    int endIndex = -1;
+
+    for (size_t i = 0; i < visibleEntitySelectionOrder.size(); i++) {
+        const EntitySelectionEntry& entry = visibleEntitySelectionOrder[i];
+        if (entry.sceneId != sceneId) {
+            continue;
+        }
+        if (entry.entity == startEntity && startIndex == -1) {
+            startIndex = static_cast<int>(i);
+        }
+        if (entry.entity == endEntity) {
+            endIndex = static_cast<int>(i);
+        }
+    }
+
+    if (startIndex == -1 || endIndex == -1) {
+        return {};
+    }
+
+    if (startIndex > endIndex) {
+        std::swap(startIndex, endIndex);
+    }
+
+    std::vector<Entity> range;
+    for (int i = startIndex; i <= endIndex; i++) {
+        const EntitySelectionEntry& entry = visibleEntitySelectionOrder[i];
+        if (entry.sceneId == sceneId) {
+            range.push_back(entry.entity);
+        }
+    }
+
+    return range;
+}
+
+void editor::Structure::removeSelectedEntity(uint32_t sceneId, Entity entity) {
+    std::vector<Entity> selectedEntities = project->getSelectedEntities(sceneId);
+    selectedEntities.erase(
+        std::remove(selectedEntities.begin(), selectedEntities.end(), entity),
+        selectedEntities.end()
+    );
+    project->replaceSelectedEntities(sceneId, selectedEntities);
+}
+
+void editor::Structure::applyEntitySelection(uint32_t sceneId, Entity entity, bool shiftPressed, bool ctrlPressed) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene || entity == NULL_ENTITY || !sceneProject->scene->isEntityCreated(entity)) {
+        return;
+    }
+
+    bool canSelectRange = shiftPressed
+        && selectionAnchorSceneId == sceneId
+        && selectionAnchorEntity != NULL_ENTITY
+        && sceneProject->scene->isEntityCreated(selectionAnchorEntity);
+
+    std::vector<Entity> entitiesToSelect;
+    if (canSelectRange) {
+        entitiesToSelect = getEntitySelectionRange(sceneId, selectionAnchorEntity, entity);
+    }
+    if (entitiesToSelect.empty()) {
+        entitiesToSelect.push_back(entity);
+    }
+
+    if (!ctrlPressed) {
+        project->clearAllSelections(project->getSelectedSceneId());
+    }
+
+    if (ctrlPressed && !shiftPressed && project->isSelectedEntity(sceneId, entity)) {
+        removeSelectedEntity(sceneId, entity);
+    } else {
+        for (Entity selectedEntity : entitiesToSelect) {
+            project->addSelectedEntity(sceneId, selectedEntity);
+        }
+    }
+
+    selectedScenes.clear();
+    project->setSelectedSceneForProperties(sceneId);
+    clearSubSelectionForEntity(sceneId, entity);
+
+    selectionAnchorSceneId = sceneId;
+    selectionAnchorEntity = entity;
+}
+
+void editor::Structure::clearSubSelectionForEntity(uint32_t sceneId, Entity entity) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->sceneRender) {
+        return;
+    }
+
+    if (sceneProject->sceneRender->getSelectedInstanceEntity() == entity) {
+        sceneProject->sceneRender->clearInstanceSelection();
+    }
+    if (sceneProject->sceneRender->getSelectedTileEntity() == entity) {
+        sceneProject->sceneRender->clearTileSelection();
+    }
+}
+
+void editor::Structure::resetEntitySelectionAnchor() {
+    selectionAnchorSceneId = NULL_PROJECT_SCENE;
+    selectionAnchorEntity = NULL_ENTITY;
 }
 
 editor::Structure::Structure(Project* project, SceneWindow* sceneWindow){
@@ -422,8 +640,51 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
     return ICON_FA_CIRCLE_DOT;
 }
 
-void editor::Structure::moveEntityToRootLevel(Entity sourceEntity, const std::unordered_set<Entity>& entitiesSet) {
+void editor::Structure::moveDraggedEntitiesToTarget(const std::vector<Entity>& draggedEntities, Entity target, InsertionType type) {
+    if (draggedEntities.empty()) {
+        return;
+    }
+
+    uint32_t sceneId = project->getSelectedSceneId();
+
+    if (draggedEntities.size() == 1) {
+        CommandHandle::get(sceneId)->addCommand(new MoveEntityOrderCmd(project, sceneId, draggedEntities[0], target, type));
+        return;
+    }
+
+    MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+    Entity currentTarget = target;
+    InsertionType currentType = type;
+    size_t commandCount = 0;
+
+    for (Entity sourceEntity : draggedEntities) {
+        if (sourceEntity == currentTarget) {
+            continue;
+        }
+
+        multiCmd->addCommand(std::make_unique<MoveEntityOrderCmd>(project, sceneId, sourceEntity, currentTarget, currentType));
+        currentTarget = sourceEntity;
+        currentType = InsertionType::AFTER;
+        commandCount++;
+    }
+
+    if (commandCount > 0) {
+        CommandHandle::get(sceneId)->addCommandNoMerge(multiCmd);
+    } else {
+        delete multiCmd;
+    }
+}
+
+void editor::Structure::moveDraggedEntitiesToRootLevel(const std::vector<Entity>& draggedEntities, const std::unordered_set<Entity>& entitiesSet) {
+    if (draggedEntities.empty()) {
+        return;
+    }
+
     SceneProject* sceneProject = project->getSelectedScene();
+    if (!sceneProject || !sceneProject->scene) {
+        return;
+    }
+
     auto transforms = sceneProject->scene->getComponentArray<Transform>();
     Entity lastRootEntity = NULL_ENTITY;
 
@@ -438,9 +699,11 @@ void editor::Structure::moveEntityToRootLevel(Entity sourceEntity, const std::un
         }
     }
 
-    if (lastRootEntity != NULL_ENTITY && lastRootEntity != sourceEntity) {
-        CommandHandle::get(project->getSelectedSceneId())->addCommand(new MoveEntityOrderCmd(project, project->getSelectedSceneId(), sourceEntity, lastRootEntity, InsertionType::AFTER));
+    if (lastRootEntity == NULL_ENTITY) {
+        return;
     }
+
+    moveDraggedEntitiesToTarget(draggedEntities, lastRootEntity, InsertionType::AFTER);
 }
 
 void editor::Structure::handleEntityFilesDrop(const std::vector<std::string>& filePaths, Entity parent) {
@@ -719,43 +982,35 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                 std::vector<Entity> virtualChildren = ProjectUtils::getVirtualChildren(sceneProject->scene, draggedEntities);
                 exportEntities.insert(exportEntities.end(), virtualChildren.begin(), virtualChildren.end());
 
-                if (draggedEntities.size() == 1 && draggedEntities[0] == node.id){
-                    YAML::Node entityData;
-                    if (exportEntities.size() == 1) {
-                        entityData = Stream::encodeEntity(draggedEntities[0], sceneProject->scene, project, sceneProject);
-                    } else {
-                        // Embed the full export data (including virtual action children) in the entity payload.
-                        // Structure uses only the EntityPayload header for reparenting; Resources uses the YAML tail.
-                        entityData = Stream::encodeEntitySelection(exportEntities, sceneProject->scene);
-                    }
-
-                    std::string yamlString = YAML::Dump(entityData);
-
-                    size_t yamlSize = yamlString.size();
-                    size_t payloadSize = sizeof(EntityPayload) + yamlSize;
-                    std::vector<char> payloadData(payloadSize);
-
-                    EntityPayload* payload = reinterpret_cast<EntityPayload*>(payloadData.data());
-                    payload->entity = node.id;
-                    payload->parent = node.parent;
-                    payload->order = node.order;
-                    payload->hasTransform = node.hasTransform;
-                    payload->entitySceneId = sceneProject->id;
-                    memcpy(payloadData.data() + sizeof(EntityPayload), yamlString.data(), yamlSize);
-
-                    ImGui::SetDragDropPayload("entity", payloadData.data(), payloadSize);
-                }else{
-                    YAML::Node entityData = Stream::encodeEntitySelection(exportEntities, sceneProject->scene);
-
-                    std::string yamlString = YAML::Dump(entityData);
-
-                    ImGui::SetDragDropPayload("bundle", yamlString.data(), yamlString.size());
+                YAML::Node entityData;
+                if (exportEntities.size() == 1) {
+                    entityData = Stream::encodeEntity(draggedEntities[0], sceneProject->scene, project, sceneProject);
+                } else {
+                    // Embed the full export data (including virtual action children) in the entity payload.
+                    // Structure uses the EntityPayload header for reparenting; Resources uses the YAML tail.
+                    entityData = Stream::encodeEntitySelection(exportEntities, sceneProject->scene);
                 }
-        }
 
-        ImGui::Text("Moving %s", node.name.c_str());
-        ImGui::EndDragDropSource();
-    }
+                std::string yamlString = YAML::Dump(entityData);
+
+                size_t yamlSize = yamlString.size();
+                size_t payloadSize = sizeof(EntityPayload) + yamlSize;
+                std::vector<char> payloadData(payloadSize);
+
+                EntityPayload* payload = reinterpret_cast<EntityPayload*>(payloadData.data());
+                payload->entity = node.id;
+                payload->parent = node.parent;
+                payload->order = node.order;
+                payload->hasTransform = node.hasTransform;
+                payload->entitySceneId = sceneProject->id;
+                memcpy(payloadData.data() + sizeof(EntityPayload), yamlString.data(), yamlSize);
+
+                ImGui::SetDragDropPayload("entity", payloadData.data(), payloadSize);
+            }
+
+            ImGui::Text("Moving %s", node.name.c_str());
+            ImGui::EndDragDropSource();
+        }
     }
 
     // Child scene entities: allow drag for cross-scene entity reference (ExternalEntity properties)
@@ -796,6 +1051,7 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
         Entity sourceParent = 0;
         size_t sourceOrder = 0;
         bool sourceHasTransform = false;
+        std::vector<Entity> movableEntities;
         if (payload && payload->IsDataType("entity")) {
             if (payload->DataSize >= sizeof(EntityPayload)) {
                 allowEntityDragDrop = true;
@@ -809,8 +1065,7 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
             if (sourceHasTransform != node.hasTransform && !node.isScene) {
                 allowEntityDragDrop = false;
             }
-            // For scene node, only allow if entity has a parent (has transform and is a child)
-            if (node.isScene && (!sourceHasTransform || sourceParent == NULL_ENTITY)) {
+            if (node.isScene && !sourceHasTransform) {
                 allowEntityDragDrop = false;
             }
 
@@ -844,21 +1099,18 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
             allowEntityDragDrop = false;
         }
 
-        if (allowEntityDragDrop && ProjectUtils::isEntityLocked(project->getSelectedScene()->scene, sourceEntity)) {
-            if (node.isScene) {
-                allowEntityDragDrop = false;
-            } else {
-                InsertionType insertionType;
-                if (insertBefore) {
-                    insertionType = InsertionType::BEFORE;
-                } else if (insertAfter) {
-                    insertionType = InsertionType::AFTER;
-                } else {
-                    insertionType = InsertionType::INTO;
-                }
+        InsertionType insertionType;
+        if (insertBefore) {
+            insertionType = InsertionType::BEFORE;
+        } else if (insertAfter) {
+            insertionType = InsertionType::AFTER;
+        } else {
+            insertionType = InsertionType::INTO;
+        }
 
-                allowEntityDragDrop = ProjectUtils::canMoveLockedEntityOrder(project->getSelectedScene()->scene, sourceEntity, node.id, insertionType);
-            }
+        if (allowEntityDragDrop) {
+            movableEntities = getMovableDraggedEntities(sourceEntity, node, insertionType);
+            allowEntityDragDrop = !movableEntities.empty();
         }
 
         if (allowEntityDragDrop){
@@ -875,17 +1127,9 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                     if (node.isScene) {
                         SceneProject* sceneProject = project->getSelectedScene();
                         std::unordered_set<Entity> entitiesSet(sceneProject->entities.begin(), sceneProject->entities.end());
-                        moveEntityToRootLevel(sourceEntity, entitiesSet);
+                        moveDraggedEntitiesToRootLevel(movableEntities, entitiesSet);
                     } else {
-                        InsertionType type;
-                        if (insertBefore){
-                            type = InsertionType::BEFORE;
-                        }else if (insertAfter){
-                            type = InsertionType::AFTER;
-                        }else{
-                            type = InsertionType::INTO;
-                        }
-                        CommandHandle::get(project->getSelectedSceneId())->addCommand(new MoveEntityOrderCmd(project, project->getSelectedSceneId(), sourceEntity, node.id, type));
+                        moveDraggedEntitiesToTarget(movableEntities, node.id, insertionType);
                     }
                 }
 
@@ -996,6 +1240,7 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
         project->clearAllSelections(project->getSelectedSceneId());
         selectedScenes.clear();
         project->setSelectedSceneForProperties(project->getSelectedSceneId());
+        resetEntitySelectionAnchor();
     }
 
     // Check for selection on mouse release (not click) to allow drag without selection
@@ -1005,46 +1250,19 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
             selectedScenes.clear();
             selectedScenes.push_back(node.childSceneId);
             project->setSelectedSceneForProperties(node.childSceneId);
+            resetEntitySelectionAnchor();
         } else if (isChildSceneEntity) {
             ImGuiIO& io = ImGui::GetIO();
-            if (!io.KeyShift){
-                project->clearAllSelections(project->getSelectedSceneId());
-            }
-            selectedScenes.clear();
-            project->addSelectedEntity(node.entitySceneId, node.id);
-            project->setSelectedSceneForProperties(node.entitySceneId);
-            // Clear any selected instance or tile that belonged to this entity
-            SceneProject* sp = project->getScene(node.entitySceneId);
-            if (sp && sp->sceneRender) {
-                if (sp->sceneRender->getSelectedInstanceEntity() == node.id) {
-                    sp->sceneRender->clearInstanceSelection();
-                }
-                if (sp->sceneRender->getSelectedTileEntity() == (Entity)node.id) {
-                    sp->sceneRender->clearTileSelection();
-                }
-            }
+            applyEntitySelection(node.entitySceneId, node.id, io.KeyShift, io.KeyCtrl);
         } else if (!node.isScene){
             ImGuiIO& io = ImGui::GetIO();
-            if (!io.KeyShift){
-                project->clearAllSelections(project->getSelectedSceneId());
-            }
-            project->addSelectedEntity(project->getSelectedSceneId(), node.id);
-            project->setSelectedSceneForProperties(project->getSelectedSceneId());
-            // Clear any selected instance or tile that belonged to this entity
-            SceneProject* sp = project->getSelectedScene();
-            if (sp && sp->sceneRender) {
-                if (sp->sceneRender->getSelectedInstanceEntity() == node.id) {
-                    sp->sceneRender->clearInstanceSelection();
-                }
-                if (sp->sceneRender->getSelectedTileEntity() == (Entity)node.id) {
-                    sp->sceneRender->clearTileSelection();
-                }
-            }
+            applyEntitySelection(project->getSelectedSceneId(), node.id, io.KeyShift, io.KeyCtrl);
         }else{
             project->clearAllSelections(project->getSelectedSceneId());
             selectedScenes.clear();
             selectedScenes.push_back(node.id);
             project->setSelectedSceneForProperties(node.id);
+            resetEntitySelectionAnchor();
         }
     }
 
@@ -1695,6 +1913,8 @@ void editor::Structure::show(){
         markMatchingNodes(root, searchStr);
     }
 
+    visibleEntitySelectionOrder.clear();
+    collectVisibleEntitySelectionOrder(root, strlen(searchBuffer) > 0);
     showTreeNode(root);
     float treeLastCursorY = ImGui::GetCursorScreenPos().y;
 
@@ -1723,13 +1943,12 @@ void editor::Structure::show(){
                     const EntityPayload* p = reinterpret_cast<const EntityPayload*>(payload->Data);
                     Entity sourceEntity = p->entity;
                     bool sourceHasTransform = p->hasTransform;
-                    Entity sourceParent = p->parent;
 
-                    // Only allow moving if source has transform and is a child (has parent)
-                    if (sourceHasTransform && sourceParent != NULL_ENTITY) {
-                        if (ImGui::AcceptDragDropPayload("entity")) {
+                    if (sourceHasTransform) {
+                        std::vector<Entity> movableEntities = getMovableDraggedEntities(sourceEntity, root, InsertionType::AFTER);
+                        if (!movableEntities.empty() && ImGui::AcceptDragDropPayload("entity")) {
                             if (payload->IsDelivery()) {
-                                moveEntityToRootLevel(sourceEntity, sceneEntitiesSet);
+                                moveDraggedEntitiesToRootLevel(movableEntities, sceneEntitiesSet);
                             }
                         }
                     }
