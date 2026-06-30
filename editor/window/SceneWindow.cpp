@@ -1573,6 +1573,7 @@ void editor::SceneWindow::show() {
 
                         if (sceneProject.sceneType == SceneType::SCENE_3D) {
                             drawSettingRow(ICON_FA_TABLE_CELLS " Show grid", sceneProject.displaySettings.showGrid3D);
+                            drawSettingRow(ICON_FA_CLONE " Disable face culling", sceneProject.displaySettings.disableFaceCulling);
                         } else {
                             drawSettingRow(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT " Show origin axis", sceneProject.displaySettings.showOrigin);
                         }

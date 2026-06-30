@@ -968,6 +968,17 @@ void RenderSystem::updateAllTerrainRenderTextures(){
     }
 }
 
+void RenderSystem::setDisableFaceCulling(bool disableFaceCulling){
+    if (this->disableFaceCulling == disableFaceCulling){
+        return;
+    }
+    this->disableFaceCulling = disableFaceCulling;
+
+    // Cull mode is baked into the pipeline at creation time, so every mesh must be
+    // reloaded for the override to take effect (editor-only debug view).
+    needReloadMeshes();
+}
+
 bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipelines, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
 
     if (!Engine::isViewLoaded()) 
@@ -1364,7 +1375,8 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             mesh.submeshes[i].vertexCount = mesh.vertexCount;
         }
 
-        if (!render.endLoad(pipelines, mesh.submeshes[i].faceCulling, mesh.cullingMode, mesh.windingOrder)){
+        bool faceCulling = disableFaceCulling ? false : mesh.submeshes[i].faceCulling;
+        if (!render.endLoad(pipelines, faceCulling, mesh.cullingMode, mesh.windingOrder)){
             return false;
         }
 

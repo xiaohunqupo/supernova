@@ -1358,6 +1358,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
             sceneNode["showOrigin"]           = sceneProject.displaySettings.showOrigin;
             sceneNode["showGrid3D"]           = sceneProject.displaySettings.showGrid3D;
             sceneNode["hideSelectionOutline"] = sceneProject.displaySettings.hideSelectionOutline;
+            sceneNode["disableFaceCulling"]   = sceneProject.displaySettings.disableFaceCulling;
             sceneNode["showGrid2D"]           = sceneProject.displaySettings.showGrid2D;
             encodePositiveFinite(sceneNode, "gridSpacing2D", sceneProject.displaySettings.gridSpacing2D);
             encodePositiveFinite(sceneNode, "gridSpacing3D", sceneProject.displaySettings.gridSpacing3D);
@@ -1515,6 +1516,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
                         if (sceneNode["showOrigin"])           ds.showOrigin           = sceneNode["showOrigin"].as<bool>();
                         if (sceneNode["showGrid3D"])           ds.showGrid3D           = sceneNode["showGrid3D"].as<bool>();
                         if (sceneNode["hideSelectionOutline"]) ds.hideSelectionOutline = sceneNode["hideSelectionOutline"].as<bool>();
+                        if (sceneNode["disableFaceCulling"])   ds.disableFaceCulling   = sceneNode["disableFaceCulling"].as<bool>();
                         if (sceneNode["showGrid2D"])           ds.showGrid2D           = sceneNode["showGrid2D"].as<bool>();
 
                         if (sceneNode["gridSpacing2D"])        ds.gridSpacing2D        = decodePositiveFinite(sceneNode["gridSpacing2D"], ds.gridSpacing2D);

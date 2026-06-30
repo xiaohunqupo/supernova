@@ -467,6 +467,13 @@ void editor::SceneRender::updateRenderSystem(){
 
 void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<Entity> entities, Entity mainCamera, const SceneDisplaySettings& settings){
     displaySettings = settings;
+
+    // Editor-only viewport debug override: forces meshes to render without face
+    // culling while editing, but reverts to the normal per-object culling during
+    // play so the running game looks as it actually will. The setter only reloads
+    // meshes when the value changes, so this is a no-op every frame once settled.
+    scene->getSystem<RenderSystem>()->setDisableFaceCulling(displaySettings.disableFaceCulling && !isPlaying);
+
     if (isPlaying){
         return;
     }

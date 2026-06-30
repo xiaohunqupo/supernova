@@ -146,6 +146,11 @@ namespace doriax{
 
 		Scene* scene;
 
+		// Editor-only viewport debug override that forces all meshes to render
+		// without face culling. Defaults to false and is never set at runtime, so
+		// exported games are unaffected.
+		bool disableFaceCulling = false;
+
 		static uint32_t pixelsWhite[64];
 		static uint32_t pixelsBlack[64];
 		static uint32_t pixelsNormal[64];
@@ -334,6 +339,10 @@ namespace doriax{
 
 		RenderSystem(Scene* scene);
 		virtual ~RenderSystem();
+
+		// Editor-only viewport debug override (see member declaration). Toggling it
+		// reloads every mesh, since cull mode is baked into the pipeline at load time.
+		void setDisableFaceCulling(bool disableFaceCulling);
 
 		bool loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipelines, InstancedMeshComponent* instmesh, TerrainComponent* terrain);
 		bool loadPoints(Entity entity, PointsComponent& points, uint8_t pipelines);
