@@ -1008,8 +1008,19 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
     // Push colors for visual feedback
     bool pushedHighlightColor = false;
 
+    // Is this camera entity currently being viewed through (preview mode)? Resolved via
+    // the node's owning scene render. getPreviewCameraEntity() is a cheap member read, so
+    // it short-circuits for every other node before the heavier isPreviewCameraActive().
+    SceneProject* previewNodeScene = (!node.isScene && !node.isChildScene) ? project->getScene(getNodeSceneId(node)) : nullptr;
+    bool previewingThisCamera = previewNodeScene && previewNodeScene->sceneRender
+        && previewNodeScene->sceneRender->getPreviewCameraEntity() == node.id
+        && previewNodeScene->sceneRender->isPreviewCameraActive();
+
     // Highlight matching nodes when searching
-    if (hasSearch && node.matchesSearch) {
+    if (previewingThisCamera) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.86f, 0.2f, 1.0f)); // Yellow: viewing through this camera
+        pushedHighlightColor = true;
+    } else if (hasSearch && node.matchesSearch) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.5f, 1.0f)); // Yellow for search matches
         pushedHighlightColor = true;
     } else if (!node.isScene && !node.isChildScene && node.isLocked && node.isBundle) {

@@ -1713,7 +1713,53 @@ void editor::SceneWindow::show() {
                     sceneProject.needUpdateRender = true;
                 }
 
-                ImGui::Image((ImTextureID)(intptr_t)sceneProject.sceneRender->getTexture().getGLHandler(), ImGui::GetContentRegionAvail());
+                ImTextureID previewTex = (ImTextureID)(intptr_t)sceneProject.sceneRender->getTexture().getGLHandler();
+                ImVec2 canvasAvail = ImGui::GetContentRegionAvail();
+
+                if (isCameraPreview) {
+                    // Fixed-aspect cameras (autoResize == false) render distorted into the
+                    // full viewport; display them at their true aspect (letterbox/pillarbox)
+                    // so the preview matches the framing they'll actually render. autoResize
+                    // cameras already fill the viewport correctly, so they stay full-size.
+                    ImVec2 imageSize = canvasAvail;
+                    if (CameraComponent* previewCam = sceneProject.scene->findComponent<CameraComponent>(previewCameraEntity)) {
+                        if (!previewCam->autoResize && canvasAvail.x > 0 && canvasAvail.y > 0) {
+                            float camAspect;
+                            if (previewCam->type == CameraType::CAMERA_PERSPECTIVE) {
+                                camAspect = previewCam->aspect;
+                            } else {
+                                float clipW = previewCam->rightClip - previewCam->leftClip;
+                                float clipH = previewCam->topClip - previewCam->bottomClip;
+                                camAspect = (clipH != 0.0f) ? std::fabs(clipW / clipH) : 0.0f;
+                            }
+                            if (camAspect > 0.0f) {
+                                float viewAspect = canvasAvail.x / canvasAvail.y;
+                                if (camAspect > viewAspect) {
+                                    imageSize = ImVec2(canvasAvail.x, canvasAvail.x / camAspect);
+                                } else {
+                                    imageSize = ImVec2(canvasAvail.y * camAspect, canvasAvail.y);
+                                }
+                            }
+                        }
+                    }
+
+                    ImVec2 canvasMin = ImGui::GetCursorScreenPos();
+                    ImVec2 imageMin(canvasMin.x + (canvasAvail.x - imageSize.x) * 0.5f,
+                                    canvasMin.y + (canvasAvail.y - imageSize.y) * 0.5f);
+                    ImVec2 imageMax(imageMin.x + imageSize.x, imageMin.y + imageSize.y);
+
+                    ImDrawList* drawList = ImGui::GetWindowDrawList();
+                    drawList->AddRectFilled(canvasMin, ImVec2(canvasMin.x + canvasAvail.x, canvasMin.y + canvasAvail.y), IM_COL32(0, 0, 0, 255));
+
+                    ImGui::SetCursorScreenPos(imageMin);
+                    ImGui::Image(previewTex, imageSize);
+
+                    // Yellow frame as a "viewing through camera" cue (inset 1px so it's not clipped at the edge).
+                    // Matches the previewed camera's highlight color in the Structure tree.
+                    drawList->AddRect(ImVec2(imageMin.x + 1, imageMin.y + 1), ImVec2(imageMax.x - 1, imageMax.y - 1), IM_COL32(255, 219, 51, 235), 0.0f, 0, 2.0f);
+                } else {
+                    ImGui::Image(previewTex, canvasAvail);
+                }
 
                 if (sceneProject.playState == ScenePlayState::STOPPED && !isCameraPreview){
                     if (ImGui::IsWindowHovered()) {
