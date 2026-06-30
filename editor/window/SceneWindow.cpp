@@ -1442,6 +1442,12 @@ void editor::SceneWindow::show() {
 
             CursorSelected cursorSelected = sceneProject.sceneRender->getCursorSelected();
 
+            // While viewing through a camera the editor manipulation tools are inert
+            // (input is suppressed in sceneEventHandler and gizmos are hidden), so
+            // disable the whole select/gizmo/transform group. Closed before the Gear
+            // button, which stays usable. Nests with each button's own BeginDisabled.
+            ImGui::BeginDisabled(isCameraPreview);
+
             ImGui::BeginDisabled(cursorSelected == CursorSelected::POINTER);
             ImGui::SameLine();
             if (ImGui::Button(ICON_FA_ARROW_POINTER)) {
@@ -1526,6 +1532,9 @@ void editor::SceneWindow::show() {
                 ImGui::SameLine(0, 10);
                 ImGui::Dummy(ImVec2(1, 20));
             }
+
+            // Close the select/gizmo/transform disabled group opened before the cursor buttons.
+            ImGui::EndDisabled();
 
             {
                 std::string sceneSettingsPopupId = "SceneSettingsPopup" + std::to_string(sceneProject.id);
