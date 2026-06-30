@@ -2,6 +2,9 @@
 
 #include "HttpClient.h"
 
+#include <cstdint>
+#include <limits>
+
 namespace doriax::editor::ai {
 
 // Payload builders / response parsers, implemented at the bottom of this file.
@@ -63,6 +66,49 @@ ProviderResponse parseErrorOrBody(const std::string& body, Json& root) {
         }
     }
     return result;
+}
+
+int readTokenCount(const Json& object, const char* key) {
+    if (!object.is_object() || !object.contains(key)) {
+        return -1;
+    }
+
+    const Json& value = object[key];
+    if (value.is_number_unsigned()) {
+        uint64_t count = value.get<uint64_t>();
+        if (count <= static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            return static_cast<int>(count);
+        }
+    } else if (value.is_number_integer()) {
+        int64_t count = value.get<int64_t>();
+        if (count >= 0 && count <= std::numeric_limits<int>::max()) {
+            return static_cast<int>(count);
+        }
+    }
+    return -1;
+}
+
+void parseOpenAiUsage(const Json& root, ProviderResponse& result) {
+    const Json& usage = root.value("usage", Json::object());
+    result.promptTokens = readTokenCount(usage, "prompt_tokens");
+    result.completionTokens = readTokenCount(usage, "completion_tokens");
+    result.totalTokens = readTokenCount(usage, "total_tokens");
+}
+
+void parseAnthropicUsage(const Json& root, ProviderResponse& result) {
+    const Json& usage = root.value("usage", Json::object());
+    result.promptTokens = readTokenCount(usage, "input_tokens");
+    result.completionTokens = readTokenCount(usage, "output_tokens");
+    if (result.promptTokens >= 0 && result.completionTokens >= 0) {
+        result.totalTokens = result.promptTokens + result.completionTokens;
+    }
+}
+
+void parseGeminiUsage(const Json& root, ProviderResponse& result) {
+    const Json& usage = root.value("usageMetadata", Json::object());
+    result.promptTokens = readTokenCount(usage, "promptTokenCount");
+    result.completionTokens = readTokenCount(usage, "candidatesTokenCount");
+    result.totalTokens = readTokenCount(usage, "totalTokenCount");
 }
 
 // --- Provider adapters ----------------------------------------------------
@@ -263,7 +309,9 @@ ProviderResponse parseChatCompletionsBody(const std::string& body) {
         return result;
     }
 
-    result.truncated = root["choices"][0].value("finish_reason", "") == "length";
+    parseOpenAiUsage(root, result);
+    result.stopReason = root["choices"][0].value("finish_reason", "");
+    result.truncated = result.stopReason == "length";
 
     const Json& message = root["choices"][0].value("message", Json::object());
     if (message.contains("content") && message["content"].is_string()) {
@@ -359,7 +407,9 @@ ProviderResponse parseAnthropicBody(const std::string& body) {
     ProviderResponse result = parseErrorOrBody(body, root);
     if (!result.error.empty()) return result;
 
-    result.truncated = root.value("stop_reason", "") == "max_tokens";
+    parseAnthropicUsage(root, result);
+    result.stopReason = root.value("stop_reason", "");
+    result.truncated = result.stopReason == "max_tokens";
 
     if (!root.contains("content") || !root["content"].is_array()) {
         return result;
@@ -494,7 +544,9 @@ ProviderResponse parseGeminiBody(const std::string& body) {
     if (!root.contains("candidates") || !root["candidates"].is_array() || root["candidates"].empty()) {
         return result;
     }
-    result.truncated = root["candidates"][0].value("finishReason", "") == "MAX_TOKENS";
+    parseGeminiUsage(root, result);
+    result.stopReason = root["candidates"][0].value("finishReason", "");
+    result.truncated = result.stopReason == "MAX_TOKENS";
 
     const Json& parts = root["candidates"][0].value("content", Json::object()).value("parts", Json::array());
     if (!parts.is_array()) {

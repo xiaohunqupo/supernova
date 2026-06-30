@@ -7,6 +7,7 @@
 #include "SecretStore.h"
 
 #include <algorithm>
+#include <cctype>
 #include <memory>
 #include <sstream>
 
@@ -31,6 +32,147 @@ std::string humanizeProviderError(long status, const std::string& detail) {
         out += ": " + detail;
     }
     return out;
+}
+
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+bool looksLikeOllamaEndpoint(const Settings& settings) {
+    if (settings.provider != ProviderId::OpenAICompatible) {
+        return false;
+    }
+    std::string endpoint = lowercase(settings.customEndpoint);
+    return endpoint.find("ollama") != std::string::npos ||
+           endpoint.find(":11434") != std::string::npos;
+}
+
+std::string pluralTokens(int count) {
+    return count == 1 ? "token" : "tokens";
+}
+
+bool hasTokenUsage(const ProviderResponse& response) {
+    return response.promptTokens >= 0 ||
+           response.completionTokens >= 0 ||
+           response.totalTokens >= 0;
+}
+
+bool promptUsedNearlyWholeContext(const ProviderResponse& response) {
+    if (response.promptTokens < 0 || response.totalTokens <= 0) {
+        return false;
+    }
+    int remaining = response.totalTokens - response.promptTokens;
+    int smallHeadroom = std::max(32, response.totalTokens / 20);
+    return remaining >= 0 && remaining <= smallHeadroom;
+}
+
+std::string tokenUsageSummary(const ProviderResponse& response) {
+    std::ostringstream out;
+    bool wrote = false;
+    if (response.promptTokens >= 0) {
+        out << response.promptTokens << " prompt";
+        wrote = true;
+    }
+    if (response.completionTokens >= 0) {
+        if (wrote) out << " + ";
+        out << response.completionTokens << " output";
+        wrote = true;
+    }
+    if (response.totalTokens >= 0) {
+        if (wrote) out << " = ";
+        out << response.totalTokens << " total";
+    }
+    return out.str();
+}
+
+// A context window comfortably above what this request already consumed, rounded
+// up to a tidy boundary, so the suggestion leaves room for both prompt and reply.
+int suggestContextTokens(const ProviderResponse& response) {
+    int used = std::max(response.totalTokens, response.promptTokens);
+    int target = used > 0 ? used * 2 : 8192;
+    for (int boundary : {8192, 16384, 32768, 65536, 131072}) {
+        if (target <= boundary) return boundary;
+    }
+    return target;
+}
+
+// Advice for a token limit that is the provider/model context window rather than
+// Doriax's output cap. Ollama gets a concrete num_ctx suggestion because a small
+// context window is a common culprit.
+std::string contextRemedy(const ProviderRequest& request, const ProviderResponse& response) {
+    if (!looksLikeOllamaEndpoint(request.settings)) {
+        return "Use a larger-context model or reduce the conversation/project context and try again.";
+    }
+    int suggested = suggestContextTokens(response);
+    std::ostringstream out;
+    out << "For Ollama, raise the model context length to at least " << suggested
+        << " (\"/set parameter num_ctx " << suggested << "\" in the Ollama session, or "
+           "\"PARAMETER num_ctx " << suggested << "\" in the Modelfile)";
+    if (response.totalTokens > 0) {
+        out << "; this response stopped after " << response.totalTokens << " total tokens";
+    }
+    out << ". You can also use a larger-context model or reduce the conversation/project context, then try again.";
+    return out.str();
+}
+
+std::string buildTruncationMessage(const ProviderRequest& request, const ProviderResponse& response) {
+    const bool hasCompletionUsage = response.completionTokens >= 0;
+    // The model reached (within rounding of) Doriax's own output cap, so the stop
+    // is the editor's "Max output tokens" setting, not a provider/context limit.
+    const bool reachedDoriaxCap =
+        hasCompletionUsage && response.completionTokens + 1 >= request.settings.maxOutputTokens;
+    const bool stoppedBeforeDoriaxCap = hasCompletionUsage && !reachedDoriaxCap;
+    // Only trust the "context full" reading when the stop was not Doriax's cap;
+    // otherwise a small cap plus a largish prompt can look like a full window.
+    const bool contextLikelyFull = promptUsedNearlyWholeContext(response) && !reachedDoriaxCap;
+
+    std::ostringstream out;
+    if (contextLikelyFull) {
+        out << "The provider stopped at a token limit";
+        if (!response.stopReason.empty()) {
+            out << " (" << response.stopReason << ")";
+        }
+        if (response.completionTokens >= 0) {
+            out << " after " << response.completionTokens << " output "
+                << pluralTokens(response.completionTokens);
+        }
+        out << " because the prompt used nearly the whole context window";
+        if (hasTokenUsage(response)) {
+            out << " (" << tokenUsageSummary(response) << " tokens)";
+        }
+        out << ". This is not Doriax's \"Max output tokens\" cap ("
+            << request.settings.maxOutputTokens << "). " << contextRemedy(request, response);
+        return out.str();
+    }
+
+    if (stoppedBeforeDoriaxCap) {
+        out << "The provider stopped at its own token limit";
+        if (!response.stopReason.empty()) {
+            out << " (" << response.stopReason << ")";
+        }
+        out << " after " << response.completionTokens << " output "
+            << pluralTokens(response.completionTokens)
+            << ", before Doriax's configured max of "
+            << request.settings.maxOutputTokens << ".";
+        if (hasTokenUsage(response)) {
+            out << " Usage: " << tokenUsageSummary(response) << " tokens.";
+        }
+        out << " " << contextRemedy(request, response);
+        return out.str();
+    }
+
+    out << "The response hit the max output token limit ("
+        << request.settings.maxOutputTokens
+        << ") and was cut off before completing.";
+    if (hasTokenUsage(response)) {
+        out << " Usage: " << tokenUsageSummary(response) << " tokens.";
+    }
+    out << " Increase \"Max output tokens\" in AI settings (gear icon) and try again - "
+           "writing a whole file such as a shader needs a higher limit.";
+    return out.str();
 }
 
 } // namespace
@@ -322,12 +464,15 @@ void AiService::runProviderRequest(ProviderRequest request) {
         if (!parsed.error.empty()) {
             appendAssistantMessageLocked(parsed.error);
         } else if (parsed.toolCalls.empty() && parsed.truncated) {
-            // A truncated reply usually dropped an incomplete tool call (e.g. writing a
-            // whole file) mid-JSON, so it arrives with no usable tool call.
-            appendAssistantMessageLocked(
-                "The response hit the max output token limit (" + std::to_string(request.settings.maxOutputTokens) +
-                ") and was cut off before completing. Increase \"Max output tokens\" in AI settings (gear icon) and try again - "
-                "writing a whole file such as a shader needs a higher limit.");
+            // A truncated reply often drops an incomplete tool call mid-JSON, so
+            // it arrives with no usable tool call. Use provider usage, when
+            // available, to distinguish the editor's output cap from a full
+            // provider/model context window.
+            std::string message = buildTruncationMessage(request, parsed);
+            if (!parsed.text.empty()) {
+                message = parsed.text + "\n\n" + message;
+            }
+            appendAssistantMessageLocked(message);
         } else if (parsed.text.empty() && parsed.toolCalls.empty()) {
             appendAssistantMessageLocked("The provider returned no text or tool calls.");
         } else {

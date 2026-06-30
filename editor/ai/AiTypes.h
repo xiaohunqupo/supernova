@@ -81,8 +81,14 @@ struct ProviderResponse {
     std::string text;
     std::vector<ToolCall> toolCalls;
     std::string error;
-    // True when the model stopped because it hit the max output token limit (finish_reason
-    // "length" / stop_reason "max_tokens" / "MAX_TOKENS"); the reply is likely incomplete.
+    // Provider stop reason such as finish_reason "length", stop_reason "max_tokens",
+    // or Gemini finishReason "MAX_TOKENS".
+    std::string stopReason;
+    // Token usage when returned by the provider. A value of -1 means unknown.
+    int promptTokens = -1;
+    int completionTokens = -1;
+    int totalTokens = -1;
+    // True when the model stopped because it hit a token limit; the reply is likely incomplete.
     bool truncated = false;
 };
 
