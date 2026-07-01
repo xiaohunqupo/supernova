@@ -1351,6 +1351,7 @@ void editor::SceneWindow::show() {
     closeSceneQueue.clear();
 
     windowFocused = false;
+    bool gameCursorInSceneRect = false;
 
     int openedScenesCount = 0;
     for (const auto& s : project->getScenes()) {
@@ -1797,6 +1798,10 @@ void editor::SceneWindow::show() {
                     }
                 }
 
+                if (sceneProject.playState == ScenePlayState::PLAYING && ImGui::IsWindowHovered()) {
+                    gameCursorInSceneRect = true;
+                }
+
                 sceneEventHandler(&sceneProject);
             }
             ImGui::EndChild();
@@ -1810,6 +1815,8 @@ void editor::SceneWindow::show() {
             handleCloseScene(sceneProject.id);
         }
     }
+
+    Backend::setGameCursorInSceneRect(gameCursorInSceneRect);
 }
 
 int editor::SceneWindow::getWidth(uint32_t sceneId) const{

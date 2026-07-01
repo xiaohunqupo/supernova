@@ -1,5 +1,6 @@
 #include "Platform.h"
 #include "Out.h"
+#include "Backend.h"
 
 using namespace doriax;
 
@@ -31,6 +32,10 @@ int editor::Platform::getScreenHeight(){
 
 std::string editor::Platform::getAssetPath(){
     return project->getProjectPath().string();
+}
+
+void editor::Platform::setShowCursor(bool showCursor){
+    Backend::setShowCursor(showCursor);
 }
 
 void editor::Platform::platformLog(const int type, const char *fmt, va_list args){

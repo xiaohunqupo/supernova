@@ -14,11 +14,51 @@
 static GLFWwindow* window = nullptr;
 static GLFWcursor* invisibleCursor = nullptr;
 static nfdwindowhandle_t nativeWindow;
+static bool gameShowCursor = true;
+static bool gameCursorInSceneRect = false;
+static bool gameCursorHidden = false;
 
 using namespace doriax;
 
 editor::App editor::Backend::app;
 std::string editor::Backend::title;
+
+static void hideEditorCursor() {
+    ImGuiIO& io = ImGui::GetIO();
+    io.MouseDrawCursor = false;
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+
+    if (invisibleCursor) {
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        glfwSetCursor(window, invisibleCursor);
+    } else {
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+    }
+    gameCursorHidden = true;
+}
+
+static void showEditorCursor() {
+    ImGuiIO& io = ImGui::GetIO();
+    io.MouseDrawCursor = false;
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    glfwSetCursor(window, nullptr);
+    io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    gameCursorHidden = false;
+}
+
+static void applyGameCursorVisibility(bool force = false) {
+    const bool shouldHide = !gameShowCursor && gameCursorInSceneRect;
+    if (!force && shouldHide == gameCursorHidden) {
+        return;
+    }
+
+    if (shouldHide) {
+        hideEditorCursor();
+    } else {
+        showEditorCursor();
+    }
+}
 
 int editor::Backend::init(int argc, char* argv[]) {
     setEditorHost(&app);
@@ -183,11 +223,17 @@ void editor::Backend::disableMouseCursor() {
 }
 
 void editor::Backend::enableMouseCursor() {
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    glfwSetCursor(window, nullptr);
+    applyGameCursorVisibility(true);
+}
 
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+void editor::Backend::setShowCursor(bool showCursor) {
+    gameShowCursor = showCursor;
+    applyGameCursorVisibility();
+}
+
+void editor::Backend::setGameCursorInSceneRect(bool inSceneRect) {
+    gameCursorInSceneRect = inSceneRect;
+    applyGameCursorVisibility();
 }
 
 void editor::Backend::closeWindow() {

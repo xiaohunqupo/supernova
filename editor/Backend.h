@@ -15,6 +15,8 @@ namespace doriax::editor{
 
         static void disableMouseCursor();
         static void enableMouseCursor();
+        static void setShowCursor(bool showCursor);
+        static void setGameCursorInSceneRect(bool inSceneRect);
         static void closeWindow();
 
         static void updateWindowTitle(const std::string& projectName);

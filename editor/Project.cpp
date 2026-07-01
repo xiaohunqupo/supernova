@@ -2294,6 +2294,8 @@ void editor::Project::deleteSceneProject(SceneProject* sceneProject){
 void editor::Project::resetEngineConfigs(bool executeViewChanged) {
     Engine::setScalingMode(Scaling::NATIVE);
     Engine::setTextureStrategy(TextureStrategy::RESIZE);
+    Engine::setMouseCursor(CursorType::ARROW);
+    Engine::setShowCursor(true);
 
     if (executeViewChanged) {
         Engine::systemViewChanged();

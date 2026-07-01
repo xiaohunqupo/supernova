@@ -24,6 +24,8 @@ namespace doriax::editor{
 
         std::string getAssetPath() override;
 
+        void setShowCursor(bool showCursor) override;
+
         void platformLog(const int type, const char *fmt, va_list args) override;
     };
 
