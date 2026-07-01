@@ -1648,6 +1648,16 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
         }
     }
 
+    if (scene->isSSAOEnabled()) {
+        keys.insert(ShaderPool::getShaderKey(ShaderType::SSAO, 0));
+        keys.insert(ShaderPool::getShaderKey(ShaderType::SSAO_BLUR, 0));
+    }
+
+    if (scene->isSSREnabled()) {
+        keys.insert(ShaderPool::getShaderKey(ShaderType::SSR, 0));
+        keys.insert(ShaderPool::getShaderKey(ShaderType::SSR_BLUR, 0));
+        keys.insert(ShaderPool::getShaderKey(ShaderType::COMPOSITE, 0));
+    }
 }
 
 void editor::Project::invalidateCustomShaders() {

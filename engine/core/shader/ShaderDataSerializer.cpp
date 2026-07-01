@@ -8,7 +8,8 @@
 #include "io/File.h"
 #include "json.hpp"
 
-#include <fstream>
+#include <cerrno>
+#include <cstring>
 #include <limits>
 #include <vector>
 
@@ -422,12 +423,25 @@ bool ShaderDataSerializerHelper::readString(FileData& in, std::string& s) {
 }
 
 bool ShaderDataSerializer::writeToFile(const std::string& filepath, uint64_t shaderKey, const ShaderData& shaderData, std::string* err) {
-    File out;
-    if (out.open(filepath.c_str(), true) != FileErrors::FILEDATA_OK) {
-        return ShaderDataSerializerHelper::setErr(err, "Cannot open file for writing: " + filepath);
+    std::vector<unsigned char> bytes;
+    if (!writeToBytes(bytes, shaderKey, shaderData, err)) {
+        return false;
     }
 
-    ShaderDataSerializerHelper::writeShaderData(out, shaderKey, shaderData);
+    File out;
+    errno = 0;
+    if (out.open(filepath.c_str(), true) != FileErrors::FILEDATA_OK) {
+        std::string detail = errno != 0 ? std::string(" (") + std::strerror(errno) + ")" : "";
+        return ShaderDataSerializerHelper::setErr(err, "Cannot open file for writing: " + filepath + detail);
+    }
+
+    if (bytes.size() > std::numeric_limits<unsigned int>::max()) {
+        return ShaderDataSerializerHelper::setErr(err, "Shader data is too large to write: " + filepath);
+    }
+
+    if (!bytes.empty() && out.write(bytes.data(), static_cast<unsigned int>(bytes.size())) != bytes.size()) {
+        return ShaderDataSerializerHelper::setErr(err, "Failed to write shader file: " + filepath);
+    }
 
     out.flush();
 
@@ -443,15 +457,24 @@ bool ShaderDataSerializer::writeToBytes(std::vector<unsigned char>& outBytes, ui
 }
 
 bool ShaderDataSerializer::writeJsonToFile(const std::string& filepath, uint64_t shaderKey, const ShaderData& shaderData, std::string* err) {
-    std::ofstream out(filepath, std::ios::out | std::ios::binary);
-    if (!out) {
-        return ShaderDataSerializerHelper::setErr(err, "Cannot open file for writing: " + filepath);
+    const std::string json = ShaderDataSerializerHelper::shaderDataToJson(shaderKey, shaderData).dump(4) + "\n";
+
+    File out;
+    errno = 0;
+    if (out.open(filepath.c_str(), true) != FileErrors::FILEDATA_OK) {
+        std::string detail = errno != 0 ? std::string(" (") + std::strerror(errno) + ")" : "";
+        return ShaderDataSerializerHelper::setErr(err, "Cannot open file for writing: " + filepath + detail);
     }
 
-    out << ShaderDataSerializerHelper::shaderDataToJson(shaderKey, shaderData).dump(4) << "\n";
-    if (!out) {
+    if (json.size() > std::numeric_limits<unsigned int>::max()) {
+        return ShaderDataSerializerHelper::setErr(err, "JSON shader data is too large to write: " + filepath);
+    }
+
+    if (!json.empty() && out.write((unsigned char*)json.data(), static_cast<unsigned int>(json.size())) != json.size()) {
         return ShaderDataSerializerHelper::setErr(err, "Failed to write JSON file: " + filepath);
     }
+
+    out.flush();
 
     return true;
 }

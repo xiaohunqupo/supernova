@@ -797,6 +797,12 @@ bool editor::Exporter::buildAndSaveShaders() {
         return false;
     }
 
+    shadersDst = fs::absolute(shadersDst, ec);
+    if (ec) {
+        setError("Failed to resolve shaders directory: " + ec.message());
+        return false;
+    }
+
     struct ShaderFormat {
         shadercompiler::lang_type_t lang;
         int version;

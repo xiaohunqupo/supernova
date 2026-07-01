@@ -5094,13 +5094,14 @@ void RenderSystem::draw(){
             "Missing shaders:\n"
             "%s\n"
             "\n"
-            "Generate them with Doriax Editor:\n"
+            "Bundle precompiled shaders for platform: %s\n"
+            "To generate them manually with Doriax Editor:\n"
             "\n"
             "> %s\n"
             "\n"
             "Current runtime shader format: %s\n"
             "-------------------"
-            , shaderOutputDir.c_str(), shaderSpecs.c_str(), shaderCommand.c_str(), ShaderPool::getShaderLangStr().c_str());
+            , shaderOutputDir.c_str(), shaderSpecs.c_str(), shaderPlatform.c_str(), shaderCommand.c_str(), ShaderPool::getShaderLangStr().c_str());
         exit(1);
     }
 }
