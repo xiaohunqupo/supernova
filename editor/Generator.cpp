@@ -296,19 +296,24 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
         return false;
     }
 
+    const fs::path exePath = FileUtils::getExecutableDir();
+
     // Detect kit change: if the compiler/generator selection changed since the
     // last configure, the build tree must be wiped (CMake does not support
-    // switching generators or compilers in-place).
+    // switching generators or compilers in-place). The editor engine library
+    // directory participates too: find_library() caches absolute paths, so a
+    // moved/updated editor install must force a fresh library lookup instead
+    // of retaining an old libdoriax path.
     {
         fs::path kitMarker = buildPath / ".doriax_kit";
         fs::path cacheFile = buildPath / "CMakeCache.txt";
-        std::string currentKit = generator + "\n" + cCompiler + "\n" + cxxCompiler;
+        std::string currentKit = generator + "\n" + cCompiler + "\n" + cxxCompiler + "\n" + exePath.string();
         if (fs::exists(kitMarker)) {
             std::ifstream f(kitMarker);
             std::string prevKit((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
             f.close();
             if (prevKit != currentKit) {
-                Out::warning("Compiler kit changed. Cleaning build directory...");
+                Out::warning("Compiler kit or engine library directory changed. Cleaning build directory...");
                 if (!cleanBuildDirectory(buildPath)) {
                     return false;
                 }
@@ -351,7 +356,7 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
             }
 
             if (kitChanged) {
-                Out::warning("Compiler kit changed. Cleaning build directory...");
+                Out::warning("Compiler kit or engine library directory changed. Cleaning build directory...");
                 if (!cleanBuildDirectory(buildPath)) {
                     return false;
                 }
@@ -403,8 +408,6 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
     }
 #endif
 
-    const fs::path exePath = FileUtils::getExecutableDir();
-
     // CMake stores path values (e.g. CMAKE_C_COMPILER) into generated .cmake
     // files and re-parses them, treating backslashes as escape sequences. On
     // Windows a path like "C:\clang...\bin\clang.exe" then fails with
@@ -443,7 +446,7 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
         fs::create_directories(buildPath, ec);
         std::ofstream f(buildPath / ".doriax_kit");
         if (f.is_open()) {
-            f << generator << "\n" << cCompiler << "\n" << cxxCompiler;
+            f << generator << "\n" << cCompiler << "\n" << cxxCompiler << "\n" << exePath.string();
         }
     }
 
@@ -1072,8 +1075,12 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "    add_compile_definitions(DORIAX_SHARED DORIAX_EDITOR)\n";
     cmakeContent += "endif()\n\n";
 
-    cmakeContent += "# Find doriax library in specified location\n";
-    cmakeContent += "find_library(DORIAX_LIB doriax PATHS ${DORIAX_LIB_DIR} NO_DEFAULT_PATH)\n";
+    cmakeContent += "# Find doriax library in specified location. find_library() caches its\n";
+    cmakeContent += "# result, so a stale DORIAX_LIB from a previous configure (e.g. before the\n";
+    cmakeContent += "# editor/engine install moved) would otherwise stick around unchanged;\n";
+    cmakeContent += "# force a fresh search on every configure instead.\n";
+    cmakeContent += "unset(DORIAX_LIB CACHE)\n";
+    cmakeContent += "find_library(DORIAX_LIB NAMES doriax PATHS \"${DORIAX_LIB_DIR}\" NO_DEFAULT_PATH)\n";
     cmakeContent += "if(NOT DORIAX_LIB)\n";
     cmakeContent += "    message(FATAL_ERROR \"Doriax library not found in ${DORIAX_LIB_DIR}\")\n";
     cmakeContent += "endif()\n\n";
