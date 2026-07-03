@@ -397,12 +397,12 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
                     value = static_cast<LightState>(currentItem);
                 }
             }
-            if constexpr (std::is_same_v<T, Shadow2DQuality>) {
+            if constexpr (std::is_same_v<T, ShadowQuality>) {
                 const char* qualityNames[] = { "None", "Low", "Medium", "High" };
                 int currentItem = static_cast<int>(value);
                 changed = ImGui::Combo(("##" + propertyName).c_str(), &currentItem, qualityNames, IM_ARRAYSIZE(qualityNames));
                 if (changed) {
-                    value = static_cast<Shadow2DQuality>(currentItem);
+                    value = static_cast<ShadowQuality>(currentItem);
                 }
             }
             break;
@@ -11932,7 +11932,7 @@ void editor::Properties::show(){
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Filter Quality").x);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-                    drawScenePropertyRow<Shadow2DQuality>(sceneProject, "shadows_2d_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
+                    drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_2d_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
                         "Smoothness of 2D light shadow edges. The penumbra width is set per light (Shadow Softness); this sets how smoothly it is sampled:\n"
                         "- None: 1 sample, no filtering, hard edges (softness is ignored)\n"
                         "- Low: 5 samples\n"
@@ -11961,10 +11961,16 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("Shadows");
 
                 if (ImGui::BeginTable("scene_shadow_settings_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Enable PCF").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Filter Quality").x);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-                    drawScenePropertyRow<bool>(sceneProject, "shadows_pcf", "Enable PCF", ScenePropertyInputType::Checkbox);
+                    drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
+                        "Smoothness of shadow edges (PCF kernel size):\n"
+                        "- None: 1 sample, hard edges\n"
+                        "- Low: 3x3 samples\n"
+                        "- Medium: 5x5 samples\n"
+                        "- High: 7x7 samples\n"
+                        "Higher values cost more per shadowed pixel. Applies instantly, no shader rebuild.");
 
                     ImGui::EndTable();
                 }

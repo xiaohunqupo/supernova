@@ -896,7 +896,6 @@ Json sceneReadableProperties(SceneProject* sceneProject) {
     Scene* scene = sceneProject->scene;
     Json props = Json::object();
     props["background_color"] = {{"type", "vector4"}, {"value", vector4Json(Catalog::getSceneProperty<Vector4>(scene, "background_color"))}};
-    props["shadows_pcf"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "shadows_pcf")}};
     props["global_illumination_color"] = {{"type", "vector3"}, {"value", vector3Json(Catalog::getSceneProperty<Vector3>(scene, "global_illumination_color"))}};
     props["global_illumination_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "global_illumination_intensity")}};
     props["light_state"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<LightState>(scene, "light_state"))}};
@@ -1694,7 +1693,7 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
             return failResult("global_illumination_color requires vector3_value.");
         }
         cmd = new ScenePropertyCmd<Vector3>(sceneProject, property, value);
-    } else if (property == "shadows_pcf" || property == "ssao_enabled" ||
+    } else if (property == "ssao_enabled" ||
                property == "ssao_debug" || property == "ssr_enabled") {
         if (!arguments.contains("bool_value") || !arguments["bool_value"].is_boolean()) {
             return failResult(property + " requires bool_value.");

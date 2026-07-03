@@ -366,7 +366,7 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 2:  return shortName ? "Uv2" : "UV2";
             case 3:  return shortName ? "Puc" : "Punctual";
             case 4:  return shortName ? "Shw" : "Shadow";
-            case 5:  return shortName ? "Pcf" : "PCF";
+            // case 5 reserved (was 'Pcf'; the PCF filter is uniform-driven now)
             case 6:  return shortName ? "Nor" : "Normals";
             case 7:  return shortName ? "Nmp" : "Normal Map";
             case 8:  return shortName ? "Tan" : "Tangents";
@@ -578,7 +578,7 @@ ShaderKey ShaderPool::getStorageKey(ShaderKey key) {
 
 uint32_t ShaderPool::getMeshProperties(
     bool unlit, bool uv1, bool uv2,
-    bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap,
+    bool punctual, bool shadows, bool normals, bool normalMap,
     bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect,
     bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
     bool terrain, bool instanced, bool ibl, bool mirror, bool ssao, bool light2d, bool shadows2d){
@@ -589,7 +589,8 @@ uint32_t ShaderPool::getMeshProperties(
     prop |= uv2              ? (1 <<  2) : 0;
     prop |= punctual         ? (1 <<  3) : 0;
     prop |= shadows          ? (1 <<  4) : 0;
-    prop |= shadowsPCF       ? (1 <<  5) : 0;
+    // bit 5 was USE_SHADOWS_PCF; the PCF filter is uniform-driven now (Scene
+    // shadowQuality). Kept reserved so the other bit positions stay stable.
     prop |= normals          ? (1 <<  6) : 0;
     prop |= normalMap        ? (1 <<  7) : 0;
     prop |= tangents         ? (1 <<  8) : 0;

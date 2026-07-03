@@ -432,8 +432,18 @@ void RenderSystem::processLights(int numLights, CameraComponent& camera, Transfo
         fs_lighting.inCon_ouCon_shadows_cascades[i] = Vector4(light.innerConeCos, light.outerConeCos, light.shadowMapIndex, light.numShadowCascades);
     }
 
+    // PCF tap radius of the 3D shadow filter, packed into cameraDir.w
+    // (kernel = (2*radius+1)^2 taps; uniform-driven, no shader variant)
+    float pcfRadius = 1.0f;
+    switch (scene->getShadowQuality()){
+        case ShadowQuality::NONE:   pcfRadius = 0.0f; break;
+        case ShadowQuality::LOW:    pcfRadius = 1.0f; break;
+        case ShadowQuality::MEDIUM: pcfRadius = 2.0f; break;
+        case ShadowQuality::HIGH:   pcfRadius = 3.0f; break;
+    }
+
     fs_lighting.eyePos = Vector4(cameraTransform.worldPosition.x, cameraTransform.worldPosition.y, cameraTransform.worldPosition.z, 0.0);
-    fs_lighting.cameraDir = Vector4(camera.worldDirection.x, camera.worldDirection.y, camera.worldDirection.z, 0.0);
+    fs_lighting.cameraDir = Vector4(camera.worldDirection.x, camera.worldDirection.y, camera.worldDirection.z, pcfRadius);
     fs_lighting.globalIllum = Vector4(scene->getGlobalIlluminationColorLinear(), scene->getGlobalIlluminationIntensity());
 
     fs_lighting.envColor = Vector4(1.0, 1.0, 1.0, 0.0);
@@ -578,11 +588,11 @@ void RenderSystem::processLights2D(){
 
     // PCF tap radius from the scene's 2D shadow quality (taps = 2*radius + 1)
     float pcfRadius = 2.0f;
-    switch (scene->getShadow2DQuality()){
-        case Shadow2DQuality::NONE:   pcfRadius = 0.0f; break;
-        case Shadow2DQuality::LOW:    pcfRadius = 2.0f; break;
-        case Shadow2DQuality::MEDIUM: pcfRadius = 4.0f; break;
-        case Shadow2DQuality::HIGH:   pcfRadius = 6.0f; break;
+    switch (scene->getShadowQuality()){
+        case ShadowQuality::NONE:   pcfRadius = 0.0f; break;
+        case ShadowQuality::LOW:    pcfRadius = 2.0f; break;
+        case ShadowQuality::MEDIUM: pcfRadius = 4.0f; break;
+        case ShadowQuality::HIGH:   pcfRadius = 6.0f; break;
     }
 
     // rows without shadows keep shadowMapIndex -1 and never sample the atlas
@@ -1480,7 +1490,6 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         bool p_hasNormal = false;
         bool p_hasTangent = false;
         bool p_receiveShadows = false;
-        bool p_shadowsPCF = false;
 
         if (mesh.submeshes[i].hasTexCoord1 && hasPBRTextures){
             p_hasTexture1 = true;
@@ -1507,9 +1516,6 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             }
             if (hasShadows && mesh.receiveShadows){
                 p_receiveShadows = true;
-                if (scene->isShadowsPCF()){
-                    p_shadowsPCF = true;
-                }
             }
         }else{
             p_unlit = true;
@@ -1540,7 +1546,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         mesh.submeshes[i].shaderProperties = ShaderPool::getMeshProperties(
                         p_unlit, p_hasTexture1, p_hasTexture2, p_punctual,
-                        p_receiveShadows, p_shadowsPCF, p_hasNormal, p_hasNormalMap,
+                        p_receiveShadows, p_hasNormal, p_hasNormalMap,
                         p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
                         (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao, p_light2d, p_shadows2d);

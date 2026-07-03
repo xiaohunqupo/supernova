@@ -39,7 +39,7 @@ void Scene::init(){
     defaultCamera = NULL_ENTITY;
 
     backgroundColor = Vector4(0.0, 0.0, 0.0, 1.0); //sRGB
-    shadowsPCF = true;
+    shadowQuality = ShadowQuality::LOW;
 
     lightState = LightState::AUTO;
     globalIllumColor = Vector3(1.0, 1.0, 1.0);
@@ -48,7 +48,7 @@ void Scene::init(){
     // default 1.0 keeps 2D scenes visually unchanged until the user dims it
     ambientLight2DColor = Vector3(1.0, 1.0, 1.0);
     ambientLight2DIntensity = 1.0;
-    shadow2DQuality = Shadow2DQuality::LOW;
+    shadow2DQuality = ShadowQuality::LOW;
 
     ssaoEnabled = false;
     ssaoRadius = 0.5;
@@ -179,15 +179,13 @@ Vector4 Scene::getBackgroundColor() const{
     return backgroundColor;
 }
 
-void Scene::setShadowsPCF(bool shadowsPCF){
-    if (this->shadowsPCF != shadowsPCF){
-        this->shadowsPCF = shadowsPCF;
-        getSystem<RenderSystem>()->needReloadMeshes();
-    }
+void Scene::setShadowQuality(ShadowQuality quality){
+    // uniform-driven (no shader variant), so no mesh reload is needed
+    this->shadowQuality = quality;
 }
 
-bool Scene::isShadowsPCF() const{
-    return this->shadowsPCF;
+ShadowQuality Scene::getShadowQuality() const{
+    return this->shadowQuality;
 }
 
 void Scene::setSSAOEnabled(bool ssaoEnabled){
@@ -355,11 +353,11 @@ Vector3 Scene::getAmbientLight2DColorLinear() const{
     return this->ambientLight2DColor;
 }
 
-void Scene::setShadow2DQuality(Shadow2DQuality quality){
+void Scene::setShadow2DQuality(ShadowQuality quality){
     this->shadow2DQuality = quality;
 }
 
-Shadow2DQuality Scene::getShadow2DQuality() const{
+ShadowQuality Scene::getShadow2DQuality() const{
     return this->shadow2DQuality;
 }
 

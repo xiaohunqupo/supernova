@@ -327,13 +327,13 @@ std::string editor::Factory::formatLightState(LightState state) {
     }
 }
 
-std::string editor::Factory::formatShadow2DQuality(Shadow2DQuality quality) {
+std::string editor::Factory::formatShadowQuality(ShadowQuality quality) {
     switch (quality) {
-        case Shadow2DQuality::NONE: return "Shadow2DQuality::NONE";
-        case Shadow2DQuality::LOW: return "Shadow2DQuality::LOW";
-        case Shadow2DQuality::MEDIUM: return "Shadow2DQuality::MEDIUM";
-        case Shadow2DQuality::HIGH: return "Shadow2DQuality::HIGH";
-        default: return "Shadow2DQuality::LOW";
+        case ShadowQuality::NONE: return "ShadowQuality::NONE";
+        case ShadowQuality::LOW: return "ShadowQuality::LOW";
+        case ShadowQuality::MEDIUM: return "ShadowQuality::MEDIUM";
+        case ShadowQuality::HIGH: return "ShadowQuality::HIGH";
+        default: return "ShadowQuality::LOW";
     }
 }
 
@@ -2193,12 +2193,12 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
 
     out << "\n";
     out << ind2 << "scene->setBackgroundColor(" << formatVector4(scene->getBackgroundColor()) << ");\n";
-    out << ind2 << "scene->setShadowsPCF(" << formatBool(scene->isShadowsPCF()) << ");\n";
+    out << ind2 << "scene->setShadowQuality(" << formatShadowQuality(scene->getShadowQuality()) << ");\n";
     out << ind2 << "scene->setGlobalIllumination(" << formatFloat(scene->getGlobalIlluminationIntensity()) << ");\n";
     out << ind2 << "scene->setGlobalIllumination(" << formatVector3(scene->getGlobalIlluminationColor()) << ");\n";
     out << ind2 << "scene->setAmbientLight2D(" << formatFloat(scene->getAmbientLight2DIntensity()) << ");\n";
     out << ind2 << "scene->setAmbientLight2D(" << formatVector3(scene->getAmbientLight2DColor()) << ");\n";
-    out << ind2 << "scene->setShadow2DQuality(" << formatShadow2DQuality(scene->getShadow2DQuality()) << ");\n";
+    out << ind2 << "scene->setShadowQuality(" << formatShadowQuality(scene->getShadowQuality()) << ");\n";
     out << ind2 << "scene->setLightState(" << formatLightState(scene->getLightState()) << ");\n";
     out << ind2 << "scene->setSSAOEnabled(" << formatBool(scene->isSSAOEnabled()) << ");\n";
     out << ind2 << "scene->setSSAORadius(" << formatFloat(scene->getSSAORadius()) << ");\n";

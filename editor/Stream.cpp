@@ -639,21 +639,21 @@ FogType editor::Stream::stringToFogType(const std::string& str) {
     return FogType::LINEAR;
 }
 
-static std::string shadow2DQualityToString(Shadow2DQuality quality) {
+static std::string shadowQualityToString(ShadowQuality quality) {
     switch (quality) {
-        case Shadow2DQuality::NONE: return "none";
-        case Shadow2DQuality::LOW: return "low";
-        case Shadow2DQuality::MEDIUM: return "medium";
-        case Shadow2DQuality::HIGH: return "high";
+        case ShadowQuality::NONE: return "none";
+        case ShadowQuality::LOW: return "low";
+        case ShadowQuality::MEDIUM: return "medium";
+        case ShadowQuality::HIGH: return "high";
     }
     return "low";
 }
 
-static Shadow2DQuality stringToShadow2DQuality(const std::string& str) {
-    if (str == "none") return Shadow2DQuality::NONE;
-    if (str == "medium") return Shadow2DQuality::MEDIUM;
-    if (str == "high") return Shadow2DQuality::HIGH;
-    return Shadow2DQuality::LOW; // Default
+static ShadowQuality stringToShadowQuality(const std::string& str) {
+    if (str == "none") return ShadowQuality::NONE;
+    if (str == "medium") return ShadowQuality::MEDIUM;
+    if (str == "high") return ShadowQuality::HIGH;
+    return ShadowQuality::LOW; // Default
 }
 
 std::string editor::Stream::lightStateToString(LightState state) {
@@ -1817,13 +1817,13 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     YAML::Node sceneNode;
 
     sceneNode["backgroundColor"] = encodeVector4(scene->getBackgroundColor());
-    sceneNode["shadowsPCF"] = scene->isShadowsPCF();
+    sceneNode["shadowQuality"] = shadowQualityToString(scene->getShadowQuality());
     sceneNode["lightState"] = lightStateToString(scene->getLightState());
     sceneNode["globalIlluminationIntensity"] = scene->getGlobalIlluminationIntensity();
     sceneNode["globalIlluminationColor"] = encodeVector3(scene->getGlobalIlluminationColor());
     sceneNode["ambientLight2DIntensity"] = scene->getAmbientLight2DIntensity();
     sceneNode["ambientLight2DColor"] = encodeVector3(scene->getAmbientLight2DColor());
-    sceneNode["shadow2DQuality"] = shadow2DQualityToString(scene->getShadow2DQuality());
+    sceneNode["shadow2DQuality"] = shadowQualityToString(scene->getShadowQuality());
     sceneNode["ssaoEnabled"] = scene->isSSAOEnabled();
     sceneNode["ssaoRadius"] = scene->getSSAORadius();
     sceneNode["ssaoIntensity"] = scene->getSSAOIntensity();
@@ -1848,8 +1848,8 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
         scene->setBackgroundColor(decodeVector4(node["backgroundColor"]));
     }
 
-    if (node["shadowsPCF"]) {
-        scene->setShadowsPCF(node["shadowsPCF"].as<bool>());
+    if (node["shadowQuality"]) {
+        scene->setShadowQuality(stringToShadowQuality(node["shadowQuality"].as<std::string>()));
     }
 
     if (node["lightState"]) {
@@ -1879,7 +1879,7 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
     }
 
     if (node["shadow2DQuality"]) {
-        scene->setShadow2DQuality(stringToShadow2DQuality(node["shadow2DQuality"].as<std::string>()));
+        scene->setShadowQuality(stringToShadowQuality(node["shadow2DQuality"].as<std::string>()));
     }
 
     if (node["ssaoEnabled"]) {

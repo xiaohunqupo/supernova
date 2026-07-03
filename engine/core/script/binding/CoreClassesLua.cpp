@@ -162,11 +162,11 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
-        .beginNamespace("Shadow2DQuality")
-        .addVariable("NONE", Shadow2DQuality::NONE)
-        .addVariable("LOW", Shadow2DQuality::LOW)
-        .addVariable("MEDIUM", Shadow2DQuality::MEDIUM)
-        .addVariable("HIGH", Shadow2DQuality::HIGH)
+        .beginNamespace("ShadowQuality")
+        .addVariable("NONE", ShadowQuality::NONE)
+        .addVariable("LOW", ShadowQuality::LOW)
+        .addVariable("MEDIUM", ShadowQuality::MEDIUM)
+        .addVariable("HIGH", ShadowQuality::HIGH)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
@@ -583,7 +583,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addFunction("setBackgroundColor", 
             luabridge::overload<float, float, float>(&Scene::setBackgroundColor),
             luabridge::overload<float, float, float, float>(&Scene::setBackgroundColor))
-        .addProperty("shadowsPCF", &Scene::isShadowsPCF, &Scene::setShadowsPCF)
+        .addProperty("shadowQuality", &Scene::getShadowQuality, &Scene::setShadowQuality)
         .addProperty("lightState", &Scene::getLightState, &Scene::setLightState)
         .addProperty("globalIlluminationColor", &Scene::getGlobalIlluminationColor, (void (Scene::*)(Vector3))&Scene::setGlobalIllumination)
         .addProperty("globalIlluminationIntensity", &Scene::getGlobalIlluminationIntensity, (void (Scene::*)(float))&Scene::setGlobalIllumination)
@@ -593,7 +593,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addProperty("ambientLight2DIntensity", &Scene::getAmbientLight2DIntensity, (void (Scene::*)(float))&Scene::setAmbientLight2D)
         .addFunction("getAmbientLight2DColorLinear", &Scene::getAmbientLight2DColorLinear)
         .addFunction("setAmbientLight2D", (void (Scene::*)(float, Vector3))&Scene::setAmbientLight2D)
-        .addProperty("shadow2DQuality", &Scene::getShadow2DQuality, &Scene::setShadow2DQuality)
+        .addProperty("shadow2DQuality", &Scene::getShadowQuality, &Scene::setShadowQuality)
         .addProperty("ssaoEnabled", &Scene::isSSAOEnabled, &Scene::setSSAOEnabled)
         .addProperty("ssaoRadius", &Scene::getSSAORadius, &Scene::setSSAORadius)
         .addProperty("ssaoIntensity", &Scene::getSSAOIntensity, &Scene::setSSAOIntensity)

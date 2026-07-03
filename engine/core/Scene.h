@@ -23,13 +23,15 @@ namespace doriax{
         AUTO
     };
 
-    // PCF filter of the 2D light shadows (taps along the 1D polar shadow map);
-    // more taps smooth the same penumbra width (set by Light2D shadowSoftness)
-    enum class Shadow2DQuality {
+    // PCF filter quality of shadow edges, uniform-driven (no shader rebuild).
+    // 3D shadows (shadowQuality): NONE = 1 tap, LOW = 3x3, MEDIUM = 5x5, HIGH = 7x7.
+    // 2D shadows (shadow2DQuality): NONE = 1 tap, LOW = 5, MEDIUM = 9, HIGH = 13 taps
+    // along the 1D polar map, smoothing the penumbra set by Light2D shadowSoftness.
+    enum class ShadowQuality {
         NONE,   // 1 tap, no filtering (hard edges)
-        LOW,    // 5 taps
-        MEDIUM, // 9 taps
-        HIGH    // 13 taps
+        LOW,
+        MEDIUM,
+        HIGH
     };
 
     enum class UIEventState {
@@ -45,7 +47,7 @@ namespace doriax{
         Entity defaultCamera;
 
         Vector4 backgroundColor;
-        bool shadowsPCF;
+        ShadowQuality shadowQuality;
 
         LightState lightState;
         Vector3 globalIllumColor;
@@ -53,7 +55,7 @@ namespace doriax{
 
         Vector3 ambientLight2DColor;
         float ambientLight2DIntensity;
-        Shadow2DQuality shadow2DQuality;
+        ShadowQuality shadow2DQuality;
 
         bool ssaoEnabled;
         float ssaoRadius;
@@ -125,8 +127,8 @@ namespace doriax{
         void setBackgroundColor(float red, float green, float blue, float alpha);
         Vector4 getBackgroundColor() const;
 
-        void setShadowsPCF(bool shadowsPCF);
-        bool isShadowsPCF() const;
+        void setShadowQuality(ShadowQuality quality);
+        ShadowQuality getShadowQuality() const;
 
         void setSSAOEnabled(bool ssaoEnabled);
         bool isSSAOEnabled() const;
@@ -183,8 +185,8 @@ namespace doriax{
         Vector3 getAmbientLight2DColor() const;
         Vector3 getAmbientLight2DColorLinear() const;
 
-        void setShadow2DQuality(Shadow2DQuality quality);
-        Shadow2DQuality getShadow2DQuality() const;
+        void setShadow2DQuality(ShadowQuality quality);
+        ShadowQuality getShadow2DQuality() const;
 
         bool canReceiveUIEvents();
 

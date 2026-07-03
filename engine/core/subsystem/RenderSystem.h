@@ -37,7 +37,7 @@ namespace doriax{
 	    Vector4 position_type[MAX_LIGHTS];
 	    Vector4 inCon_ouCon_shadows_cascades[MAX_LIGHTS];
 		Vector4 eyePos;
-		Vector4 cameraDir;
+		Vector4 cameraDir; // xyz = camera backward axis, w = 3D shadow PCF tap radius
 		Vector4 globalIllum; //global illumination
 		Vector4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
 		Vector4 viewportInfo; //1.0/viewportSize.xy in .xy (used by USE_SSAO)

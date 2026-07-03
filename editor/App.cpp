@@ -1695,7 +1695,9 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     //     and keeps each atlas within the GPU max texture size.
     // v10: 2D lighting — mesh USE_LIGHT2D/USE_SHADOWS_2D variants (u_fs_lighting2d,
     //      u_normalTexture on unlit, v_position guard) and the shadow2d 1D polar pass.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v10";
+    // v11: uniform-driven shadow PCF (ShadowQuality) — USE_SHADOWS_PCF variant removed,
+    //      shadows.glsl/lighting2d.glsl loop by radius from cameraDir.w / atlasInfo.w.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v11";
 }
 
 void editor::App::pushTabNotificationStyle(){

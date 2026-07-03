@@ -181,7 +181,7 @@ namespace doriax::editor{
                 if constexpr (std::is_same_v<T, bool>) return false;
                 if constexpr (std::is_same_v<T, float>) return 0.0f;
                 if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
-                if constexpr (std::is_same_v<T, Shadow2DQuality>) return Shadow2DQuality::LOW;
+                if constexpr (std::is_same_v<T, ShadowQuality>) return ShadowQuality::LOW;
                 // Add other types as needed
             }
 
@@ -190,9 +190,9 @@ namespace doriax::editor{
                     return scene->getBackgroundColor();
                 }
             }
-            else if (propertyName == "shadows_pcf") {
-                if constexpr (std::is_same_v<T, bool>) {
-                    return scene->isShadowsPCF();
+            else if (propertyName == "shadows_quality") {
+                if constexpr (std::is_same_v<T, ShadowQuality>) {
+                    return scene->getShadowQuality();
                 }
             }
             else if (propertyName == "global_illumination_color") {
@@ -216,8 +216,8 @@ namespace doriax::editor{
                 }
             }
             else if (propertyName == "shadows_2d_quality") {
-                if constexpr (std::is_same_v<T, Shadow2DQuality>) {
-                    return scene->getShadow2DQuality();
+                if constexpr (std::is_same_v<T, ShadowQuality>) {
+                    return scene->getShadowQuality();
                 }
             }
             else if (propertyName == "light_state") {
@@ -293,7 +293,7 @@ namespace doriax::editor{
             if constexpr (std::is_same_v<T, float>) return 0.0f;
             if constexpr (std::is_same_v<T, int>) return 0;
             if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
-                if constexpr (std::is_same_v<T, Shadow2DQuality>) return Shadow2DQuality::LOW;
+                if constexpr (std::is_same_v<T, ShadowQuality>) return ShadowQuality::LOW;
             // Add other types as needed
         }
 
@@ -306,9 +306,9 @@ namespace doriax::editor{
                     scene->setBackgroundColor(value);
                 }
             }
-            else if (propertyName == "shadows_pcf") {
-                if constexpr (std::is_same_v<T, bool>) {
-                    scene->setShadowsPCF(value);
+            else if (propertyName == "shadows_quality") {
+                if constexpr (std::is_same_v<T, ShadowQuality>) {
+                    scene->setShadowQuality(value);
                 }
             }
             else if (propertyName == "global_illumination_color") {
@@ -332,8 +332,8 @@ namespace doriax::editor{
                 }
             }
             else if (propertyName == "shadows_2d_quality") {
-                if constexpr (std::is_same_v<T, Shadow2DQuality>) {
-                    scene->setShadow2DQuality(value);
+                if constexpr (std::is_same_v<T, ShadowQuality>) {
+                    scene->setShadowQuality(value);
                 }
             }
             else if (propertyName == "light_state") {

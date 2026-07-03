@@ -109,21 +109,26 @@ float shadowCalculationAux(int shadowMapIndex, Shadow shadowConf, float NdotL){
     vec2 slotMin = 0.5 * texel_size;
     vec2 slotMax = 1.0 - 0.5 * texel_size;
 
-    #ifdef USE_SHADOWS_PCF
+    // PCF kernel radius from the scene's shadow quality (cameraDir.w), uniform-driven
+    // so quality changes need no shader rebuild: 0 = 1 tap, 1 = 3x3, 2 = 5x5, 3 = 7x7
+    int pcfRadius = int(lighting.cameraDir.w);
 
-        for(int x = -1; x <= 1; ++x) {
-            for(int y = -1; y <= 1; ++y) {
+    if (pcfRadius > 0){
+
+        for(int x = -pcfRadius; x <= pcfRadius; ++x) {
+            for(int y = -pcfRadius; y <= pcfRadius; ++y) {
                 vec2 sampleCoord = clamp(proj_coords.xy + vec2(x, y) * texel_size, slotMin, slotMax);
                 shadow += shadowCompare(shadowMapIndex, currentDepth, bias, sampleCoord);
             }
         }
-        shadow /= 9.0;
+        float pcfTaps = float(2 * pcfRadius + 1);
+        shadow /= pcfTaps * pcfTaps;
 
-    #else
+    } else {
 
         shadow = shadowCompare(shadowMapIndex, currentDepth, bias, clamp(proj_coords.xy, slotMin, slotMax));
 
-    #endif
+    }
 
     // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
     if(proj_coords.z > 1.0)
@@ -181,26 +186,33 @@ float shadowCubeCalculationPCF(int shadowMapIndex, vec3 fragToLight, float NdotL
 
     float bias = max(shadowConf.maxBias * (1.0 - NdotL), shadowConf.minBias);
 
-    #ifdef USE_SHADOWS_PCF
+    // PCF ring count from the scene's shadow quality (cameraDir.w), uniform-driven:
+    // 0 = 1 tap, 1 = 9 taps (center + 1 ring), 2 = 17 taps, 3 = 25 taps
+    int pcfRings = int(lighting.cameraDir.w);
+
+    if (pcfRings > 0){
+
+        const vec3 ringOffsets[8] = vec3[](
+            vec3( 1.0, 1.0, 1.0), vec3( 1.0,-1.0, 1.0), vec3(-1.0,-1.0, 1.0), vec3(-1.0, 1.0, 1.0),
+            vec3( 1.0, 1.0,-1.0), vec3( 1.0,-1.0,-1.0), vec3(-1.0,-1.0,-1.0), vec3(-1.0, 1.0,-1.0)
+        );
 
         float diskRadius = length( fragToLight ) * 0.0005;
 
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3( 0.f, 0.f, 0.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3( 1.f, 1.f, 1.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3( 1.f,-1.f, 1.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3(-1.f,-1.f, 1.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3(-1.f, 1.f, 1.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3( 1.f, 1.f,-1.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3( 1.f,-1.f,-1.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3(-1.f,-1.f,-1.f) * diskRadius);
-        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + vec3(-1.f, 1.f,-1.f) * diskRadius);
-        shadow /= float(9);
+        shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight);
+        for (int r = 1; r <= pcfRings; ++r){
+            float ringRadius = diskRadius * float(r) / float(pcfRings);
+            for (int i = 0; i < 8; ++i){
+                shadow += shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight + ringOffsets[i] * ringRadius);
+            }
+        }
+        shadow /= float(1 + 8 * pcfRings);
 
-    #else
+    } else {
 
         shadow = shadowCubeCompare(shadowMapIndex, currentDepth, bias, fragToLight);
 
-    #endif
+    }
 
     return shadow;
 }

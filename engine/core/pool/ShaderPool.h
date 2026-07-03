@@ -88,7 +88,7 @@ namespace doriax{
         static void setShaderBuilder(ShaderBuilderFn fn);
 
         static uint32_t getMeshProperties(bool unlit, bool uv1, bool uv2,
-						bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap,
+						bool punctual, bool shadows, bool normals, bool normalMap,
 						bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect,
                         bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
                         bool terrain, bool instanced, bool ibl, bool mirror, bool ssao = false,

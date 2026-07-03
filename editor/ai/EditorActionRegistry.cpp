@@ -373,7 +373,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "set_scene_property",
-            "Set a supported scene-level property such as background_color, shadows_pcf, global_illumination_color, ssao_enabled, ssr_enabled.",
+            "Set a supported scene-level property such as background_color, global_illumination_color, ssao_enabled, ssr_enabled.",
             objectSchemaFromProperties(propertyValueFields({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"property", stringSchema("Scene property name")}
