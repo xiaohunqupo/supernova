@@ -8528,13 +8528,28 @@ void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* 
 
     bool removedLine = false;
 
+    // endpoint sub-selected in the scene viewport (index = lineIndex * 2 + endpoint)
+    int selectedLinePoint = -1;
+    if (sceneProject->sceneRender && sceneProject->sceneRender->getSelectedLinePointEntity() == entity){
+        selectedLinePoint = sceneProject->sceneRender->getSelectedLinePointIndex();
+    }
+
     for (size_t i = 0; i < lines.lines.size(); i++) {
         ImGui::PushID((int)i);
 
         std::string lineGroupStr = "line_" + std::to_string(i);
         std::string lineLabel = "[" + std::to_string(i) + "] Line " + std::to_string(i);
 
-        ImGui::SeparatorText(lineLabel.c_str());
+        bool isLineSelected = (selectedLinePoint >= 0 && selectedLinePoint / 2 == (int)i);
+
+        // sub-selected in the scene viewport: same marking as occluder points
+        if (isLineSelected) {
+            ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::SubSelectionText);
+            ImGui::SeparatorText((std::string(ICON_FA_CARET_RIGHT) + " " + lineLabel).c_str());
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::SeparatorText(lineLabel.c_str());
+        }
 
         beginTable(cpType, getLabelSize("Point A"), lineGroupStr);
         propertyHeader("Line", -1, false, false);
@@ -8580,9 +8595,11 @@ void editor::Properties::drawLinesComponent(ComponentType cpType, SceneProject* 
 
         if (linesButtonGroups[lineGroupStr]) {
             std::string propPrefix = "lines[" + std::to_string(i) + "]";
-            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".pointA", "Point A", sceneProject, entities);
+            bool pointASelected = isLineSelected && (selectedLinePoint % 2 == 0);
+            bool pointBSelected = isLineSelected && (selectedLinePoint % 2 == 1);
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".pointA", pointASelected ? (std::string(ICON_FA_CARET_RIGHT) + " Point A") : "Point A", sceneProject, entities);
             propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".colorA", "Color A", sceneProject, entities);
-            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".pointB", "Point B", sceneProject, entities);
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".pointB", pointBSelected ? (std::string(ICON_FA_CARET_RIGHT) + " Point B") : "Point B", sceneProject, entities);
             propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".colorB", "Color B", sceneProject, entities);
         }
 

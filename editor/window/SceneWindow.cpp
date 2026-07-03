@@ -778,6 +778,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         sceneProject->sceneRender->clearTileSelection();
                         sceneProject->sceneRender->clearInstanceSelection();
                         sceneProject->sceneRender->clearOccluderPointSelection();
+                        sceneProject->sceneRender->clearLinePointSelection();
                         bool changed = project->selectObjectByRay(sceneId, x, y, io.KeyShift);
                         if (changed) {
                             sceneProject->sceneRender->update(project->getSelectedEntities(sceneId), project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -807,6 +808,33 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                             Entity bodyHit = project->findObjectByRay(sceneId, x, y);
                             if (bodyHit == selEntity) {
                                 sceneProject->sceneRender->clearOccluderPointSelection();
+                                sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                                sceneProject->sceneRender->mouseHoverEvent(x, y);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Line endpoint sub-selection within a selected lines entity
+            if (gizmoSelected == GizmoSelected::OBJECT2D) {
+                std::vector<Entity> selEntities = project->getSelectedEntities(sceneId);
+                if (selEntities.size() == 1 && !io.KeyShift) {
+                    Entity selEntity = selEntities[0];
+                    Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
+                    if (gizmo2DSide == Gizmo2DSideSelected::NONE || gizmo2DSide == Gizmo2DSideSelected::CENTER) {
+                        int pointHit = sceneProject->sceneRender->hitTestLinePoint(selEntity, x, y);
+                        if (pointHit >= 0) {
+                            sceneProject->sceneRender->selectLinePoint(selEntity, pointHit);
+                            // Re-update so the gizmo cross jumps to the endpoint
+                            sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                            sceneProject->sceneRender->mouseHoverEvent(x, y);
+                        } else if (sceneProject->sceneRender->getSelectedLinePointIndex() >= 0 && gizmo2DSide == Gizmo2DSideSelected::NONE) {
+                            // Only clear eagerly when clicking the entity body itself; clicking
+                            // empty space clears point + entity together on click-up.
+                            Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                            if (bodyHit == selEntity) {
+                                sceneProject->sceneRender->clearLinePointSelection();
                                 sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                                 sceneProject->sceneRender->mouseHoverEvent(x, y);
                             }
@@ -954,6 +982,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 Entity prevInstanceEntity = sceneProject->sceneRender->getSelectedInstanceEntity();
                 int prevOccluderPointIndex = sceneProject->sceneRender->getSelectedOccluderPointIndex();
                 Entity prevOccluderPointEntity = sceneProject->sceneRender->getSelectedOccluderPointEntity();
+                int prevLinePointIndex = sceneProject->sceneRender->getSelectedLinePointIndex();
+                Entity prevLinePointEntity = sceneProject->sceneRender->getSelectedLinePointEntity();
 
                 project->selectObjectByRay(sceneId, x, y, io.KeyShift);
 
@@ -970,6 +1000,9 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 }
                 if (prevOccluderPointIndex >= 0 && !(soleHost && selAfter[0] == prevOccluderPointEntity)){
                     sceneProject->sceneRender->clearOccluderPointSelection();
+                }
+                if (prevLinePointIndex >= 0 && !(soleHost && selAfter[0] == prevLinePointEntity)){
+                    sceneProject->sceneRender->clearLinePointSelection();
                 }
             }
             mouseLeftDown = false;
@@ -992,6 +1025,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 sceneProject->sceneRender->clearTileSelection();
                 sceneProject->sceneRender->clearInstanceSelection();
                 sceneProject->sceneRender->clearOccluderPointSelection();
+                sceneProject->sceneRender->clearLinePointSelection();
                 project->selectObjectsByRect(sceneId, clickStartPos, clickEndPos);
             }
 

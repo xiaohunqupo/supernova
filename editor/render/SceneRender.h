@@ -98,6 +98,10 @@ namespace doriax::editor{
         Entity selectedOccluderPointEntity = 0;  // NULL_ENTITY
         int selectedOccluderPointIndex = -1;
 
+        // Lines endpoint sub-selection (index = lineIndex * 2 + endpoint, 0 = A, 1 = B)
+        Entity selectedLinePointEntity = 0;  // NULL_ENTITY
+        int selectedLinePointIndex = -1;
+
         AABB getAABB(Entity entity, bool local);
         AABB getFamilyAABB(Entity entity, float offset);
 
@@ -217,6 +221,14 @@ namespace doriax::editor{
         void clearOccluderPointSelection();
         int hitTestOccluderPoint(Entity entity, float x, float y);
         OBB getOccluderPointOBB(Entity entity, int pointIndex);
+
+        // Lines endpoint sub-selection (index = lineIndex * 2 + endpoint, 0 = A, 1 = B)
+        int getSelectedLinePointIndex() const { return selectedLinePointIndex; }
+        Entity getSelectedLinePointEntity() const { return selectedLinePointEntity; }
+        void selectLinePoint(Entity entity, int pointIndex);
+        void clearLinePointSelection();
+        int hitTestLinePoint(Entity entity, float x, float y);
+        OBB getLinePointOBB(Entity entity, int pointIndex);
     };
 
 }

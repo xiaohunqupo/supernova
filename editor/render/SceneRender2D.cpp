@@ -75,6 +75,11 @@ editor::SceneRender2D::~SceneRender2D(){
     }
     occluder2DLines.clear();
 
+    for (auto& pair : linePointLines) {
+        delete pair.second;
+    }
+    linePointLines.clear();
+
     for (auto& pair : cameraObjects) {
         delete pair.second.icon;
         delete pair.second.lines;
@@ -137,6 +142,25 @@ bool editor::SceneRender2D::instanciateOccluder2DLines(Entity entity){
     }
 
     return false;
+}
+
+bool editor::SceneRender2D::instanciateLinePointLines(Entity entity){
+    if (linePointLines.find(entity) == linePointLines.end()){
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        linePointLines[entity] = new Lines(scene);
+
+        return true;
+    }
+
+    return false;
+}
+
+// square marker for an editable point (occluder polygon points, line endpoints)
+void editor::SceneRender2D::addPointHandle(Lines* linesObj, const Vector3& worldPoint, float halfSize, const Vector4& color){
+    linesObj->addLine(worldPoint + Vector3(-halfSize, -halfSize, 0.0f), worldPoint + Vector3(halfSize, -halfSize, 0.0f), color);
+    linesObj->addLine(worldPoint + Vector3(halfSize, -halfSize, 0.0f), worldPoint + Vector3(halfSize, halfSize, 0.0f), color);
+    linesObj->addLine(worldPoint + Vector3(halfSize, halfSize, 0.0f), worldPoint + Vector3(-halfSize, halfSize, 0.0f), color);
+    linesObj->addLine(worldPoint + Vector3(-halfSize, halfSize, 0.0f), worldPoint + Vector3(-halfSize, -halfSize, 0.0f), color);
 }
 
 void editor::SceneRender2D::createOrUpdateLight2DLines(Entity entity, const Transform& transform, const Light2DComponent& light, bool visible, bool highlighted){
@@ -220,14 +244,39 @@ void editor::SceneRender2D::createOrUpdateOccluder2DLines(Entity entity, const T
 
         for (size_t i = 0; i < worldPoints.size(); i++){
             bool pointSelected = hasPointSelection && ((int)i == getSelectedOccluderPointIndex());
-            const Vector4& color = pointSelected ? selectedHandleColor : handleColor;
-            float handleSize = (pointSelected ? 6.0f : 4.0f) * zoom;
-            const Vector3& worldPoint = worldPoints[i];
+            addPointHandle(occluderLinesObj, worldPoints[i],
+                           (pointSelected ? 6.0f : 4.0f) * zoom,
+                           pointSelected ? selectedHandleColor : handleColor);
+        }
+    }
+}
 
-            occluderLinesObj->addLine(worldPoint + Vector3(-handleSize, -handleSize, 0.0f), worldPoint + Vector3(handleSize, -handleSize, 0.0f), color);
-            occluderLinesObj->addLine(worldPoint + Vector3(handleSize, -handleSize, 0.0f), worldPoint + Vector3(handleSize, handleSize, 0.0f), color);
-            occluderLinesObj->addLine(worldPoint + Vector3(handleSize, handleSize, 0.0f), worldPoint + Vector3(-handleSize, handleSize, 0.0f), color);
-            occluderLinesObj->addLine(worldPoint + Vector3(-handleSize, handleSize, 0.0f), worldPoint + Vector3(-handleSize, -handleSize, 0.0f), color);
+// endpoint handles for a selected Lines entity (the lines themselves are the
+// entity's own rendered geometry); the sub-selected endpoint is drawn bigger
+// and in the selection color
+void editor::SceneRender2D::createOrUpdateLinePointLines(Entity entity, const Transform& transform, const LinesComponent& lines, bool visible){
+    Lines* handlesObj = linePointLines[entity];
+
+    handlesObj->clearLines();
+    handlesObj->setVisible(transform.visible && visible);
+
+    if (!transform.visible || !visible){
+        return;
+    }
+
+    const Vector4 handleColor(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 selectedHandleColor(1.0f, 0.6f, 0.0f, 1.0f);
+    bool hasPointSelection = (getSelectedLinePointEntity() == entity);
+
+    for (size_t i = 0; i < lines.lines.size(); i++){
+        for (int e = 0; e < 2; e++){
+            const Vector3& localPoint = (e == 0) ? lines.lines[i].pointA : lines.lines[i].pointB;
+            Vector3 worldPoint = transform.modelMatrix * localPoint;
+
+            bool pointSelected = hasPointSelection && ((int)(i * 2) + e == getSelectedLinePointIndex());
+            addPointHandle(handlesObj, worldPoint,
+                           (pointSelected ? 6.0f : 4.0f) * zoom,
+                           pointSelected ? selectedHandleColor : handleColor);
         }
     }
 }
@@ -672,6 +721,9 @@ void editor::SceneRender2D::hideAllGizmos(){
     for (auto& pair : occluder2DLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : linePointLines) {
+        pair.second->setVisible(false);
+    }
     for (auto& pair : cameraObjects) {
         pair.second.icon->setVisible(false);
         pair.second.lines->setVisible(false);
@@ -769,6 +821,7 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentJoints;
     std::set<Entity> currentLights2D;
     std::set<Entity> currentOccluders2D;
+    std::set<Entity> currentLinePoints;
     std::set<Entity> currentCameras;
     std::set<Entity> currentSounds;
     for (Entity& entity: entities){
@@ -879,6 +932,17 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             bool highlighted = isDescendantSelected(entity);
 
             createOrUpdateOccluder2DLines(entity, transform, occluder2d, highlighted, highlighted);
+        }
+
+        if (signature.test(scene->getComponentId<LinesComponent>()) && signature.test(scene->getComponentId<Transform>())){
+            LinesComponent& linesComp = scene->getComponent<LinesComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentLinePoints.insert(entity);
+            instanciateLinePointLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdateLinePointLines(entity, transform, linesComp, highlighted);
         }
 
         if (signature.test(scene->getComponentId<Joint2DComponent>())){
@@ -1065,6 +1129,16 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             itOccluder2D = occluder2DLines.erase(itOccluder2D);
         } else {
             ++itOccluder2D;
+        }
+    }
+
+    auto itLinePoints = linePointLines.begin();
+    while (itLinePoints != linePointLines.end()) {
+        if (currentLinePoints.find(itLinePoints->first) == currentLinePoints.end()) {
+            delete itLinePoints->second;
+            itLinePoints = linePointLines.erase(itLinePoints);
+        } else {
+            ++itLinePoints;
         }
     }
 
