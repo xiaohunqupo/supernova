@@ -72,6 +72,8 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     occluder2DLoaded = false;
     shadow2DSlotParams = -1;
     occluder2DBufferCapacity = 0;
+    occluder2DVertexCount = 0;
+    occluder2DNeedUpdateBuffer = false;
 }
 
 RenderSystem::~RenderSystem(){
@@ -5052,6 +5054,17 @@ void RenderSystem::update(double dt){
     if (hasLights2D){
         processLights2D();
     }
+
+    // build the merged occluder segment list once per frame (world transforms are
+    // final here); draw() uploads it at most once, even when the same scene is
+    // drawn multiple times per frame (e.g. open as a tab AND layered as a child scene)
+    if (hasShadows2D && hasShadow2DAtlas){
+        occluder2DVertexCount = buildOccluder2DSegments();
+        occluder2DNeedUpdateBuffer = (occluder2DVertexCount > 0);
+    }else{
+        occluder2DVertexCount = 0;
+        occluder2DNeedUpdateBuffer = false;
+    }
 }
 
 void RenderSystem::draw(){
@@ -5162,20 +5175,20 @@ void RenderSystem::draw(){
 
     //---------2D light shadow pass (1D polar rows)----------
     if (hasShadows2D && hasShadow2DAtlas){
-        unsigned int occluderVertexCount = buildOccluder2DSegments();
-
-        if (occluderVertexCount > 0 && (!occluder2DLoaded || occluderVertexCount > occluder2DBufferCapacity)){
-            unsigned int capacity = std::max(occluderVertexCount * 2u, 256u);
+        if (occluder2DVertexCount > 0 && (!occluder2DLoaded || occluder2DVertexCount > occluder2DBufferCapacity)){
+            unsigned int capacity = std::max(occluder2DVertexCount * 2u, 256u);
             loadOccluder2DPass(capacity);
         }
 
-        bool drawSegments = occluder2DLoaded && occluderVertexCount > 0;
+        bool drawSegments = occluder2DLoaded && occluder2DVertexCount > 0;
 
-        if (drawSegments){
+        if (drawSegments && occluder2DNeedUpdateBuffer){
             // occluders are world-space and can move every frame: re-upload the merged
-            // segment buffer once, then draw it into each shadow light's atlas row
+            // segment buffer (built in update(), at most once per frame — sokol allows
+            // a single sg_update_buffer per buffer and frame)
             occluder2DBuffer.setData((unsigned char*)occluder2DSegments.data(), occluder2DSegments.size() * sizeof(float));
             occluder2DBuffer.getRender()->updateBuffer(occluder2DBuffer.getSize(), occluder2DBuffer.getData());
+            occluder2DNeedUpdateBuffer = false;
         }
 
         // rows are rendered (or at least cleared) every frame even with zero
@@ -5218,7 +5231,7 @@ void RenderSystem::draw(){
                 for (int k = -1; k <= 1; k++){
                     shadow2dParams.offset = Vector4(2.0f * (float)k, 0.0f, 0.0f, 0.0f);
                     occluder2DRender.applyUniformBlock(shadow2DSlotParams, sizeof(vs_shadow2d_t), &shadow2dParams);
-                    occluder2DRender.draw(occluderVertexCount, 1);
+                    occluder2DRender.draw(occluder2DVertexCount, 1);
                 }
             }
 

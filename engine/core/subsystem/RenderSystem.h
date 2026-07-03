@@ -219,6 +219,11 @@ namespace doriax{
 		std::shared_ptr<ShaderRender> shadow2DShader;
 		int shadow2DSlotParams;
 		unsigned int occluder2DBufferCapacity; // in vertices
+		unsigned int occluder2DVertexCount;    // vertices built this frame
+		// sokol allows one sg_update_buffer per buffer per frame, but the same scene
+		// can be drawn twice in a frame (e.g. open as a tab AND layered as a child
+		// scene), so the upload is flagged in update() and consumed by the first draw
+		bool occluder2DNeedUpdateBuffer;
 
 		bool needUpdateShadowBindings;
 
