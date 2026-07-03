@@ -432,6 +432,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
+    if (ImGui::MenuItem(ICON_FA_VIDEO"  Camera")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Camera", EntityCreationType::CAMERA, parent, addToBundle));
+        openParent = parent;
+    }
+
     if (ImGui::MenuItem(ICON_FA_CLOUD"  Sky")){
         CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Sky", EntityCreationType::SKY, parent, addToBundle));
         openParent = parent;
@@ -442,16 +447,6 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
-    if (ImGui::MenuItem(ICON_FA_VIDEO"  Camera")){
-        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Camera", EntityCreationType::CAMERA, parent, addToBundle));
-        openParent = parent;
-    }
-
-    if (ImGui::MenuItem(ICON_FA_CLONE"  Mirror")){
-        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Mirror", EntityCreationType::MIRROR, parent, addToBundle));
-        openParent = parent;
-    }
-
     if (ImGui::BeginMenu(ICON_FA_VOLUME_HIGH"  Sound")){
         if (ImGui::MenuItem(ICON_FA_FILE_AUDIO"  Sound Source")){
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Sound Source", EntityCreationType::SOUND, parent, addToBundle));
@@ -459,6 +454,129 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         }
         if (ImGui::MenuItem(ICON_FA_VOLUME_HIGH"  3D Sound")){
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "3D Sound", EntityCreationType::SOUND_3D, parent, addToBundle));
+            openParent = parent;
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu(ICON_FA_WINDOW_RESTORE"  UI")){
+        if (ImGui::MenuItem(ICON_FA_OBJECT_GROUP"  Container")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Container", EntityCreationType::CONTAINER, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_IMAGE"  Image")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Image", EntityCreationType::IMAGE, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_FONT"  Text")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Text", EntityCreationType::TEXT, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_SQUARE_CARET_RIGHT"  Button")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Button", EntityCreationType::BUTTON, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_ARROWS_UP_DOWN"  Scrollbar")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Scrollbar", EntityCreationType::SCROLLBAR, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_BARS_PROGRESS"  Progressbar")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Progressbar", EntityCreationType::PROGRESSBAR, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_I_CURSOR"  Text Edit")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "TextEdit", EntityCreationType::TEXTEDIT, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_WINDOW_MAXIMIZE"  Panel")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Panel", EntityCreationType::PANEL, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_DRAW_POLYGON"  Polygon")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Polygon", EntityCreationType::POLYGON, parent, addToBundle));
+            openParent = parent;
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu(ICON_FA_ATOM"  Physics")){
+        if (ImGui::MenuItem(ICON_FA_LINK"  Joint 2D")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Joint2D", EntityCreationType::JOINT2D, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_LINK"  Joint 3D")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Joint3D", EntityCreationType::JOINT3D, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_WEIGHT_HANGING"  Empty Body 2D")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Body2D", EntityCreationType::BODY2D, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_WEIGHT_HANGING"  Empty Body 3D")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Body3D", EntityCreationType::BODY3D, parent, addToBundle));
+            openParent = parent;
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::MenuItem(ICON_FA_FIRE"  Particles")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Particles", EntityCreationType::PARTICLES, parent, addToBundle));
+        openParent = parent;
+    }
+
+    if (ImGui::BeginMenu(ICON_FA_FILM"  Animation")){
+        if (ImGui::MenuItem(ICON_FA_FILM"  Animation")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Animation", EntityCreationType::ANIMATION, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_PLAY"  Sprite Animation")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "SpriteAnimation", EntityCreationType::SPRITE_ANIMATION, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT"  Position Action")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "PositionAction", EntityCreationType::POSITION_ACTION, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_ROTATE"  Rotation Action")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "RotationAction", EntityCreationType::ROTATION_ACTION, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER"  Scale Action")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "ScaleAction", EntityCreationType::SCALE_ACTION, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_PALETTE"  Color Action")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "ColorAction", EntityCreationType::COLOR_ACTION, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_EYE"  Alpha Action")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "AlphaAction", EntityCreationType::ALPHA_ACTION, parent, addToBundle));
+            openParent = parent;
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::MenuItem(ICON_FA_CIRCLE"  Point Sprites")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "PointSprites", EntityCreationType::POINTS, parent, addToBundle));
+        openParent = parent;
+    }
+
+    if (ImGui::MenuItem(ICON_FA_GRIP_LINES"  Lines")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Lines", EntityCreationType::LINES, parent, addToBundle));
+        openParent = parent;
+    }
+
+    if (ImGui::BeginMenu(ICON_FA_LIGHTBULB"  Light")){
+        if (ImGui::MenuItem(ICON_FA_LIGHTBULB"  Point")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Point Light", EntityCreationType::POINT_LIGHT, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_LIGHTBULB"  Directional")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Directional Light", EntityCreationType::DIRECTIONAL_LIGHT, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_LIGHTBULB"  Spot")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Spot Light", EntityCreationType::SPOT_LIGHT, parent, addToBundle));
             openParent = parent;
         }
         ImGui::EndMenu();
@@ -516,136 +634,18 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu(ICON_FA_WINDOW_RESTORE"  UI")){
-        if (ImGui::MenuItem(ICON_FA_OBJECT_GROUP"  Container")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Container", EntityCreationType::CONTAINER, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_IMAGE"  Image")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Image", EntityCreationType::IMAGE, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_FONT"  Text")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Text", EntityCreationType::TEXT, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_SQUARE_CARET_RIGHT"  Button")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Button", EntityCreationType::BUTTON, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_ARROWS_UP_DOWN"  Scrollbar")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Scrollbar", EntityCreationType::SCROLLBAR, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_BARS_PROGRESS"  Progressbar")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Progressbar", EntityCreationType::PROGRESSBAR, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_I_CURSOR"  Text Edit")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "TextEdit", EntityCreationType::TEXTEDIT, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_WINDOW_MAXIMIZE"  Panel")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Panel", EntityCreationType::PANEL, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_DRAW_POLYGON"  Polygon")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Polygon", EntityCreationType::POLYGON, parent, addToBundle));
-            openParent = parent;
-        }
-        ImGui::EndMenu();
-    }
-
-    if (ImGui::BeginMenu(ICON_FA_LIGHTBULB"  Light")){
-        if (ImGui::MenuItem(ICON_FA_LIGHTBULB"  Point")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Point Light", EntityCreationType::POINT_LIGHT, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_LIGHTBULB"  Directional")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Directional Light", EntityCreationType::DIRECTIONAL_LIGHT, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_LIGHTBULB"  Spot")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Spot Light", EntityCreationType::SPOT_LIGHT, parent, addToBundle));
-            openParent = parent;
-        }
-        ImGui::EndMenu();
-    }
-
-    if (ImGui::BeginMenu(ICON_FA_ATOM"  Physics")){
-        if (ImGui::MenuItem(ICON_FA_LINK"  Joint 2D")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Joint2D", EntityCreationType::JOINT2D, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_LINK"  Joint 3D")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Joint3D", EntityCreationType::JOINT3D, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_WEIGHT_HANGING"  Empty Body 2D")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Body2D", EntityCreationType::BODY2D, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_WEIGHT_HANGING"  Empty Body 3D")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Body3D", EntityCreationType::BODY3D, parent, addToBundle));
-            openParent = parent;
-        }
-        ImGui::EndMenu();
-    }
-
-    if (ImGui::MenuItem(ICON_FA_CIRCLE"  Point Sprites")){
-        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "PointSprites", EntityCreationType::POINTS, parent, addToBundle));
-        openParent = parent;
-    }
-
-    if (ImGui::MenuItem(ICON_FA_GRIP_LINES"  Lines")){
-        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Lines", EntityCreationType::LINES, parent, addToBundle));
-        openParent = parent;
-    }
-
     if (ImGui::MenuItem(ICON_FA_VECTOR_SQUARE"  Mesh Polygon")){
         CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "MeshPolygon", EntityCreationType::MESH_POLYGON, parent, addToBundle));
         openParent = parent;
     }
 
-    if (ImGui::MenuItem(ICON_FA_FIRE"  Particles")){
-        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Particles", EntityCreationType::PARTICLES, parent, addToBundle));
+    if (ImGui::MenuItem(ICON_FA_PERSON_RUNNING"  Model")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Model", EntityCreationType::MODEL, parent, addToBundle));
         openParent = parent;
     }
 
-    if (ImGui::BeginMenu(ICON_FA_FILM"  Animation")){
-        if (ImGui::MenuItem(ICON_FA_FILM"  Animation")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Animation", EntityCreationType::ANIMATION, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_PLAY"  Sprite Animation")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "SpriteAnimation", EntityCreationType::SPRITE_ANIMATION, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT"  Position Action")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "PositionAction", EntityCreationType::POSITION_ACTION, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_ROTATE"  Rotation Action")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "RotationAction", EntityCreationType::ROTATION_ACTION, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER"  Scale Action")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "ScaleAction", EntityCreationType::SCALE_ACTION, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_PALETTE"  Color Action")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "ColorAction", EntityCreationType::COLOR_ACTION, parent, addToBundle));
-            openParent = parent;
-        }
-        if (ImGui::MenuItem(ICON_FA_EYE"  Alpha Action")){
-            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "AlphaAction", EntityCreationType::ALPHA_ACTION, parent, addToBundle));
-            openParent = parent;
-        }
-        ImGui::EndMenu();
-    }
-
-    if (ImGui::MenuItem(ICON_FA_PERSON_RUNNING"  Model")){
-        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Model", EntityCreationType::MODEL, parent, addToBundle));
+    if (ImGui::MenuItem(ICON_FA_CLONE"  Mirror")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Mirror", EntityCreationType::MIRROR, parent, addToBundle));
         openParent = parent;
     }
 
