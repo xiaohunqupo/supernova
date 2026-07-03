@@ -6897,16 +6897,14 @@ void editor::Properties::drawTilemapComponent(ComponentType cpType, SceneProject
                     sceneProject->sceneRender->getSelectedTileIndex() == (int)i &&
                     sceneProject->sceneRender->getSelectedTileEntity() == entities[0];
 
+                // sub-selected in the scene viewport: same marking as occluder points
                 if (isTileSelected) {
-                    ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-                    float width = ImGui::GetContentRegionAvail().x;
-                    float height = ImGui::GetFrameHeight();
-                    ImDrawList* drawList = ImGui::GetWindowDrawList();
-                    ImVec4 highlightColor = ImGui::GetStyle().Colors[ImGuiCol_HeaderActive];
-                    highlightColor.w = 0.35f;
-                    drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + width, cursorPos.y + height), ImGui::GetColorU32(highlightColor), 3.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::SubSelectionText);
+                    ImGui::SeparatorText((std::string(ICON_FA_CARET_RIGHT) + " " + label).c_str());
+                    ImGui::PopStyleColor();
+                } else {
+                    ImGui::SeparatorText(label.c_str());
                 }
-                ImGui::SeparatorText(label.c_str());
                 if (isLastHeaderRowClicked()) {
                     syncSubSelection(sceneProject, entities[0], (int)i, -1);
                 }
@@ -7213,7 +7211,7 @@ void editor::Properties::drawOccluder2DComponent(ComponentType cpType, SceneProj
 
             ImGui::PushID(static_cast<int>(i));
             if (pointSelected){
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.0f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::SubSelectionText);
                 propertyHeader(std::string(ICON_FA_CARET_RIGHT) + " Point " + std::to_string(i), -1, false, false);
                 ImGui::PopStyleColor();
             }else{
@@ -7886,16 +7884,14 @@ void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneP
             sceneProject->sceneRender->getSelectedInstanceIndex() == (int)i &&
             sceneProject->sceneRender->getSelectedInstanceEntity() == entities[0];
 
+        // sub-selected in the scene viewport: same marking as occluder points
         if (isInstanceSelected) {
-            ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-            float width = ImGui::GetContentRegionAvail().x;
-            float height = ImGui::GetFrameHeight();
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImVec4 highlightColor = ImGui::GetStyle().Colors[ImGuiCol_HeaderActive];
-            highlightColor.w = 0.35f;
-            drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + width, cursorPos.y + height), ImGui::GetColorU32(highlightColor), 3.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::SubSelectionText);
+            ImGui::SeparatorText((std::string(ICON_FA_CARET_RIGHT) + " " + instanceLabel).c_str());
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::SeparatorText(instanceLabel.c_str());
         }
-        ImGui::SeparatorText(instanceLabel.c_str());
         if (isLastHeaderRowClicked()) {
             syncSubSelection(sceneProject, entities[0], -1, (int)i);
         }
