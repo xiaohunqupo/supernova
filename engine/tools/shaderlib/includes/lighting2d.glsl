@@ -24,20 +24,31 @@ vec3 getNormal2D(){
 
 #ifdef USE_SHADOWS_2D
 // 1D polar shadow map lookup: the row stores, per angle around the light, the
-// normalized distance (dist/range) of the nearest occluder. 5-tap PCF along the
-// row; u wraps with fract() so the seam at theta = +-pi is continuous.
+// normalized distance (dist/range) of the nearest occluder. PCF along the row
+// with 2*radius+1 taps (radius from the scene's Shadow2DQuality, uniform-driven
+// so quality changes need no shader rebuild); the taps span the penumbra
+// half-width set by the light's softness, so more taps smooth the same width.
+// u wraps with fract() so the seam at theta = +-pi is continuous.
 float shadow2DCalculation(float row, vec2 lightToFrag, float dist01, float softness, float bias){
     float theta = atan(lightToFrag.y, lightToFrag.x); // [-pi, pi]
     float u = theta / (2.0 * M_PI) + 0.5;
     float v = (row + 0.5) * lighting2d.atlasInfo.y;
-    float spread = lighting2d.atlasInfo.x * max(softness, 0.5);
+
+    int radius = int(lighting2d.atlasInfo.w);
+    if (radius <= 0){
+        float occ = decodeDepth(texture(sampler2D(u_shadow2DAtlas, u_shadow2DAtlas_smp), vec2(u, v)));
+        return (dist01 - bias <= occ) ? 1.0 : 0.0;
+    }
+
+    float halfWidth = lighting2d.atlasInfo.x * max(softness, 0.5); // in texels
+    float tapStep = halfWidth / float(radius);
     float lit = 0.0;
-    for (int t = -2; t <= 2; ++t){
-        float su = fract(u + float(t) * spread);
+    for (int t = -radius; t <= radius; ++t){
+        float su = fract(u + float(t) * tapStep);
         float occ = decodeDepth(texture(sampler2D(u_shadow2DAtlas, u_shadow2DAtlas_smp), vec2(su, v)));
         lit += (dist01 - bias <= occ) ? 1.0 : 0.0;
     }
-    return lit / 5.0; // 1.0 = fully lit
+    return lit / float(2 * radius + 1); // 1.0 = fully lit
 }
 #endif
 

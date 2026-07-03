@@ -48,7 +48,7 @@ namespace doriax{
 	    Vector4 color_intensity[MAX_LIGHTS_2D];  // rgb = color (linear), w = intensity
 	    Vector4 falloff_shadow[MAX_LIGHTS_2D];   // x = falloff exp, y = shadow atlas row (-1 = none), z = softness (texels), w = bias
 		Vector4 ambient;                         // rgb = ambient2D (linear) * intensity, w = numLights2D
-		Vector4 atlasInfo;                       // x = 1/atlasWidth, y = 1/MAX_LIGHTS_2D, z = atlasWidth
+		Vector4 atlasInfo;                       // x = 1/atlasWidth, y = 1/MAX_LIGHTS_2D, z = atlasWidth, w = PCF tap radius
 	} fs_lighting2d_t;
 
 	typedef struct vs_shadow2d_t {

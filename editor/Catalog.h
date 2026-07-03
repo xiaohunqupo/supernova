@@ -181,6 +181,7 @@ namespace doriax::editor{
                 if constexpr (std::is_same_v<T, bool>) return false;
                 if constexpr (std::is_same_v<T, float>) return 0.0f;
                 if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
+                if constexpr (std::is_same_v<T, Shadow2DQuality>) return Shadow2DQuality::LOW;
                 // Add other types as needed
             }
 
@@ -212,6 +213,11 @@ namespace doriax::editor{
             else if (propertyName == "ambient_light_2d_intensity") {
                 if constexpr (std::is_same_v<T, float>) {
                     return scene->getAmbientLight2DIntensity();
+                }
+            }
+            else if (propertyName == "shadows_2d_quality") {
+                if constexpr (std::is_same_v<T, Shadow2DQuality>) {
+                    return scene->getShadow2DQuality();
                 }
             }
             else if (propertyName == "light_state") {
@@ -287,6 +293,7 @@ namespace doriax::editor{
             if constexpr (std::is_same_v<T, float>) return 0.0f;
             if constexpr (std::is_same_v<T, int>) return 0;
             if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
+                if constexpr (std::is_same_v<T, Shadow2DQuality>) return Shadow2DQuality::LOW;
             // Add other types as needed
         }
 
@@ -322,6 +329,11 @@ namespace doriax::editor{
             else if (propertyName == "ambient_light_2d_intensity") {
                 if constexpr (std::is_same_v<T, float>) {
                     scene->setAmbientLight2D(value);
+                }
+            }
+            else if (propertyName == "shadows_2d_quality") {
+                if constexpr (std::is_same_v<T, Shadow2DQuality>) {
+                    scene->setShadow2DQuality(value);
                 }
             }
             else if (propertyName == "light_state") {

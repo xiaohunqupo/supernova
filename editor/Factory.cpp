@@ -327,6 +327,16 @@ std::string editor::Factory::formatLightState(LightState state) {
     }
 }
 
+std::string editor::Factory::formatShadow2DQuality(Shadow2DQuality quality) {
+    switch (quality) {
+        case Shadow2DQuality::NONE: return "Shadow2DQuality::NONE";
+        case Shadow2DQuality::LOW: return "Shadow2DQuality::LOW";
+        case Shadow2DQuality::MEDIUM: return "Shadow2DQuality::MEDIUM";
+        case Shadow2DQuality::HIGH: return "Shadow2DQuality::HIGH";
+        default: return "Shadow2DQuality::LOW";
+    }
+}
+
 std::string editor::Factory::formatSoundState(SoundState state) {
     switch (state) {
         case SoundState::Playing: return "SoundState::Playing";
@@ -2188,6 +2198,7 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setGlobalIllumination(" << formatVector3(scene->getGlobalIlluminationColor()) << ");\n";
     out << ind2 << "scene->setAmbientLight2D(" << formatFloat(scene->getAmbientLight2DIntensity()) << ");\n";
     out << ind2 << "scene->setAmbientLight2D(" << formatVector3(scene->getAmbientLight2DColor()) << ");\n";
+    out << ind2 << "scene->setShadow2DQuality(" << formatShadow2DQuality(scene->getShadow2DQuality()) << ");\n";
     out << ind2 << "scene->setLightState(" << formatLightState(scene->getLightState()) << ");\n";
     out << ind2 << "scene->setSSAOEnabled(" << formatBool(scene->isSSAOEnabled()) << ");\n";
     out << ind2 << "scene->setSSAORadius(" << formatFloat(scene->getSSAORadius()) << ");\n";

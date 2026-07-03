@@ -576,9 +576,18 @@ void RenderSystem::processLights2D(){
     Vector3 ambient = scene->getAmbientLight2DColorLinear() * scene->getAmbientLight2DIntensity();
     fs_lighting2d.ambient = Vector4(ambient.x, ambient.y, ambient.z, (float)numLights2D);
 
+    // PCF tap radius from the scene's 2D shadow quality (taps = 2*radius + 1)
+    float pcfRadius = 2.0f;
+    switch (scene->getShadow2DQuality()){
+        case Shadow2DQuality::NONE:   pcfRadius = 0.0f; break;
+        case Shadow2DQuality::LOW:    pcfRadius = 2.0f; break;
+        case Shadow2DQuality::MEDIUM: pcfRadius = 4.0f; break;
+        case Shadow2DQuality::HIGH:   pcfRadius = 6.0f; break;
+    }
+
     // rows without shadows keep shadowMapIndex -1 and never sample the atlas
     float atlasW = (hasShadow2DAtlas && shadow2DAtlasWidth > 0) ? (float)shadow2DAtlasWidth : 1.0f;
-    fs_lighting2d.atlasInfo = Vector4(1.0f / atlasW, 1.0f / (float)MAX_LIGHTS_2D, atlasW, 0.0);
+    fs_lighting2d.atlasInfo = Vector4(1.0f / atlasW, 1.0f / (float)MAX_LIGHTS_2D, atlasW, pcfRadius);
 }
 
 bool RenderSystem::loadAndProcessFog(){

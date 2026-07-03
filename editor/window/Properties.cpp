@@ -341,7 +341,7 @@ void editor::Properties::flushDirtyMaterials(float deltaTime) {
 }
 
 template<typename T>
-void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue, float maxValue) {
+void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue, float maxValue, const std::string& help) {
     T value = Catalog::getSceneProperty<T>(sceneProject->scene, propertyName);
     bool changed = false;
 
@@ -351,6 +351,11 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
     ImGui::TableSetColumnIndex(0);
     ImGui::Text("%s", label);
     ImGui::TableSetColumnIndex(1);
+
+    if (!help.empty()){
+        // leave room in the value column for the trailing "(?)" marker
+        ImGui::SetNextItemWidth(-(ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x));
+    }
 
     switch (inputType) {
         case ScenePropertyInputType::Checkbox:
@@ -392,6 +397,14 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
                     value = static_cast<LightState>(currentItem);
                 }
             }
+            if constexpr (std::is_same_v<T, Shadow2DQuality>) {
+                const char* qualityNames[] = { "None", "Low", "Medium", "High" };
+                int currentItem = static_cast<int>(value);
+                changed = ImGui::Combo(("##" + propertyName).c_str(), &currentItem, qualityNames, IM_ARRAYSIZE(qualityNames));
+                if (changed) {
+                    value = static_cast<Shadow2DQuality>(currentItem);
+                }
+            }
             break;
     }
 
@@ -405,6 +418,11 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
             cmd->setNoMerge();
             cmd = nullptr;
         }
+    }
+
+    // after IsItemDeactivatedAfterEdit so that check still refers to the widget
+    if (!help.empty()){
+        ImGui::SameLine(); helpMarker(help);
     }
 }
 
@@ -11904,6 +11922,23 @@ void editor::Properties::show(){
 
                     drawScenePropertyRow<Vector3>(sceneProject, "ambient_light_2d_color", "Color", ScenePropertyInputType::ColorRGB);
                     drawScenePropertyRow<float>(sceneProject, "ambient_light_2d_intensity", "Intensity", ScenePropertyInputType::SliderFloat, 0.0f, 1.0f);
+
+                    ImGui::EndTable();
+                }
+
+                ImGui::SeparatorText("2D Shadows");
+
+                if (ImGui::BeginTable("scene_shadows2d_table", 2, tableFlags)) {
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Filter Quality").x);
+                    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                    drawScenePropertyRow<Shadow2DQuality>(sceneProject, "shadows_2d_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
+                        "Smoothness of 2D light shadow edges. The penumbra width is set per light (Shadow Softness); this sets how smoothly it is sampled:\n"
+                        "- None: 1 sample, no filtering, hard edges (softness is ignored)\n"
+                        "- Low: 5 samples\n"
+                        "- Medium: 9 samples\n"
+                        "- High: 13 samples, smooth even with very wide penumbras\n"
+                        "Higher values cost more per lit pixel. Raise it if wide penumbras show banding.");
 
                     ImGui::EndTable();
                 }

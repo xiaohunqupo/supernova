@@ -23,6 +23,15 @@ namespace doriax{
         AUTO
     };
 
+    // PCF filter of the 2D light shadows (taps along the 1D polar shadow map);
+    // more taps smooth the same penumbra width (set by Light2D shadowSoftness)
+    enum class Shadow2DQuality {
+        NONE,   // 1 tap, no filtering (hard edges)
+        LOW,    // 5 taps
+        MEDIUM, // 9 taps
+        HIGH    // 13 taps
+    };
+
     enum class UIEventState {
         NOT_SET,
         ENABLED,
@@ -44,6 +53,7 @@ namespace doriax{
 
         Vector3 ambientLight2DColor;
         float ambientLight2DIntensity;
+        Shadow2DQuality shadow2DQuality;
 
         bool ssaoEnabled;
         float ssaoRadius;
@@ -172,6 +182,9 @@ namespace doriax{
         float getAmbientLight2DIntensity() const;
         Vector3 getAmbientLight2DColor() const;
         Vector3 getAmbientLight2DColorLinear() const;
+
+        void setShadow2DQuality(Shadow2DQuality quality);
+        Shadow2DQuality getShadow2DQuality() const;
 
         bool canReceiveUIEvents();
 

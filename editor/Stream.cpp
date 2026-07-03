@@ -639,6 +639,23 @@ FogType editor::Stream::stringToFogType(const std::string& str) {
     return FogType::LINEAR;
 }
 
+static std::string shadow2DQualityToString(Shadow2DQuality quality) {
+    switch (quality) {
+        case Shadow2DQuality::NONE: return "none";
+        case Shadow2DQuality::LOW: return "low";
+        case Shadow2DQuality::MEDIUM: return "medium";
+        case Shadow2DQuality::HIGH: return "high";
+    }
+    return "low";
+}
+
+static Shadow2DQuality stringToShadow2DQuality(const std::string& str) {
+    if (str == "none") return Shadow2DQuality::NONE;
+    if (str == "medium") return Shadow2DQuality::MEDIUM;
+    if (str == "high") return Shadow2DQuality::HIGH;
+    return Shadow2DQuality::LOW; // Default
+}
+
 std::string editor::Stream::lightStateToString(LightState state) {
     switch (state) {
         case LightState::OFF: return "off";
@@ -1806,6 +1823,7 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["globalIlluminationColor"] = encodeVector3(scene->getGlobalIlluminationColor());
     sceneNode["ambientLight2DIntensity"] = scene->getAmbientLight2DIntensity();
     sceneNode["ambientLight2DColor"] = encodeVector3(scene->getAmbientLight2DColor());
+    sceneNode["shadow2DQuality"] = shadow2DQualityToString(scene->getShadow2DQuality());
     sceneNode["ssaoEnabled"] = scene->isSSAOEnabled();
     sceneNode["ssaoRadius"] = scene->getSSAORadius();
     sceneNode["ssaoIntensity"] = scene->getSSAOIntensity();
@@ -1858,6 +1876,10 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
         scene->setAmbientLight2D(node["ambientLight2DIntensity"].as<float>());
     } else if (node["ambientLight2DColor"]) {
         scene->setAmbientLight2D(decodeVector3(node["ambientLight2DColor"]));
+    }
+
+    if (node["shadow2DQuality"]) {
+        scene->setShadow2DQuality(stringToShadow2DQuality(node["shadow2DQuality"].as<std::string>()));
     }
 
     if (node["ssaoEnabled"]) {

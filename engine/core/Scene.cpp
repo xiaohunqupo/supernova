@@ -48,6 +48,7 @@ void Scene::init(){
     // default 1.0 keeps 2D scenes visually unchanged until the user dims it
     ambientLight2DColor = Vector3(1.0, 1.0, 1.0);
     ambientLight2DIntensity = 1.0;
+    shadow2DQuality = Shadow2DQuality::LOW;
 
     ssaoEnabled = false;
     ssaoRadius = 0.5;
@@ -352,6 +353,14 @@ Vector3 Scene::getAmbientLight2DColor() const{
 
 Vector3 Scene::getAmbientLight2DColorLinear() const{
     return this->ambientLight2DColor;
+}
+
+void Scene::setShadow2DQuality(Shadow2DQuality quality){
+    this->shadow2DQuality = quality;
+}
+
+Shadow2DQuality Scene::getShadow2DQuality() const{
+    return this->shadow2DQuality;
 }
 
 bool Scene::canReceiveUIEvents(){
