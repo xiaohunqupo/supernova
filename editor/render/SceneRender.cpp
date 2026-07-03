@@ -72,7 +72,7 @@ AABB editor::SceneRender::getAABB(Entity entity, bool local){
             return mesh.worldAABB;
         }
     }else if (signature.test(scene->getComponentId<UIComponent>())){
-        if (signature.test(scene->getComponentId<UILayoutComponent>())){
+        if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){
             UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
             if (layout.width > 0 && layout.height > 0){
                 Vector2 center = GraphicUtils::getUILayoutCenter(scene, entity, layout);
@@ -290,7 +290,7 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local, bool visual){
                               : modelMatrix * mesh.aabb.getOBB();
             }
         }else if (signature.test(scene->getComponentId<UIComponent>())){
-            if (signature.test(scene->getComponentId<UILayoutComponent>())){
+            if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){
                 UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
                 if (layout.width > 0 && layout.height > 0){
                     Vector2 center = GraphicUtils::getUILayoutCenter(scene, entity, layout);
@@ -616,8 +616,11 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
 
             showCross = signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>());
 
-            // a selected occluder polygon point is a size-less target: show the move cross
+            // a selected occluder / polygon point is a size-less target: show the move cross
             if (selectedOccluderPointIndex >= 0 && selEntities[0] == selectedOccluderPointEntity){
+                showCross = true;
+            }
+            if (selectedPolygonPointIndex >= 0 && selEntities[0] == selectedPolygonPointEntity){
                 showCross = true;
             }
 
@@ -702,6 +705,19 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             }else{
                 // line removed: drop the stale sub-selection
                 clearLinePointSelection();
+            }
+        }
+
+        // Override gizmo for selected polygon/mesh-polygon vertex (2D gizmo or 3D translate)
+        if (selectedPolygonPointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedPolygonPointEntity
+            && (toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D || toolslayer.getGizmoSelected() == GizmoSelected::TRANSLATE)){
+            OBB pointOBB = getPolygonPointOBB(selectedPolygonPointEntity, selectedPolygonPointIsMesh, selectedPolygonPointIndex);
+            if (!pointOBB.isNull()){
+                Vector3 pointCenter = pointOBB.getCenter();
+                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, scale, pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+            }else{
+                // vertex removed: drop the stale sub-selection
+                clearPolygonPointSelection();
             }
         }
 
@@ -858,6 +874,15 @@ void editor::SceneRender::mouseClickEvent(float x, float y, std::vector<Entity> 
         // Override gizmo start position to the selected line endpoint
         if (selectedLinePointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedLinePointEntity){
             OBB pointOBB = getLinePointOBB(selectedLinePointEntity, selectedLinePointIndex);
+            if (!pointOBB.isNull()){
+                gizmoStartPosition = pointOBB.getCenter();
+                cursorStartOffset = gizmoStartPosition - rretrun.point;
+            }
+        }
+
+        // Override gizmo start position to the selected polygon vertex
+        if (selectedPolygonPointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedPolygonPointEntity){
+            OBB pointOBB = getPolygonPointOBB(selectedPolygonPointEntity, selectedPolygonPointIsMesh, selectedPolygonPointIndex);
             if (!pointOBB.isNull()){
                 gizmoStartPosition = pointOBB.getCenter();
                 cursorStartOffset = gizmoStartPosition - rretrun.point;
@@ -1070,6 +1095,16 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                             lastCommand = new PropertyCmd<Vector3>(project, sceneProject->id, entity,
                                 ComponentType::LinesComponent, pointProp, newLocalPos);
                         }
+                    }else if (selectedPolygonPointIndex >= 0 && entity == selectedPolygonPointEntity){
+                        // move the selected polygon vertex instead of the entity
+                        Transform* polyTransform = scene->findComponent<Transform>(entity);
+                        if (polyTransform){
+                            Vector3 newLocalPos = polyTransform->modelMatrix.inverse() * newPos;
+                            std::string pointProp = "points[" + std::to_string(selectedPolygonPointIndex) + "].position";
+                            lastCommand = new PropertyCmd<Vector3>(project, sceneProject->id, entity,
+                                selectedPolygonPointIsMesh ? ComponentType::MeshPolygonComponent : ComponentType::PolygonComponent,
+                                pointProp, newLocalPos);
+                        }
                     }else{
                         Matrix4 gizmoMatrix = Matrix4::translateMatrix(newPos) * gizmoRMatrix * Matrix4::scaleMatrix(Vector3(1,1,1));
                         Matrix4 objMatrix = gizmoMatrix * objectMatrixOffset[entity];
@@ -1193,6 +1228,35 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                             std::string pointProp = "lines[" + std::to_string(lineIndex) + (isPointA ? "].pointA" : "].pointB");
                             lastCommand = new PropertyCmd<Vector3>(project, sceneProject->id, entity,
                                 ComponentType::LinesComponent, pointProp, newLocalPos);
+                        }
+                    }else
+                    // Handle polygon/mesh-polygon vertex sub-selection drag
+                    if (selectedPolygonPointIndex >= 0 && entity == selectedPolygonPointEntity){
+                        Transform* polyTransform = scene->findComponent<Transform>(entity);
+                        Vector3 worldOld;
+                        bool hasPoint = getPolygonPointWorld(entity, selectedPolygonPointIsMesh, selectedPolygonPointIndex, worldOld);
+                        if (polyTransform && hasPoint && toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::CENTER){
+                            // new world position of the vertex, following the cursor
+                            Vector3 newWorldPos = rretrun.point + cursorStartOffset;
+
+                            if (displaySettings.snapToGrid) {
+                                float spacing = displaySettings.gridSpacing2D;
+                                if (spacing > 0.0f) {
+                                    newWorldPos.x = std::round(newWorldPos.x / spacing) * spacing;
+                                    newWorldPos.y = std::round(newWorldPos.y / spacing) * spacing;
+                                }
+                            }
+
+                            // the cursor plane is at the entity's Z: keep the vertex's own local Z
+                            Matrix4 invModel = polyTransform->modelMatrix.inverse();
+                            Vector3 oldLocal = invModel * worldOld;
+                            Vector3 newLocalPos = invModel * newWorldPos;
+                            newLocalPos.z = oldLocal.z;
+
+                            std::string pointProp = "points[" + std::to_string(selectedPolygonPointIndex) + "].position";
+                            lastCommand = new PropertyCmd<Vector3>(project, sceneProject->id, entity,
+                                selectedPolygonPointIsMesh ? ComponentType::MeshPolygonComponent : ComponentType::PolygonComponent,
+                                pointProp, newLocalPos);
                         }
                     }else
                     // Handle tile sub-selection drag
@@ -1785,6 +1849,79 @@ OBB editor::SceneRender::getLinePointOBB(Entity entity, int pointIndex){
 
     const Vector3& localPoint = (pointIndex % 2 == 0) ? lines.lines[lineIndex].pointA : lines.lines[lineIndex].pointB;
     Vector3 worldPoint = transform.modelMatrix * localPoint;
+    float halfSize = getPointHandleHalfSize(worldPoint);
+    AABB aabb(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));
+    return aabb.getOBB();
+}
+
+void editor::SceneRender::selectPolygonPoint(Entity entity, bool isMesh, int pointIndex){
+    selectedPolygonPointEntity = entity;
+    selectedPolygonPointIsMesh = isMesh;
+    selectedPolygonPointIndex = pointIndex;
+}
+
+void editor::SceneRender::clearPolygonPointSelection(){
+    selectedPolygonPointEntity = 0;
+    selectedPolygonPointIndex = -1;
+}
+
+// Polygon and MeshPolygon both store std::vector<PolygonPoint> (Vector3 position);
+// isMesh chooses which component so one code path serves both.
+bool editor::SceneRender::getPolygonPointWorld(Entity entity, bool isMesh, int pointIndex, Vector3& worldPoint){
+    if (!scene->getComponentArray<Transform>()->hasEntity(entity)) return false;
+    Transform& transform = scene->getComponent<Transform>(entity);
+
+    if (isMesh){
+        if (!scene->getComponentArray<MeshPolygonComponent>()->hasEntity(entity)) return false;
+        MeshPolygonComponent& polygon = scene->getComponent<MeshPolygonComponent>(entity);
+        if (pointIndex < 0 || pointIndex >= (int)polygon.points.size()) return false;
+        worldPoint = transform.modelMatrix * polygon.points[pointIndex].position;
+    }else{
+        if (!scene->getComponentArray<PolygonComponent>()->hasEntity(entity)) return false;
+        PolygonComponent& polygon = scene->getComponent<PolygonComponent>(entity);
+        if (pointIndex < 0 || pointIndex >= (int)polygon.points.size()) return false;
+        worldPoint = transform.modelMatrix * polygon.points[pointIndex].position;
+    }
+
+    return true;
+}
+
+// Returns the polygon vertex under the mouse (-1 when none). Ray-vs-handle-box test
+// so it works in both ortho and perspective views (like line endpoints).
+int editor::SceneRender::hitTestPolygonPoint(Entity entity, bool isMesh, float x, float y){
+    size_t count = 0;
+    if (isMesh){
+        if (!scene->getComponentArray<MeshPolygonComponent>()->hasEntity(entity)) return -1;
+        count = scene->getComponent<MeshPolygonComponent>(entity).points.size();
+    }else{
+        if (!scene->getComponentArray<PolygonComponent>()->hasEntity(entity)) return -1;
+        count = scene->getComponent<PolygonComponent>(entity).points.size();
+    }
+
+    Ray ray = camera->screenToRay(x, y);
+
+    int bestIndex = -1;
+    float bestDistance = FLT_MAX;
+    for (size_t i = 0; i < count; i++){
+        Vector3 worldPoint;
+        if (!getPolygonPointWorld(entity, isMesh, (int)i, worldPoint)) continue;
+        float halfSize = getPointHandleHalfSize(worldPoint);
+        AABB handleAABB(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));
+
+        RayReturn rr = ray.intersects(handleAABB);
+        if (rr && rr.distance < bestDistance){
+            bestDistance = rr.distance;
+            bestIndex = (int)i;
+        }
+    }
+
+    return bestIndex;
+}
+
+OBB editor::SceneRender::getPolygonPointOBB(Entity entity, bool isMesh, int pointIndex){
+    Vector3 worldPoint;
+    if (!getPolygonPointWorld(entity, isMesh, pointIndex, worldPoint)) return OBB();
+
     float halfSize = getPointHandleHalfSize(worldPoint);
     AABB aabb(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));
     return aabb.getOBB();

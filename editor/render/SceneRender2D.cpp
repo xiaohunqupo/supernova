@@ -80,6 +80,11 @@ editor::SceneRender2D::~SceneRender2D(){
     }
     linePointLines.clear();
 
+    for (auto& pair : polygonPointLines) {
+        delete pair.second;
+    }
+    polygonPointLines.clear();
+
     for (auto& pair : cameraObjects) {
         delete pair.second.icon;
         delete pair.second.lines;
@@ -148,6 +153,17 @@ bool editor::SceneRender2D::instanciateLinePointLines(Entity entity){
     if (linePointLines.find(entity) == linePointLines.end()){
         ScopedDefaultEntityPool sys(*scene, EntityPool::System);
         linePointLines[entity] = new Lines(scene);
+
+        return true;
+    }
+
+    return false;
+}
+
+bool editor::SceneRender2D::instanciatePolygonPointLines(Entity entity){
+    if (polygonPointLines.find(entity) == polygonPointLines.end()){
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        polygonPointLines[entity] = new Lines(scene);
 
         return true;
     }
@@ -278,6 +294,32 @@ void editor::SceneRender2D::createOrUpdateLinePointLines(Entity entity, const Tr
                            (pointSelected ? 6.0f : 4.0f) * zoom,
                            pointSelected ? selectedHandleColor : handleColor);
         }
+    }
+}
+
+// vertex handles for a selected Polygon / MeshPolygon entity; the sub-selected
+// vertex is drawn bigger and in the selection color
+void editor::SceneRender2D::createOrUpdatePolygonPointLines(Entity entity, const Transform& transform, const std::vector<PolygonPoint>& points, bool isMesh, bool visible){
+    Lines* handlesObj = polygonPointLines[entity];
+
+    handlesObj->clearLines();
+    handlesObj->setVisible(transform.visible && visible);
+
+    if (!transform.visible || !visible){
+        return;
+    }
+
+    const Vector4 handleColor(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 selectedHandleColor(1.0f, 0.6f, 0.0f, 1.0f);
+    bool hasPointSelection = (getSelectedPolygonPointEntity() == entity && isSelectedPolygonPointMesh() == isMesh);
+
+    for (size_t i = 0; i < points.size(); i++){
+        Vector3 worldPoint = transform.modelMatrix * points[i].position;
+
+        bool pointSelected = hasPointSelection && ((int)i == getSelectedPolygonPointIndex());
+        addPointHandle(handlesObj, worldPoint,
+                       (pointSelected ? 6.0f : 4.0f) * zoom,
+                       pointSelected ? selectedHandleColor : handleColor);
     }
 }
 
@@ -724,6 +766,9 @@ void editor::SceneRender2D::hideAllGizmos(){
     for (auto& pair : linePointLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : polygonPointLines) {
+        pair.second->setVisible(false);
+    }
     for (auto& pair : cameraObjects) {
         pair.second.icon->setVisible(false);
         pair.second.lines->setVisible(false);
@@ -822,6 +867,7 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentLights2D;
     std::set<Entity> currentOccluders2D;
     std::set<Entity> currentLinePoints;
+    std::set<Entity> currentPolygonPoints;
     std::set<Entity> currentCameras;
     std::set<Entity> currentSounds;
     for (Entity& entity: entities){
@@ -943,6 +989,26 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             bool highlighted = isDescendantSelected(entity);
 
             createOrUpdateLinePointLines(entity, transform, linesComp, highlighted);
+        }
+
+        if (signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<Transform>())){
+            PolygonComponent& polygon = scene->getComponent<PolygonComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentPolygonPoints.insert(entity);
+            instanciatePolygonPointLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdatePolygonPointLines(entity, transform, polygon.points, false, highlighted);
+        }else if (signature.test(scene->getComponentId<MeshPolygonComponent>()) && signature.test(scene->getComponentId<Transform>())){
+            MeshPolygonComponent& polygon = scene->getComponent<MeshPolygonComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentPolygonPoints.insert(entity);
+            instanciatePolygonPointLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdatePolygonPointLines(entity, transform, polygon.points, true, highlighted);
         }
 
         if (signature.test(scene->getComponentId<Joint2DComponent>())){
@@ -1139,6 +1205,16 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             itLinePoints = linePointLines.erase(itLinePoints);
         } else {
             ++itLinePoints;
+        }
+    }
+
+    auto itPolygonPoints = polygonPointLines.begin();
+    while (itPolygonPoints != polygonPointLines.end()) {
+        if (currentPolygonPoints.find(itPolygonPoints->first) == currentPolygonPoints.end()) {
+            delete itPolygonPoints->second;
+            itPolygonPoints = polygonPointLines.erase(itPolygonPoints);
+        } else {
+            ++itPolygonPoints;
         }
     }
 

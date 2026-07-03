@@ -77,6 +77,7 @@ void editor::SceneWindow::resetProjectState() {
     mouseLeftDraggedInside = false;
     draggingMouse.clear();
     suppressLeftMouseUntilRelease.clear();
+    subSelectionClickConsumesRelease.clear();
     resyncLookDelta.clear();
     lookActive.clear();
     lookReturnPos.clear();
@@ -93,6 +94,7 @@ void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
     }
     draggingMouse.erase(sceneId);
     suppressLeftMouseUntilRelease.erase(sceneId);
+    subSelectionClickConsumesRelease.erase(sceneId);
     resyncLookDelta.erase(sceneId);
     lookActive.erase(sceneId);
     lookReturnPos.erase(sceneId);
@@ -769,6 +771,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         float y = mousePos.y - windowPos.y;
 
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && (!altHeld || altGizmoDrag) && !suppressLeftMouse){
+            subSelectionClickConsumesRelease[sceneId] = false;
+
             // Selecting and dragging an unselected object at same time (just for 2D object mode)
             if (!disableSelection && gizmoSelected == GizmoSelected::OBJECT2D) {
                 Entity hitEntity = project->findObjectByRay(sceneId, x, y);
@@ -779,6 +783,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         sceneProject->sceneRender->clearInstanceSelection();
                         sceneProject->sceneRender->clearOccluderPointSelection();
                         sceneProject->sceneRender->clearLinePointSelection();
+                        sceneProject->sceneRender->clearPolygonPointSelection();
                         bool changed = project->selectObjectByRay(sceneId, x, y, io.KeyShift);
                         if (changed) {
                             sceneProject->sceneRender->update(project->getSelectedEntities(sceneId), project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -799,6 +804,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         int pointHit = sceneProject->sceneRender->hitTestOccluderPoint(selEntity, x, y);
                         if (pointHit >= 0) {
                             sceneProject->sceneRender->selectOccluderPoint(selEntity, pointHit);
+                            subSelectionClickConsumesRelease[sceneId] = true;
                             // Re-update so the gizmo cross jumps to the point
                             sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                             sceneProject->sceneRender->mouseHoverEvent(x, y);
@@ -833,6 +839,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         int pointHit = sceneProject->sceneRender->hitTestLinePoint(selEntity, x, y);
                         if (pointHit >= 0) {
                             sceneProject->sceneRender->selectLinePoint(selEntity, pointHit);
+                            subSelectionClickConsumesRelease[sceneId] = true;
                             // Re-update so the gizmo jumps to the endpoint
                             sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                             sceneProject->sceneRender->mouseHoverEvent(x, y);
@@ -850,6 +857,43 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 }
             }
 
+            // Polygon / MeshPolygon vertex sub-selection within a selected polygon entity
+            // (2D gizmo or 3D translate; same side guards as the line block above)
+            if (gizmoSelected == GizmoSelected::OBJECT2D || gizmoSelected == GizmoSelected::TRANSLATE) {
+                std::vector<Entity> selEntities = project->getSelectedEntities(sceneId);
+                if (selEntities.size() == 1 && !io.KeyShift) {
+                    Entity selEntity = selEntities[0];
+                    bool isMeshPolygon = sceneProject->scene->findComponent<MeshPolygonComponent>(selEntity) != nullptr;
+                    bool isPolygon = sceneProject->scene->findComponent<PolygonComponent>(selEntity) != nullptr;
+                    if (isMeshPolygon || isPolygon) {
+                        Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
+                        bool blockPointHit;
+                        if (gizmoSelected == GizmoSelected::OBJECT2D) {
+                            blockPointHit = !(gizmo2DSide == Gizmo2DSideSelected::NONE || gizmo2DSide == Gizmo2DSideSelected::CENTER);
+                        } else {
+                            blockPointHit = sceneProject->sceneRender->isAnyGizmoSideSelected();
+                        }
+                        if (!blockPointHit) {
+                            int pointHit = sceneProject->sceneRender->hitTestPolygonPoint(selEntity, isMeshPolygon, x, y);
+                            if (pointHit >= 0) {
+                                sceneProject->sceneRender->selectPolygonPoint(selEntity, isMeshPolygon, pointHit);
+                                subSelectionClickConsumesRelease[sceneId] = true;
+                                // Re-update so the gizmo jumps to the vertex
+                                sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                                sceneProject->sceneRender->mouseHoverEvent(x, y);
+                            } else if (sceneProject->sceneRender->getSelectedPolygonPointIndex() >= 0 && !sceneProject->sceneRender->isAnyGizmoSideSelected()) {
+                                Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                                if (bodyHit == selEntity) {
+                                    sceneProject->sceneRender->clearPolygonPointSelection();
+                                    sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                                    sceneProject->sceneRender->mouseHoverEvent(x, y);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Tile sub-selection within a selected tilemap (outside disableSelection guard
             // so clicking a tile works even when the tilemap gizmo body is hovered)
             if (gizmoSelected == GizmoSelected::OBJECT2D) {
@@ -861,6 +905,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         int tileHit = sceneProject->sceneRender->hitTestTile(selEntity, x, y);
                         if (tileHit >= 0) {
                             sceneProject->sceneRender->selectTile(selEntity, tileHit);
+                            subSelectionClickConsumesRelease[sceneId] = true;
                             // Re-update so gizmo wraps the tile
                             sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                             sceneProject->sceneRender->mouseHoverEvent(x, y);
@@ -898,6 +943,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         int instHit = sceneProject->sceneRender->hitTestInstance(selEntity, x, y);
                         if (instHit >= 0) {
                             sceneProject->sceneRender->selectInstance(selEntity, instHit);
+                            subSelectionClickConsumesRelease[sceneId] = true;
                             sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                             sceneProject->sceneRender->mouseHoverEvent(x, y);
                         } else if (sceneProject->sceneRender->getSelectedInstanceIndex() >= 0) {
@@ -980,7 +1026,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         }
 
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && (!altHeld || altGizmoDrag) && !suppressLeftMouse){
-            if (!mouseLeftDraggedInside && mouseLeftDown && !disableSelection){
+            bool consumeSelectionRelease = subSelectionClickConsumesRelease[sceneId];
+            if (!mouseLeftDraggedInside && mouseLeftDown && !disableSelection && !consumeSelectionRelease){
                 // Remember sub-selection anchors BEFORE re-selecting, so we can tell
                 // whether the release click actually changed the host entity.
                 int prevTileIndex = sceneProject->sceneRender->getSelectedTileIndex();
@@ -991,6 +1038,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 Entity prevOccluderPointEntity = sceneProject->sceneRender->getSelectedOccluderPointEntity();
                 int prevLinePointIndex = sceneProject->sceneRender->getSelectedLinePointIndex();
                 Entity prevLinePointEntity = sceneProject->sceneRender->getSelectedLinePointEntity();
+                int prevPolygonPointIndex = sceneProject->sceneRender->getSelectedPolygonPointIndex();
+                Entity prevPolygonPointEntity = sceneProject->sceneRender->getSelectedPolygonPointEntity();
 
                 project->selectObjectByRay(sceneId, x, y, io.KeyShift);
 
@@ -1011,7 +1060,11 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 if (prevLinePointIndex >= 0 && !(soleHost && selAfter[0] == prevLinePointEntity)){
                     sceneProject->sceneRender->clearLinePointSelection();
                 }
+                if (prevPolygonPointIndex >= 0 && !(soleHost && selAfter[0] == prevPolygonPointEntity)){
+                    sceneProject->sceneRender->clearPolygonPointSelection();
+                }
             }
+            subSelectionClickConsumesRelease[sceneId] = false;
             mouseLeftDown = false;
         }
     }
@@ -1022,6 +1075,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
         if (suppressLeftMouse){
             suppressLeftMouseUntilRelease[sceneId] = false;
+            subSelectionClickConsumesRelease[sceneId] = false;
             mouseLeftDown = false;
             mouseLeftDraggedInside = false;
         }else{
@@ -1033,10 +1087,12 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 sceneProject->sceneRender->clearInstanceSelection();
                 sceneProject->sceneRender->clearOccluderPointSelection();
                 sceneProject->sceneRender->clearLinePointSelection();
+                sceneProject->sceneRender->clearPolygonPointSelection();
                 project->selectObjectsByRect(sceneId, clickStartPos, clickEndPos);
             }
 
             sceneProject->sceneRender->mouseReleaseEvent(x, y);
+            subSelectionClickConsumesRelease[sceneId] = false;
 
             mouseLeftDraggedInside = false;
         }

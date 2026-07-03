@@ -313,6 +313,11 @@ editor::SceneRender3D::~SceneRender3D(){
         delete pair.second;
     }
     linePointLines.clear();
+
+    for (auto& pair : polygonPointLines) {
+        delete pair.second;
+    }
+    polygonPointLines.clear();
 }
 
 void editor::SceneRender3D::createLines(){
@@ -460,6 +465,46 @@ void editor::SceneRender3D::createOrUpdateLinePointLines(Entity entity, const Tr
             handlesObj->addLine(worldPoint - Vector3(0, halfSize, 0), worldPoint + Vector3(0, halfSize, 0), color);
             handlesObj->addLine(worldPoint - Vector3(0, 0, halfSize), worldPoint + Vector3(0, 0, halfSize), color);
         }
+    }
+}
+
+bool editor::SceneRender3D::instanciatePolygonPointLines(Entity entity){
+    if (polygonPointLines.find(entity) == polygonPointLines.end()) {
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        polygonPointLines[entity] = new Lines(scene);
+
+        return true;
+    }
+
+    return false;
+}
+
+// vertex handles for a selected Polygon / MeshPolygon entity, drawn as small
+// 3-axis crosses; the sub-selected vertex is drawn bigger and in the selection color
+void editor::SceneRender3D::createOrUpdatePolygonPointLines(Entity entity, const Transform& transform, const std::vector<PolygonPoint>& points, bool isMesh, bool visible){
+    Lines* handlesObj = polygonPointLines[entity];
+
+    handlesObj->clearLines();
+    handlesObj->setVisible(transform.visible && visible);
+
+    if (!transform.visible || !visible){
+        return;
+    }
+
+    const Vector4 handleColor(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 selectedHandleColor(1.0f, 0.6f, 0.0f, 1.0f);
+    bool hasPointSelection = (getSelectedPolygonPointEntity() == entity && isSelectedPolygonPointMesh() == isMesh);
+
+    for (size_t i = 0; i < points.size(); i++){
+        Vector3 worldPoint = transform.modelMatrix * points[i].position;
+
+        bool pointSelected = hasPointSelection && ((int)i == getSelectedPolygonPointIndex());
+        const Vector4& color = pointSelected ? selectedHandleColor : handleColor;
+        float halfSize = getPointHandleHalfSize(worldPoint) * (pointSelected ? 0.75f : 0.5f);
+
+        handlesObj->addLine(worldPoint - Vector3(halfSize, 0, 0), worldPoint + Vector3(halfSize, 0, 0), color);
+        handlesObj->addLine(worldPoint - Vector3(0, halfSize, 0), worldPoint + Vector3(0, halfSize, 0), color);
+        handlesObj->addLine(worldPoint - Vector3(0, 0, halfSize), worldPoint + Vector3(0, 0, halfSize), color);
     }
 }
 
@@ -1588,6 +1633,9 @@ void editor::SceneRender3D::hideAllGizmos(){
     for (auto& pair : linePointLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : polygonPointLines) {
+        pair.second->setVisible(false);
+    }
 }
 
 void editor::SceneRender3D::activate(){
@@ -1684,6 +1732,7 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentJointObjects;
     std::set<Entity> currentBoneModels;
     std::set<Entity> currentLinePoints;
+    std::set<Entity> currentPolygonPoints;
 
     for (Entity& entity: entities){
         Signature signature = scene->getSignature(entity);
@@ -1762,6 +1811,26 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             bool highlighted = isDescendantSelected(entity);
 
             createOrUpdateLinePointLines(entity, transform, linesComp, highlighted);
+        }
+
+        if (signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<Transform>())) {
+            PolygonComponent& polygon = scene->getComponent<PolygonComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentPolygonPoints.insert(entity);
+            instanciatePolygonPointLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdatePolygonPointLines(entity, transform, polygon.points, false, highlighted);
+        }else if (signature.test(scene->getComponentId<MeshPolygonComponent>()) && signature.test(scene->getComponentId<Transform>())) {
+            MeshPolygonComponent& polygon = scene->getComponent<MeshPolygonComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentPolygonPoints.insert(entity);
+            instanciatePolygonPointLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdatePolygonPointLines(entity, transform, polygon.points, true, highlighted);
         }
 
         if (signature.test(scene->getComponentId<Joint3DComponent>())) {
@@ -1865,6 +1934,16 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             itLinePoints = linePointLines.erase(itLinePoints);
         } else {
             ++itLinePoints;
+        }
+    }
+
+    auto itPolygonPoints = polygonPointLines.begin();
+    while (itPolygonPoints != polygonPointLines.end()) {
+        if (currentPolygonPoints.find(itPolygonPoints->first) == currentPolygonPoints.end()) {
+            delete itPolygonPoints->second;
+            itPolygonPoints = polygonPointLines.erase(itPolygonPoints);
+        } else {
+            ++itPolygonPoints;
         }
     }
 }

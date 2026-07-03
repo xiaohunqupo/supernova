@@ -271,6 +271,9 @@ void editor::Structure::clearSubSelectionForEntity(uint32_t sceneId, Entity enti
     if (sceneProject->sceneRender->getSelectedLinePointEntity() == entity) {
         sceneProject->sceneRender->clearLinePointSelection();
     }
+    if (sceneProject->sceneRender->getSelectedPolygonPointEntity() == entity) {
+        sceneProject->sceneRender->clearPolygonPointSelection();
+    }
 }
 
 void editor::Structure::resetEntitySelectionAnchor() {

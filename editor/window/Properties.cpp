@@ -8680,6 +8680,13 @@ void editor::Properties::drawPolygonComponent(ComponentType cpType, SceneProject
         return;
     }
 
+    // vertex sub-selected in the scene viewport (Polygon = non-mesh)
+    int selectedVertex = -1;
+    if (sceneProject->sceneRender && sceneProject->sceneRender->getSelectedPolygonPointEntity() == entity
+        && !sceneProject->sceneRender->isSelectedPolygonPointMesh()){
+        selectedVertex = sceneProject->sceneRender->getSelectedPolygonPointIndex();
+    }
+
     bool removedPoint = false;
 
     for (size_t i = 0; i < polygon.points.size(); i++) {
@@ -8688,7 +8695,16 @@ void editor::Properties::drawPolygonComponent(ComponentType cpType, SceneProject
         std::string pointGroupStr = "polygon_point_" + std::to_string(i);
         std::string pointLabel = "[" + std::to_string(i) + "] Vertex " + std::to_string(i);
 
-        ImGui::SeparatorText(pointLabel.c_str());
+        bool vertexSelected = ((int)i == selectedVertex);
+
+        // sub-selected in the scene viewport: same marking as occluder/line points
+        if (vertexSelected) {
+            ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::SubSelectionText);
+            ImGui::SeparatorText((std::string(ICON_FA_CARET_RIGHT) + " " + pointLabel).c_str());
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::SeparatorText(pointLabel.c_str());
+        }
 
         beginTable(cpType, getLabelSize("Position"), pointGroupStr);
         propertyHeader("Vertex", -1, false, false);
@@ -8734,7 +8750,7 @@ void editor::Properties::drawPolygonComponent(ComponentType cpType, SceneProject
 
         if (polygonButtonGroups[pointGroupStr]) {
             std::string propPrefix = "points[" + std::to_string(i) + "]";
-            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".position", "Position", sceneProject, entities);
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".position", vertexSelected ? (std::string(ICON_FA_CARET_RIGHT) + " Position") : "Position", sceneProject, entities);
             propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".color", "Color", sceneProject, entities);
         }
 
@@ -8804,6 +8820,13 @@ void editor::Properties::drawMeshPolygonComponent(ComponentType cpType, ScenePro
         return;
     }
 
+    // vertex sub-selected in the scene viewport (MeshPolygon = mesh)
+    int selectedVertex = -1;
+    if (sceneProject->sceneRender && sceneProject->sceneRender->getSelectedPolygonPointEntity() == entity
+        && sceneProject->sceneRender->isSelectedPolygonPointMesh()){
+        selectedVertex = sceneProject->sceneRender->getSelectedPolygonPointIndex();
+    }
+
     bool removedPoint = false;
 
     for (size_t i = 0; i < polygon.points.size(); i++) {
@@ -8812,7 +8835,16 @@ void editor::Properties::drawMeshPolygonComponent(ComponentType cpType, ScenePro
         std::string pointGroupStr = "mesh_polygon_point_" + std::to_string(i);
         std::string pointLabel = "[" + std::to_string(i) + "] Vertex " + std::to_string(i);
 
-        ImGui::SeparatorText(pointLabel.c_str());
+        bool vertexSelected = ((int)i == selectedVertex);
+
+        // sub-selected in the scene viewport: same marking as occluder/line points
+        if (vertexSelected) {
+            ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::SubSelectionText);
+            ImGui::SeparatorText((std::string(ICON_FA_CARET_RIGHT) + " " + pointLabel).c_str());
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::SeparatorText(pointLabel.c_str());
+        }
 
         beginTable(cpType, getLabelSize("Position"), pointGroupStr);
         propertyHeader("Vertex", -1, false, false);
@@ -8858,7 +8890,7 @@ void editor::Properties::drawMeshPolygonComponent(ComponentType cpType, ScenePro
 
         if (meshPolygonButtonGroups[pointGroupStr]) {
             std::string propPrefix = "points[" + std::to_string(i) + "]";
-            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".position", "Position", sceneProject, entities);
+            propertyRow(RowPropertyType::Vector3, cpType, propPrefix + ".position", vertexSelected ? (std::string(ICON_FA_CARET_RIGHT) + " Position") : "Position", sceneProject, entities);
             propertyRow(RowPropertyType::Color4L, cpType, propPrefix + ".color", "Color", sceneProject, entities);
         }
 

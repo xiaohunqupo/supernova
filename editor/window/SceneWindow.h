@@ -34,6 +34,7 @@ namespace doriax::editor {
 
         std::map<uint32_t, bool> draggingMouse;
         std::map<uint32_t, bool> suppressLeftMouseUntilRelease;
+        std::map<uint32_t, bool> subSelectionClickConsumesRelease;
         std::map<uint32_t, bool> resyncLookDelta;
         std::map<uint32_t, bool> lookActive;
         std::map<uint32_t, ImVec2> lookReturnPos;

@@ -3211,7 +3211,7 @@ AABB editor::Project::getEntityWorldAABB(Scene* scene, Entity entity, Scene* mai
         aabb = scene->getComponent<MeshComponent>(entity).worldAABB;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         aabb = scene->getComponent<UIComponent>(entity).worldAABB;
-        if (signature.test(scene->getComponentId<UILayoutComponent>())){
+        if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){
             UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
             if (layout.width > 0 && layout.height > 0){
                 Vector2 center = GraphicUtils::getUILayoutCenter(scene, entity, layout);
@@ -3304,7 +3304,7 @@ AABB editor::Project::getEntityLocalAABB(Scene* scene, Entity entity) const{
         aabb = scene->getComponent<MeshComponent>(entity).aabb;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         aabb = scene->getComponent<UIComponent>(entity).aabb;
-        if (signature.test(scene->getComponentId<UILayoutComponent>())){
+        if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){
             UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);
             if (layout.width > 0 && layout.height > 0){
                 Vector2 center = GraphicUtils::getUILayoutCenter(scene, entity, layout);

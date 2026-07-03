@@ -102,6 +102,16 @@ namespace doriax::editor{
         Entity selectedLinePointEntity = 0;  // NULL_ENTITY
         int selectedLinePointIndex = -1;
 
+        // Polygon / MeshPolygon vertex sub-selection (both store std::vector<PolygonPoint>;
+        // isMesh picks which component, avoiding a ComponentType dependency in this header)
+        Entity selectedPolygonPointEntity = 0;  // NULL_ENTITY
+        int selectedPolygonPointIndex = -1;
+        bool selectedPolygonPointIsMesh = false;
+
+        // world position of vertex pointIndex of the selected entity's Polygon/MeshPolygon
+        // points (nullptr list / bad index -> false)
+        bool getPolygonPointWorld(Entity entity, bool isMesh, int pointIndex, Vector3& worldPoint);
+
         AABB getAABB(Entity entity, bool local);
         AABB getFamilyAABB(Entity entity, float offset);
 
@@ -232,6 +242,15 @@ namespace doriax::editor{
         // world half-extent of a point handle so it stays a constant size on screen
         // (~8px): zoom-scaled in ortho views, distance-scaled in perspective views
         float getPointHandleHalfSize(const Vector3& worldPoint);
+
+        // Polygon / MeshPolygon vertex sub-selection
+        int getSelectedPolygonPointIndex() const { return selectedPolygonPointIndex; }
+        Entity getSelectedPolygonPointEntity() const { return selectedPolygonPointEntity; }
+        bool isSelectedPolygonPointMesh() const { return selectedPolygonPointIsMesh; }
+        void selectPolygonPoint(Entity entity, bool isMesh, int pointIndex);
+        void clearPolygonPointSelection();
+        int hitTestPolygonPoint(Entity entity, bool isMesh, float x, float y);
+        OBB getPolygonPointOBB(Entity entity, bool isMesh, int pointIndex);
     };
 
 }
