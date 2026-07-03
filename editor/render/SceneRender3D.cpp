@@ -308,6 +308,11 @@ editor::SceneRender3D::~SceneRender3D(){
         delete pair.second;
     }
     boneLines.clear();
+
+    for (auto& pair : linePointLines) {
+        delete pair.second;
+    }
+    linePointLines.clear();
 }
 
 void editor::SceneRender3D::createLines(){
@@ -412,6 +417,50 @@ bool editor::SceneRender3D::instanciateJointObject(Entity entity){
     }
 
     return false;
+}
+
+bool editor::SceneRender3D::instanciateLinePointLines(Entity entity){
+    if (linePointLines.find(entity) == linePointLines.end()) {
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        linePointLines[entity] = new Lines(scene);
+
+        return true;
+    }
+
+    return false;
+}
+
+// endpoint handles for a selected Lines entity, drawn as small 3-axis crosses
+// (orientation-independent in 3D); the sub-selected endpoint is drawn bigger
+// and in the selection color
+void editor::SceneRender3D::createOrUpdateLinePointLines(Entity entity, const Transform& transform, const LinesComponent& lines, bool visible){
+    Lines* handlesObj = linePointLines[entity];
+
+    handlesObj->clearLines();
+    handlesObj->setVisible(transform.visible && visible);
+
+    if (!transform.visible || !visible){
+        return;
+    }
+
+    const Vector4 handleColor(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 selectedHandleColor(1.0f, 0.6f, 0.0f, 1.0f);
+    bool hasPointSelection = (getSelectedLinePointEntity() == entity);
+
+    for (size_t i = 0; i < lines.lines.size(); i++){
+        for (int e = 0; e < 2; e++){
+            const Vector3& localPoint = (e == 0) ? lines.lines[i].pointA : lines.lines[i].pointB;
+            Vector3 worldPoint = transform.modelMatrix * localPoint;
+
+            bool pointSelected = hasPointSelection && ((int)(i * 2) + e == getSelectedLinePointIndex());
+            const Vector4& color = pointSelected ? selectedHandleColor : handleColor;
+            float halfSize = getPointHandleHalfSize(worldPoint) * (pointSelected ? 0.75f : 0.5f);
+
+            handlesObj->addLine(worldPoint - Vector3(halfSize, 0, 0), worldPoint + Vector3(halfSize, 0, 0), color);
+            handlesObj->addLine(worldPoint - Vector3(0, halfSize, 0), worldPoint + Vector3(0, halfSize, 0), color);
+            handlesObj->addLine(worldPoint - Vector3(0, 0, halfSize), worldPoint + Vector3(0, 0, halfSize), color);
+        }
+    }
 }
 
 bool editor::SceneRender3D::instanciateBoneLines(Entity entity){
@@ -1536,6 +1585,9 @@ void editor::SceneRender3D::hideAllGizmos(){
     for (auto& pair : boneLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : linePointLines) {
+        pair.second->setVisible(false);
+    }
 }
 
 void editor::SceneRender3D::activate(){
@@ -1631,6 +1683,7 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentBodyObjects;
     std::set<Entity> currentJointObjects;
     std::set<Entity> currentBoneModels;
+    std::set<Entity> currentLinePoints;
 
     for (Entity& entity: entities){
         Signature signature = scene->getSignature(entity);
@@ -1698,6 +1751,17 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             bool isVisible = displaySettings.showAllBodies || highlighted;
 
             createOrUpdateBodyLines(entity, transform, body, isVisible, highlighted);
+        }
+
+        if (signature.test(scene->getComponentId<LinesComponent>()) && signature.test(scene->getComponentId<Transform>())) {
+            LinesComponent& linesComp = scene->getComponent<LinesComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentLinePoints.insert(entity);
+            instanciateLinePointLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdateLinePointLines(entity, transform, linesComp, highlighted);
         }
 
         if (signature.test(scene->getComponentId<Joint3DComponent>())) {
@@ -1791,6 +1855,16 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             itBone = boneLines.erase(itBone);
         } else {
             ++itBone;
+        }
+    }
+
+    auto itLinePoints = linePointLines.begin();
+    while (itLinePoints != linePointLines.end()) {
+        if (currentLinePoints.find(itLinePoints->first) == currentLinePoints.end()) {
+            delete itLinePoints->second;
+            itLinePoints = linePointLines.erase(itLinePoints);
+        } else {
+            ++itLinePoints;
         }
     }
 }

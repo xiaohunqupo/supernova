@@ -55,6 +55,7 @@ namespace doriax::editor{
         std::map<Entity, BodyObjects> bodyObjects;
         std::map<Entity, Lines*> jointLines;
         std::map<Entity, Lines*> boneLines;
+        std::map<Entity, Lines*> linePointLines;
 
         ViewportGizmo viewgizmo;
 
@@ -69,6 +70,7 @@ namespace doriax::editor{
         bool instanciateBodyObject(Entity entity);
         bool instanciateJointObject(Entity entity);
         bool instanciateBoneLines(Entity entity);
+        bool instanciateLinePointLines(Entity entity);
         static uint64_t quantizeHullKey(const Vector3& p);
         static void pushUniqueHullPoint(std::vector<Vector3>& points, std::unordered_set<uint64_t>& seen, const Vector3& p);
         static void reduceToExtremes(std::vector<Vector3>& points);
@@ -79,6 +81,7 @@ namespace doriax::editor{
         void createOrUpdateSoundIcon(Entity entity, const Transform& transform, bool newSound);
         void createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body3DComponent& body, bool visible, bool highlighted);
         void createOrUpdateJointLines(Entity entity, const Joint3DComponent& joint, bool visible, bool highlighted);
+        void createOrUpdateLinePointLines(Entity entity, const Transform& transform, const LinesComponent& lines, bool visible);
         void createCameraFrustum(Entity entity, const Transform& transform, const CameraComponent& cameraComponent, bool fixedSizeFrustum, bool isMainCamera);
         void createDirectionalLightArrow(Entity entity, const Transform& transform, const LightComponent& light, bool isSelected);
         void createPointLightSphere(Entity entity, const Transform& transform, const LightComponent& light, bool isSelected);

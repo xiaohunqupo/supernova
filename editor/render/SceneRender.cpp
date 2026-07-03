@@ -692,9 +692,9 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             }
         }
 
-        // Override gizmo for selected line endpoint
+        // Override gizmo for selected line endpoint (2D gizmo or 3D translate)
         if (selectedLinePointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedLinePointEntity
-            && toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D){
+            && (toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D || toolslayer.getGizmoSelected() == GizmoSelected::TRANSLATE)){
             OBB pointOBB = getLinePointOBB(selectedLinePointEntity, selectedLinePointIndex);
             if (!pointOBB.isNull()){
                 Vector3 pointCenter = pointOBB.getCenter();
@@ -1056,10 +1056,26 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                         newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, deltaPos.y, deltaPos.z));
                     }
 
-                    Matrix4 gizmoMatrix = Matrix4::translateMatrix(newPos) * gizmoRMatrix * Matrix4::scaleMatrix(Vector3(1,1,1));
-                    Matrix4 objMatrix = gizmoMatrix * objectMatrixOffset[entity];
+                    if (selectedLinePointIndex >= 0 && entity == selectedLinePointEntity){
+                        // move the selected line endpoint instead of the entity (the
+                        // gizmo sits on the point, so newPos is its new world position)
+                        LinesComponent* linesComp = scene->findComponent<LinesComponent>(entity);
+                        Transform* lineTransform = scene->findComponent<Transform>(entity);
+                        int lineIndex = selectedLinePointIndex / 2;
+                        if (linesComp && lineTransform && lineIndex < (int)linesComp->lines.size()){
+                            bool isPointA = (selectedLinePointIndex % 2 == 0);
+                            Vector3 newLocalPos = lineTransform->modelMatrix.inverse() * newPos;
 
-                    applyObjectTransform(objMatrix);
+                            std::string pointProp = "lines[" + std::to_string(lineIndex) + (isPointA ? "].pointA" : "].pointB");
+                            lastCommand = new PropertyCmd<Vector3>(project, sceneProject->id, entity,
+                                ComponentType::LinesComponent, pointProp, newLocalPos);
+                        }
+                    }else{
+                        Matrix4 gizmoMatrix = Matrix4::translateMatrix(newPos) * gizmoRMatrix * Matrix4::scaleMatrix(Vector3(1,1,1));
+                        Matrix4 objMatrix = gizmoMatrix * objectMatrixOffset[entity];
+
+                        applyObjectTransform(objMatrix);
+                    }
                 }
 
                 if (toolslayer.getGizmoSelected() == GizmoSelected::ROTATE){
@@ -1708,6 +1724,22 @@ void editor::SceneRender::clearLinePointSelection(){
     selectedLinePointIndex = -1;
 }
 
+float editor::SceneRender::getPointHandleHalfSize(const Vector3& worldPoint){
+    CameraComponent& cameracomp = scene->getComponent<CameraComponent>(camera->getEntity());
+
+    if (cameracomp.type == CameraType::CAMERA_PERSPECTIVE){
+        // same convention as the gizmo scale: constant ~8px on screen
+        float dist = (worldPoint - camera->getWorldPosition()).length();
+        float halfSize = std::tan(cameracomp.yfov) * dist * (8.0f / (float)framebuffer.getHeight());
+        if (!std::isfinite(halfSize) || halfSize <= 0.0f){
+            halfSize = 1.0f;
+        }
+        return halfSize;
+    }
+
+    return 8.0f * zoom;
+}
+
 // Returns the line endpoint under the mouse (-1 when none), flattened as
 // lineIndex * 2 + endpoint (0 = pointA, 1 = pointB).
 int editor::SceneRender::hitTestLinePoint(Entity entity, float x, float y){
@@ -1718,20 +1750,21 @@ int editor::SceneRender::hitTestLinePoint(Entity entity, float x, float y){
     Transform& transform = scene->getComponent<Transform>(entity);
 
     Ray ray = camera->screenToRay(x, y);
-    RayReturn rr = ray.intersects(Plane(Vector3(0, 0, 1), transform.worldPosition));
-    if (!rr) return -1;
 
-    // handles are drawn at 4*zoom half-extent; use a slightly larger grab radius
-    float hitRadius = 8.0f * zoom;
+    // ray test against each endpoint's handle box (works in both ortho and
+    // perspective views), keeping the nearest hit like instance picking
     int bestIndex = -1;
-    float bestDistance = hitRadius;
+    float bestDistance = FLT_MAX;
     for (size_t i = 0; i < lines.lines.size(); i++){
         for (int e = 0; e < 2; e++){
             const Vector3& localPoint = (e == 0) ? lines.lines[i].pointA : lines.lines[i].pointB;
             Vector3 worldPoint = transform.modelMatrix * localPoint;
-            float dist = Vector2(worldPoint.x - rr.point.x, worldPoint.y - rr.point.y).length();
-            if (dist <= bestDistance){
-                bestDistance = dist;
+            float halfSize = getPointHandleHalfSize(worldPoint);
+            AABB handleAABB(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));
+
+            RayReturn rr = ray.intersects(handleAABB);
+            if (rr && rr.distance < bestDistance){
+                bestDistance = rr.distance;
                 bestIndex = (int)i * 2 + e;
             }
         }
@@ -1752,8 +1785,8 @@ OBB editor::SceneRender::getLinePointOBB(Entity entity, int pointIndex){
 
     const Vector3& localPoint = (pointIndex % 2 == 0) ? lines.lines[lineIndex].pointA : lines.lines[lineIndex].pointB;
     Vector3 worldPoint = transform.modelMatrix * localPoint;
-    float halfSize = 8.0f * zoom;
-    AABB aabb(worldPoint - Vector3(halfSize, halfSize, 1.0f), worldPoint + Vector3(halfSize, halfSize, 1.0f));
+    float halfSize = getPointHandleHalfSize(worldPoint);
+    AABB aabb(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));
     return aabb.getOBB();
 }
 

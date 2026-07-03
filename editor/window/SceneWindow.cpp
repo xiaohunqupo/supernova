@@ -816,20 +816,27 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 }
             }
 
-            // Line endpoint sub-selection within a selected lines entity
-            if (gizmoSelected == GizmoSelected::OBJECT2D) {
+            // Line endpoint sub-selection within a selected lines entity (2D gizmo
+            // or 3D translate; the side guard mirrors the instance block below)
+            if (gizmoSelected == GizmoSelected::OBJECT2D || gizmoSelected == GizmoSelected::TRANSLATE) {
                 std::vector<Entity> selEntities = project->getSelectedEntities(sceneId);
                 if (selEntities.size() == 1 && !io.KeyShift) {
                     Entity selEntity = selEntities[0];
                     Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
-                    if (gizmo2DSide == Gizmo2DSideSelected::NONE || gizmo2DSide == Gizmo2DSideSelected::CENTER) {
+                    bool blockPointHit;
+                    if (gizmoSelected == GizmoSelected::OBJECT2D) {
+                        blockPointHit = !(gizmo2DSide == Gizmo2DSideSelected::NONE || gizmo2DSide == Gizmo2DSideSelected::CENTER);
+                    } else {
+                        blockPointHit = sceneProject->sceneRender->isAnyGizmoSideSelected();
+                    }
+                    if (!blockPointHit) {
                         int pointHit = sceneProject->sceneRender->hitTestLinePoint(selEntity, x, y);
                         if (pointHit >= 0) {
                             sceneProject->sceneRender->selectLinePoint(selEntity, pointHit);
-                            // Re-update so the gizmo cross jumps to the endpoint
+                            // Re-update so the gizmo jumps to the endpoint
                             sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                             sceneProject->sceneRender->mouseHoverEvent(x, y);
-                        } else if (sceneProject->sceneRender->getSelectedLinePointIndex() >= 0 && gizmo2DSide == Gizmo2DSideSelected::NONE) {
+                        } else if (sceneProject->sceneRender->getSelectedLinePointIndex() >= 0 && !sceneProject->sceneRender->isAnyGizmoSideSelected()) {
                             // Only clear eagerly when clicking the entity body itself; clicking
                             // empty space clears point + entity together on click-up.
                             Entity bodyHit = project->findObjectByRay(sceneId, x, y);

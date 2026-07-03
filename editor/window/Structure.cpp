@@ -265,6 +265,12 @@ void editor::Structure::clearSubSelectionForEntity(uint32_t sceneId, Entity enti
     if (sceneProject->sceneRender->getSelectedTileEntity() == entity) {
         sceneProject->sceneRender->clearTileSelection();
     }
+    if (sceneProject->sceneRender->getSelectedOccluderPointEntity() == entity) {
+        sceneProject->sceneRender->clearOccluderPointSelection();
+    }
+    if (sceneProject->sceneRender->getSelectedLinePointEntity() == entity) {
+        sceneProject->sceneRender->clearLinePointSelection();
+    }
 }
 
 void editor::Structure::resetEntitySelectionAnchor() {

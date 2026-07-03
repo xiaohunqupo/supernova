@@ -229,6 +229,9 @@ namespace doriax::editor{
         void clearLinePointSelection();
         int hitTestLinePoint(Entity entity, float x, float y);
         OBB getLinePointOBB(Entity entity, int pointIndex);
+        // world half-extent of a point handle so it stays a constant size on screen
+        // (~8px): zoom-scaled in ortho views, distance-scaled in perspective views
+        float getPointHandleHalfSize(const Vector3& worldPoint);
     };
 
 }
