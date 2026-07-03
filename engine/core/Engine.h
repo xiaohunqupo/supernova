@@ -15,6 +15,12 @@
 #define MAX_LIGHTS 6
 #endif
 
+// 2D lights (Light2DComponent). Also the row count of the 1D polar shadow atlas:
+// each shadow-casting 2D light renders its occluders into one atlas row.
+#ifndef MAX_LIGHTS_2D
+#define MAX_LIGHTS_2D 16
+#endif
+
 #ifndef SHADOW_CUBE_FACES
 #define SHADOW_CUBE_FACES 6
 #endif

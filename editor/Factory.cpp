@@ -1186,6 +1186,41 @@ std::string editor::Factory::createLightComponent(int indentSpaces, EntityRegist
     return code.str();
 }
 
+std::string editor::Factory::createLight2DComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<Light2DComponent>(entity)) return "";
+    Light2DComponent& light = scene->getComponent<Light2DComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "Light2DComponent light2d;\n";
+    code << ind << "light2d.color = " << formatVector3(light.color) << ";\n";
+    code << ind << "light2d.intensity = " << formatFloat(light.intensity) << ";\n";
+    code << ind << "light2d.range = " << formatFloat(light.range) << ";\n";
+    code << ind << "light2d.falloff = " << formatFloat(light.falloff) << ";\n";
+    code << ind << "light2d.height = " << formatFloat(light.height) << ";\n";
+    code << ind << "light2d.shadows = " << formatBool(light.shadows) << ";\n";
+    code << ind << "light2d.shadowBias = " << formatFloat(light.shadowBias) << ";\n";
+    code << ind << "light2d.shadowSoftness = " << formatFloat(light.shadowSoftness) << ";\n";
+    code << ind << "light2d.mapResolution = " << formatUInt(light.mapResolution) << ";\n";
+    addComponentCode(code, ind, sceneName, entityName, entity, "Light2DComponent", "light2d", assignExisting);
+    return code.str();
+}
+
+std::string editor::Factory::createOccluder2DComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<Occluder2DComponent>(entity)) return "";
+    Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "Occluder2DComponent occluder2d;\n";
+    code << ind << "occluder2d.shape = " << ((occluder.shape == Occluder2DShape::POLYGON) ? "Occluder2DShape::POLYGON" : "Occluder2DShape::AUTO_QUAD") << ";\n";
+    code << ind << "occluder2d.closed = " << formatBool(occluder.closed) << ";\n";
+    code << ind << "occluder2d.enabled = " << formatBool(occluder.enabled) << ";\n";
+    for (const Vector2& point : occluder.points) {
+        code << ind << "occluder2d.points.push_back(" << formatVector2(point) << ");\n";
+    }
+    addComponentCode(code, ind, sceneName, entityName, entity, "Occluder2DComponent", "occluder2d", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::createFogComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
     if (!scene->findComponent<FogComponent>(entity)) return "";
     FogComponent& fog = scene->getComponent<FogComponent>(entity);
@@ -1922,6 +1957,8 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::TilemapComponent: return createTilemapComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::TerrainComponent: return createTerrainComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::LightComponent: return createLightComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::Light2DComponent: return createLight2DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::Occluder2DComponent: return createOccluder2DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::FogComponent: return createFogComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::MirrorComponent: return createMirrorComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::CameraComponent: return createCameraComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
@@ -2149,6 +2186,8 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setShadowsPCF(" << formatBool(scene->isShadowsPCF()) << ");\n";
     out << ind2 << "scene->setGlobalIllumination(" << formatFloat(scene->getGlobalIlluminationIntensity()) << ");\n";
     out << ind2 << "scene->setGlobalIllumination(" << formatVector3(scene->getGlobalIlluminationColor()) << ");\n";
+    out << ind2 << "scene->setAmbientLight2D(" << formatFloat(scene->getAmbientLight2DIntensity()) << ");\n";
+    out << ind2 << "scene->setAmbientLight2D(" << formatVector3(scene->getAmbientLight2DColor()) << ");\n";
     out << ind2 << "scene->setLightState(" << formatLightState(scene->getLightState()) << ");\n";
     out << ind2 << "scene->setSSAOEnabled(" << formatBool(scene->isSSAOEnabled()) << ");\n";
     out << ind2 << "scene->setSSAORadius(" << formatFloat(scene->getSSAORadius()) << ");\n";

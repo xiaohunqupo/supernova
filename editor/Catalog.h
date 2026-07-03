@@ -95,7 +95,9 @@ namespace doriax::editor{
         TilemapComponent,
         TranslateTracksComponent,
         UIContainerComponent,
-        MirrorComponent
+        MirrorComponent,
+        Light2DComponent,
+        Occluder2DComponent
     };
 
     enum class PropertyType{
@@ -202,6 +204,16 @@ namespace doriax::editor{
                     return scene->getGlobalIlluminationIntensity();
                 }
             }
+            else if (propertyName == "ambient_light_2d_color") {
+                if constexpr (std::is_same_v<T, Vector3>) {
+                    return scene->getAmbientLight2DColor();
+                }
+            }
+            else if (propertyName == "ambient_light_2d_intensity") {
+                if constexpr (std::is_same_v<T, float>) {
+                    return scene->getAmbientLight2DIntensity();
+                }
+            }
             else if (propertyName == "light_state") {
                 if constexpr (std::is_same_v<T, LightState>) {
                     return scene->getLightState();
@@ -300,6 +312,16 @@ namespace doriax::editor{
             else if (propertyName == "global_illumination_intensity") {
                 if constexpr (std::is_same_v<T, float>) {
                     scene->setGlobalIllumination(value);
+                }
+            }
+            else if (propertyName == "ambient_light_2d_color") {
+                if constexpr (std::is_same_v<T, Vector3>) {
+                    scene->setAmbientLight2D(value);
+                }
+            }
+            else if (propertyName == "ambient_light_2d_intensity") {
+                if constexpr (std::is_same_v<T, float>) {
+                    scene->setAmbientLight2D(value);
                 }
             }
             else if (propertyName == "light_state") {

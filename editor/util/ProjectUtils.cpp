@@ -613,6 +613,20 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
                 registry->addComponent<MirrorComponent>(entity, Stream::decodeMirrorComponent(componentNode));
             }
             break;
+        case ComponentType::Light2DComponent:
+            if (!componentNode.IsDefined() || componentNode.IsNull()){
+                registry->addComponent<Light2DComponent>(entity, {});
+            }else{
+                registry->addComponent<Light2DComponent>(entity, Stream::decodeLight2DComponent(componentNode));
+            }
+            break;
+        case ComponentType::Occluder2DComponent:
+            if (!componentNode.IsDefined() || componentNode.IsNull()){
+                registry->addComponent<Occluder2DComponent>(entity, {});
+            }else{
+                registry->addComponent<Occluder2DComponent>(entity, Stream::decodeOccluder2DComponent(componentNode));
+            }
+            break;
         case ComponentType::ImageComponent:
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<ImageComponent>(entity, {});
@@ -1008,6 +1022,18 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
                 oldComponent = Stream::encodeMirrorComponent(registry->getComponent<MirrorComponent>(entity));
             }
             registry->removeComponent<MirrorComponent>(entity);
+            break;
+        case ComponentType::Light2DComponent:
+            if (encodeComponent){
+                oldComponent = Stream::encodeLight2DComponent(registry->getComponent<Light2DComponent>(entity));
+            }
+            registry->removeComponent<Light2DComponent>(entity);
+            break;
+        case ComponentType::Occluder2DComponent:
+            if (encodeComponent){
+                oldComponent = Stream::encodeOccluder2DComponent(registry->getComponent<Occluder2DComponent>(entity));
+            }
+            registry->removeComponent<Occluder2DComponent>(entity);
             break;
         case ComponentType::ImageComponent:
             if (encodeComponent){

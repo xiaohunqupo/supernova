@@ -777,10 +777,39 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                     if (!alreadySelected || (io.KeyShift && !gizmoSideActive)) {
                         sceneProject->sceneRender->clearTileSelection();
                         sceneProject->sceneRender->clearInstanceSelection();
+                        sceneProject->sceneRender->clearOccluderPointSelection();
                         bool changed = project->selectObjectByRay(sceneId, x, y, io.KeyShift);
                         if (changed) {
                             sceneProject->sceneRender->update(project->getSelectedEntities(sceneId), project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                             sceneProject->sceneRender->mouseHoverEvent(x, y);
+                        }
+                    }
+                }
+            }
+
+            // Occluder polygon point sub-selection within a selected occluder entity
+            // (mirrors the tile sub-selection flow below)
+            if (gizmoSelected == GizmoSelected::OBJECT2D) {
+                std::vector<Entity> selEntities = project->getSelectedEntities(sceneId);
+                if (selEntities.size() == 1 && !io.KeyShift) {
+                    Entity selEntity = selEntities[0];
+                    Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
+                    if (gizmo2DSide == Gizmo2DSideSelected::NONE || gizmo2DSide == Gizmo2DSideSelected::CENTER) {
+                        int pointHit = sceneProject->sceneRender->hitTestOccluderPoint(selEntity, x, y);
+                        if (pointHit >= 0) {
+                            sceneProject->sceneRender->selectOccluderPoint(selEntity, pointHit);
+                            // Re-update so the gizmo cross jumps to the point
+                            sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                            sceneProject->sceneRender->mouseHoverEvent(x, y);
+                        } else if (sceneProject->sceneRender->getSelectedOccluderPointIndex() >= 0 && gizmo2DSide == Gizmo2DSideSelected::NONE) {
+                            // Only clear eagerly when clicking the entity body itself; clicking
+                            // empty space clears point + entity together on click-up.
+                            Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                            if (bodyHit == selEntity) {
+                                sceneProject->sceneRender->clearOccluderPointSelection();
+                                sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                                sceneProject->sceneRender->mouseHoverEvent(x, y);
+                            }
                         }
                     }
                 }
@@ -923,6 +952,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 Entity prevTileEntity = sceneProject->sceneRender->getSelectedTileEntity();
                 int prevInstanceIndex = sceneProject->sceneRender->getSelectedInstanceIndex();
                 Entity prevInstanceEntity = sceneProject->sceneRender->getSelectedInstanceEntity();
+                int prevOccluderPointIndex = sceneProject->sceneRender->getSelectedOccluderPointIndex();
+                Entity prevOccluderPointEntity = sceneProject->sceneRender->getSelectedOccluderPointEntity();
 
                 project->selectObjectByRay(sceneId, x, y, io.KeyShift);
 
@@ -936,6 +967,9 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 }
                 if (prevInstanceIndex >= 0 && !(soleHost && selAfter[0] == prevInstanceEntity)){
                     sceneProject->sceneRender->clearInstanceSelection();
+                }
+                if (prevOccluderPointIndex >= 0 && !(soleHost && selAfter[0] == prevOccluderPointEntity)){
+                    sceneProject->sceneRender->clearOccluderPointSelection();
                 }
             }
             mouseLeftDown = false;
@@ -957,6 +991,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 Vector2 clickEndPos = Vector2((2 * mouseLeftDragPos.x / width[sceneId]) - 1, -((2 * mouseLeftDragPos.y / height[sceneId]) - 1));
                 sceneProject->sceneRender->clearTileSelection();
                 sceneProject->sceneRender->clearInstanceSelection();
+                sceneProject->sceneRender->clearOccluderPointSelection();
                 project->selectObjectsByRect(sceneId, clickStartPos, clickEndPos);
             }
 

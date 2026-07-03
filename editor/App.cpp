@@ -1691,7 +1691,9 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     // v9: dual shadow atlases — u_shadowAtlas (directional/spot, projective) and
     //     u_shadowPointAtlas (point cube faces); removes the u_shadowCubeMap* samplers
     //     and keeps each atlas within the GPU max texture size.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v9";
+    // v10: 2D lighting — mesh USE_LIGHT2D/USE_SHADOWS_2D variants (u_fs_lighting2d,
+    //      u_normalTexture on unlit, v_position guard) and the shadow2d 1D polar pass.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v10";
 }
 
 void editor::App::pushTabNotificationStyle(){

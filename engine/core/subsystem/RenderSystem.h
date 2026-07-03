@@ -24,6 +24,7 @@
 #include "render/CameraRender.h"
 #include "render/BufferRender.h"
 #include "render/FramebufferRender.h"
+#include "buffer/ExternalBuffer.h"
 #include "Engine.h"
 #include <map>
 #include <memory>
@@ -41,6 +42,19 @@ namespace doriax{
 		Vector4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
 		Vector4 viewportInfo; //1.0/viewportSize.xy in .xy (used by USE_SSAO)
 	} fs_lighting_t;
+
+	typedef struct fs_lighting2d_t {
+	    Vector4 position_range[MAX_LIGHTS_2D];   // xy = world pos, z = height, w = range
+	    Vector4 color_intensity[MAX_LIGHTS_2D];  // rgb = color (linear), w = intensity
+	    Vector4 falloff_shadow[MAX_LIGHTS_2D];   // x = falloff exp, y = shadow atlas row (-1 = none), z = softness (texels), w = bias
+		Vector4 ambient;                         // rgb = ambient2D (linear) * intensity, w = numLights2D
+		Vector4 atlasInfo;                       // x = 1/atlasWidth, y = 1/MAX_LIGHTS_2D, z = atlasWidth
+	} fs_lighting2d_t;
+
+	typedef struct vs_shadow2d_t {
+		Vector4 lightPos_range; // xy = light world pos, w = range
+		Vector4 offset;         // x = NDC x offset for the polar seam duplication (-2, 0, +2)
+	} vs_shadow2d_t;
 
 	typedef struct fs_fog_t {
 		Vector4 color_type;
@@ -169,6 +183,13 @@ namespace doriax{
 		bool hasIBL;
 		bool hasMultipleCameras;
 
+		// 2D light path (Light2DComponent). Deliberately independent of
+		// scene->getLightState(): the editor forces LightState::OFF in 2D scenes
+		// to keep 3D lights out, but 2D lights must still work there.
+		bool hasLights2D;
+		bool hasShadows2D;
+		int numLights2D;
+
 		// 3x3 atlas for directional + spot lights
 		FramebufferRender shadowAtlasFramebuffer;
 		CameraRender shadowAtlasPassRender;
@@ -183,9 +204,26 @@ namespace doriax{
 		bool needUpdateShadowPointAtlas;
 		bool hasShadowPointAtlas;
 
+		// 1D polar shadow atlas for 2D lights: width x MAX_LIGHTS_2D, one row per
+		// shadow-casting Light2D. Occluder2D segments of the whole scene are merged
+		// into one world-space line-list buffer and drawn once per light row.
+		FramebufferRender shadow2DAtlasFramebuffer;
+		CameraRender shadow2DAtlasPassRender;
+		unsigned int shadow2DAtlasWidth;
+		bool hasShadow2DAtlas;
+
+		bool occluder2DLoaded;
+		ExternalBuffer occluder2DBuffer;
+		std::vector<float> occluder2DSegments; // 4 floats per vertex: endpoint xy + other-endpoint xy
+		ObjectRender occluder2DRender;
+		std::shared_ptr<ShaderRender> shadow2DShader;
+		int shadow2DSlotParams;
+		unsigned int occluder2DBufferCapacity; // in vertices
+
 		bool needUpdateShadowBindings;
 
 		fs_lighting_t fs_lighting;
+		fs_lighting2d_t fs_lighting2d;
 		vs_shadows_t vs_shadows;
 		fs_shadows_t fs_shadows;
 		fs_point_shadows_t fs_point_shadows;
@@ -250,6 +288,13 @@ namespace doriax{
 		int checkLightsAndShadow();
 		bool loadLights(int numLights);
 		void processLights(int numLights, CameraComponent& camera, Transform& cameraTransform);
+		bool loadLights2D();
+		void processLights2D();
+		bool ensureShadow2DAtlas(unsigned int width);
+		void loadShadow2DTexture(ShaderData& shaderData, ObjectRender& render, bool receiveShadows2D);
+		unsigned int buildOccluder2DSegments();
+		bool loadOccluder2DPass(unsigned int vertexCapacity);
+		void destroyOccluder2DPass();
 		bool loadAndProcessFog();
 		void releaseSkyEnvironment(SkyComponent& sky);
 		void updateSkyEnvironment(SkyComponent& sky);

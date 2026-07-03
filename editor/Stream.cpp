@@ -1804,6 +1804,8 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["lightState"] = lightStateToString(scene->getLightState());
     sceneNode["globalIlluminationIntensity"] = scene->getGlobalIlluminationIntensity();
     sceneNode["globalIlluminationColor"] = encodeVector3(scene->getGlobalIlluminationColor());
+    sceneNode["ambientLight2DIntensity"] = scene->getAmbientLight2DIntensity();
+    sceneNode["ambientLight2DColor"] = encodeVector3(scene->getAmbientLight2DColor());
     sceneNode["ssaoEnabled"] = scene->isSSAOEnabled();
     sceneNode["ssaoRadius"] = scene->getSSAORadius();
     sceneNode["ssaoIntensity"] = scene->getSSAOIntensity();
@@ -1845,6 +1847,17 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
         scene->setGlobalIllumination(node["globalIlluminationIntensity"].as<float>());
     } else if (node["globalIlluminationColor"]) {
         scene->setGlobalIllumination(decodeVector3(node["globalIlluminationColor"]));
+    }
+
+    if (node["ambientLight2DIntensity"] && node["ambientLight2DColor"]) {
+        scene->setAmbientLight2D(
+            node["ambientLight2DIntensity"].as<float>(),
+            decodeVector3(node["ambientLight2DColor"])
+        );
+    } else if (node["ambientLight2DIntensity"]) {
+        scene->setAmbientLight2D(node["ambientLight2DIntensity"].as<float>());
+    } else if (node["ambientLight2DColor"]) {
+        scene->setAmbientLight2D(decodeVector3(node["ambientLight2DColor"]));
     }
 
     if (node["ssaoEnabled"]) {
@@ -2601,6 +2614,16 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::LightComponent, true)] = encodeLightComponent(light);
     }
 
+    if (signature.test(registry->getComponentId<Light2DComponent>())) {
+        Light2DComponent light2d = registry->getComponent<Light2DComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::Light2DComponent, true)] = encodeLight2DComponent(light2d);
+    }
+
+    if (signature.test(registry->getComponentId<Occluder2DComponent>())) {
+        Occluder2DComponent occluder2d = registry->getComponent<Occluder2DComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::Occluder2DComponent, true)] = encodeOccluder2DComponent(occluder2d);
+    }
+
     if (signature.test(registry->getComponentId<FogComponent>())) {
         FogComponent fog = registry->getComponent<FogComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::FogComponent, true)] = encodeFogComponent(fog);
@@ -2981,6 +3004,34 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::LightComponent, existing, &light);
             registry->getComponent<LightComponent>(entity) = light;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::Light2DComponent, true);
+    if (compNode[compName]) {
+        Light2DComponent* existing = registry->findComponent<Light2DComponent>(entity);
+        Light2DComponent light2d = decodeLight2DComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<Light2DComponent>())){
+            registry->addComponent<Light2DComponent>(entity, light2d);
+            Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::Light2DComponent));
+        }else{
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::Light2DComponent, existing, &light2d);
+            registry->getComponent<Light2DComponent>(entity) = light2d;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::Occluder2DComponent, true);
+    if (compNode[compName]) {
+        Occluder2DComponent* existing = registry->findComponent<Occluder2DComponent>(entity);
+        Occluder2DComponent occluder2d = decodeOccluder2DComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<Occluder2DComponent>())){
+            registry->addComponent<Occluder2DComponent>(entity, occluder2d);
+            Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::Occluder2DComponent));
+        }else{
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::Occluder2DComponent, existing, &occluder2d);
+            registry->getComponent<Occluder2DComponent>(entity) = occluder2d;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -4389,6 +4440,92 @@ LightComponent editor::Stream::decodeLightComponent(const YAML::Node& node, cons
     if (node["numShadowCascades"]) light.numShadowCascades = node["numShadowCascades"].as<unsigned int>();
 
     return light;
+}
+
+YAML::Node editor::Stream::encodeLight2DComponent(const Light2DComponent& light) {
+    YAML::Node node;
+
+    node["color"] = encodeVector3(light.color);
+    node["intensity"] = light.intensity;
+    node["range"] = light.range;
+    node["falloff"] = light.falloff;
+    node["height"] = light.height;
+    node["shadows"] = light.shadows;
+    node["shadowBias"] = light.shadowBias;
+    node["shadowSoftness"] = light.shadowSoftness;
+    node["mapResolution"] = light.mapResolution;
+
+    return node;
+}
+
+Light2DComponent editor::Stream::decodeLight2DComponent(const YAML::Node& node, const Light2DComponent* oldLight) {
+    Light2DComponent light;
+
+    // Use old values as defaults if provided
+    if (oldLight) {
+        light = *oldLight;
+    }
+
+    if (node["color"]) light.color = decodeVector3(node["color"]);
+    if (node["intensity"]) light.intensity = node["intensity"].as<float>();
+    if (node["range"]) light.range = node["range"].as<float>();
+    if (node["falloff"]) light.falloff = node["falloff"].as<float>();
+    if (node["height"]) light.height = node["height"].as<float>();
+    if (node["shadows"]) light.shadows = node["shadows"].as<bool>();
+    if (node["shadowBias"]) light.shadowBias = node["shadowBias"].as<float>();
+    if (node["shadowSoftness"]) light.shadowSoftness = node["shadowSoftness"].as<float>();
+    if (node["mapResolution"]) light.mapResolution = node["mapResolution"].as<unsigned int>();
+
+    return light;
+}
+
+static std::string occluder2DShapeToString(Occluder2DShape shape) {
+    switch (shape) {
+        case Occluder2DShape::AUTO_QUAD: return "autoquad";
+        case Occluder2DShape::POLYGON: return "polygon";
+    }
+    return "autoquad";
+}
+
+static Occluder2DShape stringToOccluder2DShape(const std::string& str) {
+    if (str == "polygon") return Occluder2DShape::POLYGON;
+    return Occluder2DShape::AUTO_QUAD;
+}
+
+YAML::Node editor::Stream::encodeOccluder2DComponent(const Occluder2DComponent& occluder) {
+    YAML::Node node;
+
+    node["shape"] = occluder2DShapeToString(occluder.shape);
+    node["closed"] = occluder.closed;
+    node["enabled"] = occluder.enabled;
+
+    YAML::Node pointsNode(YAML::NodeType::Sequence);
+    for (const Vector2& point : occluder.points) {
+        pointsNode.push_back(encodeVector2(point));
+    }
+    node["points"] = pointsNode;
+
+    return node;
+}
+
+Occluder2DComponent editor::Stream::decodeOccluder2DComponent(const YAML::Node& node, const Occluder2DComponent* oldOccluder) {
+    Occluder2DComponent occluder;
+
+    if (oldOccluder) {
+        occluder = *oldOccluder;
+    }
+
+    if (node["shape"]) occluder.shape = stringToOccluder2DShape(node["shape"].as<std::string>());
+    if (node["closed"]) occluder.closed = node["closed"].as<bool>();
+    if (node["enabled"]) occluder.enabled = node["enabled"].as<bool>();
+    if (node["points"]) {
+        occluder.points.clear();
+        for (const auto& pointNode : node["points"]) {
+            occluder.points.push_back(decodeVector2(pointNode));
+        }
+    }
+
+    return occluder;
 }
 
 YAML::Node editor::Stream::encodeFogComponent(const FogComponent& fog) {

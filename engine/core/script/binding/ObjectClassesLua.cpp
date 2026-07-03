@@ -17,6 +17,8 @@
 #include "Polygon.h"
 #include "Terrain.h"
 #include "Light.h"
+#include "Light2D.h"
+#include "Occluder2D.h"
 #include "Mesh.h"
 #include "Shape.h"
 #include "Tilemap.h"
@@ -304,6 +306,43 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("automaticShadowCamera", &Light::isAutomaticShadowCamera, &Light::setAutomaticShadowCamera)
         .addProperty("numCascades", &Light::getNumCascades, &Light::setNumCascades)
         .addFunction("setNumCascades", &Light::setNumCascades)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .deriveClass<Light2D, Object>("Light2D")
+        .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
+        .addProperty("color", &Light2D::getColor, (void(Light2D::*)(Vector3))&Light2D::setColor)
+        .addFunction("setColor", (void(Light2D::*)(const float, const float, const float))&Light2D::setColor)
+        .addProperty("intensity", &Light2D::getIntensity, &Light2D::setIntensity)
+        .addFunction("setIntensity", &Light2D::setIntensity)
+        .addProperty("range", &Light2D::getRange, &Light2D::setRange)
+        .addFunction("setRange", &Light2D::setRange)
+        .addProperty("falloff", &Light2D::getFalloff, &Light2D::setFalloff)
+        .addFunction("setFalloff", &Light2D::setFalloff)
+        .addProperty("height", &Light2D::getHeight, &Light2D::setHeight)
+        .addFunction("setHeight", &Light2D::setHeight)
+        .addProperty("shadows", &Light2D::isShadows, &Light2D::setShadows)
+        .addFunction("setShadows", &Light2D::setShadows)
+        .addProperty("shadowBias", &Light2D::getShadowBias, &Light2D::setShadowBias)
+        .addProperty("shadowSoftness", &Light2D::getShadowSoftness, &Light2D::setShadowSoftness)
+        .addProperty("mapResolution", &Light2D::getMapResolution, &Light2D::setMapResolution)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("Occluder2DShape")
+        .addVariable("AUTO_QUAD", Occluder2DShape::AUTO_QUAD)
+        .addVariable("POLYGON", Occluder2DShape::POLYGON)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .deriveClass<Occluder2D, Object>("Occluder2D")
+        .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
+        .addProperty("shape", &Occluder2D::getShape, &Occluder2D::setShape)
+        .addFunction("addVertex", (void(Occluder2D::*)(float, float))&Occluder2D::addVertex)
+        .addFunction("clearVertices", &Occluder2D::clearVertices)
+        .addFunction("getVertexCount", &Occluder2D::getVertexCount)
+        .addProperty("closed", &Occluder2D::isClosed, &Occluder2D::setClosed)
+        .addProperty("enabled", &Occluder2D::isEnabled, &Occluder2D::setEnabled)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

@@ -1,6 +1,6 @@
 #version 450
 
-#if !defined(MATERIAL_UNLIT) || defined(USE_MIRROR)
+#if !defined(MATERIAL_UNLIT) || defined(USE_MIRROR) || defined(USE_LIGHT2D)
     in vec3 v_position;
 #endif
 
@@ -47,10 +47,12 @@ out vec4 g_finalColor;
         uniform sampler u_metallicRoughness_smp;
         uniform sampler u_occlusion_smp;
         uniform sampler u_emissive_smp;
-        #ifdef HAS_NORMAL_MAP
-            uniform texture2D u_normalTexture;
-            uniform sampler u_normal_smp;
-        #endif
+    #endif
+    // the normal map is sampled by the lit path and by the 2D light path (which
+    // otherwise keeps the unlit fast path)
+    #if defined(HAS_NORMAL_MAP) && (!defined(MATERIAL_UNLIT) || defined(USE_LIGHT2D))
+        uniform texture2D u_normalTexture;
+        uniform sampler u_normal_smp;
     #endif
 #endif
 
@@ -76,6 +78,20 @@ uniform u_fs_pbrParams {
         vec4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
         vec4 viewportInfo; //1.0/viewportSize.xy in .xy
     } lighting;
+#endif
+
+#ifdef USE_LIGHT2D
+    uniform u_fs_lighting2d {
+        vec4 position_range[MAX_LIGHTS_2D];  //position.xy, height.z, range.w
+        vec4 color_intensity[MAX_LIGHTS_2D]; //color.rgb (linear) and intensity.w
+        vec4 falloff_shadow[MAX_LIGHTS_2D];  //falloff.x, shadowRow.y (-1.0 if no shadow), softness.z, bias.w
+        vec4 ambient;                        //ambient2D.rgb (linear, pre-multiplied by intensity) and numLights2D.w
+        vec4 atlasInfo;                      //1/atlasWidth.x, 1/MAX_LIGHTS_2D.y, atlasWidth.z
+    } lighting2d;
+    #ifdef USE_SHADOWS_2D
+        uniform texture2D u_shadow2DAtlas;
+        uniform sampler u_shadow2DAtlas_smp;
+    #endif
 #endif
 
 #ifdef USE_SSAO
@@ -155,9 +171,14 @@ const float M_PI = 3.141592653589793;
 #ifdef USE_PUNCTUAL
     #include "includes/punctual.glsl"
 #endif
-#ifdef USE_SHADOWS
+#if defined(USE_SHADOWS) || defined(USE_SHADOWS_2D)
     #include "includes/depth_util.glsl"
+#endif
+#ifdef USE_SHADOWS
     #include "includes/shadows.glsl"
+#endif
+#ifdef USE_LIGHT2D
+    #include "includes/lighting2d.glsl"
 #endif
 #ifdef HAS_TERRAIN
     #include "includes/terrain_fs.glsl"
@@ -184,6 +205,9 @@ void main() {
     #endif
 
     #ifdef MATERIAL_UNLIT
+        #ifdef USE_LIGHT2D
+            baseColor.rgb *= getLight2DIntensity(v_position, getNormal2D(), true);
+        #endif
         #ifdef HAS_FOG
             baseColor.rgb = getFogColor(baseColor.rgb);
         #endif
@@ -337,6 +361,12 @@ void main() {
         #endif
 
         vec3 color = f_emissive + f_diffuse + f_specular;
+
+        #ifdef USE_LIGHT2D
+            // mixed scene: 2D lights add on top of the PBR result (scene ambient is
+            // already applied above, so skip the 2D ambient here)
+            color.rgb += baseColor.rgb * getLight2DIntensity(v_position, n, false);
+        #endif
 
         #ifdef HAS_FOG
             color.rgb = getFogColor(color.rgb);

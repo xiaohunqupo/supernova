@@ -496,6 +496,14 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Tilemap", EntityCreationType::TILEMAP, parent, addToBundle));
             openParent = parent;
         }
+        if (ImGui::MenuItem(ICON_FA_LIGHTBULB"  2D Light")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "2D Light", EntityCreationType::POINT_LIGHT_2D, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_CIRCLE_HALF_STROKE"  2D Occluder")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "2D Occluder", EntityCreationType::OCCLUDER_2D, parent, addToBundle));
+            openParent = parent;
+        }
         ImGui::EndMenu();
     }
 
@@ -725,6 +733,10 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_IMAGE;
     }else if (signature.test(scene->getComponentId<LightComponent>())){
         return ICON_FA_LIGHTBULB;
+    }else if (signature.test(scene->getComponentId<Light2DComponent>())){
+        return ICON_FA_LIGHTBULB;
+    }else if (signature.test(scene->getComponentId<Occluder2DComponent>())){
+        return ICON_FA_CIRCLE_HALF_STROKE;
     }else if (signature.test(scene->getComponentId<CameraComponent>())){
         return ICON_FA_VIDEO;
     }else if (signature.test(scene->getComponentId<Joint2DComponent>()) || signature.test(scene->getComponentId<Joint3DComponent>())){

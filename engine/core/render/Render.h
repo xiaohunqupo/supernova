@@ -51,7 +51,8 @@ namespace doriax{
         SSAO_BLUR,  // fullscreen depth-aware blur of the SSAO result
         SSR,        // fullscreen screen-space reflections pass
         SSR_BLUR,   // fullscreen premultiplied blur of the SSR result (glossy)
-        COMPOSITE   // fullscreen composite of scene color + SSR reflections
+        COMPOSITE,  // fullscreen composite of scene color + SSR reflections
+        SHADOW2D    // 1D polar shadow pass: occluder segments into a 2D-light atlas row
     };
 
     enum class AttributeType{
@@ -134,7 +135,9 @@ namespace doriax{
         SSAO_BLUR_FS_PARAMS,
         SSR_FS_PARAMS,
         SSR_BLUR_FS_PARAMS,
-        COMPOSITE_FS_PARAMS
+        COMPOSITE_FS_PARAMS,
+        FS_LIGHTING2D,
+        SHADOW2D_VS_PARAMS
     };
 
     enum class StorageBufferType{
@@ -165,7 +168,8 @@ namespace doriax{
         SCENECOLORTEXTURE,
         SSRTEXTURE,
         GBUFFERTEXTURE,      // view-space normal (rg, octahedral) + roughness (b) + metallic (a)
-        GBUFFERALBEDOTEXTURE // linear base color (rgb) + hasIBL flag (a)
+        GBUFFERALBEDOTEXTURE, // linear base color (rgb) + hasIBL flag (a)
+        SHADOW2DATLAS        // 1D polar shadow rows (one per 2D light)
     };
 
     enum class TextureType {

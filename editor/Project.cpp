@@ -3219,15 +3219,40 @@ AABB editor::Project::getEntityWorldAABB(Scene* scene, Entity entity, Scene* mai
                 aabb = transform.modelMatrix * AABB(-center.x, -center.y, 0, layout.width-center.x, layout.height-center.y, 0);
             }
         }
-    }else if (signature.test(scene->getComponentId<LightComponent>()) || 
+    }else if (signature.test(scene->getComponentId<LightComponent>()) ||
+              signature.test(scene->getComponentId<Light2DComponent>()) ||
               signature.test(scene->getComponentId<CameraComponent>()) ||
               signature.test(scene->getComponentId<SoundComponent>())){
         Transform& transform = scene->getComponent<Transform>(entity);
         Transform& camtransform = mainScene->getComponent<Transform>(mainScene->getCamera());
         CameraComponent& camera = mainScene->getComponent<CameraComponent>(mainScene->getCamera());
-        float dist = (transform.worldPosition - camtransform.worldPosition).length();
-        float size = dist * tan(camera.yfov) * 0.01;
+        float size;
+        if (camera.type == CameraType::CAMERA_ORTHO){
+            // match the viewport icon gizmos: 128px sprite at 0.25*zoom => 16*zoom half-extent
+            float zoom = (camera.topClip - camera.bottomClip) / std::max(1.0f, (float)Engine::getCanvasHeight());
+            size = 16.0f * zoom;
+        }else{
+            float dist = (transform.worldPosition - camtransform.worldPosition).length();
+            size = dist * tan(camera.yfov) * 0.01;
+        }
         aabb = transform.modelMatrix * AABB(-size, -size, -size, size, size, size);
+    }else if (signature.test(scene->getComponentId<Occluder2DComponent>())){
+        const Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+        Transform& transform = scene->getComponent<Transform>(entity);
+
+        // hug the polygon points; the entity origin is only the fallback when
+        // there is nothing else to bound
+        AABB localAABB(Vector3(0, 0, -1), Vector3(0, 0, 1));
+        if (occluder.shape == Occluder2DShape::POLYGON && occluder.points.size() > 0){
+            localAABB.setNull();
+            for (const Vector2& point : occluder.points){
+                localAABB.merge(Vector3(point.x, point.y, 0.0f));
+            }
+            Vector3 mn = localAABB.getMinimum(); mn.z = -1.0f;
+            Vector3 mx = localAABB.getMaximum(); mx.z = 1.0f;
+            localAABB.setExtents(mn, mx);
+        }
+        aabb = transform.modelMatrix * localAABB;
     }else if (signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())){
         if (signature.test(scene->getComponentId<Transform>())) {
             const Transform& transform = scene->getComponent<Transform>(entity);
@@ -3286,10 +3311,22 @@ AABB editor::Project::getEntityLocalAABB(Scene* scene, Entity entity) const{
                 aabb = AABB(-center.x, -center.y, 0, layout.width-center.x, layout.height-center.y, 0);
             }
         }
-    }else if (signature.test(scene->getComponentId<LightComponent>()) || 
+    }else if (signature.test(scene->getComponentId<LightComponent>()) ||
+              signature.test(scene->getComponentId<Light2DComponent>()) ||
               signature.test(scene->getComponentId<CameraComponent>()) ||
               signature.test(scene->getComponentId<SoundComponent>())){
         aabb = AABB::ZERO;
+    }else if (signature.test(scene->getComponentId<Occluder2DComponent>())){
+        const Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+        aabb.setNull();
+        if (occluder.shape == Occluder2DShape::POLYGON && occluder.points.size() > 0){
+            // hug the polygon points only
+            for (const Vector2& point : occluder.points){
+                aabb.merge(Vector3(point.x, point.y, 0.0f));
+            }
+        }else{
+            aabb.merge(Vector3::ZERO); // fallback: the entity origin
+        }
     }else if (signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())){
         aabb.setNull();
         // Always include the entity origin (local space zero)

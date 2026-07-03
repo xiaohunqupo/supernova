@@ -116,6 +116,11 @@ static std::vector<editor::EnumEntry> entriesLightType = {
     { (int)LightType::SPOT, "Spot" }
 };
 
+static std::vector<editor::EnumEntry> entriesOccluder2DShape = {
+    { (int)Occluder2DShape::AUTO_QUAD, "Auto Quad" },
+    { (int)Occluder2DShape::POLYGON, "Polygon" }
+};
+
 static std::vector<editor::EnumEntry> entriesFogType = {
     { (int)FogType::LINEAR, "Linear" },
     { (int)FogType::EXPONENTIAL, "Exponential" },
@@ -7133,6 +7138,140 @@ void editor::Properties::drawLightComponent(ComponentType cpType, SceneProject* 
     endTable();
 }
 
+void editor::Properties::drawLight2DComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    RowSettings settingsFloat;
+    settingsFloat.secondColSize = 6 * ImGui::GetFontSize();
+
+    RowSettings settingsHeight = settingsFloat;
+    settingsHeight.help = "Virtual Z height of the light above the 2D plane. Gives normal maps a direction to respond to; 0 disables normal response (pure radial light).";
+
+    beginTable(cpType, getLabelSize("Intensity"));
+    propertyRow(RowPropertyType::Float, cpType, "intensity", "Intensity", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "range", "Range", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "falloff", "Falloff", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::Float, cpType, "height", "Height", sceneProject, entities, settingsHeight);
+    propertyRow(RowPropertyType::Color3L, cpType, "color", "Color", sceneProject, entities);
+    endTable();
+
+    ImGui::SeparatorText("Shadow settings");
+
+    RowSettings settingsBias;
+    settingsBias.stepSize = 0.001f;
+    settingsBias.secondColSize = 6 * ImGui::GetFontSize();
+    settingsBias.format = "%.4f";
+
+    RowSettings settingsMapRes;
+    settingsMapRes.sliderValues = &po2Values;
+
+    beginTable(cpType, getLabelSize("Map Resolution"), "shadow2d_settings_table");
+    propertyRow(RowPropertyType::Bool, cpType, "shadows", "Enabled", sceneProject, entities);
+    propertyRow(RowPropertyType::Float, cpType, "shadowBias", "Bias", sceneProject, entities, settingsBias);
+    propertyRow(RowPropertyType::Float, cpType, "shadowSoftness", "Softness", sceneProject, entities, settingsFloat);
+    propertyRow(RowPropertyType::UIntSlider, cpType, "mapResolution", "Map Resolution", sceneProject, entities, settingsMapRes);
+    endTable();
+}
+
+void editor::Properties::drawOccluder2DComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    Occluder2DComponent& occluder = sceneProject->scene->getComponent<Occluder2DComponent>(entities[0]);
+
+    RowSettings settingsShape;
+    settingsShape.enumEntries = &entriesOccluder2DShape;
+    settingsShape.help = "Auto Quad derives the occluder outline from this entity's mesh bounds; Polygon uses the point list below (local space).";
+
+    beginTable(cpType, getLabelSize("Enabled"));
+    propertyRow(RowPropertyType::Enum, cpType, "shape", "Shape", sceneProject, entities, settingsShape);
+    if (occluder.shape == Occluder2DShape::POLYGON){
+        propertyRow(RowPropertyType::Bool, cpType, "closed", "Closed", sceneProject, entities);
+    }
+    propertyRow(RowPropertyType::Bool, cpType, "enabled", "Enabled", sceneProject, entities);
+    endTable();
+
+    if (occluder.shape == Occluder2DShape::POLYGON && entities.size() == 1){
+        Entity entity = entities[0];
+
+        Command* pointsCmd = nullptr;
+        auto setPoints = [&](const std::vector<Vector2>& newPoints, bool merge){
+            editor::PropertyCmd<std::vector<Vector2>>* cmd = new editor::PropertyCmd<std::vector<Vector2>>(project, sceneProject->id, entity, cpType, "points", newPoints);
+            if (!merge){
+                cmd->setNoMerge();
+            }
+            CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+            pointsCmd = cmd;
+        };
+
+        ImGui::SeparatorText("Points");
+
+        // point sub-selected in the scene viewport (click on a handle)
+        int selectedPoint = -1;
+        if (sceneProject->sceneRender && sceneProject->sceneRender->getSelectedOccluderPointEntity() == entity){
+            selectedPoint = sceneProject->sceneRender->getSelectedOccluderPointIndex();
+        }
+
+        beginTable(cpType, getLabelSize(ICON_FA_CARET_RIGHT " Point 000"), "occluder2d_points_table");
+        for (size_t i = 0; i < occluder.points.size(); i++){
+            bool pointSelected = ((int)i == selectedPoint);
+
+            ImGui::PushID(static_cast<int>(i));
+            if (pointSelected){
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.0f, 1.0f));
+                propertyHeader(std::string(ICON_FA_CARET_RIGHT) + " Point " + std::to_string(i), -1, false, false);
+                ImGui::PopStyleColor();
+            }else{
+                propertyHeader("Point " + std::to_string(i), -1, false, false);
+            }
+
+            float deleteButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            float value[2] = {occluder.points[i].x, occluder.points[i].y};
+            ImGui::SetNextItemWidth(std::max(0.0f, ImGui::GetContentRegionAvail().x - deleteButtonWidth - ImGui::GetStyle().ItemSpacing.x));
+            if (ImGui::DragFloat2("##occluder2d_point", value, 1.0f, 0.0f, 0.0f, "%.2f")){
+                std::vector<Vector2> newPoints = occluder.points;
+                newPoints[i] = Vector2(value[0], value[1]);
+                setPoints(newPoints, true);
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit()){
+                if (pointsCmd){
+                    pointsCmd->setNoMerge();
+                    pointsCmd = nullptr;
+                }
+            }
+
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            if (ImGui::Button(ICON_FA_TRASH_CAN "##occluder2d_point_delete")){
+                std::vector<Vector2> newPoints = occluder.points;
+                newPoints.erase(newPoints.begin() + static_cast<std::ptrdiff_t>(i));
+                if (sceneProject->sceneRender && (int)i <= selectedPoint){
+                    sceneProject->sceneRender->clearOccluderPointSelection();
+                }
+                setPoints(newPoints, false);
+                ImGui::PopStyleColor(2);
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopStyleColor(2);
+            ImGui::PopID();
+        }
+        endTable();
+
+        if (ImGui::Button(ICON_FA_PLUS " Add Point##occluder2d", ImVec2(std::max(0.0f, ImGui::GetContentRegionAvail().x), 0))){
+            std::vector<Vector2> newPoints = occluder.points;
+            if (newPoints.size() >= 2){
+                // continue the outline: offset from the last edge so the new point is visible
+                Vector2 last = newPoints[newPoints.size() - 1];
+                Vector2 prev = newPoints[newPoints.size() - 2];
+                Vector2 dir = last - prev;
+                newPoints.push_back(last + dir * 0.5f);
+            }else if (newPoints.size() == 1){
+                newPoints.push_back(newPoints[0] + Vector2(50.0f, 0.0f));
+            }else{
+                newPoints.push_back(Vector2(0.0f, 0.0f));
+            }
+            setPoints(newPoints, false);
+        }
+    }
+}
+
 void editor::Properties::drawFogComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     FogComponent& fog = sceneProject->scene->getComponent<FogComponent>(entities[0]);
 
@@ -11640,6 +11779,10 @@ void editor::Properties::show(){
                     drawTerrainComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::LightComponent){
                     drawLightComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::Light2DComponent){
+                    drawLight2DComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::Occluder2DComponent){
+                    drawOccluder2DComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::FogComponent){
                     drawFogComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::MirrorComponent){
@@ -11737,6 +11880,20 @@ void editor::Properties::show(){
                 drawScenePropertyRow<LightState>(sceneProject, "light_state", "Lights", ScenePropertyInputType::Combo);
 
                 ImGui::EndTable();
+            }
+
+            if (sceneProject->sceneType != SceneType::SCENE_3D) {
+                ImGui::SeparatorText("Ambient Light (2D)");
+
+                if (ImGui::BeginTable("scene_ambient2d_table", 2, tableFlags)) {
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Intensity").x);
+                    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                    drawScenePropertyRow<Vector3>(sceneProject, "ambient_light_2d_color", "Color", ScenePropertyInputType::ColorRGB);
+                    drawScenePropertyRow<float>(sceneProject, "ambient_light_2d_intensity", "Intensity", ScenePropertyInputType::SliderFloat, 0.0f, 1.0f);
+
+                    ImGui::EndTable();
+                }
             }
 
             LightState currentLightState = doriax::editor::Catalog::getSceneProperty<LightState>(sceneProject->scene, "light_state");

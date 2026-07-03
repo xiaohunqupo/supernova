@@ -3,6 +3,11 @@
 #include "resources/icons/camera-icon_png.h"
 #include "resources/icons/audio-source-icon_png.h"
 
+// defined by resources/icons/bulb-icon_png.h, included in SceneRender3D.cpp
+// (the xxd headers define non-static arrays, so they link in one TU only)
+extern unsigned char bulb_icon_png[];
+extern unsigned int bulb_icon_png_len;
+
 #include "Backend.h"
 #include "Project.h"
 #include "command/CommandHandle.h"
@@ -105,10 +110,11 @@ AABB editor::SceneRender::getAABB(Entity entity, bool local){
                 return aabb;
             }
         }
-    }else if (signature.test(scene->getComponentId<CameraComponent>()) && signature.test(scene->getComponentId<Transform>())){
+    }else if ((signature.test(scene->getComponentId<CameraComponent>()) || signature.test(scene->getComponentId<Light2DComponent>())) && signature.test(scene->getComponentId<Transform>())){
         CameraComponent& sceneCamera = scene->getComponent<CameraComponent>(camera->getEntity());
 
         if (sceneCamera.type == CameraType::CAMERA_ORTHO) {
+            // matches the viewport icon: 128px sprite at 0.25*zoom scale => 16*zoom half-extent
             float halfSize = 16.0f * zoom;
             AABB aabb(-halfSize, -halfSize, -1, halfSize, halfSize, 1);
 
@@ -118,6 +124,28 @@ AABB editor::SceneRender::getAABB(Entity entity, bool local){
                 Transform& transform = scene->getComponent<Transform>(entity);
                 return transform.modelMatrix * aabb;
             }
+        }
+    }else if (signature.test(scene->getComponentId<Occluder2DComponent>()) && signature.test(scene->getComponentId<Transform>())){
+        Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+        Transform& transform = scene->getComponent<Transform>(entity);
+
+        // hug the polygon points; the entity origin is only the fallback when
+        // there is nothing else to bound
+        AABB aabb(Vector3(0, 0, -1), Vector3(0, 0, 1));
+        if (occluder.shape == Occluder2DShape::POLYGON && occluder.points.size() > 0){
+            aabb.setNull();
+            for (const Vector2& point : occluder.points){
+                aabb.merge(Vector3(point.x, point.y, 0.0f));
+            }
+            Vector3 mn = aabb.getMinimum(); mn.z = -1.0f;
+            Vector3 mx = aabb.getMaximum(); mx.z = 1.0f;
+            aabb.setExtents(mn, mx);
+        }
+
+        if (local){
+            return aabb;
+        }else{
+            return transform.modelMatrix * aabb;
         }
     }else if ((signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())) && signature.test(scene->getComponentId<Transform>())){
         Transform& transform = scene->getComponent<Transform>(entity);
@@ -295,10 +323,11 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local, bool visual){
                               : modelMatrix * aabb.getOBB();
                 }
             }
-        }else if (signature.test(scene->getComponentId<CameraComponent>())){
+        }else if (signature.test(scene->getComponentId<CameraComponent>()) || signature.test(scene->getComponentId<Light2DComponent>())){
             CameraComponent& sceneCamera = scene->getComponent<CameraComponent>(camera->getEntity());
 
             if (sceneCamera.type == CameraType::CAMERA_ORTHO) {
+                // matches the viewport icon: 128px sprite at 0.25*zoom scale => 16*zoom half-extent
                 float halfSize = 16.0f * zoom;
                 AABB aabb(-halfSize, -halfSize, -1, halfSize, halfSize, 1);
                 if (local){
@@ -307,6 +336,28 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local, bool visual){
                     return visual ? transformAABBPreservingShear(modelMatrix, aabb)
                               : modelMatrix * aabb.getOBB();
                 }
+            }
+        }else if (signature.test(scene->getComponentId<Occluder2DComponent>())){
+            Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+
+            // hug the polygon points; the entity origin is only the fallback when
+            // there is nothing else to bound
+            AABB aabb(Vector3(0, 0, -1), Vector3(0, 0, 1));
+            if (occluder.shape == Occluder2DShape::POLYGON && occluder.points.size() > 0){
+                aabb.setNull();
+                for (const Vector2& point : occluder.points){
+                    aabb.merge(Vector3(point.x, point.y, 0.0f));
+                }
+                Vector3 mn = aabb.getMinimum(); mn.z = -1.0f;
+                Vector3 mx = aabb.getMaximum(); mx.z = 1.0f;
+                aabb.setExtents(mn, mx);
+            }
+
+            if (local){
+                return aabb.getOBB();
+            }else{
+                return visual ? transformAABBPreservingShear(modelMatrix, aabb)
+                          : modelMatrix * aabb.getOBB();
             }
         }else if (signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>())){
             AABB aabb(Vector3::ZERO, Vector3::ZERO);
@@ -564,6 +615,12 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
                 || (signature.test(scene->getComponentId<TilemapComponent>()) && selectedTileIndex >= 0);
 
             showCross = signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>());
+
+            // a selected occluder polygon point is a size-less target: show the move cross
+            if (selectedOccluderPointIndex >= 0 && selEntities[0] == selectedOccluderPointEntity){
+                showCross = true;
+            }
+
             showRects = canResize2D && !isCamera && !isInstancedMesh && !showCross;
         }
 
@@ -619,6 +676,19 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
                     selBB.clear();
                     selBB.push_back(instOBB);
                 }
+            }
+        }
+
+        // Override gizmo for selected occluder polygon point
+        if (selectedOccluderPointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedOccluderPointEntity
+            && toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D){
+            OBB pointOBB = getOccluderPointOBB(selectedOccluderPointEntity, selectedOccluderPointIndex);
+            if (!pointOBB.isNull()){
+                Vector3 pointCenter = pointOBB.getCenter();
+                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, scale, pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+            }else{
+                // point removed or shape changed: drop the stale sub-selection
+                clearOccluderPointSelection();
             }
         }
 
@@ -759,6 +829,16 @@ void editor::SceneRender::mouseClickEvent(float x, float y, std::vector<Entity> 
                     gizmoStartPosition = tileOBB.getCenter();
                     cursorStartOffset = gizmoStartPosition - rretrun.point;
                 }
+            }
+        }
+
+        // Override gizmo start position to the selected occluder point (the drag
+        // follows the cursor absolutely, so no start value is needed)
+        if (selectedOccluderPointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedOccluderPointEntity){
+            OBB pointOBB = getOccluderPointOBB(selectedOccluderPointEntity, selectedOccluderPointIndex);
+            if (!pointOBB.isNull()){
+                gizmoStartPosition = pointOBB.getCenter();
+                cursorStartOffset = gizmoStartPosition - rretrun.point;
             }
         }
 
@@ -1019,6 +1099,33 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                 }
 
                 if (toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D){
+                    // Handle occluder polygon point sub-selection drag
+                    if (selectedOccluderPointIndex >= 0 && entity == selectedOccluderPointEntity){
+                        Occluder2DComponent* occluder = scene->findComponent<Occluder2DComponent>(entity);
+                        Transform* occTransform = scene->findComponent<Transform>(entity);
+                        if (occluder && occTransform && selectedOccluderPointIndex < (int)occluder->points.size()
+                            && toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::CENTER){
+
+                            // new world position of the point, following the cursor
+                            Vector3 newWorldPos = rretrun.point + cursorStartOffset;
+
+                            if (displaySettings.snapToGrid) {
+                                float spacing = displaySettings.gridSpacing2D;
+                                if (spacing > 0.0f) {
+                                    newWorldPos.x = std::round(newWorldPos.x / spacing) * spacing;
+                                    newWorldPos.y = std::round(newWorldPos.y / spacing) * spacing;
+                                }
+                            }
+
+                            Vector3 newLocalPos = occTransform->modelMatrix.inverse() * newWorldPos;
+
+                            std::vector<Vector2> newPoints = occluder->points;
+                            newPoints[selectedOccluderPointIndex] = Vector2(newLocalPos.x, newLocalPos.y);
+
+                            lastCommand = new PropertyCmd<std::vector<Vector2>>(project, sceneProject->id, entity,
+                                ComponentType::Occluder2DComponent, "points", newPoints);
+                        }
+                    }else
                     // Handle tile sub-selection drag
                     if (selectedTileIndex >= 0 && entity == selectedTileEntity){
                         TilemapComponent* tilemap = scene->findComponent<TilemapComponent>(entity);
@@ -1481,6 +1588,63 @@ void editor::SceneRender::clearTileSelection(){
     selectedTileIndex = -1;
 }
 
+void editor::SceneRender::selectOccluderPoint(Entity entity, int pointIndex){
+    selectedOccluderPointEntity = entity;
+    selectedOccluderPointIndex = pointIndex;
+}
+
+void editor::SceneRender::clearOccluderPointSelection(){
+    selectedOccluderPointEntity = 0;
+    selectedOccluderPointIndex = -1;
+}
+
+// Returns the polygon point under the mouse (-1 when none). Only POLYGON
+// occluders have editable points.
+int editor::SceneRender::hitTestOccluderPoint(Entity entity, float x, float y){
+    if (!scene->getComponentArray<Occluder2DComponent>()->hasEntity(entity)) return -1;
+    if (!scene->getComponentArray<Transform>()->hasEntity(entity)) return -1;
+
+    Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+    Transform& transform = scene->getComponent<Transform>(entity);
+
+    if (occluder.shape != Occluder2DShape::POLYGON) return -1;
+
+    Ray ray = camera->screenToRay(x, y);
+    RayReturn rr = ray.intersects(Plane(Vector3(0, 0, 1), transform.worldPosition));
+    if (!rr) return -1;
+
+    // handles are drawn at 4*zoom half-extent; use a slightly larger grab radius
+    float hitRadius = 8.0f * zoom;
+    int bestIndex = -1;
+    float bestDistance = hitRadius;
+    for (size_t i = 0; i < occluder.points.size(); i++){
+        Vector3 worldPoint = transform.modelMatrix * Vector3(occluder.points[i].x, occluder.points[i].y, 0.0f);
+        float dist = Vector2(worldPoint.x - rr.point.x, worldPoint.y - rr.point.y).length();
+        if (dist <= bestDistance){
+            bestDistance = dist;
+            bestIndex = (int)i;
+        }
+    }
+
+    return bestIndex;
+}
+
+OBB editor::SceneRender::getOccluderPointOBB(Entity entity, int pointIndex){
+    if (!scene->getComponentArray<Occluder2DComponent>()->hasEntity(entity)) return OBB();
+    if (!scene->getComponentArray<Transform>()->hasEntity(entity)) return OBB();
+
+    Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+    Transform& transform = scene->getComponent<Transform>(entity);
+
+    if (occluder.shape != Occluder2DShape::POLYGON) return OBB();
+    if (pointIndex < 0 || pointIndex >= (int)occluder.points.size()) return OBB();
+
+    Vector3 worldPoint = transform.modelMatrix * Vector3(occluder.points[pointIndex].x, occluder.points[pointIndex].y, 0.0f);
+    float halfSize = 8.0f * zoom;
+    AABB aabb(worldPoint - Vector3(halfSize, halfSize, 1.0f), worldPoint + Vector3(halfSize, halfSize, 1.0f));
+    return aabb.getOBB();
+}
+
 int editor::SceneRender::hitTestTile(Entity entity, float x, float y){
     if (!scene->getComponentArray<TilemapComponent>()->hasEntity(entity)) return -1;
     if (!scene->getComponentArray<Transform>()->hasEntity(entity)) return -1;
@@ -1624,6 +1788,17 @@ void editor::SceneRender::setupSoundIcon(SoundObjects& so){
     so.icon->setCastShadows(false);
     so.icon->setReceiveShadows(false);
     so.icon->setPivotPreset(PivotPreset::CENTER);
+}
+
+void editor::SceneRender::setupLight2DIcon(Light2DObjects& lo){
+    TextureData iconData;
+    iconData.loadTextureFromMemory(bulb_icon_png, bulb_icon_png_len);
+    lo.icon->setTexture("editor:resources:bulb_icon", iconData);
+    lo.icon->setSize(128, 128);
+    lo.icon->setReceiveLights(false);
+    lo.icon->setCastShadows(false);
+    lo.icon->setReceiveShadows(false);
+    lo.icon->setPivotPreset(PivotPreset::CENTER);
 }
 
 void editor::SceneRender::updateCameraFrustum(CameraObjects& co, const CameraComponent& cameraComponent, bool isMainCamera, bool fixedSizeFrustum){

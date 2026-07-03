@@ -49,6 +49,7 @@ namespace doriax{
         int slotFSParams = -1;
         int slotFSTexCoordSets = -1;
         int slotFSLighting = -1;
+        int slotFSLighting2D = -1;
         int slotFSFog = -1;
         int slotFSMirror = -1;
         int slotVSSprite = -1;

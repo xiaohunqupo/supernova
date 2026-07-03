@@ -65,6 +65,16 @@ editor::SceneRender2D::~SceneRender2D(){
     }
     jointLines.clear();
 
+    for (auto& pair : light2DLines) {
+        delete pair.second;
+    }
+    light2DLines.clear();
+
+    for (auto& pair : occluder2DLines) {
+        delete pair.second;
+    }
+    occluder2DLines.clear();
+
     for (auto& pair : cameraObjects) {
         delete pair.second.icon;
         delete pair.second.lines;
@@ -75,6 +85,11 @@ editor::SceneRender2D::~SceneRender2D(){
         delete pair.second.icon;
     }
     soundObjects.clear();
+
+    for (auto& pair : light2DObjects) {
+        delete pair.second.icon;
+    }
+    light2DObjects.clear();
 
     delete gridLines;
     delete tileLines;
@@ -100,6 +115,121 @@ bool editor::SceneRender2D::instanciateJointLines(Entity entity){
     }
 
     return false;
+}
+
+bool editor::SceneRender2D::instanciateLight2DLines(Entity entity){
+    if (light2DLines.find(entity) == light2DLines.end()){
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        light2DLines[entity] = new Lines(scene);
+
+        return true;
+    }
+
+    return false;
+}
+
+bool editor::SceneRender2D::instanciateOccluder2DLines(Entity entity){
+    if (occluder2DLines.find(entity) == occluder2DLines.end()){
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        occluder2DLines[entity] = new Lines(scene);
+
+        return true;
+    }
+
+    return false;
+}
+
+void editor::SceneRender2D::createOrUpdateLight2DLines(Entity entity, const Transform& transform, const Light2DComponent& light, bool visible, bool highlighted){
+    Lines* lightLinesObj = light2DLines[entity];
+
+    lightLinesObj->clearLines();
+    lightLinesObj->setVisible(transform.visible && visible);
+
+    if (!transform.visible || !visible){
+        return;
+    }
+
+    float alpha = highlighted ? 1.0f : 0.35f;
+    const Vector4 lightColor(1.0f, 0.85f, 0.3f, alpha);
+    const Vector3 center = transform.worldPosition;
+
+    // range circle
+    LineDrawUtils::addCircle2D(lightLinesObj, center, light.range, lightColor, 48);
+
+    // small center cross
+    float markSize = 6.0f * zoom;
+    lightLinesObj->addLine(center + Vector3(-markSize, 0.0f, 0.0f), center + Vector3(markSize, 0.0f, 0.0f), lightColor);
+    lightLinesObj->addLine(center + Vector3(0.0f, -markSize, 0.0f), center + Vector3(0.0f, markSize, 0.0f), lightColor);
+}
+
+void editor::SceneRender2D::createOrUpdateOccluder2DLines(Entity entity, const Transform& transform, const Occluder2DComponent& occluder, bool visible, bool highlighted){
+    Lines* occluderLinesObj = occluder2DLines[entity];
+
+    occluderLinesObj->clearLines();
+    occluderLinesObj->setVisible(transform.visible && visible && occluder.enabled);
+
+    if (!transform.visible || !visible || !occluder.enabled){
+        return;
+    }
+
+    float alpha = highlighted ? 1.0f : 0.35f;
+    const Vector4 occluderColor(0.9f, 0.35f, 0.9f, alpha);
+    const Vector4 handleColor(1.0f, 1.0f, 1.0f, alpha);
+    const Matrix4& modelMatrix = transform.modelMatrix;
+
+    // same outline the shadow pass builds: polygon points or the sibling mesh AABB
+    std::vector<Vector2> points;
+    bool closed = true;
+
+    if (occluder.shape == Occluder2DShape::AUTO_QUAD){
+        MeshComponent* mesh = scene->findComponent<MeshComponent>(entity);
+        if (!mesh || mesh->aabb == AABB::ZERO){
+            return;
+        }
+        Vector3 mn = mesh->aabb.getMinimum();
+        Vector3 mx = mesh->aabb.getMaximum();
+        points.push_back(Vector2(mn.x, mn.y));
+        points.push_back(Vector2(mx.x, mn.y));
+        points.push_back(Vector2(mx.x, mx.y));
+        points.push_back(Vector2(mn.x, mx.y));
+    }else{
+        points = occluder.points;
+        closed = occluder.closed;
+    }
+
+    if (points.size() < 2){
+        return;
+    }
+
+    std::vector<Vector3> worldPoints;
+    worldPoints.reserve(points.size());
+    for (const Vector2& point : points){
+        worldPoints.push_back(modelMatrix * Vector3(point.x, point.y, 0.0f));
+    }
+
+    size_t numSegments = closed ? worldPoints.size() : (worldPoints.size() - 1);
+    for (size_t s = 0; s < numSegments; s++){
+        occluderLinesObj->addLine(worldPoints[s], worldPoints[(s + 1) % worldPoints.size()], occluderColor);
+    }
+
+    // point handles (visual markers for the editable polygon points); the
+    // sub-selected point is drawn bigger and in the selection color
+    if (highlighted && occluder.shape == Occluder2DShape::POLYGON){
+        const Vector4 selectedHandleColor(1.0f, 0.6f, 0.0f, 1.0f);
+        bool hasPointSelection = (getSelectedOccluderPointEntity() == entity);
+
+        for (size_t i = 0; i < worldPoints.size(); i++){
+            bool pointSelected = hasPointSelection && ((int)i == getSelectedOccluderPointIndex());
+            const Vector4& color = pointSelected ? selectedHandleColor : handleColor;
+            float handleSize = (pointSelected ? 6.0f : 4.0f) * zoom;
+            const Vector3& worldPoint = worldPoints[i];
+
+            occluderLinesObj->addLine(worldPoint + Vector3(-handleSize, -handleSize, 0.0f), worldPoint + Vector3(handleSize, -handleSize, 0.0f), color);
+            occluderLinesObj->addLine(worldPoint + Vector3(handleSize, -handleSize, 0.0f), worldPoint + Vector3(handleSize, handleSize, 0.0f), color);
+            occluderLinesObj->addLine(worldPoint + Vector3(handleSize, handleSize, 0.0f), worldPoint + Vector3(-handleSize, handleSize, 0.0f), color);
+            occluderLinesObj->addLine(worldPoint + Vector3(-handleSize, handleSize, 0.0f), worldPoint + Vector3(-handleSize, -handleSize, 0.0f), color);
+        }
+    }
 }
 
 void editor::SceneRender2D::createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body2DComponent& body, bool visible, bool highlighted){
@@ -536,11 +666,20 @@ void editor::SceneRender2D::hideAllGizmos(){
     for (auto& pair : jointLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : light2DLines) {
+        pair.second->setVisible(false);
+    }
+    for (auto& pair : occluder2DLines) {
+        pair.second->setVisible(false);
+    }
     for (auto& pair : cameraObjects) {
         pair.second.icon->setVisible(false);
         pair.second.lines->setVisible(false);
     }
     for (auto& pair : soundObjects) {
+        pair.second.icon->setVisible(false);
+    }
+    for (auto& pair : light2DObjects) {
         pair.second.icon->setVisible(false);
     }
 }
@@ -628,6 +767,8 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentContainers;
     std::set<Entity> currentBodies;
     std::set<Entity> currentJoints;
+    std::set<Entity> currentLights2D;
+    std::set<Entity> currentOccluders2D;
     std::set<Entity> currentCameras;
     std::set<Entity> currentSounds;
     for (Entity& entity: entities){
@@ -700,6 +841,44 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             bool isVisible = displaySettings.showAllBodies || highlighted;
 
             createOrUpdateBodyLines(entity, transform, body, isVisible, highlighted);
+        }
+
+        if (signature.test(scene->getComponentId<Light2DComponent>()) && signature.test(scene->getComponentId<Transform>())){
+            Light2DComponent& light2d = scene->getComponent<Light2DComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentLights2D.insert(entity);
+            instanciateLight2DLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdateLight2DLines(entity, transform, light2d, highlighted, highlighted);
+
+            bool newLight = false;
+            if (light2DObjects.find(entity) == light2DObjects.end()){
+                ScopedDefaultEntityPool sys(*toolslayer.getScene(), EntityPool::System);
+                light2DObjects[entity].icon = new Sprite(toolslayer.getScene());
+                newLight = true;
+            }
+
+            Light2DObjects& lo = light2DObjects[entity];
+            if (newLight){
+                setupLight2DIcon(lo);
+            }
+
+            lo.icon->setPosition(transform.worldPosition);
+            lo.icon->setScale(0.25f * zoom);
+            lo.icon->setVisible(transform.visible);
+        }
+
+        if (signature.test(scene->getComponentId<Occluder2DComponent>()) && signature.test(scene->getComponentId<Transform>())){
+            Occluder2DComponent& occluder2d = scene->getComponent<Occluder2DComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            currentOccluders2D.insert(entity);
+            instanciateOccluder2DLines(entity);
+            bool highlighted = isDescendantSelected(entity);
+
+            createOrUpdateOccluder2DLines(entity, transform, occluder2d, highlighted, highlighted);
         }
 
         if (signature.test(scene->getComponentId<Joint2DComponent>())){
@@ -856,6 +1035,36 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             itJoint = jointLines.erase(itJoint);
         } else {
             ++itJoint;
+        }
+    }
+
+    auto itLight2D = light2DLines.begin();
+    while (itLight2D != light2DLines.end()) {
+        if (currentLights2D.find(itLight2D->first) == currentLights2D.end()) {
+            delete itLight2D->second;
+            itLight2D = light2DLines.erase(itLight2D);
+        } else {
+            ++itLight2D;
+        }
+    }
+
+    auto itLight2DObj = light2DObjects.begin();
+    while (itLight2DObj != light2DObjects.end()) {
+        if (currentLights2D.find(itLight2DObj->first) == currentLights2D.end()) {
+            delete itLight2DObj->second.icon;
+            itLight2DObj = light2DObjects.erase(itLight2DObj);
+        } else {
+            ++itLight2DObj;
+        }
+    }
+
+    auto itOccluder2D = occluder2DLines.begin();
+    while (itOccluder2D != occluder2DLines.end()) {
+        if (currentOccluders2D.find(itOccluder2D->first) == currentOccluders2D.end()) {
+            delete itOccluder2D->second;
+            itOccluder2D = occluder2DLines.erase(itOccluder2D);
+        } else {
+            ++itOccluder2D;
         }
     }
 

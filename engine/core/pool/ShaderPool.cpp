@@ -86,6 +86,10 @@ bool ShaderPool::parseShaderTypeToken(const std::string& typeToken, ShaderType& 
         shaderType = ShaderType::COMPOSITE;
         return true;
     }
+    if (typeToken == "shadow2d") {
+        shaderType = ShaderType::SHADOW2D;
+        return true;
+    }
 
     return false;
 }
@@ -330,13 +334,14 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
         case ShaderType::SSR:    return lowerCase ? "ssr"    : "SSR";
         case ShaderType::SSR_BLUR: return lowerCase ? "ssrblur" : "SSR Blur";
         case ShaderType::COMPOSITE: return lowerCase ? "composite" : "Composite";
+        case ShaderType::SHADOW2D: return lowerCase ? "shadow2d" : "Shadow 2D";
         default:                 return lowerCase ? "unknown": "Unknown";
     }
 }
 
 int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
     switch (shaderType) {
-        case ShaderType::MESH:   return 22;
+        case ShaderType::MESH:   return 24;
         case ShaderType::DEPTH:  return 7;
         case ShaderType::GBUFFER: return 9;
         case ShaderType::UI:     return 4;
@@ -348,6 +353,7 @@ int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
         case ShaderType::SSR:    return 0;
         case ShaderType::SSR_BLUR: return 0;
         case ShaderType::COMPOSITE: return 0;
+        case ShaderType::SHADOW2D: return 0;
         default:                 return 0;
     }
 }
@@ -377,6 +383,8 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 19: return shortName ? "Ibl" : "IBL";
             case 20: return shortName ? "Mir" : "Mirror";
             case 21: return shortName ? "Sao" : "SSAO";
+            case 22: return shortName ? "L2d" : "Light 2D";
+            case 23: return shortName ? "S2d" : "Shadow 2D";
         }
     } else if (shaderType == ShaderType::DEPTH) {
         switch (bit) {
@@ -573,7 +581,7 @@ uint32_t ShaderPool::getMeshProperties(
     bool punctual, bool shadows, bool shadowsPCF, bool normals, bool normalMap,
     bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect,
     bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
-    bool terrain, bool instanced, bool ibl, bool mirror, bool ssao){
+    bool terrain, bool instanced, bool ibl, bool mirror, bool ssao, bool light2d, bool shadows2d){
     uint32_t prop = 0;
 
     prop |= unlit            ? (1 <<  0) : 0;
@@ -598,6 +606,8 @@ uint32_t ShaderPool::getMeshProperties(
     prop |= ibl              ? (1 << 19) : 0;
     prop |= mirror           ? (1 << 20) : 0;
     prop |= ssao             ? (1 << 21) : 0;
+    prop |= light2d          ? (1 << 22) : 0;
+    prop |= shadows2d        ? (1 << 23) : 0;
 
     return prop;
 }

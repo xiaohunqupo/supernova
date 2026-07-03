@@ -369,6 +369,25 @@ namespace {
         makeFastProperty<LightComponent, unsigned int, &LightComponent::numShadowCascades>("numShadowCascades", PropertyType::UInt, UpdateFlags_LightShadowCamera | UpdateFlags_Scene_Mesh_Reload),
     };
 
+    static const FastPropertyDescriptor kLight2DProperties[] = {
+        makeFastProperty<Light2DComponent, Vector3, &Light2DComponent::color>("color", PropertyType::Vector3, UpdateFlags_None),
+        makeFastProperty<Light2DComponent, float, &Light2DComponent::intensity>("intensity", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<Light2DComponent, float, &Light2DComponent::range>("range", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<Light2DComponent, float, &Light2DComponent::falloff>("falloff", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<Light2DComponent, float, &Light2DComponent::height>("height", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<Light2DComponent, bool, &Light2DComponent::shadows>("shadows", PropertyType::Bool, UpdateFlags_Scene_Mesh_Reload),
+        makeFastProperty<Light2DComponent, float, &Light2DComponent::shadowBias>("shadowBias", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<Light2DComponent, float, &Light2DComponent::shadowSoftness>("shadowSoftness", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<Light2DComponent, unsigned int, &Light2DComponent::mapResolution>("mapResolution", PropertyType::UInt, UpdateFlags_None),
+    };
+
+    static const FastPropertyDescriptor kOccluder2DProperties[] = {
+        makeFastProperty<Occluder2DComponent, Occluder2DShape, &Occluder2DComponent::shape>("shape", PropertyType::Enum, UpdateFlags_None),
+        makeFastProperty<Occluder2DComponent, bool, &Occluder2DComponent::closed>("closed", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<Occluder2DComponent, bool, &Occluder2DComponent::enabled>("enabled", PropertyType::Bool, UpdateFlags_None),
+        makeFastPropertyNoDefault<Occluder2DComponent, std::vector<Vector2>, &Occluder2DComponent::points>("points", PropertyType::Custom, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kFogProperties[] = {
         makeFastProperty<FogComponent, FogType, &FogComponent::type>("type", PropertyType::Enum, UpdateFlags_None),
         makeFastProperty<FogComponent, Vector3, &FogComponent::color>("color", PropertyType::Vector3, UpdateFlags_None),
@@ -1203,6 +1222,14 @@ namespace {
         return resolveDirectProperties(static_cast<MirrorComponent*>(comp), propertyName, kMirrorProperties);
     }
 
+    PropertyData resolveLight2DPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<Light2DComponent*>(comp), propertyName, kLight2DProperties);
+    }
+
+    PropertyData resolveOccluder2DPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<Occluder2DComponent*>(comp), propertyName, kOccluder2DProperties);
+    }
+
     PropertyData resolveCameraPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<CameraComponent*>(comp), propertyName, kCameraProperties);
     }
@@ -2019,6 +2046,14 @@ namespace {
         enumerateFromDescriptors(comp, ps, kMirrorProperties);
     }
 
+    void enumerateLight2DProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kLight2DProperties);
+    }
+
+    void enumerateOccluder2DProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kOccluder2DProperties);
+    }
+
     void enumerateCameraProperties(void* comp, std::map<std::string, PropertyData>& ps) {
         enumerateFromDescriptors(comp, ps, kCameraProperties);
     }
@@ -2670,6 +2705,8 @@ namespace {
         {ComponentType::LightComponent, &findComponentPtr<LightComponent>, &resolveLightPropertyFast, &enumerateLightProperties},
         {ComponentType::FogComponent, &findComponentPtr<FogComponent>, &resolveFogPropertyFast, &enumerateFogProperties},
         {ComponentType::MirrorComponent, &findComponentPtr<MirrorComponent>, &resolveMirrorPropertyFast, &enumerateMirrorProperties},
+        {ComponentType::Light2DComponent, &findComponentPtr<Light2DComponent>, &resolveLight2DPropertyFast, &enumerateLight2DProperties},
+        {ComponentType::Occluder2DComponent, &findComponentPtr<Occluder2DComponent>, &resolveOccluder2DPropertyFast, &enumerateOccluder2DProperties},
         {ComponentType::CameraComponent, &findComponentPtr<CameraComponent>, &resolveCameraPropertyFast, &enumerateCameraProperties},
         {ComponentType::SoundComponent, &findComponentPtr<SoundComponent>, &resolveAudioPropertyFast, &enumerateAudioProperties},
         {ComponentType::SkyComponent, &findComponentPtr<SkyComponent>, &resolveSkyPropertyFast, &enumerateSkyProperties},
@@ -2792,6 +2829,10 @@ std::string editor::Catalog::getComponentName(ComponentType component, bool remo
         name = "FogComponent";
     }else if(component == ComponentType::MirrorComponent){
         name = "MirrorComponent";
+    }else if(component == ComponentType::Light2DComponent){
+        name = "Light2DComponent";
+    }else if(component == ComponentType::Occluder2DComponent){
+        name = "Occluder2DComponent";
     }else if(component == ComponentType::ImageComponent){
         name = "ImageComponent";
     }else if(component == ComponentType::InstancedMeshComponent){
@@ -2913,6 +2954,10 @@ ComponentId editor::Catalog::getComponentId(const EntityRegistry* registry, Comp
             return registry->getComponentId<FogComponent>();
         case ComponentType::MirrorComponent:
             return registry->getComponentId<MirrorComponent>();
+        case ComponentType::Light2DComponent:
+            return registry->getComponentId<Light2DComponent>();
+        case ComponentType::Occluder2DComponent:
+            return registry->getComponentId<Occluder2DComponent>();
         case ComponentType::ImageComponent:
             return registry->getComponentId<ImageComponent>();
         case ComponentType::InstancedMeshComponent:
@@ -3011,6 +3056,10 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
         return ComponentType::FogComponent;
     }else if(normalizedName == "mirror"){
         return ComponentType::MirrorComponent;
+    }else if(normalizedName == "light2d"){
+        return ComponentType::Light2DComponent;
+    }else if(normalizedName == "occluder2d"){
+        return ComponentType::Occluder2DComponent;
     }else if(normalizedName == "image"){
         return ComponentType::ImageComponent;
     }else if(normalizedName == "instancedmesh"){
@@ -3170,6 +3219,12 @@ std::vector<editor::ComponentType> editor::Catalog::findComponents(EntityRegistr
     }
     if (registry->findComponent<MirrorComponent>(entity)){
         ret.push_back(ComponentType::MirrorComponent);
+    }
+    if (registry->findComponent<Light2DComponent>(entity)){
+        ret.push_back(ComponentType::Light2DComponent);
+    }
+    if (registry->findComponent<Occluder2DComponent>(entity)){
+        ret.push_back(ComponentType::Occluder2DComponent);
     }
     if (registry->findComponent<ImageComponent>(entity)){
         ret.push_back(ComponentType::ImageComponent);
@@ -3372,6 +3427,8 @@ uint64_t editor::Catalog::getChangedUpdateFlags(ComponentType compType, void* ol
 uint64_t editor::Catalog::getComponentStructuralUpdateFlags(ComponentType compType) {
     switch (compType) {
         case ComponentType::LightComponent:
+        // adding/removing a 2D light toggles the USE_LIGHT2D shader variant
+        case ComponentType::Light2DComponent:
         case ComponentType::FogComponent:
         // adding/removing a mirror toggles the inverted-culling pipeline baked
         // into meshes, so they must reload
@@ -3696,6 +3753,18 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::MirrorComponent: {
             YAML::Node encoded = Stream::encodeMirrorComponent(sourceRegistry->getComponent<MirrorComponent>(sourceEntity));
             targetRegistry->getComponent<MirrorComponent>(targetEntity) = Stream::decodeMirrorComponent(encoded);
+            break;
+        }
+
+        case ComponentType::Light2DComponent: {
+            YAML::Node encoded = Stream::encodeLight2DComponent(sourceRegistry->getComponent<Light2DComponent>(sourceEntity));
+            targetRegistry->getComponent<Light2DComponent>(targetEntity) = Stream::decodeLight2DComponent(encoded);
+            break;
+        }
+
+        case ComponentType::Occluder2DComponent: {
+            YAML::Node encoded = Stream::encodeOccluder2DComponent(sourceRegistry->getComponent<Occluder2DComponent>(sourceEntity));
+            targetRegistry->getComponent<Occluder2DComponent>(targetEntity) = Stream::decodeOccluder2DComponent(encoded);
             break;
         }
 

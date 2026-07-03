@@ -66,6 +66,12 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     hasShadowPointAtlas = false;
     initShadowAtlasRects();
     initShadowPointAtlasRects();
+
+    shadow2DAtlasWidth = 0;
+    hasShadow2DAtlas = false;
+    occluder2DLoaded = false;
+    shadow2DSlotParams = -1;
+    occluder2DBufferCapacity = 0;
 }
 
 RenderSystem::~RenderSystem(){
@@ -77,6 +83,9 @@ void RenderSystem::load(){
     hasFog = false;
     hasIBL = false;
     hasMultipleCameras = false;
+    hasLights2D = false;
+    hasShadows2D = false;
+    numLights2D = 0;
 
     createEmptyTextures();
 
@@ -100,6 +109,10 @@ void RenderSystem::destroy(){
     shadowPointAtlasFramebuffer.destroyFramebuffer();
     shadowPointAtlasSlotResolution = 0;
     hasShadowPointAtlas = false;
+    shadow2DAtlasFramebuffer.destroyFramebuffer();
+    shadow2DAtlasWidth = 0;
+    hasShadow2DAtlas = false;
+    destroyOccluder2DPass();
 
     auto skys = scene->getComponentArray<SkyComponent>();
     if (skys->size() > 0){
@@ -233,6 +246,20 @@ int RenderSystem::checkLightsAndShadow(){
             hasShadows = true;
         }
     }
+
+    // 2D lights are gated only by their own component count, NOT by
+    // scene->getLightState(): the editor forces LightState::OFF in 2D scenes
+    // to keep 3D lights out of them, but 2D lights must still work there.
+    hasLights2D = false;
+    hasShadows2D = false;
+
+    auto lights2d = scene->getComponentArray<Light2DComponent>();
+    numLights2D = lights2d->size();
+    if (numLights2D > MAX_LIGHTS_2D)
+        numLights2D = MAX_LIGHTS_2D;
+
+    if (numLights2D > 0)
+        hasLights2D = true;
 
     return numLights;
 }
@@ -434,6 +461,124 @@ void RenderSystem::processLights(int numLights, CameraComponent& camera, Transfo
     for (int i = numLights; i < MAX_LIGHTS; i++){
         fs_lighting.color_intensity[i].w = 0.0;
     }
+}
+
+bool RenderSystem::loadLights2D(){
+    bool prevHasShadows2D = hasShadows2D;
+    hasShadows2D = false;
+
+    auto lights2d = scene->getComponentArray<Light2DComponent>();
+    auto occluders = scene->getComponentArray<Occluder2DComponent>();
+
+    bool anyOccluder = false;
+    for (int i = 0; i < occluders->size(); i++){
+        if (occluders->getComponentFromIndex(i).enabled){
+            anyOccluder = true;
+            break;
+        }
+    }
+
+    int freeRow = 0;
+    unsigned int maxResolution = 0;
+    for (int i = 0; i < numLights2D; i++){
+        Light2DComponent& light = lights2d->getComponentFromIndex(i);
+
+        light.shadowMapIndex = -1;
+
+        if (light.shadows && anyOccluder){
+            light.shadowMapIndex = freeRow++;
+            maxResolution = std::max(maxResolution, light.mapResolution);
+        }
+    }
+
+    hasShadows2D = (freeRow > 0);
+
+    if (hasShadows2D){
+        if (!ensureShadow2DAtlas(maxResolution)){
+            Log::warn("Failed to create 2D shadow atlas");
+            for (int i = 0; i < numLights2D; i++){
+                lights2d->getComponentFromIndex(i).shadowMapIndex = -1;
+            }
+            hasShadows2D = false;
+        }
+    }
+
+    if (!hasShadows2D){
+        if (hasShadow2DAtlas){
+            needUpdateShadowBindings = true;
+        }
+        hasShadow2DAtlas = false;
+    }
+
+    // USE_SHADOWS_2D is baked into mesh shader variants, so a flip (first shadow
+    // light + occluder appearing, or the last one going away) rebuilds meshes
+    if (hasShadows2D != prevHasShadows2D){
+        needReloadMeshes();
+    }
+
+    return true;
+}
+
+bool RenderSystem::ensureShadow2DAtlas(unsigned int width){
+    int maxTextureSize = sg_query_limits().max_image_size_2d;
+    if (maxTextureSize < 1){
+        maxTextureSize = 4096;
+    }
+    if (width < 1){
+        width = 1;
+    }
+    if ((int)width > maxTextureSize){
+        Log::warn("2D shadow atlas width clamped from %u to %d (GPU max texture size)", width, maxTextureSize);
+        width = (unsigned int)maxTextureSize;
+    }
+
+    if (shadow2DAtlasFramebuffer.isCreated() && shadow2DAtlasWidth == width){
+        if (!hasShadow2DAtlas){
+            needUpdateShadowBindings = true;
+        }
+        hasShadow2DAtlas = true;
+        return true;
+    }
+
+    shadow2DAtlasFramebuffer.destroyFramebuffer();
+    if (!shadow2DAtlasFramebuffer.createFramebuffer(
+            TextureType::TEXTURE_2D, (int)width, MAX_LIGHTS_2D,
+            TextureFilter::NEAREST, TextureFilter::NEAREST,
+            TextureWrap::CLAMP_TO_EDGE, TextureWrap::CLAMP_TO_EDGE, true)){
+        hasShadow2DAtlas = false;
+        return false;
+    }
+
+    shadow2DAtlasWidth = width;
+    hasShadow2DAtlas = true;
+    needUpdateShadowBindings = true;
+    return true;
+}
+
+void RenderSystem::processLights2D(){
+    auto lights2d = scene->getComponentArray<Light2DComponent>();
+
+    for (int i = 0; i < numLights2D; i++){
+        Light2DComponent& light = lights2d->getComponentFromIndex(i);
+        Entity entity = lights2d->getEntity(i);
+        Transform* transform = scene->findComponent<Transform>(entity);
+
+        Vector3 worldPosition;
+        if (transform){
+            worldPosition = Vector3(transform->worldPosition);
+        }
+
+        fs_lighting2d.position_range[i] = Vector4(worldPosition.x, worldPosition.y, light.height, std::max(light.range, 0.001f));
+        fs_lighting2d.color_intensity[i] = Vector4(light.color.x, light.color.y, light.color.z, light.intensity);
+        fs_lighting2d.falloff_shadow[i] = Vector4(light.falloff, (float)light.shadowMapIndex, light.shadowSoftness, light.shadowBias);
+    }
+
+    Vector3 ambient = scene->getAmbientLight2DColorLinear() * scene->getAmbientLight2DIntensity();
+    fs_lighting2d.ambient = Vector4(ambient.x, ambient.y, ambient.z, (float)numLights2D);
+
+    // rows without shadows keep shadowMapIndex -1 and never sample the atlas
+    float atlasW = (hasShadow2DAtlas && shadow2DAtlasWidth > 0) ? (float)shadow2DAtlasWidth : 1.0f;
+    fs_lighting2d.atlasInfo = Vector4(1.0f / atlasW, 1.0f / (float)MAX_LIGHTS_2D, atlasW, 0.0);
 }
 
 bool RenderSystem::loadAndProcessFog(){
@@ -680,10 +825,13 @@ bool RenderSystem::checkPBRTextures(Material& material, bool receiveLights){
 
     bool hasOtherPBRTextures = false;
     if (hasLights && receiveLights) {
-        hasOtherPBRTextures = !material.metallicRoughnessTexture.empty() || 
-                              !material.normalTexture.empty() || 
-                              !material.occlusionTexture.empty() || 
+        hasOtherPBRTextures = !material.metallicRoughnessTexture.empty() ||
+                              !material.normalTexture.empty() ||
+                              !material.occlusionTexture.empty() ||
                               !material.emissiveTexture.empty();
+    } else if (hasLights2D && receiveLights) {
+        // the 2D light path samples only the normal map from the PBR set
+        hasOtherPBRTextures = !material.normalTexture.empty();
     }
 
     return hasBaseColor || hasOtherPBRTextures;
@@ -716,17 +864,6 @@ bool RenderSystem::loadPBRTextures(Material& material, ShaderData& shaderData, O
             render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyWhite);
         }
 
-        textureRender = material.normalTexture.getRender(&emptyNormal);
-        slotTex = shaderData.getTextureIndex(TextureShaderType::NORMAL);
-        if (textureRender){
-            if (!textureRender->isCreated()){
-                return false;
-            }
-            render.addTexture(slotTex, ShaderStageType::FRAGMENT, textureRender);
-        }else{
-            render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyNormal);
-        }
-
         textureRender = material.occlusionTexture.getRender(&emptyWhite);
         slotTex = shaderData.getTextureIndex(TextureShaderType::OCCULSION);
         if (textureRender){
@@ -750,6 +887,22 @@ bool RenderSystem::loadPBRTextures(Material& material, ShaderData& shaderData, O
         }
     }
 
+    // normal map is sampled by both the 3D lit path and the 2D light path (which
+    // otherwise keeps the unlit shader); addTexture no-ops when the compiled
+    // variant has no u_normalTexture slot
+    if ((hasLights || hasLights2D) && receiveLights){
+        textureRender = material.normalTexture.getRender(&emptyNormal);
+        slotTex = shaderData.getTextureIndex(TextureShaderType::NORMAL);
+        if (textureRender){
+            if (!textureRender->isCreated()){
+                return false;
+            }
+            render.addTexture(slotTex, ShaderStageType::FRAGMENT, textureRender);
+        }else{
+            render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyNormal);
+        }
+    }
+
     return true;
 }
 
@@ -766,7 +919,9 @@ void RenderSystem::updateShadowBindings(){
         }
 
         for (int s = 0; s < mesh.numSubmeshes; s++){
-            if (!(mesh.submeshes[s].shaderProperties & (1u << 4))){
+            bool has3DShadows = mesh.submeshes[s].shaderProperties & (1u << 4);  // 'Shw'
+            bool has2DShadows = mesh.submeshes[s].shaderProperties & (1u << 23); // 'S2d'
+            if (!has3DShadows && !has2DShadows){
                 continue;
             }
             if (!mesh.submeshes[s].shader){
@@ -774,7 +929,12 @@ void RenderSystem::updateShadowBindings(){
             }
 
             ShaderData& shaderData = mesh.submeshes[s].shader.get()->shaderData;
-            loadShadowTextures(shaderData, mesh.submeshes[s].render, mesh.receiveLights, true);
+            if (has3DShadows){
+                loadShadowTextures(shaderData, mesh.submeshes[s].render, mesh.receiveLights, true);
+            }
+            if (has2DShadows){
+                loadShadow2DTexture(shaderData, mesh.submeshes[s].render, true);
+            }
         }
     }
 
@@ -795,6 +955,147 @@ void RenderSystem::loadShadowTextures(ShaderData& shaderData, ObjectRender& rend
         render.addTexture(slotTex, ShaderStageType::FRAGMENT,
                           hasShadowPointAtlas ? &shadowPointAtlasFramebuffer.getColorTexture() : &emptyWhite);
     }
+}
+
+void RenderSystem::loadShadow2DTexture(ShaderData& shaderData, ObjectRender& render, bool receiveShadows2D){
+    if (receiveShadows2D){
+        // same white fallback as the 3D atlases: decoded depth ~1.0 = unoccluded
+        std::pair<int, int> slotTex = shaderData.getTextureIndex(TextureShaderType::SHADOW2DATLAS);
+        render.addTexture(slotTex, ShaderStageType::FRAGMENT,
+                          hasShadow2DAtlas ? &shadow2DAtlasFramebuffer.getColorTexture() : &emptyWhite);
+    }
+}
+
+// Merges every enabled Occluder2D into occluder2DSegments as a world-space line
+// list: each vertex carries its own endpoint (POSITION) plus the segment's other
+// endpoint (TEXCOORD1), which the shadow2d vertex shader needs to unwrap segments
+// crossing the polar seam. Returns the vertex count.
+unsigned int RenderSystem::buildOccluder2DSegments(){
+    occluder2DSegments.clear();
+
+    auto occluders = scene->getComponentArray<Occluder2DComponent>();
+
+    std::vector<Vector2> worldPoints;
+    for (int i = 0; i < occluders->size(); i++){
+        Occluder2DComponent& occluder = occluders->getComponentFromIndex(i);
+        if (!occluder.enabled){
+            continue;
+        }
+        Entity entity = occluders->getEntity(i);
+        Transform* transform = scene->findComponent<Transform>(entity);
+        if (!transform || !transform->visible){
+            continue;
+        }
+
+        worldPoints.clear();
+        bool closed = true;
+
+        if (occluder.shape == Occluder2DShape::AUTO_QUAD){
+            MeshComponent* mesh = scene->findComponent<MeshComponent>(entity);
+            if (!mesh || mesh->aabb == AABB::ZERO){
+                continue;
+            }
+            Vector3 mn = mesh->aabb.getMinimum();
+            Vector3 mx = mesh->aabb.getMaximum();
+            worldPoints.push_back(Vector2(mn.x, mn.y));
+            worldPoints.push_back(Vector2(mx.x, mn.y));
+            worldPoints.push_back(Vector2(mx.x, mx.y));
+            worldPoints.push_back(Vector2(mn.x, mx.y));
+        }else{
+            worldPoints.assign(occluder.points.begin(), occluder.points.end());
+            closed = occluder.closed;
+        }
+
+        size_t numPoints = worldPoints.size();
+        if (numPoints < 2){
+            continue;
+        }
+
+        for (size_t p = 0; p < numPoints; p++){
+            Vector3 world = transform->modelMatrix * Vector3(worldPoints[p].x, worldPoints[p].y, 0.0f);
+            worldPoints[p] = Vector2(world.x, world.y);
+        }
+
+        size_t numSegments = closed ? numPoints : (numPoints - 1);
+        for (size_t s = 0; s < numSegments; s++){
+            const Vector2& a = worldPoints[s];
+            const Vector2& b = worldPoints[(s + 1) % numPoints];
+
+            occluder2DSegments.push_back(a.x);
+            occluder2DSegments.push_back(a.y);
+            occluder2DSegments.push_back(b.x);
+            occluder2DSegments.push_back(b.y);
+
+            occluder2DSegments.push_back(b.x);
+            occluder2DSegments.push_back(b.y);
+            occluder2DSegments.push_back(a.x);
+            occluder2DSegments.push_back(a.y);
+        }
+    }
+
+    return (unsigned int)(occluder2DSegments.size() / 4);
+}
+
+bool RenderSystem::loadOccluder2DPass(unsigned int vertexCapacity){
+    if (!Engine::isViewLoaded())
+        return false;
+
+    destroyOccluder2DPass(); // also called when growing the buffer capacity
+
+    ObjectRender& render = occluder2DRender;
+
+    render.beginLoad(PrimitiveType::LINES);
+
+    shadow2DShader = ShaderPool::get(ShaderType::SHADOW2D, 0);
+    if (!shadow2DShader->isCreated())
+        return false;
+    render.setShader(shadow2DShader.get());
+    ShaderData& shaderData = shadow2DShader.get()->shaderData;
+
+    shadow2DSlotParams = shaderData.getUniformBlockIndex(UniformBlockType::SHADOW2D_VS_PARAMS);
+
+    occluder2DBuffer.clear();
+    occluder2DBuffer.addAttribute(AttributeType::POSITION, 2, 0);
+    occluder2DBuffer.addAttribute(AttributeType::TEXCOORD1, 2, 2 * sizeof(float));
+    occluder2DBuffer.setStride(4 * sizeof(float));
+    occluder2DBuffer.setRenderAttributes(true);
+    occluder2DBuffer.setUsage(BufferUsage::STREAM);
+
+    size_t bufferSize = vertexCapacity * occluder2DBuffer.getStride();
+    if (bufferSize == 0)
+        return false;
+
+    occluder2DBuffer.getRender()->createBuffer(bufferSize, occluder2DBuffer.getData(), occluder2DBuffer.getType(), occluder2DBuffer.getUsage());
+    for (auto const &attr : occluder2DBuffer.getAttributes()) {
+        render.addAttribute(shaderData.getAttrIndex(attr.first), occluder2DBuffer.getRender(), attr.second.getElements(), attr.second.getDataType(), occluder2DBuffer.getStride(), attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
+    }
+
+    if (!render.endLoad(PIP_DEPTH, false, CullingMode::BACK, WindingOrder::CCW)){
+        return false;
+    }
+
+    occluder2DBufferCapacity = vertexCapacity;
+    occluder2DLoaded = true;
+    return true;
+}
+
+void RenderSystem::destroyOccluder2DPass(){
+    if (!occluder2DLoaded)
+        return;
+
+    if (shadow2DShader){
+        shadow2DShader.reset();
+        ShaderPool::remove(ShaderType::SHADOW2D, 0);
+    }
+
+    occluder2DRender.destroy();
+
+    occluder2DBuffer.clearAll();
+    occluder2DBuffer.getRender()->destroyBuffer();
+
+    shadow2DSlotParams = -1;
+    occluder2DBufferCapacity = 0;
+    occluder2DLoaded = false;
 }
 
 bool RenderSystem::loadDepthTexture(Material& material, ShaderData& shaderData, ObjectRender& render){
@@ -1205,6 +1506,22 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             p_unlit = true;
         }
 
+        // dedicated 2D light path: composes with MATERIAL_UNLIT (sprites keep the
+        // cheap unlit shader; accumulated 2D light multiplies the base color) and
+        // with the lit path in mixed scenes (contributions add)
+        bool useLight2D = hasLights2D && mesh.receiveLights;
+        bool p_light2d = useLight2D;
+        bool p_shadows2d = useLight2D && hasShadows2D && mesh.receiveShadows;
+        if (useLight2D){
+            p_hasNormal = true;
+            if (mesh.submeshes[i].hasTangent){
+                p_hasTangent = true;
+            }
+            if (mesh.submeshes[i].hasNormalMap){
+                p_hasNormalMap = true;
+            }
+        }
+
         // remember whether this submesh's lit shader applies IBL specular, so the SSR
         // G-buffer can flag those pixels for the energy-conserving composite
         mesh.submeshes[i].hasIBL = p_ibl;
@@ -1217,7 +1534,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                         p_receiveShadows, p_shadowsPCF, p_hasNormal, p_hasNormalMap,
                         p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
-                        (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao);
+                        (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao, p_light2d, p_shadows2d);
         // a user-forked main shader overrides the built-in Mesh shader; the variant
         // (#define) system, depth/gbuffer passes and bind-slots are unchanged
         mesh.submeshes[i].customShaderId = ShaderPool::registerCustomShader(mesh.customShader);
@@ -1282,6 +1599,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                 mesh.submeshes[i].slotFSPointShadows = shaderData.getUniformBlockIndex(UniformBlockType::FS_POINT_SHADOWS);
             }
         }
+        if (p_light2d){
+            mesh.submeshes[i].slotFSLighting2D = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING2D);
+        }
         if (mesh.submeshes[i].hasTextureRect){
             mesh.submeshes[i].slotVSSprite = shaderData.getUniformBlockIndex(UniformBlockType::SPRITE_VS_PARAMS);
         }
@@ -1296,6 +1616,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             return false;
         }
         loadShadowTextures(shaderData, mesh.submeshes[i].render, mesh.receiveLights, p_receiveShadows);
+        loadShadow2DTexture(shaderData, mesh.submeshes[i].render, p_shadows2d);
 
         if (p_ibl){
             auto skyArray = scene->getComponentArray<SkyComponent>();
@@ -1722,6 +2043,12 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
                     render.addTexture(ssaoShaderData.getTextureIndex(TextureShaderType::SSAOTEXTURE), ShaderStageType::FRAGMENT,
                                       currentSSAOTexture ? currentSSAOTexture : &emptyWhite);
                 }
+            }
+
+            // USE_LIGHT2D (property bit 22): dedicated 2D light path; composes with
+            // both unlit (sprites) and lit submeshes, so it is applied independently
+            if (mesh.submeshes[i].shaderProperties & (1u << 22)){
+                render.applyUniformBlock(mesh.submeshes[i].slotFSLighting2D, sizeof(fs_lighting2d_t), &fs_lighting2d);
             }
 
             if (mesh.submeshes[i].hasTextureRect){
@@ -4422,6 +4749,7 @@ void RenderSystem::update(double dt){
     Transform& mainCameraTransform =  scene->getComponent<Transform>(mainCameraEntity);
 
     loadLights(numLights);
+    loadLights2D();
     loadAndProcessFog();
 
     auto skys = scene->getComponentArray<SkyComponent>();
@@ -4706,6 +5034,9 @@ void RenderSystem::update(double dt){
     }
 
     processLights(numLights, mainCamera, mainCameraTransform);
+    if (hasLights2D){
+        processLights2D();
+    }
 }
 
 void RenderSystem::draw(){
@@ -4811,6 +5142,72 @@ void RenderSystem::draw(){
                     passRender->endRenderPass();
                 }
             }
+        }
+    }
+
+    //---------2D light shadow pass (1D polar rows)----------
+    if (hasShadows2D && hasShadow2DAtlas){
+        unsigned int occluderVertexCount = buildOccluder2DSegments();
+
+        if (occluderVertexCount > 0 && (!occluder2DLoaded || occluderVertexCount > occluder2DBufferCapacity)){
+            unsigned int capacity = std::max(occluderVertexCount * 2u, 256u);
+            loadOccluder2DPass(capacity);
+        }
+
+        bool drawSegments = occluder2DLoaded && occluderVertexCount > 0;
+
+        if (drawSegments){
+            // occluders are world-space and can move every frame: re-upload the merged
+            // segment buffer once, then draw it into each shadow light's atlas row
+            occluder2DBuffer.setData((unsigned char*)occluder2DSegments.data(), occluder2DSegments.size() * sizeof(float));
+            occluder2DBuffer.getRender()->updateBuffer(occluder2DBuffer.getSize(), occluder2DBuffer.getData());
+        }
+
+        // rows are rendered (or at least cleared) every frame even with zero
+        // segments: the rows are in light-relative polar space, so stale contents
+        // would make old shadows follow the light around
+        auto lights2d = scene->getComponentArray<Light2DComponent>();
+        bool atlasRowWritten = false;
+
+        for (int l = 0; l < numLights2D; l++){
+            Light2DComponent& light = lights2d->getComponentFromIndex(l);
+            if (!light.shadows || light.shadowMapIndex < 0 || light.intensity <= 0){
+                continue;
+            }
+            Entity entity = lights2d->getEntity(l);
+            Transform* lightTransform = scene->findComponent<Transform>(entity);
+            if (!lightTransform){
+                continue;
+            }
+
+            // first row of the frame clears the whole atlas to white (= far/unoccluded)
+            if (!atlasRowWritten){
+                shadow2DAtlasPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0));
+            }else{
+                shadow2DAtlasPassRender.setLoadActionLoad();
+            }
+            Rect rowRect(0.0f, (float)light.shadowMapIndex, (float)shadow2DAtlasWidth, 1.0f);
+            shadow2DAtlasPassRender.startRenderPass(&shadow2DAtlasFramebuffer);
+            shadow2DAtlasPassRender.applyViewport(rowRect);
+            shadow2DAtlasPassRender.applyScissor(rowRect);
+            atlasRowWritten = true;
+
+            if (drawSegments && occluder2DRender.beginDraw(PIP_DEPTH)){
+                vs_shadow2d_t shadow2dParams;
+                shadow2dParams.lightPos_range = Vector4(
+                    lightTransform->worldPosition.x, lightTransform->worldPosition.y,
+                    0.0f, std::max(light.range, 0.001f));
+
+                // three passes at NDC x offsets -2/0/+2 so segments crossing the
+                // theta = +-pi seam rasterize on both ends of the row
+                for (int k = -1; k <= 1; k++){
+                    shadow2dParams.offset = Vector4(2.0f * (float)k, 0.0f, 0.0f, 0.0f);
+                    occluder2DRender.applyUniformBlock(shadow2DSlotParams, sizeof(vs_shadow2d_t), &shadow2dParams);
+                    occluder2DRender.draw(occluderVertexCount, 1);
+                }
+            }
+
+            shadow2DAtlasPassRender.endRenderPass();
         }
     }
 
@@ -5109,6 +5506,9 @@ void RenderSystem::draw(){
 void RenderSystem::onComponentAdded(Entity entity, ComponentId componentId) {
     if (componentId == scene->getComponentId<LightComponent>()) {
         needReloadMeshes();
+    } else if (componentId == scene->getComponentId<Light2DComponent>()) {
+        // shader variant change (USE_LIGHT2D)
+        needReloadMeshes();
     } else if (componentId == scene->getComponentId<MirrorComponent>()) {
         // a mirror enables the inverted-culling pipeline on meshes; reload so it bakes
         needReloadMeshes();
@@ -5119,6 +5519,8 @@ void RenderSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
     if (componentId == scene->getComponentId<LightComponent>()) {
         LightComponent& light = scene->getComponent<LightComponent>(entity);
         destroyLight(light);
+        needReloadMeshes();
+    } else if (componentId == scene->getComponentId<Light2DComponent>()) {
         needReloadMeshes();
     } else if (componentId == scene->getComponentId<MeshComponent>()) {
         MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);

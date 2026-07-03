@@ -52,6 +52,10 @@ namespace doriax::editor{
         Sprite* icon = nullptr;
     };
 
+    struct Light2DObjects{
+        Sprite* icon = nullptr;
+    };
+
     class Project;
 
     class SceneRender{
@@ -90,6 +94,10 @@ namespace doriax::editor{
         Quaternion instanceStartRotation;
         Vector3 instanceStartScale;
 
+        // Occluder2D polygon point sub-selection
+        Entity selectedOccluderPointEntity = 0;  // NULL_ENTITY
+        int selectedOccluderPointIndex = -1;
+
         AABB getAABB(Entity entity, bool local);
         AABB getFamilyAABB(Entity entity, float offset);
 
@@ -116,6 +124,7 @@ namespace doriax::editor{
         void drawCameraFrustumLines(Lines* lines, const CameraComponent& cameraComponent, bool isMainCamera, bool fixedSizeFrustum = true);
         void setupCameraIcon(CameraObjects& co);
         void setupSoundIcon(SoundObjects& so);
+        void setupLight2DIcon(Light2DObjects& lo);
 
         Scene* scene;
         Camera* camera;
@@ -200,6 +209,14 @@ namespace doriax::editor{
         int hitTestInstance(Entity entity, float x, float y);
         OBB getInstanceOBB(Entity entity, int instanceIndex, bool visual = false);
         Quaternion getInstanceWorldRotation(const Transform& transform, const InstancedMeshComponent& instmesh, const InstanceData& inst) const;
+
+        // Occluder2D polygon point sub-selection
+        int getSelectedOccluderPointIndex() const { return selectedOccluderPointIndex; }
+        Entity getSelectedOccluderPointEntity() const { return selectedOccluderPointEntity; }
+        void selectOccluderPoint(Entity entity, int pointIndex);
+        void clearOccluderPointSelection();
+        int hitTestOccluderPoint(Entity entity, float x, float y);
+        OBB getOccluderPointOBB(Entity entity, int pointIndex);
     };
 
 }

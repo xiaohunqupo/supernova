@@ -262,6 +262,8 @@ void editor::ShaderBuilder::addMeshPropertyDefinitions(std::vector<shadercompile
     if (prop & (1 << 19)) defs.push_back({"USE_IBL", "1"});                   // 'Ibl'
     if (prop & (1 << 20)) defs.push_back({"USE_MIRROR", "1"});                // 'Mir'
     if (prop & (1 << 21)) defs.push_back({"USE_SSAO", "1"});                  // 'Sao'
+    if (prop & (1 << 22)) defs.push_back({"USE_LIGHT2D", "1"});               // 'L2d'
+    if (prop & (1 << 23)) defs.push_back({"USE_SHADOWS_2D", "1"});            // 'S2d'
 }
 
 void editor::ShaderBuilder::addDepthMeshPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {
@@ -448,12 +450,16 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }else if (shaderType == ShaderType::COMPOSITE){
         args.vert_file = "fullscreen.vert";
         args.frag_file = "composite.frag";
+    }else if (shaderType == ShaderType::SHADOW2D){
+        args.vert_file = "shadow2d.vert";
+        args.frag_file = "shadow2d.frag";
     }else{
         return false;
     }
 
     if (shaderType == ShaderType::MESH){
         args.defines.push_back({"MAX_LIGHTS", "6"});
+        args.defines.push_back({"MAX_LIGHTS_2D", std::to_string(MAX_LIGHTS_2D)});
         args.defines.push_back({"MAX_SHADOW_ATLAS_SLOTS", std::to_string(MAX_SHADOW_ATLAS_SLOTS)});
         args.defines.push_back({"MAX_POINT_SHADOW_ATLAS_SLOTS", std::to_string(MAX_POINT_SHADOW_ATLAS_SLOTS)});
         args.defines.push_back({"MAX_SHADOWCASCADES", std::to_string(MAX_SHADOWCASCADES)});

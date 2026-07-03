@@ -16,6 +16,8 @@ EntityRegistry::EntityRegistry() {
     registerComponent<Transform>();
     registerComponent<CameraComponent>();
     registerComponent<LightComponent>();
+    registerComponent<Light2DComponent>();
+    registerComponent<Occluder2DComponent>();
     registerComponent<ActionComponent>();
     registerComponent<TimedActionComponent>();
     registerComponent<PositionActionComponent>();

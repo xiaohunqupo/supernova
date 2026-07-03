@@ -40,6 +40,8 @@ void ComponentAddDialog::initializeCategories() {
         }},
         {"2D Graphics", ICON_FA_LAYER_GROUP, ImVec4(0.3f, 0.8f, 0.5f, 1.0f), {
             {ComponentType::SpriteComponent, ICON_FA_IMAGE, "Sprite", "2D sprite", ImVec4(0.3f, 0.8f, 0.5f, 1.0f)},
+            {ComponentType::Light2DComponent, ICON_FA_LIGHTBULB, "2D Light", "2D point light with radius falloff", ImVec4(1.0f, 0.9f, 0.3f, 1.0f)},
+            {ComponentType::Occluder2DComponent, ICON_FA_CIRCLE_HALF_STROKE, "2D Occluder", "Casts shadows from 2D lights", ImVec4(0.5f, 0.5f, 0.6f, 1.0f)},
             {ComponentType::SpriteAnimationComponent, ICON_FA_FILM, "Sprite Animation", "Animated sprite", ImVec4(0.4f, 0.8f, 0.6f, 1.0f)},
             {ComponentType::TilemapComponent, ICON_FA_BORDER_ALL, "Tilemap", "Tile-based map", ImVec4(0.5f, 0.7f, 0.6f, 1.0f)},
             {ComponentType::PolygonComponent, ICON_FA_DRAW_POLYGON, "Polygon", "2D polygon shape", ImVec4(0.6f, 0.8f, 0.4f, 1.0f)},

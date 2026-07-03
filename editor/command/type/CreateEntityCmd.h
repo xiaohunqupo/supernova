@@ -35,6 +35,8 @@ namespace doriax::editor{
         POINT_LIGHT,
         DIRECTIONAL_LIGHT,
         SPOT_LIGHT,
+        POINT_LIGHT_2D,
+        OCCLUDER_2D,
         JOINT2D,
         JOINT3D,
         BODY2D,

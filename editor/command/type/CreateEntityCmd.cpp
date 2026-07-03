@@ -402,6 +402,31 @@ bool editor::CreateEntityCmd::execute(){
         light.range = 10.0f;
         light.intensity = 30.0f;
 
+    }else if (type == EntityCreationType::POINT_LIGHT_2D){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<Light2DComponent>(entity, {});
+        updateFlags |= Catalog::getComponentStructuralUpdateFlags(ComponentType::Light2DComponent);
+
+        Light2DComponent& light = scene->getComponent<Light2DComponent>(entity);
+        light.range = 200.0f;
+        light.intensity = 1.0f;
+
+    }else if (type == EntityCreationType::OCCLUDER_2D){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<Occluder2DComponent>(entity, {});
+        updateFlags |= Catalog::getComponentStructuralUpdateFlags(ComponentType::Occluder2DComponent);
+
+        // a standalone occluder entity has no sibling mesh for AUTO_QUAD to derive
+        // an outline from, so start as an editable polygon with a default square
+        Occluder2DComponent& occluder = scene->getComponent<Occluder2DComponent>(entity);
+        occluder.shape = Occluder2DShape::POLYGON;
+        occluder.points.push_back(Vector2(-50.0f, -50.0f));
+        occluder.points.push_back(Vector2(50.0f, -50.0f));
+        occluder.points.push_back(Vector2(50.0f, 50.0f));
+        occluder.points.push_back(Vector2(-50.0f, 50.0f));
+
     }else if (type == EntityCreationType::JOINT2D){
 
         scene->addComponent<Joint2DComponent>(entity, {});

@@ -45,6 +45,10 @@ void Scene::init(){
     globalIllumColor = Vector3(1.0, 1.0, 1.0);
     globalIllumIntensity = 0.1;
 
+    // default 1.0 keeps 2D scenes visually unchanged until the user dims it
+    ambientLight2DColor = Vector3(1.0, 1.0, 1.0);
+    ambientLight2DIntensity = 1.0;
+
     ssaoEnabled = false;
     ssaoRadius = 0.5;
     ssaoIntensity = 1.0;
@@ -323,6 +327,31 @@ Vector3 Scene::getGlobalIlluminationColor() const{
 
 Vector3 Scene::getGlobalIlluminationColorLinear() const{
     return this->globalIllumColor;
+}
+
+void Scene::setAmbientLight2D(float intensity, Vector3 color){
+    this->ambientLight2DIntensity = intensity;
+    this->ambientLight2DColor = Color::sRGBToLinear(color);
+}
+
+void Scene::setAmbientLight2D(float intensity){
+    this->ambientLight2DIntensity = intensity;
+}
+
+void Scene::setAmbientLight2D(Vector3 color){
+    this->ambientLight2DColor = Color::sRGBToLinear(color);
+}
+
+float Scene::getAmbientLight2DIntensity() const{
+    return this->ambientLight2DIntensity;
+}
+
+Vector3 Scene::getAmbientLight2DColor() const{
+    return Color::linearTosRGB(this->ambientLight2DColor);
+}
+
+Vector3 Scene::getAmbientLight2DColorLinear() const{
+    return this->ambientLight2DColor;
 }
 
 bool Scene::canReceiveUIEvents(){

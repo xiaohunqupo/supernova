@@ -20,6 +20,8 @@
 #include "component/SpriteAnimationComponent.h"
 #include "component/Transform.h"
 #include "component/LightComponent.h"
+#include "component/Light2DComponent.h"
+#include "component/Occluder2DComponent.h"
 #include "component/ActionComponent.h"
 #include "component/TimedActionComponent.h"
 #include "component/PositionActionComponent.h"

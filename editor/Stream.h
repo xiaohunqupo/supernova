@@ -244,6 +244,12 @@ namespace doriax::editor {
         static YAML::Node encodeLightComponent(const LightComponent& light);
         static LightComponent decodeLightComponent(const YAML::Node& node, const LightComponent* oldLight = nullptr);
 
+        static YAML::Node encodeLight2DComponent(const Light2DComponent& light);
+        static Light2DComponent decodeLight2DComponent(const YAML::Node& node, const Light2DComponent* oldLight = nullptr);
+
+        static YAML::Node encodeOccluder2DComponent(const Occluder2DComponent& occluder);
+        static Occluder2DComponent decodeOccluder2DComponent(const YAML::Node& node, const Occluder2DComponent* oldOccluder = nullptr);
+
         static YAML::Node encodeFogComponent(const FogComponent& fog);
         static FogComponent decodeFogComponent(const YAML::Node& node, const FogComponent* oldFog = nullptr);
 

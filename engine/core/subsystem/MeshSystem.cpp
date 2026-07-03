@@ -122,6 +122,7 @@ bool MeshSystem::createSprite(SpriteComponent& sprite, MeshComponent& mesh, Came
     mesh.buffer.addAttribute(AttributeType::POSITION, 3);
     mesh.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
     mesh.buffer.addAttribute(AttributeType::NORMAL, 3);
+    mesh.buffer.addAttribute(AttributeType::TANGENT, 4);
     mesh.buffer.addAttribute(AttributeType::COLOR, 4);
 
     mesh.buffer.setUsage(BufferUsage::DYNAMIC);
@@ -199,6 +200,16 @@ bool MeshSystem::createSprite(SpriteComponent& sprite, MeshComponent& mesh, Came
     mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
     mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
 
+    // flat +Z quad with u along +X: constant tangent, so normal maps work with the
+    // 2D light path. Handedness (w) follows the V direction, which flipY inverts.
+    Attribute* attTangent = mesh.buffer.getAttribute(AttributeType::TANGENT);
+    Vector4 tangent = Vector4(1.0f, 0.0f, 0.0f, sprite.flipY ? -1.0f : 1.0f);
+
+    mesh.buffer.addVector4(attTangent, tangent);
+    mesh.buffer.addVector4(attTangent, tangent);
+    mesh.buffer.addVector4(attTangent, tangent);
+    mesh.buffer.addVector4(attTangent, tangent);
+
     Attribute* attColor = mesh.buffer.getAttribute(AttributeType::COLOR);
 
     mesh.buffer.addVector4(attColor, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
@@ -235,11 +246,17 @@ bool MeshSystem::createMeshPolygon(MeshPolygonComponent& polygon, MeshComponent&
     mesh.buffer.addAttribute(AttributeType::POSITION, 3);
     mesh.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
     mesh.buffer.addAttribute(AttributeType::NORMAL, 3);
+    mesh.buffer.addAttribute(AttributeType::TANGENT, 4);
     mesh.buffer.addAttribute(AttributeType::COLOR, 4);
+
+    // flat +Z polygon with u along +X (see texcoord generation below); handedness
+    // (w) follows the V direction, which flipY inverts
+    Vector4 tangent = Vector4(1.0f, 0.0f, 0.0f, polygon.flipY ? -1.0f : 1.0f);
 
     for (int i = 0; i < polygon.points.size(); i++){
         mesh.buffer.addVector3(AttributeType::POSITION, polygon.points[i].position);
         mesh.buffer.addVector3(AttributeType::NORMAL, Vector3(0.0f, 0.0f, 1.0f));
+        mesh.buffer.addVector4(AttributeType::TANGENT, tangent);
         mesh.buffer.addVector4(AttributeType::COLOR, polygon.points[i].color);
     }
 
@@ -325,6 +342,7 @@ bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
     mesh.buffer.addAttribute(AttributeType::POSITION, 3);
     mesh.buffer.addAttribute(AttributeType::TEXCOORD1, 2);
     mesh.buffer.addAttribute(AttributeType::NORMAL, 3);
+    mesh.buffer.addAttribute(AttributeType::TANGENT, 4);
     mesh.buffer.addAttribute(AttributeType::COLOR, 4);
 
     mesh.buffer.setUsage(BufferUsage::DYNAMIC);
@@ -419,6 +437,15 @@ bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
         mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
         mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
         mesh.buffer.addVector3(attNormal, Vector3(0.0f, 0.0f, 1.0f));
+
+        // flat +Z tiles with u along +X; handedness (w) follows the V direction,
+        // which flipY inverts
+        Attribute* attTangent = mesh.buffer.getAttribute(AttributeType::TANGENT);
+        Vector4 tangent = Vector4(1.0f, 0.0f, 0.0f, tilemap.flipY ? -1.0f : 1.0f);
+        mesh.buffer.addVector4(attTangent, tangent);
+        mesh.buffer.addVector4(attTangent, tangent);
+        mesh.buffer.addVector4(attTangent, tangent);
+        mesh.buffer.addVector4(attTangent, tangent);
 
         Attribute* attColor = mesh.buffer.getAttribute(AttributeType::COLOR);
         mesh.buffer.addVector4(attColor, Vector4(1.0f, 1.0f, 1.0f, 1.0f));

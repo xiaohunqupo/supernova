@@ -210,6 +210,10 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_fs_ssrBlurParams";
     }else if (type == UniformBlockType::COMPOSITE_FS_PARAMS){
         ustr = "u_fs_compositeParams";
+    }else if (type == UniformBlockType::FS_LIGHTING2D){
+        ustr = "u_fs_lighting2d";
+    }else if (type == UniformBlockType::SHADOW2D_VS_PARAMS){
+        ustr = "u_vs_shadow2dParams";
     }
 
     if (ustr.empty()){
@@ -302,6 +306,8 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_gbufferTexture";
     }else if (type == TextureShaderType::GBUFFERALBEDOTEXTURE){
         texstr = "u_albedoTexture";
+    }else if (type == TextureShaderType::SHADOW2DATLAS){
+        texstr = "u_shadow2DAtlas";
     }
 
     if (texstr.empty()){

@@ -42,6 +42,9 @@ namespace doriax{
         Vector3 globalIllumColor;
         float globalIllumIntensity;
 
+        Vector3 ambientLight2DColor;
+        float ambientLight2DIntensity;
+
         bool ssaoEnabled;
         float ssaoRadius;
         float ssaoIntensity;
@@ -161,6 +164,14 @@ namespace doriax{
         float getGlobalIlluminationIntensity() const;
         Vector3 getGlobalIlluminationColor() const;
         Vector3 getGlobalIlluminationColorLinear() const;
+
+        void setAmbientLight2D(float intensity, Vector3 color);
+        void setAmbientLight2D(float intensity);
+        void setAmbientLight2D(Vector3 color);
+
+        float getAmbientLight2DIntensity() const;
+        Vector3 getAmbientLight2DColor() const;
+        Vector3 getAmbientLight2DColorLinear() const;
 
         bool canReceiveUIEvents();
 

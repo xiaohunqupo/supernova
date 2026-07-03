@@ -15,8 +15,11 @@ namespace doriax::editor{
         std::map<Entity, Lines*> containerLines;
         std::map<Entity, Lines*> bodyLines;
         std::map<Entity, Lines*> jointLines;
+        std::map<Entity, Lines*> light2DLines;
+        std::map<Entity, Lines*> occluder2DLines;
         std::map<Entity, CameraObjects> cameraObjects;
         std::map<Entity, SoundObjects> soundObjects;
+        std::map<Entity, Light2DObjects> light2DObjects;
         Lines* tileLines = nullptr;
         bool isUI;
         int viewportWidth;
@@ -27,8 +30,12 @@ namespace doriax::editor{
         void updateGridLines();
         bool instanciateBodyLines(Entity entity);
         bool instanciateJointLines(Entity entity);
+        bool instanciateLight2DLines(Entity entity);
+        bool instanciateOccluder2DLines(Entity entity);
         void createOrUpdateBodyLines(Entity entity, const Transform& transform, const Body2DComponent& body, bool visible, bool highlighted);
         void createOrUpdateJointLines(Entity entity, const Joint2DComponent& joint, bool visible, bool highlighted);
+        void createOrUpdateLight2DLines(Entity entity, const Transform& transform, const Light2DComponent& light, bool visible, bool highlighted);
+        void createOrUpdateOccluder2DLines(Entity entity, const Transform& transform, const Occluder2DComponent& occluder, bool visible, bool highlighted);
 
     protected:
         void hideAllGizmos() override;

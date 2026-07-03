@@ -590,11 +590,13 @@ set(DORIAX_SRCS
     core/object/Camera.cpp
     core/object/EntityHandle.cpp
     core/object/Light.cpp
+    core/object/Light2D.cpp
     core/object/Lines.cpp
     core/object/Mesh.cpp
     core/object/MeshPolygon.cpp
     core/object/Model.cpp
     core/object/Object.cpp
+    core/object/Occluder2D.cpp
     core/object/Points.cpp
     core/object/Shape.cpp
     core/object/Sprite.cpp
