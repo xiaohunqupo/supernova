@@ -182,7 +182,7 @@ namespace doriax::editor{
         void markMaterialDirty(unsigned int sceneId, Entity entity, int submeshIndex, const std::string& relativePath);
         void flushDirtyMaterials(float deltaTime);
         template<typename T>
-        void drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue = 0.0f, float maxValue = 1.0f, const std::string& help = "");
+        void drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue = 0.0f, float maxValue = 1.0f, const std::string& help = "", float inputWidth = 0.0f);
 
         // Sound preview helpers
         SoundPreviewRuntime& soundPreview();

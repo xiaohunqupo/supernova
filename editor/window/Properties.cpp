@@ -341,7 +341,7 @@ void editor::Properties::flushDirtyMaterials(float deltaTime) {
 }
 
 template<typename T>
-void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue, float maxValue, const std::string& help) {
+void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue, float maxValue, const std::string& help, float inputWidth) {
     T value = Catalog::getSceneProperty<T>(sceneProject->scene, propertyName);
     bool changed = false;
 
@@ -352,7 +352,15 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
     ImGui::Text("%s", label);
     ImGui::TableSetColumnIndex(1);
 
-    if (!help.empty()){
+    if (inputWidth > 0.0f) {
+        if (!help.empty()) {
+            const float reservedHelpWidth = ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x;
+            const float availableInputWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x - reservedHelpWidth);
+            ImGui::SetNextItemWidth(std::min(inputWidth, availableInputWidth));
+        } else {
+            ImGui::SetNextItemWidth(inputWidth);
+        }
+    } else if (!help.empty()){
         // leave room in the value column for the trailing "(?)" marker
         ImGui::SetNextItemWidth(-(ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x));
     }
@@ -11902,6 +11910,8 @@ void editor::Properties::show(){
 
         if (sceneProject->scene) {
             ImGuiTableFlags tableFlags = ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchSame;
+            const float shadowQualityLabelColWidth = ImGui::CalcTextSize("Filter Quality").x + ImGui::GetStyle().CellPadding.x * 2.0f;
+            const float shadowQualityComboWidth = ImGui::CalcTextSize("Medium").x + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f;
 
             if (ImGui::BeginTable("scene_settings_table", 2, tableFlags)) {
                 ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Background").x);
@@ -11929,16 +11939,17 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("2D Shadows");
 
                 if (ImGui::BeginTable("scene_shadows2d_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Filter Quality").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, shadowQualityLabelColWidth);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_2d_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
-                        "Smoothness of 2D light shadow edges. The penumbra width is set per light (Shadow Softness); this sets how smoothly it is sampled:\n"
+                        "Smoothness of 2D light shadow edges. The penumbra width is set per light (Shadow Softness):\n"
                         "- None: 1 sample, no filtering, hard edges (softness is ignored)\n"
                         "- Low: 5 samples\n"
                         "- Medium: 9 samples\n"
                         "- High: 13 samples, smooth even with very wide penumbras\n"
-                        "Higher values cost more per lit pixel. Raise it if wide penumbras show banding.");
+                        "Higher values cost more per lit pixel. Raise it if wide penumbras show banding.",
+                        shadowQualityComboWidth);
 
                     ImGui::EndTable();
                 }
@@ -11961,16 +11972,17 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("Shadows");
 
                 if (ImGui::BeginTable("scene_shadow_settings_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Filter Quality").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, shadowQualityLabelColWidth);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
-                        "Smoothness of shadow edges (PCF kernel size):\n"
+                        "Smoothness of shadow edges (PCF size):\n"
                         "- None: 1 sample, hard edges\n"
                         "- Low: 3x3 samples\n"
                         "- Medium: 5x5 samples\n"
                         "- High: 7x7 samples\n"
-                        "Higher values cost more per shadowed pixel. Applies instantly, no shader rebuild.");
+                        "Higher values cost more per shadowed pixel.",
+                        shadowQualityComboWidth);
 
                     ImGui::EndTable();
                 }
