@@ -911,7 +911,7 @@ void AiChatWindow::drawTranscript(float height) {
 }
 
 void AiChatWindow::drawProposals(const std::vector<ai::ActionProposal>& proposals, float height) {
-    ImGui::BeginChild("##AiProposals", ImVec2(0, height), ImGuiChildFlags_Border);
+    ImGui::BeginChild("##AiProposals", ImVec2(0, height), ImGuiChildFlags_Borders);
 
     for (const auto& proposal : proposals) {
         if (proposal.executed) {

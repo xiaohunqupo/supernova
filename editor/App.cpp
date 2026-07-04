@@ -959,10 +959,13 @@ void editor::App::setup() {
 
     ImFontConfig config;
     config.MergeMode = true;
-    config.GlyphMinAdvanceX = 16.0f;
     config.FontDataOwnedByAtlas = false;
+    // Merge size 0.0f: inherit the implicit reference size of AddFontDefault().
+    // Since 1.92, merging with an explicit size into an implicit-ref-size font asserts,
+    // and specifying GlyphMinAdvanceX (monospacing) requires a non-zero reference size,
+    // so it is omitted here. The visible icon font is font1 below, which keeps monospacing.
     static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-    io.Fonts->AddFontFromMemoryTTF(fa_solid_900_ttf, fa_solid_900_ttf_len, 16.0f, &config, icon_ranges);
+    io.Fonts->AddFontFromMemoryTTF(fa_solid_900_ttf, fa_solid_900_ttf_len, 0.0f, &config, icon_ranges);
 
     ImFontConfig config1;
     strcpy(config1.Name, "roboto-v20-latin-regular (16 px)");

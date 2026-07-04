@@ -744,7 +744,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
     size_t sceneId = sceneProject->id;
 
-    bool altHeld = ImGui::IsKeyDown(ImGuiKey_ModAlt);
+    bool altHeld = ImGui::IsKeyDown(ImGuiMod_Alt);
     bool suppressLeftMouse = suppressLeftMouseUntilRelease[sceneId];
     bool handPanEnabled = sceneProject->sceneRender->getCursorSelected() == CursorSelected::HAND;
     GizmoSelected gizmoSelected = sceneProject->sceneRender->getToolsLayer()->getGizmoSelected();
@@ -1190,7 +1190,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 float finalSpeed = 0.02 * (speedOffset + walkSpeed[sceneId]) * distanceScaleFactor;
 
                 // Shift multiplier for faster movement
-                if (ImGui::IsKeyDown(ImGuiKey_ModShift)) {
+                if (ImGui::IsKeyDown(ImGuiMod_Shift)) {
                     finalSpeed *= 3.0f;
                 }
 
@@ -1217,10 +1217,10 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 Backend::disableMouseCursor();
             }
             if (ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
-                if (ImGui::IsKeyDown(ImGuiKey_ModShift)) {
+                if (ImGui::IsKeyDown(ImGuiMod_Shift)) {
                     camera->slide(-0.01 * mouseDelta.x * distanceScaleFactor);
                     camera->slideUp(0.01 * mouseDelta.y * distanceScaleFactor);
-                } else if (ImGui::IsKeyDown(ImGuiKey_ModCtrl)) {
+                } else if (ImGui::IsKeyDown(ImGuiMod_Ctrl)) {
                     float ctrlZoomAmount = -0.1f * mouseDelta.y * distanceScaleFactor;
                     if (ctrlZoomAmount > distanceFromTarget - 0.1f) {
                         ctrlZoomAmount = distanceFromTarget - 0.1f;
@@ -1342,7 +1342,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 // Numpad preset views (3D only)
                 if (sceneProject->sceneType == SceneType::SCENE_3D) {
                     Camera* cam = sceneProject->sceneRender->getCamera();
-                    if (!ImGui::IsKeyDown(ImGuiKey_ModCtrl)) {
+                    if (!ImGui::IsKeyDown(ImGuiMod_Ctrl)) {
                         if (ImGui::IsKeyPressed(ImGuiKey_Keypad1)) {
                             // Numpad 1: Front view (-Z looking toward +Z)
                             snapCameraToDirection(cam, Vector3(0, 0, 1));
