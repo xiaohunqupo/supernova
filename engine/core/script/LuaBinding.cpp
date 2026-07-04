@@ -23,6 +23,8 @@
 #include "object/Terrain.h"
 #include "object/Tilemap.h"
 #include "object/Light.h"
+#include "object/Light2D.h"
+#include "object/Occluder2D.h"
 #include "object/Camera.h"
 #include "object/Bone.h"
 #include "object/environment/Fog.h"
@@ -506,6 +508,8 @@ bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, dori
     DISPATCH_TYPE(Object, "object");
     DISPATCH_TYPE(Camera, "camera");
     DISPATCH_TYPE(Light, "light");
+    DISPATCH_TYPE(Light2D, "light2d");
+    DISPATCH_TYPE(Occluder2D, "occluder2d");
     DISPATCH_TYPE(Mesh, "mesh");
     DISPATCH_TYPE(Shape, "shape");
     DISPATCH_TYPE(Terrain, "terrain");

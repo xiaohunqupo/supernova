@@ -2101,6 +2101,8 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
         else if (hasComponent(sceneProject->scene, entity, ComponentType::MeshComponent) ||
                  hasComponent(sceneProject->scene, entity, ComponentType::ModelComponent)) parentClass = "Mesh";
         else if (hasComponent(sceneProject->scene, entity, ComponentType::LightComponent)) parentClass = "Light";
+        else if (hasComponent(sceneProject->scene, entity, ComponentType::Light2DComponent)) parentClass = "Light2D";
+        else if (hasComponent(sceneProject->scene, entity, ComponentType::Occluder2DComponent)) parentClass = "Occluder2D";
         else if (hasComponent(sceneProject->scene, entity, ComponentType::Transform)) parentClass = "Object";
     } else if (type != ScriptType::SCRIPT_LUA) {
         parentClass = "ScriptBase";

@@ -126,6 +126,8 @@ void ScriptCreateDialog::writeFiles(const fs::path& headerPath,
                 auto cameraComponentId = m_scene->getComponentId<CameraComponent>();
                 auto meshComponentId = m_scene->getComponentId<MeshComponent>();
                 auto lightComponentId = m_scene->getComponentId<LightComponent>();
+                auto light2DComponentId = m_scene->getComponentId<Light2DComponent>();
+                auto occluder2DComponentId = m_scene->getComponentId<Occluder2DComponent>();
                 auto transformComponentId = m_scene->getComponentId<Transform>();
 
                 if (signature.test(transformComponentId)) {
@@ -140,6 +142,10 @@ void ScriptCreateDialog::writeFiles(const fs::path& headerPath,
                     isMesh = true;
                 } else if (signature.test(lightComponentId)) {
                     parentClass = "Light";
+                } else if (signature.test(light2DComponentId)) {
+                    parentClass = "Light2D";
+                } else if (signature.test(occluder2DComponentId)) {
+                    parentClass = "Occluder2D";
                 }
             }
 
