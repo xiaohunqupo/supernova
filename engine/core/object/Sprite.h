@@ -10,6 +10,7 @@
 #include "action/SpriteAnimation.h"
 
 #include "Mesh.h"
+#include "Occluder2D.h"
 
 namespace doriax{
     class DORIAX_API Sprite: public Mesh{
@@ -26,6 +27,9 @@ namespace doriax{
         Sprite& operator=(const Sprite& rhs);
 
         bool createSprite();
+
+        Occluder2D getOccluder2D();
+        void removeOccluder2D();
 
         void setSize(unsigned int width, unsigned int height);
         void setWidth(unsigned int width);

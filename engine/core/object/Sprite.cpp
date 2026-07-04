@@ -4,6 +4,7 @@
 
 #include "Sprite.h"
 
+#include "component/Occluder2DComponent.h"
 #include "util/Color.h"
 #include "subsystem/MeshSystem.h"
 #include "subsystem/RenderSystem.h"
@@ -41,6 +42,20 @@ bool Sprite::createSprite(){
     MeshComponent& mesh = getComponent<MeshComponent>();
 
     return scene->getSystem<MeshSystem>()->createOrUpdateSprite(spritecomp, mesh);
+}
+
+Occluder2D Sprite::getOccluder2D(){
+    if (!scene->findComponent<Occluder2DComponent>(entity)){
+        addComponent<Occluder2DComponent>();
+    }
+
+    return Occluder2D(scene, entity);
+}
+
+void Sprite::removeOccluder2D(){
+    if (scene->findComponent<Occluder2DComponent>(entity)){
+        removeComponent<Occluder2DComponent>();
+    }
 }
 
 void Sprite::setSize(unsigned int width, unsigned int height){

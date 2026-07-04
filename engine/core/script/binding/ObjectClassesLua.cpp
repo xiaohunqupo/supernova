@@ -622,6 +622,8 @@ void LuaBinding::registerObjectClasses(lua_State *L){
     luabridge::getGlobalNamespace(L)
         .deriveClass<Sprite, Mesh>("Sprite")
         .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
+        .addFunction("getOccluder2D", &Sprite::getOccluder2D)
+        .addFunction("removeOccluder2D", &Sprite::removeOccluder2D)
         .addFunction("setSize", &Sprite::setSize)
         .addProperty("width", &Sprite::getWidth, &Sprite::setWidth)
         .addProperty("height", &Sprite::getHeight, &Sprite::setHeight)
