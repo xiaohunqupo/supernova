@@ -21,7 +21,7 @@
 
 using namespace doriax;
 
-editor::CodeEditor::CodeEditor(Project* project) : isFileChangePopupOpen(false), windowFocused(false), lastFocused(nullptr), isParsingSymbols(false), newSymbolsReady(false) {
+editor::CodeEditor::CodeEditor(Project* project) : lastScriptWatchTime(0.0), isFileChangePopupOpen(false), windowFocused(false), lastFocused(nullptr), isParsingSymbols(false), newSymbolsReady(false) {
     this->project = project;
 }
 
@@ -401,6 +401,76 @@ void editor::CodeEditor::checkFileChanges(EditorInstance& instance) {
     }
 }
 
+void editor::CodeEditor::checkExternalScriptChanges() {
+    // Skip entirely while any scene is playing: play mutates the live scene in-process and
+    // restores it from a snapshot on stop, so a background property refresh would fight it.
+    // Baselines stay frozen and external edits are picked up on the first tick after stop.
+    for (const auto& sceneProject : project->getScenes()) {
+        if (sceneProject.playState != ScenePlayState::STOPPED)
+            return;
+    }
+
+    // Collect every script file referenced by entities across loaded scenes. These are
+    // watched even when not open in the code editor, so editing a script header/.lua in
+    // an external editor (nano, etc.) still refreshes the entity's properties.
+    std::unordered_set<std::string> referenced;
+    for (auto& sceneProject : project->getScenes()) {
+        if (!sceneProject.scene)
+            continue;
+        // Iterate only entities that actually hold a ScriptComponent (dense pool)
+        // instead of scanning every entity in the scene.
+        auto scriptsArray = sceneProject.scene->getComponentArray<ScriptComponent>();
+        for (size_t i = 0; i < scriptsArray->size(); i++) {
+            const ScriptComponent& scriptComponent = scriptsArray->getComponentFromIndex(i);
+            for (const auto& scriptEntry : scriptComponent.scripts) {
+                if ((scriptEntry.type == ScriptType::SUBCLASS || scriptEntry.type == ScriptType::SCRIPT_CLASS) &&
+                    !scriptEntry.headerPath.empty()) {
+                    referenced.insert(scriptEntry.headerPath);
+                } else if (scriptEntry.type == ScriptType::SCRIPT_LUA && !scriptEntry.path.empty()) {
+                    referenced.insert(scriptEntry.path);
+                }
+            }
+        }
+    }
+
+    for (const std::string& relPath : referenced) {
+        fs::file_time_type currentWriteTime;
+        try {
+            currentWriteTime = fs::last_write_time(resolveFilepath(relPath));
+        } catch (const std::exception&) {
+            continue; // missing / inaccessible this tick — skip
+        }
+
+        auto it = watchedScriptFiles.find(relPath);
+        if (it == watchedScriptFiles.end()) {
+            // First sighting — record baseline, don't refresh (already in sync on load).
+            watchedScriptFiles[relPath] = currentWriteTime;
+            continue;
+        }
+        if (it->second == currentWriteTime)
+            continue; // unchanged
+
+        // Changed on disk. If the file is open, the per-instance watcher
+        // (checkFileChanges) owns reloading the buffer + properties and the unsaved-edit
+        // conflict prompt — just resync our baseline so we don't double-handle it.
+        it->second = currentWriteTime;
+        if (editors.find(relPath) != editors.end())
+            continue;
+
+        // Not open in the editor: re-parse properties straight from disk.
+        updateScriptPropertiesForPath(relPath);
+    }
+
+    // Forget files no longer referenced (entity/script removed) so a re-added file
+    // gets a fresh baseline instead of an immediate spurious refresh.
+    for (auto it = watchedScriptFiles.begin(); it != watchedScriptFiles.end();) {
+        if (referenced.find(it->first) == referenced.end())
+            it = watchedScriptFiles.erase(it);
+        else
+            ++it;
+    }
+}
+
 void editor::CodeEditor::handleFileChangePopup() {
     if (changedFilesQueue.empty()) {
         return;
@@ -484,7 +554,15 @@ std::string editor::CodeEditor::getWindowTitle(const EditorInstance& instance) c
 }
 
 void editor::CodeEditor::updateScriptProperties(const EditorInstance& instance, const std::string& inMemoryContent){
-    // Update script properties if this is a script file
+    updateScriptPropertiesForPath(instance.filepath, inMemoryContent);
+}
+
+void editor::CodeEditor::updateScriptPropertiesForPath(const fs::path& relFilepath, const std::string& inMemoryContent){
+    const std::string relPathStr = relFilepath.string();
+    const fs::path fullPath = resolveFilepath(relFilepath);
+
+    // Re-parse and refresh properties for EVERY entity whose script references this file
+    // (multiple entities can share the same script).
     for (auto& sceneProject : project->getScenes()) {
         if (!sceneProject.scene)
             continue;
@@ -494,7 +572,6 @@ void editor::CodeEditor::updateScriptProperties(const EditorInstance& instance, 
             if (!scriptComponent)
                 continue;
 
-            bool found = false;
             // Check all scripts in the component
             for (const auto& scriptEntry : scriptComponent->scripts) {
                 bool isCppScript =
@@ -505,28 +582,28 @@ void editor::CodeEditor::updateScriptProperties(const EditorInstance& instance, 
                     (scriptEntry.type == ScriptType::SCRIPT_LUA);
 
                 // For C++ scripts we compare headerPath, for Lua we compare .lua path
-                // instance.filepath is already project-relative
+                // relFilepath is already project-relative
                 bool matchesFile = false;
                 if (isCppScript && !scriptEntry.headerPath.empty()) {
-                    matchesFile = (scriptEntry.headerPath == instance.filepath.string());
+                    matchesFile = (scriptEntry.headerPath == relPathStr);
                 } else if (isLuaScript && !scriptEntry.path.empty()) {
-                    matchesFile = (scriptEntry.path == instance.filepath.string());
+                    matchesFile = (scriptEntry.path == relPathStr);
                 }
 
                 if (matchesFile) {
                     std::vector<ScriptEntry> newScripts = scriptComponent->scripts;
 
-                    fs::path fullPath = resolveFilepath(instance.filepath);
-                    project->updateScriptProperties(&sceneProject, entity, newScripts, inMemoryContent, fullPath.string());
-                    PropertyCmd<std::vector<ScriptEntry>> propertyCmd(project, sceneProject.id, entity, ComponentType::ScriptComponent, "scripts", newScripts);
-                    propertyCmd.execute();
+                    // Only apply when the schema actually changed, so re-parsing after an
+                    // unrelated edit (e.g. a function body) doesn't needlessly mark the
+                    // scene modified.
+                    if (project->updateScriptProperties(&sceneProject, entity, newScripts, inMemoryContent, fullPath.string())) {
+                        PropertyCmd<std::vector<ScriptEntry>> propertyCmd(project, sceneProject.id, entity, ComponentType::ScriptComponent, "scripts", newScripts);
+                        propertyCmd.execute();
+                    }
 
-                    found = true;
-                    break; // Found matching script, no need to check others
+                    break; // Found matching script in this entity, move to the next entity
                 }
             }
-            if (found)
-            break; // No need to scan more entities in this scene
         }
     }
 }
@@ -1303,6 +1380,13 @@ void editor::CodeEditor::show() {
     double currentTime = ImGui::GetTime();
 
     windowFocused = false;
+
+    // Watch script files referenced by entities but not open in the editor, so external
+    // edits (e.g. nano) refresh entity properties without needing to open/save or restart.
+    if (currentTime - lastScriptWatchTime >= 1.0) {
+        checkExternalScriptChanges();
+        lastScriptWatchTime = currentTime;
+    }
 
     // Iterate through all open editors
     for (auto it = editors.begin(); it != editors.end();) {

@@ -37,6 +37,10 @@ namespace doriax::editor {
             fs::file_time_type newWriteTime;
         };
         std::vector<PendingFileChange> changedFilesQueue;
+        // External-change watch for script files that are NOT open in the code editor
+        // (open files are polled per-instance). Maps project-relative path -> last seen mtime.
+        std::unordered_map<std::string, fs::file_time_type> watchedScriptFiles;
+        double lastScriptWatchTime;
         bool isFileChangePopupOpen;
         bool windowFocused;
         EditorInstance* lastFocused;
@@ -49,10 +53,14 @@ namespace doriax::editor {
         std::atomic<bool> newSymbolsReady{false};
 
         void checkFileChanges(EditorInstance& instance);
+        // Polls script files referenced by entities but not open in the editor, and
+        // re-parses their properties when they change on disk (e.g. edited in nano).
+        void checkExternalScriptChanges();
         bool loadFileContent(EditorInstance& instance);
         void handleFileChangePopup();
         std::string getWindowTitle(const EditorInstance& instance) const;
         void updateScriptProperties(const EditorInstance& instance, const std::string& inMemoryContent = "");
+        void updateScriptPropertiesForPath(const fs::path& relFilepath, const std::string& inMemoryContent = "");
 
         // Background parsing for project symbols
         void updateAllProjectSymbols();

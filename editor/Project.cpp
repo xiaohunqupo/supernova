@@ -3877,7 +3877,7 @@ void editor::Project::updateAllScriptsProperties(uint32_t sceneId){
     }
 }
 
-void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity entity, std::vector<ScriptEntry>& scripts, const std::string& inMemoryContent, const std::string& inMemoryPath) {
+bool editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity entity, std::vector<ScriptEntry>& scripts, const std::string& inMemoryContent, const std::string& inMemoryPath) {
     bool hasChanges = false;
 
     // Update properties for each script in the component
@@ -3993,6 +3993,8 @@ void editor::Project::updateScriptProperties(SceneProject* sceneProject, Entity 
     if (hasChanges) {
         sceneProject->isModified = true;
     }
+
+    return hasChanges;
 }
 
 bool editor::Project::createEntityBundle(uint32_t sceneId, fs::path filepath, YAML::Node entityNode){
