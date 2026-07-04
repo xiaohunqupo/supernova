@@ -8948,7 +8948,7 @@ void editor::Properties::drawBody2DComponent(ComponentType cpType, SceneProject*
         }
     }
 
-    ImGui::SetNextItemWidth(12 * ImGui::GetFontSize());
+    ImGui::SetNextItemWidth(9 * ImGui::GetFontSize());
     if (ImGui::BeginCombo("##shape2d_create_type", createShape2DLabel)){
         for (const EnumEntry& entry : entriesShape2DType){
             bool selected = (createShape2DType == entry.value);
@@ -9397,7 +9397,7 @@ void editor::Properties::drawBody3DComponent(ComponentType cpType, SceneProject*
         }
     }
 
-    ImGui::SetNextItemWidth(12 * ImGui::GetFontSize());
+    ImGui::SetNextItemWidth(9 * ImGui::GetFontSize());
     if (ImGui::BeginCombo("##shape3d_create_type", createShape3DLabel)){
         for (const EnumEntry& entry : entriesShape3DType){
             bool selected = (createShape3DType == entry.value);
