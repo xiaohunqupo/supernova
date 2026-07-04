@@ -882,7 +882,10 @@ void editor::CodeEditor::insertCppEntityProperty(EditorInstance& instance, Entit
     size_t insertPos = std::string::npos;
 
     // Find last DPROPERTY declaration (the variable line after it ends with ";")
-    std::regex spropertyRegex(R"(DPROPERTY\s*\([^)]*\)\s*\n\s*[\w:*<>]+\s+\w+\s*=[^;]*;)");
+    // Type is [\w:<>]+ and the pointer '*' / whitespace separator is [\s*]+ so that the
+    // variable line is matched whether '*' sits next to the type ("T* v") or the name ("T *v").
+    // The "= default" part is optional to match members declared without an initializer.
+    std::regex spropertyRegex(R"(DPROPERTY\s*\([^)]*\)\s*\n\s*[\w:<>]+[\s*]+\w+\s*(?:=[^;]*)?;)");
     std::sregex_iterator it(headerText.begin(), headerText.end(), spropertyRegex);
     std::sregex_iterator endIt;
     size_t lastSpropertyEnd = std::string::npos;

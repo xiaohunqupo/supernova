@@ -212,7 +212,8 @@ std::vector<ScriptProperty> editor::ScriptParser::parseScriptPropertiesFromStrin
         "(?:,\\s*([\\w]+))?\\s*"                   // optional , Type
         "\\)\\s*"                                  // )
         "(?:/\\*[^*]*@DPROPERTY_TYPE:\\s*([\\w]+)[^*]*\\*/\\s*)?" // optional /* @DPROPERTY_TYPE: Type */
-        "([\\w:*]+(?:\\s*<[^>]+>)?)\\s+"          // C++ Type (with templates and pointers)
+        "([\\w:]+(?:\\s*<[^>]+>)?)"               // C++ Type (with templates)
+        "([\\s*]+)"                                // separator: whitespace and/or '*' (either side of the name)
         "(\\w+)\\s*"                               // varName
         "(?:=\\s*([^;]+?))?\\s*;"                 // optional = defaultValue
     );
@@ -227,9 +228,12 @@ std::vector<ScriptProperty> editor::ScriptParser::parseScriptPropertiesFromStrin
         std::string displayName = match[1].str();
         std::string explicitType = match[2].str();        // From DPROPERTY(..., Type)
         std::string typeAnnotation = match[3].str();      // From /* @DPROPERTY_TYPE: Type */
-        std::string cppType = match[4].str();
-        std::string varName = match[5].str();
-        std::string defaultValueStr = match[6].str();     // May be empty
+        // Combine the type name (group 4) with the pointer/reference markers (group 5)
+        // so that '*' is retained regardless of whether it was written next to the
+        // type ("Camera* c") or next to the variable ("Camera *c").
+        std::string cppType = match[4].str() + match[5].str();
+        std::string varName = match[6].str();
+        std::string defaultValueStr = match[7].str();     // May be empty
 
         // Remove whitespace from type (but keep * for pointers)
         std::string cleanCppType;
