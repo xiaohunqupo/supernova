@@ -62,6 +62,17 @@ namespace doriax{
         // the on-disk validation key drops customId and keeps only type+properties.
         static ShaderKey getStorageKey(ShaderKey key);
 
+        // Bitmask of the property positions that currently map to a real variant for
+        // this shader type (derived from getShaderPropertyName, so retired/reserved
+        // bits like MESH bit 5 are excluded). Used to normalize keys.
+        static uint32_t getValidPropertyMask(ShaderType shaderType);
+
+        // Strips property bits that no longer map to a variant (retired features,
+        // bits beyond the current count). Keeps type + customId. Persisted keys from
+        // older editor versions collapse onto their current equivalent, so stale
+        // variants stop being exported and looked up.
+        static ShaderKey normalizeKey(ShaderKey key);
+
         // Custom (user-forked) shader registry. Interns a project-relative base path
         // (e.g. "shaders/myMesh", no extension) and returns a stable session id used
         // in the ShaderKey; an empty path returns 0 (built-in). The derived (sanitized)

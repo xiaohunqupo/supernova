@@ -788,6 +788,17 @@ bool editor::Exporter::buildAndSaveShaders() {
         return false;
     }
 
+    // Drop retired/reserved property bits so keys collected before a feature bit was
+    // retired collapse onto their current equivalent (the std::set dedupes them),
+    // instead of exporting stale duplicate variants with '?' in their names.
+    {
+        std::set<ShaderKey> normalizedKeys;
+        for (const ShaderKey& key : config.selectedShaderKeys) {
+            normalizedKeys.insert(ShaderPool::normalizeKey(key));
+        }
+        config.selectedShaderKeys = std::move(normalizedKeys);
+    }
+
     fs::path shadersDst = getShaderOutputDir();
 
     std::error_code ec;

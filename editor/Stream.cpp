@@ -4,6 +4,7 @@
 #include "Catalog.h"
 #include "Factory.h"
 #include "pool/SoundPool.h"
+#include "pool/ShaderPool.h"
 #include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 #include "render/SceneRender2D.h"
@@ -1687,7 +1688,10 @@ void editor::Stream::decodeSceneProject(SceneProject* sceneProject, const YAML::
     sceneProject->shaderKeys.clear();
     if (node["shaderKeys"]) {
         for (const auto& keyNode : node["shaderKeys"]) {
-            sceneProject->shaderKeys.insert(keyNode.as<uint64_t>());
+            // Normalize on load so keys persisted by older editor versions (carrying
+            // retired property bits like MESH bit 5) collapse onto their current
+            // equivalent instead of producing stale duplicate shader variants at export.
+            sceneProject->shaderKeys.insert(ShaderPool::normalizeKey(keyNode.as<uint64_t>()));
         }
     }
 

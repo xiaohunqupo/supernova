@@ -576,6 +576,25 @@ ShaderKey ShaderPool::getStorageKey(ShaderKey key) {
     return key & 0x0000FFFFFFFFFFFFULL;
 }
 
+uint32_t ShaderPool::getValidPropertyMask(ShaderType shaderType) {
+    // Derived from the property-name table so a retired bit (e.g. MESH bit 5, the
+    // old 'Pcf') is excluded automatically: it has no short name ("?").
+    uint32_t mask = 0;
+    int propCount = getShaderPropertyCount(shaderType);
+    for (int i = 0; i < propCount; i++) {
+        if (getShaderPropertyName(shaderType, i, true) != "?")
+            mask |= (1u << i);
+    }
+    return mask;
+}
+
+ShaderKey ShaderPool::normalizeKey(ShaderKey key) {
+    ShaderType type = getShaderTypeFromKey(key);
+    uint16_t customId = getCustomIdFromKey(key);
+    uint32_t properties = getPropertiesFromKey(key) & getValidPropertyMask(type);
+    return getShaderKey(type, properties, customId);
+}
+
 uint32_t ShaderPool::getMeshProperties(
     bool unlit, bool uv1, bool uv2,
     bool punctual, bool shadows, bool normals, bool normalMap,

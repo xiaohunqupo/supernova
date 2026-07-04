@@ -6,13 +6,52 @@
 #include "FileUtils.h"
 
 #include <algorithm>
+#include <cctype>
+#include <unordered_set>
 
 using namespace doriax::editor;
+
+namespace {
+    // Shader names carry variant codes that may contain characters which are not
+    // valid in a C++ identifier (for example '?', emitted for an unknown/reserved
+    // property bit). The name is still used verbatim as the runtime lookup key, so
+    // only the emitted variable name is sanitized to a valid identifier here.
+    std::string toIdentifier(const std::string& name) {
+        std::string id;
+        id.reserve(name.size());
+        for (char c : name) {
+            if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
+                id += c;
+            } else {
+                id += '_';
+            }
+        }
+        if (id.empty() || std::isdigit(static_cast<unsigned char>(id[0]))) {
+            id.insert(id.begin(), '_');
+        }
+        return id;
+    }
+}
 
 std::string ShaderHeaderBuilder::buildShaderHeader(const std::string& suffix, std::vector<HeaderShader> shaders) {
     std::sort(shaders.begin(), shaders.end(), [](const HeaderShader& a, const HeaderShader& b) {
         return a.name < b.name;
     });
+
+    // Precompute a valid, unique C++ identifier for each shader. The original
+    // name stays as the string lookup key in getBase64Shader() so it keeps
+    // matching ShaderPool::getShaderName() at runtime.
+    std::vector<std::string> varNames;
+    varNames.reserve(shaders.size());
+    std::unordered_set<std::string> usedNames;
+    for (const auto& shader : shaders) {
+        std::string base = toIdentifier(shader.name);
+        std::string unique = base;
+        for (int n = 1; !usedNames.insert(unique).second; ++n) {
+            unique = base + "_" + std::to_string(n);
+        }
+        varNames.push_back(unique);
+    }
 
     std::string content;
     content += "#ifndef SHADER_" + suffix + "_h\n";
@@ -20,8 +59,9 @@ std::string ShaderHeaderBuilder::buildShaderHeader(const std::string& suffix, st
     content += "#include <string>\n\n";
 
     constexpr size_t chunkSize = 100;
-    for (const auto& shader : shaders) {
-        content += "static const std::string " + shader.name + " = ";
+    for (size_t i = 0; i < shaders.size(); ++i) {
+        const auto& shader = shaders[i];
+        content += "static const std::string " + varNames[i] + " = ";
         if (shader.encodedData.empty()) {
             content += "\"\"";
         } else {
@@ -34,11 +74,12 @@ std::string ShaderHeaderBuilder::buildShaderHeader(const std::string& suffix, st
 
     content += "std::string getBase64Shader(std::string name) {";
     bool first = true;
-    for (const auto& shader : shaders) {
+    for (size_t i = 0; i < shaders.size(); ++i) {
+        const auto& shader = shaders[i];
         content += "\n";
         content += first ? "    if (name == \"" : "    } else if (name == \"";
         content += shader.name + "\") {\n";
-        content += "        return " + shader.name + ";";
+        content += "        return " + varNames[i] + ";";
         first = false;
     }
     if (!first) {
