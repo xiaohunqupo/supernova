@@ -201,7 +201,7 @@ const std::vector<ToolDefinition>& cachedTools() {
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"name", stringSchema("Entity display name")},
-                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, image, sprite, tilemap, text, button, scrollbar, progressbar, textedit, panel, polygon, container, point_light, directional_light, spot_light, joint2d, joint3d, body2d, body3d, sky, fog, camera, sound, sound_3d, animation, sprite_animation, position_action, rotation_action, scale_action, color_action, alpha_action, model, particles, points, lines, mesh_polygon, terrain")},
+                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, image, sprite, tilemap, text, button, scrollbar, progressbar, textedit, panel, polygon, container, point_light, directional_light, spot_light, light_2d, occluder_2d, joint2d, joint3d, body2d, body3d, sky, fog, camera, sound, sound_3d, animation, sprite_animation, position_action, rotation_action, scale_action, color_action, alpha_action, model, particles, points, lines, mesh_polygon, terrain. light_2d = 2D radius-falloff light (Light2DComponent); occluder_2d = 2D shadow caster (Occluder2DComponent).")},
                 {"parent_id", integerSchema("Optional parent entity id for transform entities")},
                 {"position", vector3Schema("Optional local position")}
             }, {"name", "type"}),
@@ -373,7 +373,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "set_scene_property",
-            "Set a supported scene-level property such as background_color, global_illumination_color, ssao_enabled, ssr_enabled.",
+            "Set a supported scene-level property such as background_color, global_illumination_color, ssao_enabled, ssr_enabled, ambient_light_2d_color/ambient_light_2d_intensity (2D light ambient), shadows_quality (3D) and shadows_2d_quality (2D) as int_value 0=none/1=low/2=medium/3=high.",
             objectSchemaFromProperties(propertyValueFields({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"property", stringSchema("Scene property name")}

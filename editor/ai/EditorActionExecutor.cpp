@@ -234,6 +234,8 @@ bool parseEntityType(const std::string& typeName, EntityCreationType& type) {
         {"point_light", EntityCreationType::POINT_LIGHT},
         {"directional_light", EntityCreationType::DIRECTIONAL_LIGHT},
         {"spot_light", EntityCreationType::SPOT_LIGHT},
+        {"light_2d", EntityCreationType::POINT_LIGHT_2D},
+        {"occluder_2d", EntityCreationType::OCCLUDER_2D},
         {"joint2d", EntityCreationType::JOINT2D},
         {"joint3d", EntityCreationType::JOINT3D},
         {"body2d", EntityCreationType::BODY2D},
@@ -899,6 +901,10 @@ Json sceneReadableProperties(SceneProject* sceneProject) {
     props["global_illumination_color"] = {{"type", "vector3"}, {"value", vector3Json(Catalog::getSceneProperty<Vector3>(scene, "global_illumination_color"))}};
     props["global_illumination_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "global_illumination_intensity")}};
     props["light_state"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<LightState>(scene, "light_state"))}};
+    props["ambient_light_2d_color"] = {{"type", "vector3"}, {"value", vector3Json(Catalog::getSceneProperty<Vector3>(scene, "ambient_light_2d_color"))}};
+    props["ambient_light_2d_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ambient_light_2d_intensity")}};
+    props["shadows_quality"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<ShadowQuality>(scene, "shadows_quality"))}};
+    props["shadows_2d_quality"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<ShadowQuality>(scene, "shadows_2d_quality"))}};
     props["ssao_enabled"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "ssao_enabled")}};
     props["ssao_radius"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssao_radius")}};
     props["ssao_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssao_intensity")}};
@@ -1687,10 +1693,10 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
             return failResult("background_color requires vector4_value.");
         }
         cmd = new ScenePropertyCmd<Vector4>(sceneProject, property, value);
-    } else if (property == "global_illumination_color") {
+    } else if (property == "global_illumination_color" || property == "ambient_light_2d_color") {
         Vector3 value = Catalog::getSceneProperty<Vector3>(sceneProject->scene, property);
         if (!parseVector3(arguments.value("vector3_value", Json::object()), value)) {
-            return failResult("global_illumination_color requires vector3_value.");
+            return failResult(property + " requires vector3_value.");
         }
         cmd = new ScenePropertyCmd<Vector3>(sceneProject, property, value);
     } else if (property == "ssao_enabled" ||
@@ -1699,7 +1705,8 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
             return failResult(property + " requires bool_value.");
         }
         cmd = new ScenePropertyCmd<bool>(sceneProject, property, arguments["bool_value"].get<bool>());
-    } else if (property == "global_illumination_intensity" || property == "ssao_radius" ||
+    } else if (property == "global_illumination_intensity" || property == "ambient_light_2d_intensity" ||
+               property == "ssao_radius" ||
                property == "ssao_intensity" || property == "ssao_bias" ||
                property == "ssr_max_distance" || property == "ssr_thickness" ||
                property == "ssr_intensity" || property == "ssr_blur") {
@@ -1718,6 +1725,12 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
         }
         cmd = new ScenePropertyCmd<LightState>(sceneProject, property,
                                                static_cast<LightState>(arguments["int_value"].get<int>()));
+    } else if (property == "shadows_quality" || property == "shadows_2d_quality") {
+        if (!arguments.contains("int_value") || !arguments["int_value"].is_number_integer()) {
+            return failResult(property + " requires int_value (0=none, 1=low, 2=medium, 3=high).");
+        }
+        cmd = new ScenePropertyCmd<ShadowQuality>(sceneProject, property,
+                                                  static_cast<ShadowQuality>(arguments["int_value"].get<int>()));
     } else {
         return failResult("Unsupported scene property: " + property);
     }

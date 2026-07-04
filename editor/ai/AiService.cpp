@@ -364,6 +364,7 @@ std::string AiService::buildSystemPrompt() const {
         << "Call tools only when they help the user's explicit goal, and never invent tool names.\n"
         << "Read-only tools inspect project context. Mutating, file-writing, download, and import tools may require user approval before they run.\n"
         << "Use read_resource_file before editing existing scripts or materials. Use inspect_scene for scene-level settings.\n"
+        << "2D scenes have a dedicated lighting model: create_entity light_2d adds a Light2DComponent (radius/falloff point light) and occluder_2d adds an Occluder2DComponent (shadow caster). Light2D adds on top of the scene's 2D ambient (set_scene_property ambient_light_2d_color/ambient_light_2d_intensity), so dim the ambient to make 2D lights visible. Occluder2D shape AUTO_QUAD derives its outline from a sibling mesh; POLYGON uses its own points. Enable a Light2D's shadows property to cast from occluders. Shadow edge smoothness is per scene: shadows_quality (3D) and shadows_2d_quality (2D) take int_value 0=none/1=low/2=medium/3=high. These are separate from the 3D Light/global_illumination path.\n"
         << "After a tool returns, use its result to decide the next step and report concise progress to the user.\n"
         << "Prefer project-relative paths. Never request arbitrary shell commands. Never ask for secrets in chat.\n"
         << "For external assets, use curated sources only and preserve license/author/source attribution.\n"
