@@ -1,5 +1,6 @@
 #include "Backend.h"
 #include "EditorHost.h"
+#include "AppSettings.h"
 
 #include <GLFW/glfw3.h>
 
@@ -63,6 +64,19 @@ static void applyGameCursorVisibility(bool force = false) {
 int editor::Backend::init(int argc, char* argv[]) {
     setEditorHost(&app);
 
+    // Load settings early so the platform choice below can honor the persisted
+    // multi-viewport preference (file I/O only, no window system needed).
+    app.initializeSettings();
+
+#ifdef __linux__
+    // Dear ImGui multi-viewport needs to reposition OS windows, which the Wayland
+    // backend forbids (glfwSetWindowPos is a no-op there). Only when the feature is
+    // enabled, prefer X11 (works under XWayland) so dockable panels can be torn off.
+    // Falls back to the default backend if X11 isn't available.
+    if (AppSettings::getMultiViewportEnabled() && glfwPlatformSupported(GLFW_PLATFORM_X11))
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
+
     // Initialize GLFW
     if (!glfwInit())
         return -1;
@@ -81,9 +95,6 @@ int editor::Backend::init(int argc, char* argv[]) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    // Initialize settings first (this doesn't need ImGui yet)
-    app.initializeSettings();
 
     // Get saved window dimensions from app
     int windowWidth = app.getInitialWindowWidth();
@@ -174,6 +185,15 @@ int editor::Backend::init(int argc, char* argv[]) {
 
         render.endRenderPass();
 
+        // Multi-viewport: render torn-off windows in their own GL contexts, then
+        // restore the main context so sokol's next-frame pass runs on the right one.
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
+
         glfwSwapBuffers(window);
     }
 
@@ -238,6 +258,10 @@ void editor::Backend::setGameCursorInSceneRect(bool inSceneRect) {
 
 void editor::Backend::closeWindow() {
     glfwSetWindowShouldClose(window, GLFW_TRUE);
+}
+
+bool editor::Backend::isRunningOnWayland() {
+    return glfwGetPlatform() == GLFW_PLATFORM_WAYLAND;
 }
 
 void editor::Backend::updateWindowTitle(const std::string& projectName) {

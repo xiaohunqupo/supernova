@@ -37,6 +37,9 @@ private:
     // Code editor settings
     static float codeEditorFontSize;
 
+    // Editor viewport settings
+    static bool multiViewportEnabled;
+
     // AI assistant settings (API keys are intentionally not stored here)
     static ai::Settings aiSettings;
 
@@ -91,6 +94,10 @@ public:
 
     static float getCodeEditorFontSize();
     static void setCodeEditorFontSize(float size);
+
+    // Multi-viewport: allow dockable windows to be dragged out into their own OS window
+    static bool getMultiViewportEnabled();
+    static void setMultiViewportEnabled(bool enabled);
 
     // AI assistant settings
     static ai::Settings getAiSettings();

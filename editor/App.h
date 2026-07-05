@@ -41,6 +41,7 @@ namespace doriax::editor{
         bool needShow = false;
         std::string title;
         std::string message;
+        std::string note; // optional highlighted note rendered below the message
         AlertType type = AlertType::Info;
         std::function<void()> onYes = nullptr;
         std::function<void()> onNo = nullptr;
@@ -167,6 +168,8 @@ namespace doriax::editor{
             // marks the viewport sub-selection (tiles, instances, occluder points)
             // in Properties lists; same orange as the viewport selection outline
             static ImVec4 SubSelectionText;
+            // amber warning text, e.g. alert notes; matches OutputWindow's Warning log color
+            static ImVec4 WarningText;
         };
 
         App();
@@ -199,6 +202,7 @@ namespace doriax::editor{
         void saveAllCodeEditors() override;
 
         void registerAlert(std::string title, std::string message) override;
+        void registerAlert(std::string title, std::string message, std::string note); // note is rendered highlighted below the message
         void registerConfirmAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr) override;
         void registerThreeButtonAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr, std::function<void()> onCancel = nullptr) override;
         void registerSaveSceneDialog(uint32_t sceneId, std::function<void()> callback = nullptr) override;

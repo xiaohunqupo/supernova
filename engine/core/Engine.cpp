@@ -64,9 +64,9 @@ double Engine::deltatime = 0;
 float Engine::framerate = 0;
 
 // Upper bound for the delta time exposed to gameplay and the update loop.
-// Mirrors Unity's Time.maximumDeltaTime and Godot's max-step clamp: a frame that
-// stalls (scene load, debugger break, alt-tab) is clamped so scripts and physics
-// never receive a giant step that teleports objects or triggers the spiral of death.
+// A frame that stalls (scene load, debugger break, alt-tab) is clamped so scripts
+// and physics never receive a giant step that teleports objects or triggers the
+// spiral of death.
 double Engine::maxDeltatime = 0.25;
 
 double Engine::updateTime = 1.0 / 60.0; //60Hz

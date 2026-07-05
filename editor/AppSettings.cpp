@@ -21,6 +21,7 @@ int AppSettings::resourcesLayout = 0;
 int AppSettings::resourcesItemViewStyle = 1;
 float AppSettings::resourcesLeftPanelWidth = 200.0f;
 float AppSettings::codeEditorFontSize = AppSettings::defaultCodeEditorFontSize;
+bool AppSettings::multiViewportEnabled = false;
 ai::Settings AppSettings::aiSettings;
 
 bool AppSettings::initialize() {
@@ -124,6 +125,14 @@ bool AppSettings::loadSettings() {
             }
         }
 
+        // Load editor viewport settings
+        if (settingsData["editor"]) {
+            auto editorNode = settingsData["editor"];
+            if (editorNode["multi_viewport"]) {
+                multiViewportEnabled = editorNode["multi_viewport"].as<bool>();
+            }
+        }
+
         // Load AI assistant settings (no API keys)
         if (settingsData["ai_assistant"]) {
             auto aiNode = settingsData["ai_assistant"];
@@ -191,6 +200,11 @@ bool AppSettings::saveSettings() {
         YAML::Node codeNode;
         codeNode["font_size"] = codeEditorFontSize;
         settingsData["code_editor"] = codeNode;
+
+        // Editor viewport settings
+        YAML::Node editorNode;
+        editorNode["multi_viewport"] = multiViewportEnabled;
+        settingsData["editor"] = editorNode;
 
         // AI assistant settings. Secrets must never be serialized here.
         YAML::Node aiNode;
@@ -344,6 +358,14 @@ float AppSettings::getCodeEditorFontSize() {
 
 void AppSettings::setCodeEditorFontSize(float size) {
     codeEditorFontSize = std::clamp(size, minCodeEditorFontSize, maxCodeEditorFontSize);
+}
+
+bool AppSettings::getMultiViewportEnabled() {
+    return multiViewportEnabled;
+}
+
+void AppSettings::setMultiViewportEnabled(bool enabled) {
+    multiViewportEnabled = enabled;
 }
 
 ai::Settings AppSettings::getAiSettings() {

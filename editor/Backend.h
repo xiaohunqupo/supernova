@@ -19,6 +19,11 @@ namespace doriax::editor{
         static void setGameCursorInSceneRect(bool inSceneRect);
         static void closeWindow();
 
+        // True when the windowing platform can't reposition OS windows at runtime
+        // (Wayland). In that case toggling multi-viewport needs an app restart to
+        // take effect, since the backend is chosen at startup from the saved setting.
+        static bool isRunningOnWayland();
+
         static void updateWindowTitle(const std::string& projectName);
 
         static void* getNFDWindowHandle();

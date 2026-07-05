@@ -47,6 +47,7 @@ ImVec4 editor::App::ThemeColors::NestedHeaderHovered;
 ImVec4 editor::App::ThemeColors::NestedHeaderActive;
 ImVec4 editor::App::ThemeColors::DisabledGreenText;
 ImVec4 editor::App::ThemeColors::SubSelectionText;
+ImVec4 editor::App::ThemeColors::WarningText;
 
 ImFont* editor::App::codeFont = nullptr;
 
@@ -340,6 +341,36 @@ void editor::App::showMenu(){
             }
 
             ImGui::Separator();
+            // Reflect the saved preference, not the live imgui flag: on Wayland the
+            // flag can't be activated until a restart forces X11, but the menu should
+            // still show the user's choice as enabled.
+            bool multiViewport = AppSettings::getMultiViewportEnabled();
+            if (ImGui::MenuItem("Detachable Windows", nullptr, &multiViewport)) {
+                AppSettings::setMultiViewportEnabled(multiViewport);
+                AppSettings::saveSettings();
+
+                // Activate the live flag only where extra OS windows actually work.
+                // Wayland can't reposition windows, so leave it off until restart.
+                if (multiViewport && !Backend::isRunningOnWayland())
+                    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+                else
+                    ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
+
+#ifdef __linux__
+                if (multiViewport) {
+                    if (Backend::isRunningOnWayland())
+                        registerAlert("Restart Required",
+                            "Detachable windows will take effect after you restart the editor.",
+                            "Note: This feature may encounter issues on Linux.");
+                    else
+                        registerAlert("Experimental Feature",
+                            "Detachable windows are now enabled.",
+                            "Note: This feature may encounter issues on Linux.");
+                }
+#endif
+            }
+
+            ImGui::Separator();
             if (ImGui::MenuItem("Reset Layout")) {
                 structureWindow->setOpen(true);
                 propertiesWindow->setOpen(true);
@@ -596,6 +627,10 @@ void editor::App::showAlert(){
 
         if (ImGui::BeginPopupModal((alert.title + "##AlertModal").c_str(), nullptr, flags)) {
             ImGui::Text("%s", alert.message.c_str());
+            if (!alert.note.empty()) {
+                ImGui::Spacing();
+                ImGui::TextColored(ThemeColors::WarningText, "%s", alert.note.c_str());
+            }
             ImGui::Separator();
 
             if (alert.type == AlertType::Info) {
@@ -946,6 +981,10 @@ void editor::App::setup() {
 
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
+    // Activate only where it works: on Wayland the backend can't reposition windows,
+    // so the feature stays off this session until a restart forces the X11 backend.
+    if (AppSettings::getMultiViewportEnabled() && !Backend::isRunningOnWayland())
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;  // Multi-Viewport / Platform Windows (toggle in View menu)
 
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
@@ -1477,6 +1516,7 @@ void editor::App::kewtStyleTheme(){
                                             ImVec4(0.38f, 0.72f, 0.46f, 1.00f),
                                             0.58f);
     ThemeColors::SubSelectionText = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+    ThemeColors::WarningText = ImVec4(1.00f, 0.85f, 0.40f, 1.00f);
 
     // main
     style.WindowPadding = ImVec2(8, 8);
@@ -1585,9 +1625,14 @@ void editor::App::saveAllCodeEditors() {
 }
 
 void editor::App::registerAlert(std::string title, std::string message) {
+    registerAlert(title, message, "");
+}
+
+void editor::App::registerAlert(std::string title, std::string message, std::string note) {
     alert.needShow = true;
     alert.title = title;
     alert.message = message;
+    alert.note = note;
     alert.type = AlertType::Info;
     alert.onYes = nullptr;
     alert.onNo = nullptr;
@@ -1597,6 +1642,7 @@ void editor::App::registerConfirmAlert(std::string title, std::string message, s
     alert.needShow = true;
     alert.title = title;
     alert.message = message;
+    alert.note.clear();
     alert.type = AlertType::Confirm;
     alert.onYes = onYes;
     alert.onNo = onNo;
@@ -1606,6 +1652,7 @@ void editor::App::registerThreeButtonAlert(std::string title, std::string messag
     alert.needShow = true;
     alert.title = title;
     alert.message = message;
+    alert.note.clear();
     alert.type = AlertType::ThreeButton;
     alert.onYes = onYes;
     alert.onNo = onNo;

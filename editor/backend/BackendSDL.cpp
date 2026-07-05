@@ -1,11 +1,14 @@
 #include "Backend.h"
 #include "EditorHost.h"
+#include "AppSettings.h"
 
 #include <SDL.h>
 #include <SDL_opengl.h>
 
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
+
+#include <cstdlib>
 
 #include "nfd.hpp"
 #include "nfd_sdl2.h"
@@ -68,6 +71,21 @@ static void applyGameCursorVisibility(bool force = false) {
 int editor::Backend::init(int argc, char* argv[]) {
     setEditorHost(&app);
 
+    // Load settings early so the video-driver choice below can honor the persisted
+    // multi-viewport preference (file I/O only, no window system needed).
+    app.initializeSettings();
+
+#ifdef __linux__
+    // Match the GLFW backend: Dear ImGui multi-viewport needs to reposition OS
+    // windows, which the SDL Wayland video driver doesn't support. Only when the
+    // feature is enabled and we're on a Wayland session with XWayland reachable
+    // (DISPLAY set), select the x11 driver. Respect an explicit user-provided
+    // SDL_VIDEODRIVER. Must be set before SDL_Init().
+    if (AppSettings::getMultiViewportEnabled() &&
+        getenv("WAYLAND_DISPLAY") && getenv("DISPLAY") && !getenv("SDL_VIDEODRIVER"))
+        setenv("SDL_VIDEODRIVER", "x11", 1);
+#endif
+
     // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         return -1;
@@ -95,9 +113,6 @@ int editor::Backend::init(int argc, char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-    // Initialize settings first (this doesn't need ImGui yet)
-    app.initializeSettings();
 
     // Get saved window dimensions from app
     int windowWidth = app.getInitialWindowWidth();
@@ -211,6 +226,16 @@ int editor::Backend::init(int argc, char* argv[]) {
 
         render.endRenderPass();
 
+        // Multi-viewport: render torn-off windows in their own GL contexts, then
+        // restore the main context so sokol's next-frame pass runs on the right one.
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            SDL_Window*   backup_window  = SDL_GL_GetCurrentWindow();
+            SDL_GLContext backup_context = SDL_GL_GetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            SDL_GL_MakeCurrent(backup_window, backup_context);
+        }
+
         SDL_GL_SwapWindow(window);
     }
 
@@ -279,6 +304,11 @@ void editor::Backend::setGameCursorInSceneRect(bool inSceneRect) {
 
 void editor::Backend::closeWindow() {
     shouldClose = true;
+}
+
+bool editor::Backend::isRunningOnWayland() {
+    const char* driver = SDL_GetCurrentVideoDriver();
+    return driver && SDL_strcmp(driver, "wayland") == 0;
 }
 
 void editor::Backend::updateWindowTitle(const std::string& projectName) {
