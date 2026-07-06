@@ -282,6 +282,32 @@ bool shaderTypeForComponent(ComponentType component, ShaderType& out) {
     }
 }
 
+// Parses the "mesh"/"ui"/"sky"/"points"/"lines" shader_type argument used to fork or
+// address a scene's default shader (as opposed to a specific entity's component).
+bool parseShaderTypeName(const std::string& name, ShaderType& out) {
+    static const std::unordered_map<std::string, ShaderType> map = {
+        {"mesh", ShaderType::MESH}, {"ui", ShaderType::UI}, {"sky", ShaderType::SKYBOX},
+        {"points", ShaderType::POINTS}, {"lines", ShaderType::LINES}
+    };
+    auto it = map.find(lower(name));
+    if (it == map.end()) return false;
+    out = it->second;
+    return true;
+}
+
+// The Catalog/ScenePropertyCmd property name that stores a scene's default shader path
+// for a given type (see editor::Catalog::get/setSceneProperty).
+const char* scenePropertyNameForShaderType(ShaderType type) {
+    switch (type) {
+        case ShaderType::MESH:   return "default_mesh_shader";
+        case ShaderType::UI:     return "default_ui_shader";
+        case ShaderType::SKYBOX: return "default_sky_shader";
+        case ShaderType::POINTS: return "default_points_shader";
+        case ShaderType::LINES:  return "default_lines_shader";
+        default: return "";
+    }
+}
+
 // Picks the entity's first renderable component that supports custom shaders.
 bool detectForkableComponent(EntityRegistry* registry, Entity entity, ComponentType& component, ShaderType& shaderType) {
     for (ComponentType candidate : {ComponentType::MeshComponent, ComponentType::UIComponent,
@@ -1742,6 +1768,8 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
         if (!arguments.contains("string_value") || !arguments["string_value"].is_string()) {
             return failResult(property + " requires string_value (custom shader base path, empty for built-in).");
         }
+        std::string error;
+        if (!validateCustomShaderValue(property, arguments, error)) return failResult(error);
         cmd = new ScenePropertyCmd<std::string>(project, sceneId, property, arguments["string_value"].get<std::string>());
     } else {
         return failResult("Unsupported scene property: " + property);
@@ -2507,7 +2535,13 @@ ActionResult EditorActionExecutor::generateShaders(const Json& arguments, const 
 }
 
 bool EditorActionExecutor::validateCustomShaderValue(const std::string& propertyName, const Json& args, std::string& error) const {
-    if (propertyName != "customShader") {
+    // Every shader-path property (per-component customShader, or a scene's per-type
+    // default) is a project-relative base path; both must reference real files.
+    static const std::set<std::string> shaderPathProperties = {
+        "customShader", "default_mesh_shader", "default_ui_shader",
+        "default_sky_shader", "default_points_shader", "default_lines_shader"
+    };
+    if (!shaderPathProperties.count(propertyName)) {
         return true;
     }
     const std::string value = args.value("string_value", "");
@@ -2518,8 +2552,8 @@ bool EditorActionExecutor::validateCustomShaderValue(const std::string& property
     Util::CustomShaderPaths paths = Util::resolveCustomShaderPaths(value);
     const fs::path projectPath = project->getProjectPath();
     if (!fs::exists(projectPath / paths.vert) || !fs::exists(projectPath / paths.frag)) {
-        error = "customShader references missing files (" + paths.vert + ", " + paths.frag +
-                "). Use fork_shader to create a fork, or write_shader_file to author the .vert/.frag, before setting customShader.";
+        error = propertyName + " references missing files (" + paths.vert + ", " + paths.frag +
+                "). Use fork_shader to create a fork, or write_shader_file to author the .vert/.frag, before setting " + propertyName + ".";
         return false;
     }
     return true;
@@ -2529,6 +2563,57 @@ ActionResult EditorActionExecutor::forkShader(const Json& arguments) {
     uint32_t sceneId = resolveSceneId(project, arguments);
     SceneProject* sceneProject = project->getScene(sceneId);
     if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    const bool hasEntity = arguments.contains("entity_id") ||
+                           (arguments.contains("entity_name") && arguments["entity_name"].is_string());
+    const std::string shaderTypeArg = arguments.value("shader_type", "");
+
+    // No entity selector: fork a scene-wide default shader for the given type instead of a
+    // specific component (priority: component customShader > scene default > built-in).
+    if (!hasEntity) {
+        ShaderType shaderType;
+        if (!parseShaderTypeName(shaderTypeArg, shaderType)) {
+            return failResult("fork_shader requires entity_id/entity_name, or shader_type "
+                              "(mesh, ui, sky, points, or lines) to fork a scene default.");
+        }
+        const std::string scenePropertyName = scenePropertyNameForShaderType(shaderType);
+
+        // Re-forking would orphan the previous fork's files; require an explicit reset first.
+        const std::string current = Catalog::getSceneProperty<std::string>(sceneProject->scene, scenePropertyName);
+        if (!current.empty()) {
+            return failResult("Scene already has a default " + shaderTypeArg + " shader (" + current +
+                              "). Edit it with write_shader_file, or clear " + scenePropertyName +
+                              " to reset before forking again.");
+        }
+
+        const std::string desiredName = sceneProject->name + " " + shaderTypeArg;
+        auto* forkCmd = new ForkShaderCmd(project, sceneProject, shaderType, scenePropertyName, desiredName);
+        if (!forkCmd->isValid()) {
+            delete forkCmd;
+            return failResult("Failed to plan the shader fork (built-in source unavailable?).");
+        }
+
+        const std::string base = forkCmd->getBase();
+        CommandHandle::get(sceneId)->addCommandNoMerge(forkCmd);
+
+        // The command writes the files as part of execute(); confirm so the AI gets accurate feedback.
+        if (!fs::exists(project->getProjectPath() / (base + ".vert")) ||
+            !fs::exists(project->getProjectPath() / (base + ".frag"))) {
+            return failResult("Shader fork did not write its source files.");
+        }
+
+        if (resourcesWindow) {
+            resourcesWindow->refreshCurrentDirectory();
+        }
+        Out::info("AI forked scene default shader: %s", base.c_str());
+
+        return okResult("Forked scene default shader through the command history.",
+                        Json{{"custom_shader", base},
+                             {"vert_path", base + ".vert"},
+                             {"frag_path", base + ".frag"},
+                             {"scene_property", scenePropertyName}});
+    }
+
     Entity entity = resolveEntity(sceneProject, arguments);
     if (entity == NULL_ENTITY) return failResult("Entity not found.");
 

@@ -373,7 +373,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "set_scene_property",
-            "Set a supported scene-level property such as background_color, global_illumination_color, ssao_enabled, ssr_enabled, ambient_light_2d_color/ambient_light_2d_intensity (2D light ambient), shadows_quality (3D) and shadows_2d_quality (2D) as int_value 0=none/1=low/2=medium/3=high.",
+            "Set a supported scene-level property such as background_color, global_illumination_color, ssao_enabled, ssr_enabled, ambient_light_2d_color/ambient_light_2d_intensity (2D light ambient), shadows_quality (3D) and shadows_2d_quality (2D) as int_value 0=none/1=low/2=medium/3=high. Also sets a scene's default custom shader per type via default_mesh_shader/default_ui_shader/default_sky_shader/default_points_shader/default_lines_shader as string_value (project-relative fork base path, empty to reset to built-in) - used by every component of that type whose own customShader is empty (priority: component customShader > scene default > built-in). Use fork_shader with shader_type (no entity) to create the fork first.",
             objectSchemaFromProperties(propertyValueFields({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"property", stringSchema("Scene property name")}
@@ -689,12 +689,13 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "fork_shader",
-            "Fork a built-in shader for a renderable component (Mesh/UI/Points/Lines/Sky) into the project's shaders folder and point its customShader at the fork, as one undoable step. Creates <name>.vert and <name>.frag (their #include \"includes/...\" still resolve against the engine library) which you then edit with write_shader_file. This is the correct way to start a custom shader; do not set customShader to files that do not exist.",
+            "Fork a built-in shader into the project's shaders folder as one undoable step. Give entity_id/entity_name to fork a single component's shader (points its customShader at the fork); omit both and give shader_type instead to fork a scene-wide default shader for that type (points the scene's default_<type>_shader at the fork, used by every component of that type without its own customShader - see set_scene_property). Creates <name>.vert and <name>.frag (their #include \"includes/...\" still resolve against the engine library) which you then edit with write_shader_file. This is the correct way to start a custom shader; do not set customShader or a scene default_*_shader to files that do not exist.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
-                {"entity_id", integerSchema("Entity id")},
+                {"entity_id", integerSchema("Entity id. Omit both this and entity_name, and give shader_type, to fork a scene default instead")},
                 {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
-                {"component", stringSchema("Renderable component name (MeshComponent, UIComponent, PointsComponent, LinesComponent, SkyComponent). Omit to auto-detect the entity's renderable component")}
+                {"component", stringSchema("Renderable component name (MeshComponent, UIComponent, PointsComponent, LinesComponent, SkyComponent). Omit to auto-detect the entity's renderable component. Ignored when forking a scene default")},
+                {"shader_type", stringSchema("mesh, ui, sky, points, or lines. Required (and only used) when entity_id/entity_name are omitted, to fork a scene-wide default shader for that type")}
             }),
             false
         },
@@ -1181,7 +1182,8 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         return hasString(arguments, "target_dir") ? ok() : fail(name + " requires target_dir.");
     }
     if (name == "fork_shader") {
-        return hasEntitySelector(arguments) ? ok() : fail("fork_shader requires entity_id or entity_name.");
+        if (hasEntitySelector(arguments) || hasString(arguments, "shader_type")) return ok();
+        return fail("fork_shader requires entity_id/entity_name, or shader_type to fork a scene default.");
     }
     if (name == "write_shader_file") {
         if (!hasString(arguments, "path")) return fail("write_shader_file requires path.");
@@ -1476,6 +1478,9 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
         }
         if (arguments.contains("entity_name")) {
             return "Fork shader for \"" + arguments.value("entity_name", "") + "\"";
+        }
+        if (arguments.contains("shader_type")) {
+            return "Fork scene default " + arguments.value("shader_type", "") + " shader";
         }
         return "Fork custom shader";
     }
