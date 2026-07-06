@@ -896,7 +896,11 @@ bool RenderSystem::loadPBRTextures(Material& material, ShaderData& shaderData, O
             render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyWhite);
         }
 
-        textureRender = material.emissiveTexture.getRender(&emptyBlack);
+        // A missing emissive texture must default to white (glTF: emissive =
+        // emissiveFactor * emissiveTexture, absent texture = 1,1,1,1). The shader
+        // unconditionally multiplies emissiveFactor by this sample for UV meshes, so a
+        // black fallback would silently zero out emissiveFactor when no texture is set.
+        textureRender = material.emissiveTexture.getRender(&emptyWhite);
         slotTex = shaderData.getTextureIndex(TextureShaderType::EMISSIVE);
         if (textureRender){
             if (!textureRender->isCreated()){
@@ -904,7 +908,7 @@ bool RenderSystem::loadPBRTextures(Material& material, ShaderData& shaderData, O
             }
             render.addTexture(slotTex, ShaderStageType::FRAGMENT, textureRender);
         }else{
-            render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyBlack);
+            render.addTexture(slotTex, ShaderStageType::FRAGMENT, &emptyWhite);
         }
     }
 
