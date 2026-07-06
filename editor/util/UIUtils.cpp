@@ -2,6 +2,7 @@
 #include "App.h"
 #include "external/IconsFontAwesome6.h"
 #include "window/widget/InputTextContextMenu.h"
+#include "imgui_internal.h"
 
 namespace doriax::editor {
 
@@ -19,6 +20,7 @@ bool UIUtils::searchInput(const char* id, std::string hint, char* buffer, size_t
     float inputWidth = totalWidth - buttonWidth;
     if (inputWidth < 50.0f) inputWidth = 50.0f; // Minimum width
 
+    ImGui::PushStyleColor(ImGuiCol_NavHighlight, ImVec4(0, 0, 0, 0));
     ImGui::PushItemWidth(inputWidth);
 
     if (autoFocus) {
@@ -31,9 +33,13 @@ bool UIUtils::searchInput(const char* id, std::string hint, char* buffer, size_t
     } else {
         changed = ImGui::InputTextWithHint(id, hint.c_str(), buffer, bufferSize);
     }
-    changed = InputTextContextMenu::drawForLastItem(buffer, bufferSize) || changed;
+    ImGuiID inputId = ImGui::GetItemID();
+    ImRect inputRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 
     ImGui::PopItemWidth();
+    ImGui::PopStyleColor();
+
+    changed = InputTextContextMenu::drawForLastItem(buffer, bufferSize) || changed;
 
     // Button on the same line with no spacing
     ImGui::SameLine(0.0f, 0.0f);
@@ -47,6 +53,7 @@ bool UIUtils::searchInput(const char* id, std::string hint, char* buffer, size_t
     bool isMatchCase = (matchCase != nullptr) && (*matchCase);
     ImVec4 iconTextColor = isMatchCase ? style.Colors[ImGuiCol_Text] : style.Colors[ImGuiCol_TextDisabled];
 
+    ImGui::PushStyleColor(ImGuiCol_NavHighlight, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Button, bgColor);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, bgHoveredColor);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, bgActiveColor);
@@ -54,12 +61,21 @@ bool UIUtils::searchInput(const char* id, std::string hint, char* buffer, size_t
 
     // Create unique popup ID based on the input ID
     std::string popupId = std::string("SearchOptions") + id;
+    std::string buttonId = std::string(ICON_FA_MAGNIFYING_GLASS) + "##SearchButton" + id;
 
-    if (ImGui::Button(ICON_FA_MAGNIFYING_GLASS)) {
+    if (ImGui::Button(buttonId.c_str(), ImVec2(buttonWidth, 0.0f))) {
         ImGui::OpenPopup(popupId.c_str());
     }
+    ImGuiID iconButtonId = ImGui::GetItemID();
+    ImRect iconButtonRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 
     ImGui::PopStyleColor(4);
+    ImGui::PopStyleColor();
+
+    ImRect searchRect = inputRect;
+    searchRect.Add(iconButtonRect);
+    ImGui::RenderNavCursor(searchRect, inputId);
+    ImGui::RenderNavCursor(searchRect, iconButtonId);
 
     // Context menu for search options
     if (ImGui::BeginPopup(popupId.c_str())) {
