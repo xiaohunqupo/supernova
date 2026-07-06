@@ -1410,7 +1410,11 @@ void editor::App::engineShutdown(){
 
 void editor::App::addNewSceneToDock(uint32_t sceneId){
     if (isInitialized){
-        dockTabWindow("###Scene" + std::to_string(sceneId));
+        const std::string windowName = "###Scene" + std::to_string(sceneId);
+        const SceneProject* sceneProject = project.getScene(sceneId);
+        const bool isUnsavedScene = sceneProject && sceneProject->filepath.empty();
+
+        dockTabWindow(windowName, isUnsavedScene);
     }
 }
 
