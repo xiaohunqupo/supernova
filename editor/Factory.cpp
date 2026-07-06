@@ -1279,6 +1279,9 @@ std::string editor::Factory::createCameraComponent(int indentSpaces, EntityRegis
     code << ind << "camera.transparentSort = " << formatBool(camera.transparentSort) << ";\n";
     code << ind << "camera.useTarget = " << formatBool(camera.useTarget) << ";\n";
     code << ind << "camera.autoResize = " << formatBool(camera.autoResize) << ";\n";
+    code << ind << "camera.framebufferWidth = " << formatUInt(camera.framebufferWidth) << ";\n";
+    code << ind << "camera.framebufferHeight = " << formatUInt(camera.framebufferHeight) << ";\n";
+    code << ind << "camera.framebufferFilter = " << formatTextureFilter(camera.framebufferFilter) << ";\n";
     addComponentCode(code, ind, sceneName, entityName, entity, "CameraComponent", "camera", assignExisting);
     return code.str();
 }

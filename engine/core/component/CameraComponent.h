@@ -71,6 +71,13 @@ namespace doriax{
         // need to be a pointer to not lost reference when component changes position
         Framebuffer* framebuffer = new Framebuffer();
 
+        // authored framebuffer settings (source of truth, serialized/editable);
+        // RenderSystem syncs these into the Framebuffer above and recreates it when
+        // they change. Defaults must match the Framebuffer() constructor defaults.
+        unsigned int framebufferWidth = 512;
+        unsigned int framebufferHeight = 512;
+        TextureFilter framebufferFilter = TextureFilter::LINEAR;
+
         bool transparentSort = true;
 
         bool useTarget = true;

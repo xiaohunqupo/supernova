@@ -416,6 +416,10 @@ namespace {
         makeFastProperty<CameraComponent, bool, &CameraComponent::transparentSort>("transparentSort", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<CameraComponent, bool, &CameraComponent::useTarget>("useTarget", PropertyType::Bool, UpdateFlags_Camera),
         makeFastProperty<CameraComponent, bool, &CameraComponent::autoResize>("autoResize", PropertyType::Bool, UpdateFlags_Camera),
+        // framebuffer settings are applied by RenderSystem::update (no update flag needed)
+        makeFastProperty<CameraComponent, unsigned int, &CameraComponent::framebufferWidth>("framebufferWidth", PropertyType::UInt, UpdateFlags_None),
+        makeFastProperty<CameraComponent, unsigned int, &CameraComponent::framebufferHeight>("framebufferHeight", PropertyType::UInt, UpdateFlags_None),
+        makeFastProperty<CameraComponent, TextureFilter, &CameraComponent::framebufferFilter>("framebufferFilter", PropertyType::Enum, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kSoundProperties[] = {

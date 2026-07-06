@@ -132,6 +132,12 @@ static std::vector<editor::EnumEntry> entriesCameraType = {
     { (int)CameraType::CAMERA_PERSPECTIVE, "Perspective" }
 };
 
+// render-target framebuffers have no mipmaps, so only the non-mipmap filters apply
+static std::vector<editor::EnumEntry> entriesTextureFilter = {
+    { (int)TextureFilter::NEAREST, "Nearest" },
+    { (int)TextureFilter::LINEAR, "Linear" }
+};
+
 static std::vector<editor::EnumEntry> entriesEmitterShape = {
     { (int)ParticleEmitterShape::Box, "Box" },
     { (int)ParticleEmitterShape::Sphere, "Sphere" },
@@ -6304,6 +6310,23 @@ void editor::Properties::drawCameraComponent(ComponentType cpType, SceneProject*
     }
 
     endTable();
+
+    // framebuffer settings only matter when the camera renders into a texture
+    // (bind a camera to a texture by dragging it onto a texture slot)
+    if (camera.renderToTexture){
+        RowSettings sizeSettings;
+        sizeSettings.stepSize = 1.0f;
+
+        RowSettings filterSettings;
+        filterSettings.enumEntries = &entriesTextureFilter;
+
+        ImGui::SeparatorText("Render Target");
+        beginTable(cpType, getLabelSize("Height"), "camera_framebuffer");
+        propertyRow(RowPropertyType::UInt, cpType, "framebufferWidth", "Width", sceneProject, entities, sizeSettings);
+        propertyRow(RowPropertyType::UInt, cpType, "framebufferHeight", "Height", sceneProject, entities, sizeSettings);
+        propertyRow(RowPropertyType::Enum, cpType, "framebufferFilter", "Filter", sceneProject, entities, filterSettings);
+        endTable();
+    }
 }
 
 void editor::Properties::drawAudioComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){

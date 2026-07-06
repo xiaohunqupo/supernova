@@ -3725,6 +3725,9 @@ Entity RenderSystem::createMirrorCamera(Entity mirrorEntity){
     int h = (Engine::getCanvasHeight() > 0) ? Engine::getCanvasHeight() : 1024;
     cam.framebuffer->setWidth(w);
     cam.framebuffer->setHeight(h);
+    // keep authored fields in sync so RenderSystem::update doesn't resize it back
+    cam.framebufferWidth = w;
+    cam.framebufferHeight = h;
 
     return camEntity;
 }
@@ -4734,8 +4737,40 @@ void RenderSystem::update(double dt){
         Transform& cameraTransform = scene->getComponent<Transform>(cameraEntity);
 
         if (camera.renderToTexture){
-            if (!camera.framebuffer->isCreated()){
+            // sync authored framebuffer settings (editor/serialized) into the live
+            // framebuffer; recreate it when they change so edits take effect. A
+            // non-positive size is ignored so an in-use framebuffer is never left
+            // destroyed (meshes sampling an uncreated framebuffer would be invalid).
+            bool validSize = camera.framebufferWidth > 0 && camera.framebufferHeight > 0;
+
+            bool settingsChanged = validSize &&
+                (camera.framebuffer->getWidth() != camera.framebufferWidth ||
+                 camera.framebuffer->getHeight() != camera.framebufferHeight ||
+                 camera.framebuffer->getMinFilter() != camera.framebufferFilter ||
+                 camera.framebuffer->getMagFilter() != camera.framebufferFilter);
+
+            if (settingsChanged){
+                camera.framebuffer->setWidth(camera.framebufferWidth);
+                camera.framebuffer->setHeight(camera.framebufferHeight);
+                camera.framebuffer->setMinFilter(camera.framebufferFilter);
+                camera.framebuffer->setMagFilter(camera.framebufferFilter);
+
+                if (camera.framebuffer->isCreated()){
+                    camera.framebuffer->destroy();
+                }
+            }
+
+            bool created = false;
+            if (!camera.framebuffer->isCreated() && validSize){
                 camera.framebuffer->create();
+                created = true;
+            }
+
+            // autoResize cameras derive clip/aspect from the framebuffer size;
+            // reconcile on first creation and after any size change, otherwise the
+            // camera keeps a stale (e.g. canvas) aspect and the RTT image is distorted
+            if (settingsChanged || created){
+                updateCameraSize(cameraEntity);
             }
         }
 

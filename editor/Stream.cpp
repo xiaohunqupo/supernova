@@ -4639,6 +4639,9 @@ YAML::Node editor::Stream::encodeCameraComponent(const CameraComponent& camera) 
     node["transparentSort"] = camera.transparentSort;
     node["useTarget"] = camera.useTarget;
     node["autoResize"] = camera.autoResize;
+    node["framebufferWidth"] = camera.framebufferWidth;
+    node["framebufferHeight"] = camera.framebufferHeight;
+    node["framebufferFilter"] = textureFilterToString(camera.framebufferFilter);
 
     return node;
 }
@@ -4666,6 +4669,9 @@ CameraComponent editor::Stream::decodeCameraComponent(const YAML::Node& node, co
     if (node["transparentSort"]) camera.transparentSort = node["transparentSort"].as<bool>();
     if (node["useTarget"]) camera.useTarget = node["useTarget"].as<bool>();
     if (node["autoResize"]) camera.autoResize = node["autoResize"].as<bool>();
+    if (node["framebufferWidth"]) camera.framebufferWidth = node["framebufferWidth"].as<unsigned int>();
+    if (node["framebufferHeight"]) camera.framebufferHeight = node["framebufferHeight"].as<unsigned int>();
+    if (node["framebufferFilter"]) camera.framebufferFilter = stringToTextureFilter(node["framebufferFilter"].as<std::string>());
 
     return camera;
 }

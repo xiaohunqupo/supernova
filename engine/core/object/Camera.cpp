@@ -541,10 +541,10 @@ Framebuffer* Camera::getFramebuffer(){
 void Camera::setFramebufferSize(int width, int height){
     CameraComponent& camera = getComponent<CameraComponent>();
 
-    float oldWidth = camera.framebuffer->getWidth();
-    float oldHeight = camera.framebuffer->getHeight();
+    if ((camera.framebufferWidth != (unsigned int)width) || (camera.framebufferHeight != (unsigned int)height)){
+        camera.framebufferWidth = width;
+        camera.framebufferHeight = height;
 
-    if ((oldWidth != width) || (oldHeight != height)){
         camera.framebuffer->setWidth(width);
         camera.framebuffer->setHeight(height);
 
@@ -557,6 +557,8 @@ void Camera::setFramebufferSize(int width, int height){
 
 void Camera::setFramebufferFilter(TextureFilter filter){
     CameraComponent& camera = getComponent<CameraComponent>();
+
+	camera.framebufferFilter = filter;
 
 	camera.framebuffer->setMinFilter(filter);
 	camera.framebuffer->setMagFilter(filter);
