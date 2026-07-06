@@ -137,7 +137,7 @@ namespace doriax::editor {
             }
 
             if (changed) {
-                cmd = new ScenePropertyCmd<T>(sceneProject, propertyName, value);
+                cmd = new ScenePropertyCmd<T>(project, sceneProject->id, propertyName, value);
                 CommandHandle::get(sceneProject->id)->addCommand(cmd);
             }
 

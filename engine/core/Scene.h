@@ -9,6 +9,7 @@
 #include "SubSystem.h"
 #include "EntityRegistry.h"
 #include "Export.h"
+#include "render/Render.h"
 #include <string>
 #include <vector>
 
@@ -72,6 +73,14 @@ namespace doriax{
         int ssrDebugMode;       // 0=off,1=reflection,2=normal,3=roughness,4=metallic,5=albedo,6=IBL specular
 
         UIEventState uiEventState;
+
+        // scene-wide custom shaders, used when a component's customShader is empty
+        // (project-relative base or "a.vert|b.frag"; empty = engine built-in)
+        std::string defaultMeshShader;
+        std::string defaultUIShader;
+        std::string defaultSkyShader;
+        std::string defaultPointsShader;
+        std::string defaultLinesShader;
 
         std::vector<std::pair<std::string, std::shared_ptr<SubSystem>>> systems;
 
@@ -187,6 +196,24 @@ namespace doriax{
 
         void setShadow2DQuality(ShadowQuality quality);
         ShadowQuality getShadow2DQuality() const;
+
+        void setDefaultMeshShader(const std::string& path);
+        const std::string& getDefaultMeshShader() const;
+
+        void setDefaultUIShader(const std::string& path);
+        const std::string& getDefaultUIShader() const;
+
+        void setDefaultSkyShader(const std::string& path);
+        const std::string& getDefaultSkyShader() const;
+
+        void setDefaultPointsShader(const std::string& path);
+        const std::string& getDefaultPointsShader() const;
+
+        void setDefaultLinesShader(const std::string& path);
+        const std::string& getDefaultLinesShader() const;
+
+        void setDefaultCustomShader(ShaderType type, const std::string& path);
+        const std::string& getDefaultCustomShader(ShaderType type) const;
 
         bool canReceiveUIEvents();
 

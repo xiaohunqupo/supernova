@@ -1553,8 +1553,10 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
                         (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao, p_light2d, p_shadows2d);
         // a user-forked main shader overrides the built-in Mesh shader; the variant
-        // (#define) system, depth/gbuffer passes and bind-slots are unchanged
-        mesh.submeshes[i].customShaderId = ShaderPool::registerCustomShader(mesh.customShader);
+        // (#define) system, depth/gbuffer passes and bind-slots are unchanged.
+        // Priority: component customShader > scene default shader > built-in (empty)
+        const std::string& meshShaderSrc = mesh.customShader.empty() ? scene->getDefaultCustomShader(ShaderType::MESH) : mesh.customShader;
+        mesh.submeshes[i].customShaderId = ShaderPool::registerCustomShader(meshShaderSrc);
         mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties, mesh.submeshes[i].customShaderId);
         // the depth shader feeds shadow maps (casters) and the SSAO depth pre-pass
         // (SSR uses its own G-buffer shader, built below)
@@ -1587,7 +1589,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             if (mesh.submeshes[i].customShaderId != 0 &&
                 ShaderPool::isShaderBuildFailed(ShaderType::MESH, mesh.submeshes[i].shaderProperties, mesh.submeshes[i].customShaderId)){
                 Log::error("Custom shader '%s' failed to compile; rendering '%s' with the built-in shader",
-                           mesh.customShader.c_str(), scene->getEntityName(entity).c_str());
+                           meshShaderSrc.c_str(), scene->getEntityName(entity).c_str());
                 mesh.submeshes[i].customShaderId = 0;
                 mesh.submeshes[i].shader = ShaderPool::get(ShaderType::MESH, mesh.submeshes[i].shaderProperties, 0);
             }
@@ -2892,13 +2894,14 @@ bool RenderSystem::loadUI(Entity entity, UIComponent& ui, uint8_t pipelines, boo
     }
 
     ui.shaderProperties = ShaderPool::getUIProperties(p_hasTexture, p_hasFontAtlasTexture, false, p_vertexColorVec4);
-    ui.customShaderId = ShaderPool::registerCustomShader(ui.customShader);
+    const std::string& uiShaderSrc = ui.customShader.empty() ? scene->getDefaultCustomShader(ShaderType::UI) : ui.customShader;
+    ui.customShaderId = ShaderPool::registerCustomShader(uiShaderSrc);
     ui.shader = ShaderPool::get(ShaderType::UI, ui.shaderProperties, ui.customShaderId);
     if (!ui.shader->isCreated()){
         // A custom shader that failed to compile falls back to the built-in shader (so the
         // object stays visible and loading finishes); retried after its source changes.
         if (ui.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::UI, ui.shaderProperties, ui.customShaderId)){
-            Log::error("Custom shader '%s' failed to compile; using the built-in shader", ui.customShader.c_str());
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", uiShaderSrc.c_str());
             ui.customShaderId = 0;
             ui.shader = ShaderPool::get(ShaderType::UI, ui.shaderProperties, 0);
         }
@@ -3077,13 +3080,14 @@ bool RenderSystem::loadPoints(Entity entity, PointsComponent& points, uint8_t pi
     }
 
     points.shaderProperties = ShaderPool::getPointsProperties(p_hasTexture, false, true, p_hasTextureRect);
-    points.customShaderId = ShaderPool::registerCustomShader(points.customShader);
+    const std::string& pointsShaderSrc = points.customShader.empty() ? scene->getDefaultCustomShader(ShaderType::POINTS) : points.customShader;
+    points.customShaderId = ShaderPool::registerCustomShader(pointsShaderSrc);
     points.shader = ShaderPool::get(ShaderType::POINTS, points.shaderProperties, points.customShaderId);
     if (!points.shader->isCreated()){
         // A custom shader that failed to compile falls back to the built-in shader (so the
         // object stays visible and loading finishes); retried after its source changes.
         if (points.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::POINTS, points.shaderProperties, points.customShaderId)){
-            Log::error("Custom shader '%s' failed to compile; using the built-in shader", points.customShader.c_str());
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", pointsShaderSrc.c_str());
             points.customShaderId = 0;
             points.shader = ShaderPool::get(ShaderType::POINTS, points.shaderProperties, 0);
         }
@@ -3150,13 +3154,14 @@ bool RenderSystem::loadLines(Entity entity, LinesComponent& lines, uint8_t pipel
     render.beginLoad(PrimitiveType::LINES);
 
     lines.shaderProperties = ShaderPool::getLinesProperties(false, true);
-    lines.customShaderId = ShaderPool::registerCustomShader(lines.customShader);
+    const std::string& linesShaderSrc = lines.customShader.empty() ? scene->getDefaultCustomShader(ShaderType::LINES) : lines.customShader;
+    lines.customShaderId = ShaderPool::registerCustomShader(linesShaderSrc);
     lines.shader = ShaderPool::get(ShaderType::LINES, lines.shaderProperties, lines.customShaderId);
     if (!lines.shader->isCreated()){
         // A custom shader that failed to compile falls back to the built-in shader (so the
         // object stays visible and loading finishes); retried after its source changes.
         if (lines.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::LINES, lines.shaderProperties, lines.customShaderId)){
-            Log::error("Custom shader '%s' failed to compile; using the built-in shader", lines.customShader.c_str());
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", linesShaderSrc.c_str());
             lines.customShaderId = 0;
             lines.shader = ShaderPool::get(ShaderType::LINES, lines.shaderProperties, 0);
         }
@@ -3415,13 +3420,14 @@ bool RenderSystem::loadSky(Entity entity, SkyComponent& sky, uint8_t pipelines){
 
     render->beginLoad(PrimitiveType::TRIANGLES);
 
-    sky.customShaderId = ShaderPool::registerCustomShader(sky.customShader);
+    const std::string& skyShaderSrc = sky.customShader.empty() ? scene->getDefaultCustomShader(ShaderType::SKYBOX) : sky.customShader;
+    sky.customShaderId = ShaderPool::registerCustomShader(skyShaderSrc);
     sky.shader = ShaderPool::get(ShaderType::SKYBOX, 0, sky.customShaderId);
     if (!sky.shader->isCreated()){
         // A custom shader that failed to compile falls back to the built-in shader (so the
         // object stays visible and loading finishes); retried after its source changes.
         if (sky.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::SKYBOX, 0, sky.customShaderId)){
-            Log::error("Custom shader '%s' failed to compile; using the built-in shader", sky.customShader.c_str());
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", skyShaderSrc.c_str());
             sky.customShaderId = 0;
             sky.shader = ShaderPool::get(ShaderType::SKYBOX, 0, 0);
         }

@@ -917,6 +917,11 @@ Json sceneReadableProperties(SceneProject* sceneProject) {
     props["ssr_blur"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssr_blur")}};
     props["ssr_max_steps"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "ssr_max_steps")}};
     props["ssr_debug_mode"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "ssr_debug_mode")}};
+    props["default_mesh_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_mesh_shader")}};
+    props["default_ui_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_ui_shader")}};
+    props["default_sky_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_sky_shader")}};
+    props["default_points_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_points_shader")}};
+    props["default_lines_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_lines_shader")}};
     return props;
 }
 
@@ -1692,19 +1697,19 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
         if (!parseVector4(arguments.value("vector4_value", Json::object()), value)) {
             return failResult("background_color requires vector4_value.");
         }
-        cmd = new ScenePropertyCmd<Vector4>(sceneProject, property, value);
+        cmd = new ScenePropertyCmd<Vector4>(project, sceneId, property, value);
     } else if (property == "global_illumination_color" || property == "ambient_light_2d_color") {
         Vector3 value = Catalog::getSceneProperty<Vector3>(sceneProject->scene, property);
         if (!parseVector3(arguments.value("vector3_value", Json::object()), value)) {
             return failResult(property + " requires vector3_value.");
         }
-        cmd = new ScenePropertyCmd<Vector3>(sceneProject, property, value);
+        cmd = new ScenePropertyCmd<Vector3>(project, sceneId, property, value);
     } else if (property == "ssao_enabled" ||
                property == "ssao_debug" || property == "ssr_enabled") {
         if (!arguments.contains("bool_value") || !arguments["bool_value"].is_boolean()) {
             return failResult(property + " requires bool_value.");
         }
-        cmd = new ScenePropertyCmd<bool>(sceneProject, property, arguments["bool_value"].get<bool>());
+        cmd = new ScenePropertyCmd<bool>(project, sceneId, property, arguments["bool_value"].get<bool>());
     } else if (property == "global_illumination_intensity" || property == "ambient_light_2d_intensity" ||
                property == "ssao_radius" ||
                property == "ssao_intensity" || property == "ssao_bias" ||
@@ -1713,24 +1718,31 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
         if (!arguments.contains("number_value") || !arguments["number_value"].is_number()) {
             return failResult(property + " requires number_value.");
         }
-        cmd = new ScenePropertyCmd<float>(sceneProject, property, arguments["number_value"].get<float>());
+        cmd = new ScenePropertyCmd<float>(project, sceneId, property, arguments["number_value"].get<float>());
     } else if (property == "ssr_max_steps" || property == "ssr_debug_mode") {
         if (!arguments.contains("int_value") || !arguments["int_value"].is_number_integer()) {
             return failResult(property + " requires int_value.");
         }
-        cmd = new ScenePropertyCmd<int>(sceneProject, property, arguments["int_value"].get<int>());
+        cmd = new ScenePropertyCmd<int>(project, sceneId, property, arguments["int_value"].get<int>());
     } else if (property == "light_state") {
         if (!arguments.contains("int_value") || !arguments["int_value"].is_number_integer()) {
             return failResult("light_state requires int_value.");
         }
-        cmd = new ScenePropertyCmd<LightState>(sceneProject, property,
+        cmd = new ScenePropertyCmd<LightState>(project, sceneId, property,
                                                static_cast<LightState>(arguments["int_value"].get<int>()));
     } else if (property == "shadows_quality" || property == "shadows_2d_quality") {
         if (!arguments.contains("int_value") || !arguments["int_value"].is_number_integer()) {
             return failResult(property + " requires int_value (0=none, 1=low, 2=medium, 3=high).");
         }
-        cmd = new ScenePropertyCmd<ShadowQuality>(sceneProject, property,
+        cmd = new ScenePropertyCmd<ShadowQuality>(project, sceneId, property,
                                                   static_cast<ShadowQuality>(arguments["int_value"].get<int>()));
+    } else if (property == "default_mesh_shader" || property == "default_ui_shader" ||
+               property == "default_sky_shader" || property == "default_points_shader" ||
+               property == "default_lines_shader") {
+        if (!arguments.contains("string_value") || !arguments["string_value"].is_string()) {
+            return failResult(property + " requires string_value (custom shader base path, empty for built-in).");
+        }
+        cmd = new ScenePropertyCmd<std::string>(project, sceneId, property, arguments["string_value"].get<std::string>());
     } else {
         return failResult("Unsupported scene property: " + property);
     }

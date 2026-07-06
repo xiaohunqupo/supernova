@@ -1827,7 +1827,7 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["globalIlluminationColor"] = encodeVector3(scene->getGlobalIlluminationColor());
     sceneNode["ambientLight2DIntensity"] = scene->getAmbientLight2DIntensity();
     sceneNode["ambientLight2DColor"] = encodeVector3(scene->getAmbientLight2DColor());
-    sceneNode["shadow2DQuality"] = shadowQualityToString(scene->getShadowQuality());
+    sceneNode["shadow2DQuality"] = shadowQualityToString(scene->getShadow2DQuality());
     sceneNode["ssaoEnabled"] = scene->isSSAOEnabled();
     sceneNode["ssaoRadius"] = scene->getSSAORadius();
     sceneNode["ssaoIntensity"] = scene->getSSAOIntensity();
@@ -1839,6 +1839,17 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["ssrIntensity"] = scene->getSSRIntensity();
     sceneNode["ssrBlur"] = scene->getSSRBlur();
     sceneNode["enableUIEvents"] = uiEventStateToString(scene->getEnableUIEvents());
+
+    if (!scene->getDefaultMeshShader().empty())
+        sceneNode["defaultMeshShader"] = scene->getDefaultMeshShader();
+    if (!scene->getDefaultUIShader().empty())
+        sceneNode["defaultUIShader"] = scene->getDefaultUIShader();
+    if (!scene->getDefaultSkyShader().empty())
+        sceneNode["defaultSkyShader"] = scene->getDefaultSkyShader();
+    if (!scene->getDefaultPointsShader().empty())
+        sceneNode["defaultPointsShader"] = scene->getDefaultPointsShader();
+    if (!scene->getDefaultLinesShader().empty())
+        sceneNode["defaultLinesShader"] = scene->getDefaultLinesShader();
 
     return sceneNode;
 }
@@ -1883,7 +1894,7 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
     }
 
     if (node["shadow2DQuality"]) {
-        scene->setShadowQuality(stringToShadowQuality(node["shadow2DQuality"].as<std::string>()));
+        scene->setShadow2DQuality(stringToShadowQuality(node["shadow2DQuality"].as<std::string>()));
     }
 
     if (node["ssaoEnabled"]) {
@@ -1920,6 +1931,13 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
     if (node["enableUIEvents"]) {
         scene->setEnableUIEvents(stringToUIEventState(node["enableUIEvents"].as<std::string>()));
     }
+
+    // absent key clears the default so decoding into a reused scene (play restore) is exact
+    scene->setDefaultMeshShader(node["defaultMeshShader"] ? node["defaultMeshShader"].as<std::string>() : "");
+    scene->setDefaultUIShader(node["defaultUIShader"] ? node["defaultUIShader"].as<std::string>() : "");
+    scene->setDefaultSkyShader(node["defaultSkyShader"] ? node["defaultSkyShader"].as<std::string>() : "");
+    scene->setDefaultPointsShader(node["defaultPointsShader"] ? node["defaultPointsShader"].as<std::string>() : "");
+    scene->setDefaultLinesShader(node["defaultLinesShader"] ? node["defaultLinesShader"].as<std::string>() : "");
 
     return scene;
 }

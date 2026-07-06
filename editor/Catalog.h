@@ -182,6 +182,7 @@ namespace doriax::editor{
                 if constexpr (std::is_same_v<T, float>) return 0.0f;
                 if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
                 if constexpr (std::is_same_v<T, ShadowQuality>) return ShadowQuality::LOW;
+                if constexpr (std::is_same_v<T, std::string>) return std::string();
                 // Add other types as needed
             }
 
@@ -217,7 +218,7 @@ namespace doriax::editor{
             }
             else if (propertyName == "shadows_2d_quality") {
                 if constexpr (std::is_same_v<T, ShadowQuality>) {
-                    return scene->getShadowQuality();
+                    return scene->getShadow2DQuality();
                 }
             }
             else if (propertyName == "light_state") {
@@ -285,6 +286,31 @@ namespace doriax::editor{
                     return scene->getSSRDebugMode();
                 }
             }
+            else if (propertyName == "default_mesh_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    return scene->getDefaultMeshShader();
+                }
+            }
+            else if (propertyName == "default_ui_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    return scene->getDefaultUIShader();
+                }
+            }
+            else if (propertyName == "default_sky_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    return scene->getDefaultSkyShader();
+                }
+            }
+            else if (propertyName == "default_points_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    return scene->getDefaultPointsShader();
+                }
+            }
+            else if (propertyName == "default_lines_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    return scene->getDefaultLinesShader();
+                }
+            }
 
             // Return default value if property not found
             if constexpr (std::is_same_v<T, Vector4>) return Vector4(0.0, 0.0, 0.0, 1.0);
@@ -294,6 +320,7 @@ namespace doriax::editor{
             if constexpr (std::is_same_v<T, int>) return 0;
             if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
                 if constexpr (std::is_same_v<T, ShadowQuality>) return ShadowQuality::LOW;
+            if constexpr (std::is_same_v<T, std::string>) return std::string();
             // Add other types as needed
         }
 
@@ -333,7 +360,7 @@ namespace doriax::editor{
             }
             else if (propertyName == "shadows_2d_quality") {
                 if constexpr (std::is_same_v<T, ShadowQuality>) {
-                    scene->setShadowQuality(value);
+                    scene->setShadow2DQuality(value);
                 }
             }
             else if (propertyName == "light_state") {
@@ -399,6 +426,31 @@ namespace doriax::editor{
             else if (propertyName == "ssr_debug_mode") {
                 if constexpr (std::is_same_v<T, int>) {
                     scene->setSSRDebugMode(value);
+                }
+            }
+            else if (propertyName == "default_mesh_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    scene->setDefaultMeshShader(value);
+                }
+            }
+            else if (propertyName == "default_ui_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    scene->setDefaultUIShader(value);
+                }
+            }
+            else if (propertyName == "default_sky_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    scene->setDefaultSkyShader(value);
+                }
+            }
+            else if (propertyName == "default_points_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    scene->setDefaultPointsShader(value);
+                }
+            }
+            else if (propertyName == "default_lines_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    scene->setDefaultLinesShader(value);
                 }
             }
         }

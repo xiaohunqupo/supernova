@@ -2198,7 +2198,7 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setGlobalIllumination(" << formatVector3(scene->getGlobalIlluminationColor()) << ");\n";
     out << ind2 << "scene->setAmbientLight2D(" << formatFloat(scene->getAmbientLight2DIntensity()) << ");\n";
     out << ind2 << "scene->setAmbientLight2D(" << formatVector3(scene->getAmbientLight2DColor()) << ");\n";
-    out << ind2 << "scene->setShadowQuality(" << formatShadowQuality(scene->getShadowQuality()) << ");\n";
+    out << ind2 << "scene->setShadow2DQuality(" << formatShadowQuality(scene->getShadow2DQuality()) << ");\n";
     out << ind2 << "scene->setLightState(" << formatLightState(scene->getLightState()) << ");\n";
     out << ind2 << "scene->setSSAOEnabled(" << formatBool(scene->isSSAOEnabled()) << ");\n";
     out << ind2 << "scene->setSSAORadius(" << formatFloat(scene->getSSAORadius()) << ");\n";
@@ -2211,6 +2211,16 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setSSRIntensity(" << formatFloat(scene->getSSRIntensity()) << ");\n";
     out << ind2 << "scene->setSSRBlur(" << formatFloat(scene->getSSRBlur()) << ");\n";
     out << ind2 << "scene->setEnableUIEvents(" << formatUIEventState(scene->getEnableUIEvents()) << ");\n";
+    if (!scene->getDefaultMeshShader().empty())
+        out << ind2 << "scene->setDefaultMeshShader(" << formatString(scene->getDefaultMeshShader()) << ");\n";
+    if (!scene->getDefaultUIShader().empty())
+        out << ind2 << "scene->setDefaultUIShader(" << formatString(scene->getDefaultUIShader()) << ");\n";
+    if (!scene->getDefaultSkyShader().empty())
+        out << ind2 << "scene->setDefaultSkyShader(" << formatString(scene->getDefaultSkyShader()) << ");\n";
+    if (!scene->getDefaultPointsShader().empty())
+        out << ind2 << "scene->setDefaultPointsShader(" << formatString(scene->getDefaultPointsShader()) << ");\n";
+    if (!scene->getDefaultLinesShader().empty())
+        out << ind2 << "scene->setDefaultLinesShader(" << formatString(scene->getDefaultLinesShader()) << ");\n";
     out << ind << "}\n";
 
     return out.str();

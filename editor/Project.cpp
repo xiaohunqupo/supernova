@@ -957,11 +957,26 @@ void editor::Project::applyCustomShaderPathChange(const std::function<bool(std::
         return changed;
     };
 
+    // scene-level default shaders reference the same files; the setter flags the reload
+    auto applyToSceneDefaults = [&](Scene* scene) -> bool {
+        bool changed = false;
+        for (ShaderType type : {ShaderType::MESH, ShaderType::UI, ShaderType::SKYBOX, ShaderType::POINTS, ShaderType::LINES}) {
+            std::string defaultShader = scene->getDefaultCustomShader(type);
+            if (!defaultShader.empty() && transform(defaultShader)) {
+                scene->setDefaultCustomShader(type, defaultShader);
+                changed = true;
+            }
+        }
+        return changed;
+    };
+
     for (auto& sceneProject : scenes) {
         if (!sceneProject.scene) {
             continue;
         }
-        if (applyToRegistry(sceneProject.scene)) {
+        bool changed = applyToRegistry(sceneProject.scene);
+        changed |= applyToSceneDefaults(sceneProject.scene);
+        if (changed) {
             sceneProject.isModified = true;
             sceneProject.needUpdateRender = true;
         }
@@ -1603,14 +1618,31 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
 
     Scene* scene = sceneProject->scene;
 
+    // resolve the effective custom shader (component > scene default > built-in) from the
+    // strings rather than the cached customShaderId, which lags a reload frame after a
+    // scene-default change and is zeroed by the build-fail fallback
+    auto effectiveShaderId = [&](const std::string& customShader, ShaderType type) -> uint16_t {
+        return ShaderPool::registerCustomShader(customShader.empty() ? scene->getDefaultCustomShader(type) : customShader);
+    };
+
+    // the runtime falls back to the built-in variant when a custom shader fails to build,
+    // so always collect the customId-0 key alongside a custom one
+    auto insertKeys = [&](ShaderType type, uint32_t properties, uint16_t customShaderId) {
+        keys.insert(ShaderPool::getShaderKey(type, properties, customShaderId));
+        if (customShaderId != 0) {
+            keys.insert(ShaderPool::getShaderKey(type, properties, 0));
+        }
+    };
+
     for (Entity entity : sceneProject->entities) {
         Signature signature = scene->getSignature(entity);
 
         if (signature.test(scene->getComponentId<MeshComponent>())) {
             const MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
             if (mesh.loaded) {
+                uint16_t customShaderId = effectiveShaderId(mesh.customShader, ShaderType::MESH);
                 for (unsigned int s = 0; s < mesh.numSubmeshes; ++s) {
-                    keys.insert(ShaderPool::getShaderKey(ShaderType::MESH, mesh.submeshes[s].shaderProperties, mesh.submeshes[s].customShaderId));
+                    insertKeys(ShaderType::MESH, mesh.submeshes[s].shaderProperties, customShaderId);
                     keys.insert(ShaderPool::getShaderKey(ShaderType::DEPTH, mesh.submeshes[s].depthShaderProperties));
                     if (mesh.submeshes[s].gbufferShader) {
                         keys.insert(ShaderPool::getShaderKey(ShaderType::GBUFFER, mesh.submeshes[s].gbufferShaderProperties));
@@ -1622,28 +1654,28 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
         if (signature.test(scene->getComponentId<UIComponent>())) {
             const UIComponent& ui = scene->getComponent<UIComponent>(entity);
             if (ui.loaded) {
-                keys.insert(ShaderPool::getShaderKey(ShaderType::UI, ui.shaderProperties, ui.customShaderId));
+                insertKeys(ShaderType::UI, ui.shaderProperties, effectiveShaderId(ui.customShader, ShaderType::UI));
             }
         }
 
         if (signature.test(scene->getComponentId<PointsComponent>())) {
             const PointsComponent& pts = scene->getComponent<PointsComponent>(entity);
             if (pts.loaded) {
-                keys.insert(ShaderPool::getShaderKey(ShaderType::POINTS, pts.shaderProperties, pts.customShaderId));
+                insertKeys(ShaderType::POINTS, pts.shaderProperties, effectiveShaderId(pts.customShader, ShaderType::POINTS));
             }
         }
 
         if (signature.test(scene->getComponentId<LinesComponent>())) {
             const LinesComponent& ln = scene->getComponent<LinesComponent>(entity);
             if (ln.loaded) {
-                keys.insert(ShaderPool::getShaderKey(ShaderType::LINES, ln.shaderProperties, ln.customShaderId));
+                insertKeys(ShaderType::LINES, ln.shaderProperties, effectiveShaderId(ln.customShader, ShaderType::LINES));
             }
         }
 
         if (signature.test(scene->getComponentId<SkyComponent>())) {
             const SkyComponent& sky = scene->getComponent<SkyComponent>(entity);
             if (sky.loaded) {
-                keys.insert(ShaderPool::getShaderKey(ShaderType::SKYBOX, 0, sky.customShaderId));
+                insertKeys(ShaderType::SKYBOX, 0, effectiveShaderId(sky.customShader, ShaderType::SKYBOX));
             }
         }
     }
@@ -1669,17 +1701,24 @@ void editor::Project::invalidateCustomShaders() {
     for (auto& sceneProject : getScenes()) {
         if (!sceneProject.scene)
             continue;
+        Scene* scene = sceneProject.scene;
+        // a component rides on a fork either via its own customShader or the scene default
+        bool sceneMesh = !scene->getDefaultMeshShader().empty();
+        bool sceneUI = !scene->getDefaultUIShader().empty();
+        bool scenePoints = !scene->getDefaultPointsShader().empty();
+        bool sceneLines = !scene->getDefaultLinesShader().empty();
+        bool sceneSky = !scene->getDefaultSkyShader().empty();
         for (Entity entity : sceneProject.entities) {
-            if (MeshComponent* mesh = sceneProject.scene->findComponent<MeshComponent>(entity))
-                if (!mesh->customShader.empty()) mesh->needReload = true;
-            if (UIComponent* ui = sceneProject.scene->findComponent<UIComponent>(entity))
-                if (!ui->customShader.empty()) ui->needReload = true;
-            if (PointsComponent* pts = sceneProject.scene->findComponent<PointsComponent>(entity))
-                if (!pts->customShader.empty()) pts->needReload = true;
-            if (LinesComponent* ln = sceneProject.scene->findComponent<LinesComponent>(entity))
-                if (!ln->customShader.empty()) ln->needReload = true;
-            if (SkyComponent* sky = sceneProject.scene->findComponent<SkyComponent>(entity))
-                if (!sky->customShader.empty()) sky->needReload = true;
+            if (MeshComponent* mesh = scene->findComponent<MeshComponent>(entity))
+                if (sceneMesh || !mesh->customShader.empty()) mesh->needReload = true;
+            if (UIComponent* ui = scene->findComponent<UIComponent>(entity))
+                if (sceneUI || !ui->customShader.empty()) ui->needReload = true;
+            if (PointsComponent* pts = scene->findComponent<PointsComponent>(entity))
+                if (scenePoints || !pts->customShader.empty()) pts->needReload = true;
+            if (LinesComponent* ln = scene->findComponent<LinesComponent>(entity))
+                if (sceneLines || !ln->customShader.empty()) ln->needReload = true;
+            if (SkyComponent* sky = scene->findComponent<SkyComponent>(entity))
+                if (sceneSky || !sky->customShader.empty()) sky->needReload = true;
         }
     }
 }

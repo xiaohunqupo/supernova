@@ -65,6 +65,12 @@ void Scene::init(){
     ssrDebugMode = 0;
 
     uiEventState = UIEventState::NOT_SET;
+
+    defaultMeshShader = "";
+    defaultUIShader = "";
+    defaultSkyShader = "";
+    defaultPointsShader = "";
+    defaultLinesShader = "";
 }
 
 Scene::~Scene(){
@@ -359,6 +365,84 @@ void Scene::setShadow2DQuality(ShadowQuality quality){
 
 ShadowQuality Scene::getShadow2DQuality() const{
     return this->shadow2DQuality;
+}
+
+void Scene::setDefaultMeshShader(const std::string& path){
+    if (this->defaultMeshShader != path){
+        this->defaultMeshShader = path;
+        getSystem<RenderSystem>()->needReloadMeshes();
+    }
+}
+
+const std::string& Scene::getDefaultMeshShader() const{
+    return this->defaultMeshShader;
+}
+
+void Scene::setDefaultUIShader(const std::string& path){
+    if (this->defaultUIShader != path){
+        this->defaultUIShader = path;
+        getSystem<RenderSystem>()->needReloadUIs();
+    }
+}
+
+const std::string& Scene::getDefaultUIShader() const{
+    return this->defaultUIShader;
+}
+
+void Scene::setDefaultSkyShader(const std::string& path){
+    if (this->defaultSkyShader != path){
+        this->defaultSkyShader = path;
+        getSystem<RenderSystem>()->needReloadSky();
+    }
+}
+
+const std::string& Scene::getDefaultSkyShader() const{
+    return this->defaultSkyShader;
+}
+
+void Scene::setDefaultPointsShader(const std::string& path){
+    if (this->defaultPointsShader != path){
+        this->defaultPointsShader = path;
+        getSystem<RenderSystem>()->needReloadPoints();
+    }
+}
+
+const std::string& Scene::getDefaultPointsShader() const{
+    return this->defaultPointsShader;
+}
+
+void Scene::setDefaultLinesShader(const std::string& path){
+    if (this->defaultLinesShader != path){
+        this->defaultLinesShader = path;
+        getSystem<RenderSystem>()->needReloadLines();
+    }
+}
+
+const std::string& Scene::getDefaultLinesShader() const{
+    return this->defaultLinesShader;
+}
+
+void Scene::setDefaultCustomShader(ShaderType type, const std::string& path){
+    switch (type){
+        case ShaderType::MESH:   setDefaultMeshShader(path);   break;
+        case ShaderType::UI:     setDefaultUIShader(path);     break;
+        case ShaderType::SKYBOX: setDefaultSkyShader(path);    break;
+        case ShaderType::POINTS: setDefaultPointsShader(path); break;
+        case ShaderType::LINES:  setDefaultLinesShader(path);  break;
+        default: break; // internal pass types cannot have scene defaults
+    }
+}
+
+const std::string& Scene::getDefaultCustomShader(ShaderType type) const{
+    static const std::string empty;
+    switch (type){
+        case ShaderType::MESH:   return this->defaultMeshShader;
+        case ShaderType::UI:     return this->defaultUIShader;
+        case ShaderType::SKYBOX: return this->defaultSkyShader;
+        case ShaderType::POINTS: return this->defaultPointsShader;
+        case ShaderType::LINES:  return this->defaultLinesShader;
+        default: return empty;
+    }
 }
 
 bool Scene::canReceiveUIEvents(){

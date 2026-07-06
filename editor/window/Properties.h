@@ -15,6 +15,8 @@
 #include "soloud.h"
 #include "soloud_wav.h"
 
+#include <functional>
+
 namespace doriax::editor{
 
     class SceneWindow;
@@ -272,7 +274,18 @@ namespace doriax::editor{
         // plus .vert/.frag drag-drop. The .vert/.frag entry points may share a base name or
         // live in separate files (see Util::resolveCustomShaderPaths).
         void drawCustomShaderRow(ComponentType cpType, ShaderType shaderType, SceneProject* sceneProject, std::vector<Entity> entities);
-        void drawShaderFilesPopup(ComponentType cpType, SceneProject* sceneProject, Entity shaderEntity, const std::string& currentVert, const std::string& currentFrag);
+        // Scene-level variant: edits a scene default shader property (e.g. "default_mesh_shader"),
+        // used by every component of that type whose customShader is empty.
+        void drawSceneShaderRow(SceneProject* sceneProject, ShaderType shaderType, const char* scenePropertyName, const char* label);
+        // Interaction core shared by the entity and scene shader rows; draws into the current
+        // table value cell. setShader issues the undoable command; doFork performs the fork
+        // and returns the new base path ("" on failure); idSuffix uniquifies ImGui IDs and
+        // the edit-files popup within the window.
+        void drawShaderRowContents(ShaderType shaderType, const std::string& currentShader,
+                                   const std::function<void(const std::string&)>& setShader,
+                                   const std::function<std::string()>& doFork,
+                                   const std::string& idSuffix);
+        void drawShaderFilesPopup(const std::string& popupName, const std::function<void(const std::string&)>& setShader, const std::string& currentVert, const std::string& currentFrag);
         void drawTransform(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawModelComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

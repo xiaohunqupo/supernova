@@ -417,7 +417,7 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
     }
 
     if (changed) {
-        cmd = new ScenePropertyCmd<T>(sceneProject, propertyName, value);
+        cmd = new ScenePropertyCmd<T>(project, sceneProject->id, propertyName, value);
         CommandHandle::get(sceneProject->id)->addCommand(cmd);
     }
 
@@ -4614,6 +4614,66 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
     if (!shaderRef)
         return;
     const std::string currentShader = *shaderRef;
+
+    auto setShader = [&](const std::string& value) {
+        Command* shaderCmd = new PropertyCmd<std::string>(project, sceneProject->id, shaderEntity, cpType, "customShader", value);
+        CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
+    };
+    auto doFork = [&]() -> std::string {
+        // Fork is a single undoable step (writes .vert/.frag + sets customShader);
+        // undo deletes the forked files.
+        ForkShaderCmd* forkCmd = new ForkShaderCmd(project, sceneProject->id, shaderEntity, cpType, shaderType, sceneProject->scene->getEntityName(shaderEntity));
+        if (forkCmd->isValid()) {
+            std::string base = forkCmd->getBase();
+            CommandHandle::get(sceneProject->id)->addCommand(forkCmd);
+            return base;
+        }
+        delete forkCmd;
+        return "";
+    };
+
+    beginTable(cpType, getLabelSize("receive shadows"), "custom_shader_table");
+    propertyHeader("Shader");
+
+    drawShaderRowContents(shaderType, currentShader, setShader, doFork, "custom_shader");
+
+    endTable();
+}
+
+void editor::Properties::drawSceneShaderRow(SceneProject* sceneProject, ShaderType shaderType, const char* scenePropertyName, const char* label){
+    // Scene default shader: used by every component of this type whose customShader is
+    // empty (priority: component shader > scene default > built-in).
+    const std::string currentShader = Catalog::getSceneProperty<std::string>(sceneProject->scene, scenePropertyName);
+
+    auto setShader = [&](const std::string& value) {
+        Command* shaderCmd = new ScenePropertyCmd<std::string>(project, sceneProject->id, scenePropertyName, value);
+        CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
+    };
+    auto doFork = [&]() -> std::string {
+        // Single undoable step (writes .vert/.frag + sets the scene property);
+        // undo deletes the forked files.
+        ForkShaderCmd* forkCmd = new ForkShaderCmd(project, sceneProject, shaderType, scenePropertyName, sceneProject->name + " " + label);
+        if (forkCmd->isValid()) {
+            std::string base = forkCmd->getBase();
+            CommandHandle::get(sceneProject->id)->addCommand(forkCmd);
+            return base;
+        }
+        delete forkCmd;
+        return "";
+    };
+
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("%s", label);
+    ImGui::TableSetColumnIndex(1);
+
+    drawShaderRowContents(shaderType, currentShader, setShader, doFork, scenePropertyName);
+}
+
+void editor::Properties::drawShaderRowContents(ShaderType shaderType, const std::string& currentShader,
+                                               const std::function<void(const std::string&)>& setShader,
+                                               const std::function<std::string()>& doFork,
+                                               const std::string& idSuffix){
     const std::filesystem::path projectPath = project->getProjectPath();
 
     // The .vert/.frag entry points either share a base name (stored as "shaders/mesh")
@@ -4623,14 +4683,8 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
     const bool separate = Util::isSeparateCustomShader(currentShader);
     const bool vertExists = hasCustom && std::filesystem::exists(projectPath / paths.vert);
     const bool fragExists = hasCustom && std::filesystem::exists(projectPath / paths.frag);
+    const std::string popupName = "Edit Shader Files##" + idSuffix;
 
-    beginTable(cpType, getLabelSize("receive shadows"), "custom_shader_table");
-    propertyHeader("Shader");
-
-    auto setCustomShader = [&](const std::string& value) {
-        Command* shaderCmd = new PropertyCmd<std::string>(project, sceneProject->id, shaderEntity, cpType, "customShader", value);
-        CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
-    };
     auto openRelative = [&](const std::string& rel) {
         if (CodeEditor* codeEditor = Backend::getApp().getCodeEditor())
             codeEditor->openFile((projectPath / rel).string(), true);
@@ -4643,7 +4697,7 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
             Backend::getApp().registerAlert("Error", "A custom shader needs both a .vert and a .frag file with the same base name.");
             return;
         }
-        setCustomShader(base);
+        setShader(base);
     };
 
     if (!hasCustom)
@@ -4658,17 +4712,11 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x / 3.0, ImGui::GetStyle().FramePadding.y / 2.0));
 
     ImGui::BeginDisabled(hasCustom);
-    if (ImGui::Button(ICON_FA_CODE_FORK "##fork_custom_shader")) {
-        // Fork is a single undoable step (writes .vert/.frag + sets customShader);
-        // undo deletes the forked files.
-        ForkShaderCmd* forkCmd = new ForkShaderCmd(project, sceneProject->id, shaderEntity, cpType, shaderType, sceneProject->scene->getEntityName(shaderEntity));
-        if (forkCmd->isValid()) {
-            std::string base = forkCmd->getBase();
-            CommandHandle::get(sceneProject->id)->addCommand(forkCmd);
+    if (ImGui::Button((std::string(ICON_FA_CODE_FORK "##fork_") + idSuffix).c_str())) {
+        std::string base = doFork();
+        if (!base.empty()) {
             openRelative(base + ".vert");
             openRelative(base + ".frag");
-        } else {
-            delete forkCmd;
         }
     }
     if (ImGui::IsItemHovered())
@@ -4676,14 +4724,14 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
     ImGui::EndDisabled();
 
     ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_PEN_TO_SQUARE "##edit_custom_shader"))
-        ImGui::OpenPopup("Edit Shader Files");
+    if (ImGui::Button((std::string(ICON_FA_PEN_TO_SQUARE "##edit_") + idSuffix).c_str()))
+        ImGui::OpenPopup(popupName.c_str());
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Pick the .vert and .frag files (they can have different names)");
 
     ImGui::SameLine();
     ImGui::BeginDisabled(!vertExists);
-    if (ImGui::Button(ICON_FA_FILE_CODE "##open_vert_shader"))
+    if (ImGui::Button((std::string(ICON_FA_FILE_CODE "##open_vert_") + idSuffix).c_str()))
         openRelative(paths.vert);
     if (ImGui::IsItemHovered()) {
         if (vertExists)
@@ -4697,7 +4745,7 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
 
     ImGui::SameLine();
     ImGui::BeginDisabled(!fragExists);
-    if (ImGui::Button(ICON_FA_FILE_LINES "##open_frag_shader"))
+    if (ImGui::Button((std::string(ICON_FA_FILE_LINES "##open_frag_") + idSuffix).c_str()))
         openRelative(paths.frag);
     if (ImGui::IsItemHovered()) {
         if (fragExists)
@@ -4711,15 +4759,15 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
 
     ImGui::SameLine();
     ImGui::BeginDisabled(!hasCustom);
-    if (ImGui::Button(ICON_FA_XMARK "##reset_custom_shader"))
-        setCustomShader("");
+    if (ImGui::Button((std::string(ICON_FA_XMARK "##reset_") + idSuffix).c_str()))
+        setShader("");
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Reset to the built-in shader");
     ImGui::EndDisabled();
 
     ImGui::PopStyleVar();
 
-    drawShaderFilesPopup(cpType, sceneProject, shaderEntity, paths.vert, paths.frag);
+    drawShaderFilesPopup(popupName, setShader, paths.vert, paths.frag);
 
     // Drag-drop an existing .vert/.frag from the resources window.
     if (ImGui::BeginDragDropTarget()) {
@@ -4734,18 +4782,17 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
         }
         ImGui::EndDragDropTarget();
     }
-
-    endTable();
 }
 
 // Popup that lets the user pick the .vert and .frag entry points independently (so they
 // can use differently-named files). Applying stores the result via Util::makeCustomShader,
 // collapsing to the shared-base shorthand when both files share a <base>.vert/.frag.
-void editor::Properties::drawShaderFilesPopup(ComponentType cpType, SceneProject* sceneProject, Entity shaderEntity, const std::string& currentVert, const std::string& currentFrag){
+// popupName must be unique within the window (several shader rows can share it).
+void editor::Properties::drawShaderFilesPopup(const std::string& popupName, const std::function<void(const std::string&)>& setShader, const std::string& currentVert, const std::string& currentFrag){
     const std::filesystem::path projectPath = project->getProjectPath();
 
     ImGui::SetNextWindowSizeConstraints(ImVec2(25 * ImGui::GetFontSize(), 0), ImVec2(FLT_MAX, FLT_MAX));
-    if (!ImGui::BeginPopup("Edit Shader Files"))
+    if (!ImGui::BeginPopup(popupName.c_str()))
         return;
 
     static std::string vertEdit;
@@ -4809,7 +4856,11 @@ void editor::Properties::drawShaderFilesPopup(ComponentType cpType, SceneProject
         ImGui::EndDisabled();
     };
 
-    beginTable(cpType, getLabelSize("Fragment File"), "edit_shader_files");
+    // the popup is its own window, so a fixed table name cannot collide
+    ImGui::PushItemWidth(-1);
+    ImGui::BeginTable("table_edit_shader_files", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV);
+    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Fragment File"));
+    ImGui::TableSetupColumn("Value");
     slotRow("Vertex File", vertEdit, ".vert", "vert");
     slotRow("Fragment File", fragEdit, ".frag", "frag");
     endTable();
@@ -4826,8 +4877,7 @@ void editor::Properties::drawShaderFilesPopup(ComponentType cpType, SceneProject
         std::string newValue = bothEmpty ? std::string() : Util::makeCustomShader(vertEdit, fragEdit);
         std::string currentValue = (currentVert.empty() || currentFrag.empty()) ? std::string() : Util::makeCustomShader(currentVert, currentFrag);
         if (newValue != currentValue) {
-            Command* shaderCmd = new PropertyCmd<std::string>(project, sceneProject->id, shaderEntity, cpType, "customShader", newValue);
-            CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
+            setShader(newValue);
         }
         ImGui::CloseCurrentPopup();
     }
@@ -12061,7 +12111,7 @@ void editor::Properties::show(){
                             ImGui::TableSetColumnIndex(1);
                             ImGui::SetNextItemWidth(-1);
                             if (ImGui::Combo("##ssr_debug_mode", &debugMode, ssrDebugNames, IM_ARRAYSIZE(ssrDebugNames))) {
-                                Command* cmd = new ScenePropertyCmd<int>(sceneProject, "ssr_debug_mode", debugMode);
+                                Command* cmd = new ScenePropertyCmd<int>(project, sceneProject->id, "ssr_debug_mode", debugMode);
                                 CommandHandle::get(sceneProject->id)->addCommand(cmd);
                             }
                         }
@@ -12069,6 +12119,28 @@ void editor::Properties::show(){
 
                     ImGui::EndTable();
                 }
+            }
+
+            // Scene default shaders: used by components of each type whose customShader is
+            // empty (priority: component shader > scene default > built-in).
+            ImGui::SeparatorText("Default Shaders");
+
+            if (ImGui::BeginTable("scene_default_shaders_table", 2, tableFlags)) {
+                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Points").x);
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                if (sceneProject->sceneType != SceneType::SCENE_UI) {
+                    drawSceneShaderRow(sceneProject, ShaderType::MESH, "default_mesh_shader", "Mesh");
+                    if (sceneProject->sceneType == SceneType::SCENE_3D)
+                        drawSceneShaderRow(sceneProject, ShaderType::SKYBOX, "default_sky_shader", "Sky");
+                }
+                drawSceneShaderRow(sceneProject, ShaderType::UI, "default_ui_shader", "UI");
+                if (sceneProject->sceneType != SceneType::SCENE_UI) {
+                    drawSceneShaderRow(sceneProject, ShaderType::POINTS, "default_points_shader", "Points");
+                    drawSceneShaderRow(sceneProject, ShaderType::LINES, "default_lines_shader", "Lines");
+                }
+
+                ImGui::EndTable();
             }
         }
 
