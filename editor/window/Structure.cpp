@@ -1526,6 +1526,14 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                         CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new AddComponentCmd(project, project->getSelectedSceneId(), node.id, bodyType));
                     }
 
+                    bool canAddOccluder2D = selectedScene->sceneType == SceneType::SCENE_2D
+                        && !signature.test(selectedScene->scene->getComponentId<Occluder2DComponent>())
+                        && (signature.test(selectedScene->scene->getComponentId<SpriteComponent>())
+                            || signature.test(selectedScene->scene->getComponentId<TilemapComponent>()));
+                    if (ImGui::MenuItem(ICON_FA_CIRCLE_HALF_STROKE "  Add 2D Occluder", nullptr, false, !node.isLocked && canAddOccluder2D)) {
+                        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new AddComponentCmd(project, project->getSelectedSceneId(), node.id, ComponentType::Occluder2DComponent));
+                    }
+
                     bool hasMesh = signature.test(selectedScene->scene->getComponentId<MeshComponent>());
                     bool hasInstanced = signature.test(selectedScene->scene->getComponentId<InstancedMeshComponent>());
                     if (hasMesh && ImGui::MenuItem(ICON_FA_LAYER_GROUP "  Add Instanced Mesh", nullptr, false, !node.isLocked && !hasInstanced)) {
