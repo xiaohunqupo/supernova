@@ -4632,7 +4632,7 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
         return "";
     };
 
-    beginTable(cpType, getLabelSize("receive shadows"), "custom_shader_table");
+    beginTable(cpType, getLabelSize("Shader"), "custom_shader_table");
     propertyHeader("Shader");
 
     drawShaderRowContents(shaderType, currentShader, setShader, doFork, "custom_shader");
@@ -7847,7 +7847,7 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
 }
 
 void editor::Properties::drawSkyComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    beginTable(cpType, getLabelSize("Default sky"));
+    beginTable(cpType, getLabelSize("Default sky"), "default_sky");
 
     bool allDefault = true;
     for (auto& entity : entities){
@@ -7881,9 +7881,11 @@ void editor::Properties::drawSkyComponent(ComponentType cpType, SceneProject* sc
 
     endTable();
 
+    drawCustomShaderRow(cpType, ShaderType::SKYBOX, sceneProject, entities);
+
     ImGui::SeparatorText("Sky settings");
 
-    beginTable(cpType, getLabelSize("Rotation"));
+    beginTable(cpType, getLabelSize("Rotation"), "sky_settings");
 
     RowSettings visibleSettings;
     visibleSettings.help = "When disabled, the sky is not drawn but still provides image-based lighting to meshes.";
@@ -7893,8 +7895,6 @@ void editor::Properties::drawSkyComponent(ComponentType cpType, SceneProject* sc
     propertyRow(RowPropertyType::Float, cpType, "rotation", "Rotation", sceneProject, entities);
 
     endTable();
-
-    drawCustomShaderRow(cpType, ShaderType::SKYBOX, sceneProject, entities);
 }
 
 void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
