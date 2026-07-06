@@ -69,20 +69,7 @@ bool editor::CreateEntityCmd::execute(){
         }
     }
 
-    unsigned int nameCount = 2;
-    std::string baseName = entityName;
-    bool foundName = true;
-    while (foundName){
-        foundName = false;
-        for (auto& entity : sceneProject->entities) {
-            std::string usedName = scene->getEntityName(entity);
-            if (usedName == entityName){
-                entityName = baseName + " " + std::to_string(nameCount);
-                nameCount++;
-                foundName = true;
-            }
-        }
-    }
+    entityName = ProjectUtils::makeUniqueEntityName(scene, sceneProject->entities, entityName);
 
     if (type == EntityCreationType::OBJECT){
 

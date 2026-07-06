@@ -4,6 +4,10 @@
 #include "Out.h"
 #include "command/type/DeleteEntityCmd.h"
 #include "util/CameraTextureLink.h"
+#include "util/ProjectUtils.h"
+
+#include <algorithm>
+#include <unordered_set>
 
 using namespace doriax;
 
@@ -40,31 +44,6 @@ void editor::DuplicateEntityCmd::stripEntityIds(YAML::Node node){
             stripEntityIds(entry);
         }
     }
-}
-
-std::string editor::DuplicateEntityCmd::makeUniqueCopyName(const std::string& name, std::unordered_set<std::string>& existingNames){
-    // Remove existing " (copy)" or " (copy N)" suffix
-    std::string cleanBase = name;
-    size_t pos = cleanBase.rfind(" (copy)");
-    if (pos != std::string::npos && pos == cleanBase.size() - 7) {
-        cleanBase = cleanBase.substr(0, pos);
-    } else {
-        pos = cleanBase.rfind(" (copy ");
-        if (pos != std::string::npos) {
-            size_t endParen = cleanBase.rfind(')');
-            if (endParen == cleanBase.size() - 1 && endParen > pos)
-                cleanBase = cleanBase.substr(0, pos);
-        }
-    }
-
-    std::string newName = cleanBase + " (copy)";
-    unsigned int count = 2;
-    while (existingNames.count(newName)) {
-        newName = cleanBase + " (copy " + std::to_string(count++) + ")";
-    }
-
-    existingNames.insert(newName);
-    return newName;
 }
 
 bool editor::DuplicateEntityCmd::execute(){
@@ -152,7 +131,8 @@ bool editor::DuplicateEntityCmd::execute(){
                 entities.insert(srcIt + 1, duplicated);
         }
 
-        std::string newName = makeUniqueCopyName(scene->getEntityName(topLevel[i]), existingNames);
+        std::string newName = ProjectUtils::makeUniqueEntityName(scene->getEntityName(topLevel[i]), existingNames);
+        existingNames.insert(newName);
         scene->setEntityName(duplicated, newName);
         project->addSelectedEntity(sceneId, duplicated);
     }
@@ -164,7 +144,7 @@ bool editor::DuplicateEntityCmd::execute(){
 
     sceneProject->isModified = true;
 
-    editor::Out::info("Duplicated %zu entity(ies)", topLevel.size());
+    editor::Out::info("Duplicated %zu %s", topLevel.size(), topLevel.size() == 1 ? "entity" : "entities");
 
     return true;
 }

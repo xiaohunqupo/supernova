@@ -5,9 +5,12 @@
 #include "Stream.h"
 #include "shaders.h"
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <filesystem>
-#include <cctype>
+#include <limits>
+#include <unordered_set>
 
 #include "component/ActionComponent.h"
 #include "component/AnimationComponent.h"
@@ -46,9 +49,6 @@
 #include "command/type/MultiPropertyCmd.h"
 #include "command/type/PropertyCmd.h"
 
-#include <algorithm>
-#include <cctype>
-
 #include "EntityHandle.h"
 #include "Object.h"
 #include "Mesh.h"
@@ -69,6 +69,41 @@
 using namespace doriax;
 
 static void parseLuaPropertiesTable(lua_State* L, ScriptEntry& entry);
+
+namespace {
+
+bool splitTrailingDuplicateNumber(const std::string& name, std::string& baseName, size_t& nextNumber){
+    size_t end = name.find_last_not_of(' ');
+    if (end == std::string::npos || !std::isdigit(static_cast<unsigned char>(name[end])))
+        return false;
+
+    size_t start = end;
+    while (start > 0 && std::isdigit(static_cast<unsigned char>(name[start - 1]))) {
+        start--;
+    }
+
+    if (start == 0 || name[start - 1] != ' ' || start - 1 == 0)
+        return false;
+
+    size_t value = 0;
+    constexpr size_t maxValue = std::numeric_limits<size_t>::max();
+    for (size_t i = start; i <= end; i++) {
+        size_t digit = static_cast<size_t>(name[i] - '0');
+        if (value > (maxValue - digit) / 10)
+            return false;
+
+        value = value * 10 + digit;
+    }
+
+    if (value == maxValue)
+        return false;
+
+    baseName = name.substr(0, start - 1);
+    nextNumber = std::max<size_t>(2, value + 1);
+    return true;
+}
+
+}
 
 void editor::ProjectUtils::setDefaultSkyTexture(Texture& outTexture) {
     TextureData skyBack;
@@ -324,32 +359,38 @@ bool editor::ProjectUtils::canMoveLockedEntityOrder(Scene* scene, Entity source,
     return getEffectiveParent(scene, source) == getEffectiveParent(scene, target);
 }
 
+std::string editor::ProjectUtils::makeUniqueEntityName(const std::string& baseName, const std::unordered_set<std::string>& existingNames) {
+    if (baseName.empty() || existingNames.find(baseName) == existingNames.end()) {
+        return baseName;
+    }
+
+    std::string cleanBase = baseName;
+    size_t nameCount = 2;
+    splitTrailingDuplicateNumber(baseName, cleanBase, nameCount);
+
+    std::string uniqueName = cleanBase + " " + std::to_string(nameCount++);
+    while (existingNames.find(uniqueName) != existingNames.end()) {
+        uniqueName = cleanBase + " " + std::to_string(nameCount++);
+    }
+
+    return uniqueName;
+}
+
 std::string editor::ProjectUtils::makeUniqueEntityName(Scene* scene, const std::vector<Entity>& entities, const std::string& baseName, const std::unordered_set<Entity>& ignoredEntities) {
     if (!scene || baseName.empty()) {
         return baseName;
     }
 
-    std::string uniqueName = baseName;
-    unsigned int nameCount = 2;
-
-    while (true) {
-        bool foundName = false;
-        for (Entity sceneEntity : entities) {
-            if (ignoredEntities.find(sceneEntity) != ignoredEntities.end()) {
-                continue;
-            }
-
-            if (scene->getEntityName(sceneEntity) == uniqueName) {
-                uniqueName = baseName + " " + std::to_string(nameCount++);
-                foundName = true;
-                break;
-            }
+    std::unordered_set<std::string> existingNames;
+    for (Entity sceneEntity : entities) {
+        if (ignoredEntities.find(sceneEntity) != ignoredEntities.end()) {
+            continue;
         }
 
-        if (!foundName) {
-            return uniqueName;
-        }
+        existingNames.insert(scene->getEntityName(sceneEntity));
     }
+
+    return makeUniqueEntityName(baseName, existingNames);
 }
 
 size_t editor::ProjectUtils::getTransformIndex(EntityRegistry* registry, Entity entity){
