@@ -138,6 +138,23 @@ static std::vector<editor::EnumEntry> entriesTextureFilter = {
     { (int)TextureFilter::LINEAR, "Linear" }
 };
 
+// full filter set for a texture's minification (mipmap variants trigger mipmap generation)
+static std::vector<editor::EnumEntry> entriesTextureMinFilter = {
+    { (int)TextureFilter::NEAREST, "Nearest" },
+    { (int)TextureFilter::LINEAR, "Linear" },
+    { (int)TextureFilter::NEAREST_MIPMAP_NEAREST, "Nearest Mipmap Nearest" },
+    { (int)TextureFilter::NEAREST_MIPMAP_LINEAR, "Nearest Mipmap Linear" },
+    { (int)TextureFilter::LINEAR_MIPMAP_NEAREST, "Linear Mipmap Nearest" },
+    { (int)TextureFilter::LINEAR_MIPMAP_LINEAR, "Linear Mipmap Linear" }
+};
+
+static std::vector<editor::EnumEntry> entriesTextureWrap = {
+    { (int)TextureWrap::REPEAT, "Repeat" },
+    { (int)TextureWrap::MIRRORED_REPEAT, "Mirrored Repeat" },
+    { (int)TextureWrap::CLAMP_TO_EDGE, "Clamp to Edge" },
+    { (int)TextureWrap::CLAMP_TO_BORDER, "Clamp to Border" }
+};
+
 static std::vector<editor::EnumEntry> entriesEmitterShape = {
     { (int)ParticleEmitterShape::Box, "Box" },
     { (int)ParticleEmitterShape::Sphere, "Sphere" },
@@ -979,6 +996,178 @@ void editor::Properties::applyCameraTexture(Entity cameraEntity, ComponentType c
     cmd = multiCmd;
     CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
     cmd->setNoMerge();
+}
+
+// Popup that lets the user configure the sampler settings (min/mag filter, U/V wrap, and
+// the SVG rasterization scale for vector sources) of a texture property. Laid out with the
+// project's standard "<label> | <input>" property table. Each change commits a PropertyCmd
+// that copies the current per-entity Texture and mutates only the chosen field, then
+// invalidates the cached GPU texture so the new sampler is rebuilt on the next getRender().
+void editor::Properties::drawTextureSettingsPopup(const char* popupId, ComponentType cpType, const std::string& id, SceneProject* sceneProject, std::vector<Entity>& entities, std::function<void()> onValueChanged){
+    ImGui::SetNextWindowSizeConstraints(ImVec2(20 * ImGui::GetFontSize(), 0), ImVec2(FLT_MAX, FLT_MAX));
+    if (!ImGui::BeginPopup(popupId))
+        return;
+
+    // Sampler settings (filter/wrap) are baked into the GPU texture at creation and the
+    // TexturePool caches by id, so simply changing the value is not enough: we must drop
+    // the cached render to force a rebuild. Routing this through the command's
+    // onValueChanged makes it fire on both execute and undo, keeping the two directions
+    // consistent (and it also chains any caller-provided callback).
+    auto invalidateAndNotify = [sceneProject, entities, cpType, id, onValueChanged](){
+        for (const Entity& entity : entities){
+            Texture* ref = Catalog::getPropertyRef<Texture>(sceneProject->scene, entity, cpType, id);
+            if (ref)
+                ref->invalidateRender();
+        }
+        if (onValueChanged)
+            onValueChanged();
+    };
+
+    // Applies mutator to each selected entity's texture and rebuilds it.
+    auto applyMutation = [&](const std::function<void(Texture&)>& mutator){
+        for (Entity& entity : entities){
+            Texture* valueRef = Catalog::getPropertyRef<Texture>(sceneProject->scene, entity, cpType, id);
+            if (!valueRef)
+                continue;
+
+            Texture modified = *valueRef;
+            mutator(modified);
+
+            cmd = new PropertyCmd<Texture>(project, sceneProject->id, entity, cpType, id, modified, invalidateAndNotify);
+            CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+        }
+        finishProperty = true;
+    };
+
+    // Renders a "<label> | <combo>" property row for an enum-backed sampler field. Returns
+    // true and sets outValue when the selection changes. The label goes in the first table
+    // column and the (stretched) combo in the second, matching the project's property rows.
+    auto comboRow = [this](const char* label, const char* comboId, const std::vector<editor::EnumEntry>& entries, int currentValue, int& outValue) -> bool {
+        int item = 0;
+        for (size_t i = 0; i < entries.size(); ++i){
+            if (entries[i].value == currentValue){
+                item = (int)i;
+                break;
+            }
+        }
+        std::vector<const char*> names;
+        for (const auto& entry : entries)
+            names.push_back(entry.name);
+
+        propertyHeader(label, 13 * ImGui::GetFontSize(), false, false);
+        if (ImGui::Combo(comboId, &item, names.data(), (int)names.size())){
+            outValue = entries[item].value;
+            return true;
+        }
+        return false;
+    };
+
+    // Read current values from the first selected entity as the representative state.
+    Texture* current = Catalog::getPropertyRef<Texture>(sceneProject->scene, entities.front(), cpType, id);
+    if (!current){
+        ImGui::EndPopup();
+        return;
+    }
+
+    // SVG rasterization scale is only relevant for vector sources. The scale is carried in
+    // the texture path as "<path>?svgScale=N", so changing it rebuilds the texture from a
+    // new path while preserving the current sampler settings.
+    float svgCurrentScale = 1.0f;
+    std::string svgCleanPath = TextureData::parseSvgScalePath(current->getPath(), &svgCurrentScale);
+    bool isSvg = TextureData::hasSvgExtension(svgCleanPath.c_str());
+
+    // Rebuild each SVG entity from its own clean path at the given scale, carrying over the
+    // sampler settings so a scale change never resets the user's filter/wrap.
+    auto applyScale = [&](float scale){
+        for (Entity& entity : entities){
+            Texture* valueRef = Catalog::getPropertyRef<Texture>(sceneProject->scene, entity, cpType, id);
+            if (!valueRef)
+                continue;
+
+            float curScale = 1.0f;
+            std::string cleanPath = TextureData::parseSvgScalePath(valueRef->getPath(), &curScale);
+            if (!TextureData::hasSvgExtension(cleanPath.c_str()))
+                continue;
+
+            Texture texture(TextureData::buildSvgScalePath(cleanPath, scale));
+            texture.setMinFilter(valueRef->getMinFilter());
+            texture.setMagFilter(valueRef->getMagFilter());
+            texture.setWrapU(valueRef->getWrapU());
+            texture.setWrapV(valueRef->getWrapV());
+
+            if (*valueRef != texture){
+                cmd = new PropertyCmd<Texture>(project, sceneProject->id, entity, cpType, id, texture, invalidateAndNotify);
+                CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+            }
+        }
+        finishProperty = true;
+    };
+
+    ImGui::Text("Texture settings");
+    ImGui::Separator();
+
+    beginTable(cpType, getLabelSize("Mag Filter"), "texsettings_" + id);
+
+    int chosen = 0;
+    if (comboRow("Min Filter", "##texset_min", entriesTextureMinFilter, (int)current->getMinFilter(), chosen)){
+        applyMutation([chosen](Texture& t){ t.setMinFilter((TextureFilter)chosen); });
+    }
+    if (comboRow("Mag Filter", "##texset_mag", entriesTextureFilter, (int)current->getMagFilter(), chosen)){
+        applyMutation([chosen](Texture& t){ t.setMagFilter((TextureFilter)chosen); });
+    }
+    if (comboRow("Wrap U", "##texset_wrapu", entriesTextureWrap, (int)current->getWrapU(), chosen)){
+        applyMutation([chosen](Texture& t){ t.setWrapU((TextureWrap)chosen); });
+    }
+    if (comboRow("Wrap V", "##texset_wrapv", entriesTextureWrap, (int)current->getWrapV(), chosen)){
+        applyMutation([chosen](Texture& t){ t.setWrapV((TextureWrap)chosen); });
+    }
+
+    endTable();
+
+    if (isSvg){
+        ImGui::SeparatorText("SVG");
+
+        beginTable(cpType, getLabelSize("Mag Filter"), "texsettings_svg_" + id);
+
+        // "SVG Scale" | drag field; commit only on release so each distinct scale rasterizes
+        // a new texture at most once.
+        static std::map<std::string, float> svgScaleEditing;
+        const std::string editKey = std::to_string(static_cast<int>(cpType)) + ":" + id;
+        auto editIt = svgScaleEditing.find(editKey);
+        float editScale = (editIt != svgScaleEditing.end()) ? editIt->second : svgCurrentScale;
+
+        propertyHeader("SVG Scale", 8 * ImGui::GetFontSize(), false, false);
+        if (ImGui::DragFloat("##texset_svgscale", &editScale, 0.05f, 0.1f, 16.0f, "%.2fx")) {
+            svgScaleEditing[editKey] = editScale;
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            svgScaleEditing.erase(editKey);
+            applyScale(editScale);
+        }
+
+        // "Presets" | quick-pick scale buttons (the active scale is highlighted)
+        propertyHeader("Presets", -1, false, false);
+        struct ScalePreset { const char* label; float value; };
+        static const ScalePreset presets[] = {
+            {"0.5x", 0.5f}, {"1x", 1.0f}, {"2x", 2.0f}, {"3x", 3.0f}, {"4x", 4.0f}
+        };
+        for (int i = 0; i < IM_ARRAYSIZE(presets); ++i){
+            if (i > 0)
+                ImGui::SameLine();
+            bool selected = std::fabs(svgCurrentScale - presets[i].value) < 1e-4f;
+            if (selected)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+            if (ImGui::SmallButton(presets[i].label)) {
+                applyScale(presets[i].value);
+            }
+            if (selected)
+                ImGui::PopStyleColor();
+        }
+
+        endTable();
+    }
+
+    ImGui::EndPopup();
 }
 
 void editor::Properties::dragDropResourcesTexture(ComponentType cpType, std::string id, SceneProject* sceneProject, std::vector<Entity> entities, ComponentType componentType){
@@ -3147,12 +3336,6 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         bool isCameraTexture = CameraTextureLink::isCameraTexture(newValue);
 
-        // Detect an SVG source so we can offer a rasterization-scale button. The scale is
-        // carried in the texture path as "<path>?svgScale=N".
-        float svgCurrentScale = 1.0f;
-        std::string svgCleanPath = TextureData::parseSvgScalePath(newValue.getPath(), &svgCurrentScale);
-        bool isSvgTexture = !isCameraTexture && TextureData::hasSvgExtension(svgCleanPath.c_str());
-
         float thumbSize = ImGui::GetFrameHeight() * 3;
         Texture* thumbTexture = findThumbnail(TextureData::parseSvgScalePath(newValue.getPath()));
         if (thumbTexture) {
@@ -3175,10 +3358,15 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             drawImageWithBorderAndRounding(&newValue, ImVec2(thumbSize, thumbSize), ImGui::GetStyle().FrameRounding, border_col);
         }
 
+        // sampler settings (min/mag filter, wrap) only apply to an actual image texture,
+        // not to a camera/framebuffer link or an empty slot
+        bool showTexSettings = !isCameraTexture && !newValue.empty();
+
         ImVec2 texButtonSize = ImGui::CalcItemSize(ImVec2(0, 0), ImGui::GetFrameHeight(), ImGui::GetFrameHeight());
-        // reserve room for the action buttons (file + camera, plus an SVG-scale button for
-        // vector sources), with one gap between each item and a trailing gap on the right
-        int texButtonCount = isSvgTexture ? 3 : 2;
+        // reserve room for the action buttons (file + camera, plus a settings button when
+        // applicable), with one gap between each item and a trailing gap on the right
+        int texButtonCount = 2;
+        if (showTexSettings) texButtonCount++;
         float texButtonsReserve = texButtonSize.x * texButtonCount + ImGui::GetStyle().ItemSpacing.x * (texButtonCount + 1);
         ImGui::BeginChild("textureframe", ImVec2(-texButtonsReserve, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2),
             false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -3248,15 +3436,17 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         }
         ImGui::SetItemTooltip("Camera as source (render to texture)");
 
-        if (isSvgTexture) {
+        if (showTexSettings) {
             ImGui::SameLine();
-            if (ImGui::Button(ICON_FA_VECTOR_SQUARE, texButtonSize)) {
-                ImGui::OpenPopup("svgscalepopup");
+            if (ImGui::Button(ICON_FA_SLIDERS, texButtonSize)) {
+                ImGui::OpenPopup("texturesettingspopup");
             }
-            ImGui::SetItemTooltip("SVG scale: %gx", svgCurrentScale);
+            ImGui::SetItemTooltip("Texture settings (filter, wrap, SVG scale)");
         }
 
         ImGui::PopStyleVar();
+
+        drawTextureSettingsPopup("texturesettingspopup", cpType, id, sceneProject, entities, settings.onValueChanged);
 
         if (ImGui::BeginPopup("cameratexturepopup")) {
             Scene* scene = sceneProject->scene;
@@ -3277,52 +3467,6 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             }
             if (!hasCamera) {
                 ImGui::TextDisabled("No camera in scene");
-            }
-            ImGui::EndPopup();
-        }
-
-        if (ImGui::BeginPopup("svgscalepopup")) {
-            ImGui::TextUnformatted("SVG Scale");
-            ImGui::Separator();
-
-            auto applyScale = [&](float scale){
-                std::string newPath = TextureData::buildSvgScalePath(svgCleanPath, scale);
-                if (newPath != newValue.getPath()) {
-                    Texture texture(newPath);
-                    for (Entity& entity : entities){
-                        cmd = new PropertyCmd<Texture>(project, sceneProject->id, entity, cpType, id, texture, settings.onValueChanged);
-                        CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
-                        finishProperty = true;
-                    }
-                }
-            };
-
-            // Holds the in-progress drag value so the scale is committed only on release:
-            // each distinct scale rasterizes a new texture, so we avoid spamming the cache.
-            static std::map<std::string, float> svgScaleEditing;
-            const std::string editKey = std::to_string(static_cast<int>(cpType)) + ":" + id;
-            auto editIt = svgScaleEditing.find(editKey);
-            float editScale = (editIt != svgScaleEditing.end()) ? editIt->second : svgCurrentScale;
-
-            ImGui::SetNextItemWidth(140);
-            if (ImGui::DragFloat("##svgscaledrag", &editScale, 0.05f, 0.1f, 16.0f, "%.2fx")) {
-                svgScaleEditing[editKey] = editScale;
-            }
-            if (ImGui::IsItemDeactivatedAfterEdit()) {
-                svgScaleEditing.erase(editKey);
-                applyScale(editScale);
-            }
-
-            ImGui::Separator();
-            struct ScalePreset { const char* label; float value; };
-            static const ScalePreset presets[] = {
-                {"0.5x", 0.5f}, {"1x", 1.0f}, {"2x", 2.0f}, {"3x", 3.0f}, {"4x", 4.0f}
-            };
-            for (const ScalePreset& preset : presets) {
-                bool selected = std::fabs(svgCurrentScale - preset.value) < 1e-4f;
-                if (ImGui::MenuItem(preset.label, nullptr, selected)) {
-                    applyScale(preset.value);
-                }
             }
             ImGui::EndPopup();
         }
