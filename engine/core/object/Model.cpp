@@ -123,6 +123,100 @@ Animation Model::findAnimation(const std::string& name){
     throw std::out_of_range("vector animations is out of range");
 }
 
+void Model::playAnimation(int index, float fadeTime){
+    ModelComponent& model = getComponent<ModelComponent>();
+
+    Entity target;
+    try{
+        target = model.animations.at(index);
+    }catch (const std::out_of_range& e){
+        Log::error("Playing non-existent animation: %s", e.what());
+        return;
+    }
+
+    // Fade out every other animation of this model that is currently running.
+    for (Entity animEntity : model.animations){
+        if (animEntity == target || animEntity == NULL_ENTITY || !scene->isEntityCreated(animEntity))
+            continue;
+
+        Signature signature = scene->getSignature(animEntity);
+        if (!signature.test(scene->getComponentId<AnimationComponent>()) ||
+            !signature.test(scene->getComponentId<ActionComponent>()))
+            continue;
+
+        if (scene->getComponent<ActionComponent>(animEntity).state == ActionState::Running){
+            Animation(scene, animEntity).fadeOut(fadeTime);
+        }
+    }
+
+    Animation(scene, target).fadeIn(fadeTime);
+}
+
+void Model::playAnimation(int index){
+    ModelComponent& model = getComponent<ModelComponent>();
+
+    float fadeTime = 0.0f;
+    if (index >= 0 && index < (int)model.animations.size()){
+        Entity target = model.animations[index];
+        if (target != NULL_ENTITY && scene->isEntityCreated(target) &&
+            scene->getSignature(target).test(scene->getComponentId<AnimationComponent>())){
+            fadeTime = scene->getComponent<AnimationComponent>(target).defaultFadeTime;
+        }
+    }
+
+    playAnimation(index, fadeTime);
+}
+
+void Model::playAnimation(const std::string& name, float fadeTime){
+    ModelComponent& model = getComponent<ModelComponent>();
+
+    for (int i = 0; i < (int)model.animations.size(); i++){
+        Signature signature = scene->getSignature(model.animations[i]);
+        if (signature.test(scene->getComponentId<AnimationComponent>())){
+            if (scene->getComponent<AnimationComponent>(model.animations[i]).name == name){
+                playAnimation(i, fadeTime);
+                return;
+            }
+        }
+    }
+
+    Log::error("Playing non-existent animation: %s", name.c_str());
+}
+
+void Model::playAnimation(const std::string& name){
+    ModelComponent& model = getComponent<ModelComponent>();
+
+    for (int i = 0; i < (int)model.animations.size(); i++){
+        Signature signature = scene->getSignature(model.animations[i]);
+        if (signature.test(scene->getComponentId<AnimationComponent>())){
+            if (scene->getComponent<AnimationComponent>(model.animations[i]).name == name){
+                playAnimation(i, scene->getComponent<AnimationComponent>(model.animations[i]).defaultFadeTime);
+                return;
+            }
+        }
+    }
+
+    Log::error("Playing non-existent animation: %s", name.c_str());
+}
+
+void Model::stopAnimations(float fadeTime){
+    ModelComponent& model = getComponent<ModelComponent>();
+
+    for (Entity animEntity : model.animations){
+        if (animEntity == NULL_ENTITY || !scene->isEntityCreated(animEntity))
+            continue;
+
+        Signature signature = scene->getSignature(animEntity);
+        if (!signature.test(scene->getComponentId<AnimationComponent>()) ||
+            !signature.test(scene->getComponentId<ActionComponent>()))
+            continue;
+
+        if (scene->getComponent<ActionComponent>(animEntity).state == ActionState::Running){
+            Animation(scene, animEntity).fadeOut(fadeTime);
+        }
+    }
+}
+
 Bone Model::getBone(const std::string& name){
     ModelComponent& model = getComponent<ModelComponent>();
 

@@ -21,6 +21,21 @@ namespace doriax{
         bool isLoop() const;
         void setLoop(bool loop);
 
+        // Crossfade helpers. fadeIn starts the animation ramping its blend weight
+        // 0->1 over `duration` seconds; fadeOut ramps the (already running)
+        // animation to 0 and stops it. A duration <= 0 is instant.
+        void fadeIn(float duration);
+        void fadeOut(float duration);
+
+        using Action::start; // keep base start() visible alongside the fade overload
+        void start(float fadeInDuration);
+
+        float getBlendWeight() const;
+        void setBlendWeight(float weight);
+
+        float getDefaultFadeTime() const;
+        void setDefaultFadeTime(float time);
+
         bool isOwnedActions() const;
         void setOwnedActions(bool ownedActions);
 

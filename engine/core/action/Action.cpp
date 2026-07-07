@@ -80,6 +80,18 @@ float Action::getSpeed() const{
     return action.speed;
 }
 
+void Action::setWeight(float weight){
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    action.weight = weight;
+}
+
+float Action::getWeight() const{
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    return action.weight;
+}
+
 bool Action::isRunning() const{
     ActionComponent& action = getComponent<ActionComponent>();
 

@@ -5708,6 +5708,7 @@ YAML::Node editor::Stream::encodeAnimationComponent(const AnimationComponent& an
     node["loop"] = animation.loop;
     node["duration"] = animation.duration;
     node["ownedActions"] = animation.ownedActions;
+    node["defaultFadeTime"] = animation.defaultFadeTime;
 
     YAML::Node actionsNode;
     for (const auto& frame : animation.actions) {
@@ -5734,6 +5735,7 @@ AnimationComponent editor::Stream::decodeAnimationComponent(const YAML::Node& no
     if (node["loop"]) animation.loop = node["loop"].as<bool>();
     if (node["duration"]) animation.duration = node["duration"].as<float>();
     if (node["ownedActions"]) animation.ownedActions = node["ownedActions"].as<bool>();
+    if (node["defaultFadeTime"]) animation.defaultFadeTime = node["defaultFadeTime"].as<float>();
 
     if (node["actions"]) {
         animation.actions.clear();

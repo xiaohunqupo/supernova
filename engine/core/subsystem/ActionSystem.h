@@ -7,6 +7,8 @@
 
 #include "SubSystem.h"
 
+#include <unordered_map>
+
 #include "component/Transform.h"
 #include "component/SpriteComponent.h"
 #include "component/MeshComponent.h"
@@ -35,6 +37,32 @@ namespace doriax{
 	class DORIAX_API ActionSystem : public SubSystem {
 
     private:
+
+		// Per-target weighted pose accumulator used to blend keyframe-track
+		// animations (translate/rotate/scale/morph) that target the same bone.
+		// Each contributing animation adds its sampled value scaled by its blend
+		// weight; flushPoseBlend() then writes the normalized (weighted-average)
+		// result once per target. This makes blending order-independent and lets
+		// multiple animations crossfade smoothly.
+		struct TransformBlendAccum {
+			Vector3 positionSum = Vector3(0, 0, 0);
+			float positionWeight = 0.0f;
+			Vector3 scaleSum = Vector3(0, 0, 0);
+			float scaleWeight = 0.0f;
+			Quaternion rotationSum = Quaternion(0, 0, 0, 0);
+			Quaternion rotationRef;
+			bool hasRotationRef = false;
+			float rotationWeight = 0.0f;
+		};
+		struct MorphBlendAccum {
+			float sums[MAX_MORPHTARGETS] = {0};
+			float weights[MAX_MORPHTARGETS] = {0};
+		};
+		std::unordered_map<Entity, TransformBlendAccum> transformBlend;
+		std::unordered_map<Entity, MorphBlendAccum> morphBlend;
+
+		void clearPoseBlend();
+		void flushPoseBlend();
 
 		void actionStateChange(Entity entity, ActionComponent& action);
 
@@ -116,10 +144,10 @@ namespace doriax{
 
 		//Keyframe
 		void keyframeUpdate(double dt, ActionComponent& action, KeyframeTracksComponent& keyframe);
-		void translateTracksUpdate(KeyframeTracksComponent& keyframe, TranslateTracksComponent& translatetracks, Transform& transform);
-		void scaleTracksUpdate(KeyframeTracksComponent& keyframe, ScaleTracksComponent& scaletracks, Transform& transform);
-		void rotateTracksUpdate(KeyframeTracksComponent& keyframe, RotateTracksComponent& rotatetracks, Transform& transform);
-		void morphTracksUpdate(KeyframeTracksComponent& keyframe, MorphTracksComponent& morpthtracks, MeshComponent& mesh);
+		void translateTracksUpdate(KeyframeTracksComponent& keyframe, TranslateTracksComponent& translatetracks, Entity target, float weight);
+		void scaleTracksUpdate(KeyframeTracksComponent& keyframe, ScaleTracksComponent& scaletracks, Entity target, float weight);
+		void rotateTracksUpdate(KeyframeTracksComponent& keyframe, RotateTracksComponent& rotatetracks, Entity target, float weight);
+		void morphTracksUpdate(KeyframeTracksComponent& keyframe, MorphTracksComponent& morpthtracks, Entity target, float weight);
 
 		void processRunningAction(double dt, Entity entity, ActionComponent& action);
 
@@ -132,6 +160,7 @@ namespace doriax{
 		void particleActionReset(Entity entity);
 
 		void updateAnimationPreview(double dt, Entity entity);
+		void updateAnimationPreview(double dt, const std::vector<Entity>& entities);
 		void updateActionPreview(double dt, Entity entity);
 
 		float getDuration(Entity entity);

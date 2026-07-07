@@ -11431,6 +11431,7 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
     propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "duration", "Duration", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "ownedActions", "Owned actions", sceneProject, entities);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "defaultFadeTime", "Fade time", sceneProject, entities);
     endTable();
 
     AnimationComponent& anim = sceneProject->scene->getComponent<AnimationComponent>(entities[0]);

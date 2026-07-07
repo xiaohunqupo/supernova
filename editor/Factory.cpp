@@ -1795,6 +1795,7 @@ std::string editor::Factory::createAnimationComponent(int indentSpaces, EntityRe
     code << ind << "animcomp.loop = " << formatBool(anim.loop) << ";\n";
     code << ind << "animcomp.duration = " << formatFloat(anim.duration) << ";\n";
     code << ind << "animcomp.ownedActions = " << formatBool(anim.ownedActions) << ";\n";
+    code << ind << "animcomp.defaultFadeTime = " << formatFloat(anim.defaultFadeTime) << ";\n";
     code << ind << "animcomp.actions.clear();\n";
     for (size_t i = 0; i < anim.actions.size(); i++) {
         code << ind << "animcomp.actions.push_back({" << formatFloat(anim.actions[i].startTime) << ", " << formatFloat(anim.actions[i].duration) << ", " << formatEntity(anim.actions[i].action, entityVarNames) << ", " << formatUInt(anim.actions[i].track) << "});\n";

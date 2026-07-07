@@ -29,6 +29,9 @@ namespace doriax{
         void setSpeed(float speed);
         float getSpeed() const;
 
+        void setWeight(float weight);
+        float getWeight() const;
+
         bool isRunning() const;
         bool isStopped() const;
         bool isPaused() const;

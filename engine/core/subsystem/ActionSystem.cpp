@@ -278,6 +278,15 @@ void ActionSystem::actionStart(Entity entity){
 
     actionComponentStart(action);
 
+    // Reset blend weight to full when an animation starts without a pending fade
+    // (a fade-in sets weight/fadeSpeed before triggering start, so preserve those).
+    if (signature.test(scene->getComponentId<AnimationComponent>())){
+        AnimationComponent& animcomp = scene->getComponent<AnimationComponent>(entity);
+        if (animcomp.fadeSpeed <= 0.0f){
+            animcomp.weight = 1.0f;
+        }
+    }
+
     if (action.target != NULL_ENTITY){
         Signature targetSignature = scene->getSignature(action.target);
 
@@ -385,6 +394,44 @@ void ActionSystem::actionDestroy(ActionComponent& action){
 void ActionSystem::animationUpdate(double dt, Entity entity, ActionComponent& action, AnimationComponent& animcomp){
     int totalActionsPassed = 0;
 
+    // Advance the blend weight toward its fade target. Child actions inherit this
+    // weight so their sampled poses are combined by flushPoseBlend() into a smooth
+    // weighted average, producing crossfades between overlapping animations.
+    if (animcomp.fadeSpeed > 0.0f){
+        float step = (float)(animcomp.fadeSpeed * dt);
+        if (animcomp.weight < animcomp.fadeTarget){
+            animcomp.weight = std::min(animcomp.fadeTarget, animcomp.weight + step);
+        }else if (animcomp.weight > animcomp.fadeTarget){
+            animcomp.weight = std::max(animcomp.fadeTarget, animcomp.weight - step);
+        }
+
+        if (animcomp.weight == animcomp.fadeTarget){
+            animcomp.fadeSpeed = 0.0f; // fade finished
+        }
+
+        if (animcomp.weight <= 0.0f && animcomp.stopOnFadeOut){
+            animcomp.weight = 0.0f;
+            animcomp.fadeSpeed = 0.0f;
+            animcomp.stopOnFadeOut = false;
+
+            // Stop child actions so they no longer contribute to the pose blend.
+            for (const ActionFrame& frame : animcomp.actions){
+                if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)){
+                    Signature childSig = scene->getSignature(frame.action);
+                    if (childSig.test(scene->getComponentId<ActionComponent>())){
+                        ActionComponent& childAction = scene->getComponent<ActionComponent>(frame.action);
+                        if (childAction.state == ActionState::Running){
+                            actionStop(frame.action);
+                        }
+                    }
+                }
+            }
+
+            actionStop(entity);
+            return;
+        }
+    }
+
     for (int i = 0; i < animcomp.actions.size(); i++){
 
         float timeDiff = action.timecount - animcomp.actions[i].startTime;
@@ -401,6 +448,7 @@ void ActionSystem::animationUpdate(double dt, Entity entity, ActionComponent& ac
                 }
 
                 iaction.timecount = timeDiff * iaction.speed;
+                iaction.weight = animcomp.weight;
 
                 if (timeDiff > (animcomp.actions[i].duration / iaction.speed)) {
                     totalActionsPassed++;
@@ -1244,49 +1292,137 @@ void ActionSystem::keyframeUpdate(double dt, ActionComponent& action, KeyframeTr
     }
 }
 
-void ActionSystem::translateTracksUpdate(KeyframeTracksComponent& keyframe, TranslateTracksComponent& translatetracks, Transform& transform){
+void ActionSystem::translateTracksUpdate(KeyframeTracksComponent& keyframe, TranslateTracksComponent& translatetracks, Entity target, float weight){
+    if (weight <= 0.0f)
+        return;
+
     Vector3 previousTranslation = translatetracks.values[0];
     if (keyframe.index > 0){
         previousTranslation = translatetracks.values[keyframe.index-1];
     }
 
-    transform.position = previousTranslation + keyframe.interpolation * (translatetracks.values[keyframe.index] - previousTranslation);
-    transform.needUpdate = true;
+    Vector3 value = previousTranslation + keyframe.interpolation * (translatetracks.values[keyframe.index] - previousTranslation);
+
+    TransformBlendAccum& accum = transformBlend[target];
+    accum.positionSum = accum.positionSum + value * weight;
+    accum.positionWeight += weight;
 }
 
-void ActionSystem::scaleTracksUpdate(KeyframeTracksComponent& keyframe, ScaleTracksComponent& scaletracks, Transform& transform){
+void ActionSystem::scaleTracksUpdate(KeyframeTracksComponent& keyframe, ScaleTracksComponent& scaletracks, Entity target, float weight){
+    if (weight <= 0.0f)
+        return;
+
     Vector3 previousScale = scaletracks.values[0];
     if (keyframe.index > 0){
         previousScale = scaletracks.values[keyframe.index-1];
     }
 
-    transform.scale = previousScale + keyframe.interpolation * (scaletracks.values[keyframe.index] - previousScale);
-    transform.needUpdate = true;
+    Vector3 value = previousScale + keyframe.interpolation * (scaletracks.values[keyframe.index] - previousScale);
+
+    TransformBlendAccum& accum = transformBlend[target];
+    accum.scaleSum = accum.scaleSum + value * weight;
+    accum.scaleWeight += weight;
 }
 
-void ActionSystem::rotateTracksUpdate(KeyframeTracksComponent& keyframe, RotateTracksComponent& rotatetracks, Transform& transform){
+void ActionSystem::rotateTracksUpdate(KeyframeTracksComponent& keyframe, RotateTracksComponent& rotatetracks, Entity target, float weight){
+    if (weight <= 0.0f)
+        return;
+
     Quaternion previousRotation = rotatetracks.values[0];
     if (keyframe.index > 0){
         previousRotation = rotatetracks.values[keyframe.index-1];
     }
 
-    transform.rotation = Quaternion::slerp(keyframe.interpolation, previousRotation, rotatetracks.values[keyframe.index]);
-    transform.needUpdate = true;
+    Quaternion value = Quaternion::slerp(keyframe.interpolation, previousRotation, rotatetracks.values[keyframe.index]);
+
+    TransformBlendAccum& accum = transformBlend[target];
+    // Weighted quaternion average (nlerp-style): align each sample to the first
+    // sample's hemisphere so the shortest arc is taken, sum, then normalize on flush.
+    if (!accum.hasRotationRef){
+        accum.rotationRef = value;
+        accum.hasRotationRef = true;
+    } else if (accum.rotationRef.dot(value) < 0.0f){
+        value = -value;
+    }
+    accum.rotationSum = accum.rotationSum + value * weight;
+    accum.rotationWeight += weight;
 }
 
-void ActionSystem::morphTracksUpdate(KeyframeTracksComponent& keyframe, MorphTracksComponent& morpthtracks, MeshComponent& mesh){
+void ActionSystem::morphTracksUpdate(KeyframeTracksComponent& keyframe, MorphTracksComponent& morpthtracks, Entity target, float weight){
+    if (weight <= 0.0f)
+        return;
+
     std::vector<float> previousMorph = morpthtracks.values[0];
     if (keyframe.index > 0){
         previousMorph = morpthtracks.values[keyframe.index-1];
     }
 
     if ((keyframe.index == 0) || (morpthtracks.values[keyframe.index].size() == morpthtracks.values[keyframe.index-1].size())) {
-        for (int morphIndex = 0; morphIndex < morpthtracks.values[keyframe.index].size(); morphIndex++) {
-            mesh.morphWeights[morphIndex] = previousMorph[morphIndex] + keyframe.interpolation * (morpthtracks.values[keyframe.index][morphIndex] - previousMorph[morphIndex]);
+        MorphBlendAccum& accum = morphBlend[target];
+        for (int morphIndex = 0; morphIndex < morpthtracks.values[keyframe.index].size() && morphIndex < MAX_MORPHTARGETS; morphIndex++) {
+            float value = previousMorph[morphIndex] + keyframe.interpolation * (morpthtracks.values[keyframe.index][morphIndex] - previousMorph[morphIndex]);
+            accum.sums[morphIndex] += value * weight;
+            accum.weights[morphIndex] += weight;
         }
     }else{
         Log::error("MorphTrack of index %i is different size than index %i", keyframe.index, keyframe.index-1);
     }
+}
+
+void ActionSystem::clearPoseBlend(){
+    transformBlend.clear();
+    morphBlend.clear();
+}
+
+void ActionSystem::flushPoseBlend(){
+    for (auto& entry : transformBlend){
+        Entity target = entry.first;
+        TransformBlendAccum& accum = entry.second;
+
+        if (!scene->isEntityCreated(target))
+            continue;
+
+        Transform* transform = scene->findComponent<Transform>(target);
+        if (!transform)
+            continue;
+
+        bool changed = false;
+        if (accum.positionWeight > 0.0f){
+            transform->position = accum.positionSum * (1.0f / accum.positionWeight);
+            changed = true;
+        }
+        if (accum.scaleWeight > 0.0f){
+            transform->scale = accum.scaleSum * (1.0f / accum.scaleWeight);
+            changed = true;
+        }
+        if (accum.rotationWeight > 0.0f){
+            transform->rotation = accum.rotationSum.normalized();
+            changed = true;
+        }
+        if (changed){
+            transform->needUpdate = true;
+        }
+    }
+
+    for (auto& entry : morphBlend){
+        Entity target = entry.first;
+        MorphBlendAccum& accum = entry.second;
+
+        if (!scene->isEntityCreated(target))
+            continue;
+
+        MeshComponent* mesh = scene->findComponent<MeshComponent>(target);
+        if (!mesh)
+            continue;
+
+        for (int i = 0; i < MAX_MORPHTARGETS; i++){
+            if (accum.weights[i] > 0.0f){
+                mesh->morphWeights[i] = accum.sums[i] / accum.weights[i];
+            }
+        }
+    }
+
+    clearPoseBlend();
 }
 
 float ActionSystem::getDuration(Entity entity) {
@@ -1442,9 +1578,7 @@ void ActionSystem::processRunningAction(double dt, Entity entity, ActionComponen
             TranslateTracksComponent& translatetracks = scene->getComponent<TranslateTracksComponent>(entity);
 
             if (targetSignature.test(scene->getComponentId<Transform>())){
-                Transform& transform = scene->getComponent<Transform>(action.target);
-
-                translateTracksUpdate(keyframe, translatetracks, transform);
+                translateTracksUpdate(keyframe, translatetracks, action.target, action.weight);
             }
         }
 
@@ -1452,9 +1586,7 @@ void ActionSystem::processRunningAction(double dt, Entity entity, ActionComponen
             RotateTracksComponent& rotatetracks = scene->getComponent<RotateTracksComponent>(entity);
 
             if (targetSignature.test(scene->getComponentId<Transform>())){
-                Transform& transform = scene->getComponent<Transform>(action.target);
-
-                rotateTracksUpdate(keyframe, rotatetracks, transform);
+                rotateTracksUpdate(keyframe, rotatetracks, action.target, action.weight);
             }
         }
 
@@ -1462,9 +1594,7 @@ void ActionSystem::processRunningAction(double dt, Entity entity, ActionComponen
             ScaleTracksComponent& scaletracks = scene->getComponent<ScaleTracksComponent>(entity);
 
             if (targetSignature.test(scene->getComponentId<Transform>())){
-                Transform& transform = scene->getComponent<Transform>(action.target);
-
-                scaleTracksUpdate(keyframe, scaletracks, transform);
+                scaleTracksUpdate(keyframe, scaletracks, action.target, action.weight);
             }
         }
 
@@ -1472,9 +1602,7 @@ void ActionSystem::processRunningAction(double dt, Entity entity, ActionComponen
             MorphTracksComponent& morpthtracks = scene->getComponent<MorphTracksComponent>(entity);
 
             if (targetSignature.test(scene->getComponentId<MeshComponent>())){
-                MeshComponent& mesh = scene->getComponent<MeshComponent>(action.target);
-
-                morphTracksUpdate(keyframe, morpthtracks, mesh);
+                morphTracksUpdate(keyframe, morpthtracks, action.target, action.weight);
             }
         }
 
@@ -1553,6 +1681,16 @@ void ActionSystem::processRunningAction(double dt, Entity entity, ActionComponen
 }
 
 void ActionSystem::updateAnimationPreview(double dt, Entity entity){
+    std::vector<Entity> entities;
+    entities.push_back(entity);
+    updateAnimationPreview(dt, entities);
+}
+
+void ActionSystem::updateAnimationPreview(double dt, const std::vector<Entity>& entities){
+    // Drives one or more top-level animations into a single pose-blend scope so
+    // concurrently running clips crossfade (used by the editor transition preview).
+    clearPoseBlend();
+
     std::unordered_set<Entity> visitedAnimations;
 
     std::function<void(Entity)> previewAnimation = [&](Entity animationEntity) {
@@ -1601,7 +1739,13 @@ void ActionSystem::updateAnimationPreview(double dt, Entity entity){
         }
     };
 
-    previewAnimation(entity);
+    for (Entity entity : entities){
+        if (entity != NULL_ENTITY && scene->isEntityCreated(entity)){
+            previewAnimation(entity);
+        }
+    }
+
+    flushPoseBlend();
 }
 
 void ActionSystem::updateActionPreview(double dt, Entity entity){
@@ -1621,7 +1765,9 @@ void ActionSystem::updateActionPreview(double dt, Entity entity){
     actionStateChange(entity, action);
 
     if (action.state == ActionState::Running){
+        clearPoseBlend();
         processRunningAction(dt, entity, action);
+        flushPoseBlend();
     }
 }
 
@@ -1629,6 +1775,8 @@ void ActionSystem::update(double dt){
     if (paused) {
         return;
     }
+
+    clearPoseBlend();
 
     //Animations actions
     auto animations = scene->getComponentArray<AnimationComponent>();
@@ -1663,6 +1811,9 @@ void ActionSystem::update(double dt){
         }
 
 	}
+
+    // Write the blended (weighted-average) pose to each animated target.
+    flushPoseBlend();
 }
 
 void ActionSystem::onComponentAdded(Entity entity, ComponentId componentId) {

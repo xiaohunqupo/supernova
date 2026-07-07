@@ -42,6 +42,72 @@ void Animation::setLoop(bool loop){
     animation.loop = loop;
 }
 
+void Animation::fadeIn(float duration){
+    AnimationComponent& animation = getComponent<AnimationComponent>();
+
+    if (duration <= 0.0f){
+        animation.weight = 1.0f;
+        animation.fadeTarget = 1.0f;
+        animation.fadeSpeed = 0.0f;
+        animation.stopOnFadeOut = false;
+    }else{
+        animation.weight = 0.0f;
+        animation.fadeTarget = 1.0f;
+        animation.fadeSpeed = 1.0f / duration;
+        animation.stopOnFadeOut = false;
+    }
+
+    start();
+}
+
+void Animation::fadeOut(float duration){
+    AnimationComponent& animation = getComponent<AnimationComponent>();
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    if (action.state != ActionState::Running){
+        return;
+    }
+
+    if (duration <= 0.0f){
+        stop();
+        return;
+    }
+
+    animation.fadeTarget = 0.0f;
+    animation.fadeSpeed = (animation.weight > 0.0f ? animation.weight : 1.0f) / duration;
+    animation.stopOnFadeOut = true;
+}
+
+void Animation::start(float fadeInDuration){
+    fadeIn(fadeInDuration);
+}
+
+float Animation::getBlendWeight() const{
+    AnimationComponent& animation = getComponent<AnimationComponent>();
+
+    return animation.weight;
+}
+
+void Animation::setBlendWeight(float weight){
+    AnimationComponent& animation = getComponent<AnimationComponent>();
+
+    animation.weight = weight;
+    animation.fadeSpeed = 0.0f;
+    animation.fadeTarget = weight;
+}
+
+float Animation::getDefaultFadeTime() const{
+    AnimationComponent& animation = getComponent<AnimationComponent>();
+
+    return animation.defaultFadeTime;
+}
+
+void Animation::setDefaultFadeTime(float time){
+    AnimationComponent& animation = getComponent<AnimationComponent>();
+
+    animation.defaultFadeTime = time;
+}
+
 bool Animation::isOwnedActions() const{
     AnimationComponent& animation = getComponent<AnimationComponent>();
 

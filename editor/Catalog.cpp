@@ -350,6 +350,7 @@ namespace {
         makeFastProperty<AnimationComponent, bool, &AnimationComponent::loop>("loop", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<AnimationComponent, float, &AnimationComponent::duration>("duration", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<AnimationComponent, bool, &AnimationComponent::ownedActions>("ownedActions", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<AnimationComponent, float, &AnimationComponent::defaultFadeTime>("defaultFadeTime", PropertyType::Float, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kLightProperties[] = {

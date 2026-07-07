@@ -28,6 +28,7 @@
 #include "component/AlphaActionComponent.h"
 #include "subsystem/ActionSystem.h"
 #include "subsystem/MeshSystem.h"
+#include "action/Animation.h"
 #include "util/ProjectUtils.h"
 
 #include <algorithm>
@@ -65,6 +66,9 @@ editor::AnimationWindow::AnimationWindow(Project* project){
 
     snapToGrid = true;
     snapInterval = 0.1f;
+
+    transitionTarget = NULL_ENTITY;
+    previewPrimary = NULL_ENTITY;
 
     hasNotification = false;
     windowOpen = true;
@@ -318,6 +322,22 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
         startPreview(scene, sceneProject);
     }
 
+    // Scrubbing exits any active transition: reset blend/fade state and preview only the
+    // selected clip (a two-clip crossfade is not meaningfully scrubbable on one timeline).
+    for (Entity e : previewAnimations) {
+        if (e != NULL_ENTITY && scene->isEntityCreated(e)) {
+            if (AnimationComponent* ac = scene->findComponent<AnimationComponent>(e)) {
+                ac->weight = 1.0f;
+                ac->fadeTarget = 1.0f;
+                ac->fadeSpeed = 0.0f;
+                ac->stopOnFadeOut = false;
+            }
+        }
+    }
+    previewAnimations.clear();
+    previewAnimations.push_back(selectedEntity);
+    previewPrimary = selectedEntity;
+
     AnimationComponent& anim = scene->getComponent<AnimationComponent>(selectedEntity);
     currentTime = std::max(0.0f, std::min(time, getAnimationDuration(anim)));
 
@@ -355,27 +375,33 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     }
 }
 
-void editor::AnimationWindow::startPreview(Scene* scene, SceneProject* sceneProject) {
-    if (isPreviewing || !canPreviewEntity(selectedEntity, scene)) {
+void editor::AnimationWindow::addAnimationToPreview(Scene* scene, Entity animEntity) {
+    if (animEntity == NULL_ENTITY || !scene->findComponent<AnimationComponent>(animEntity)) {
         return;
     }
 
-    previewState.clear();
-
+    // Snapshot this animation's action tree (entities not already captured), so it can be
+    // restored when the preview ends.
     std::vector<Entity> previewEntities;
     std::unordered_set<Entity> visitedAnimations;
     std::unordered_set<Entity> collectedEntities;
-    collectPreviewEntitiesRecursive(scene, selectedEntity, previewEntities, visitedAnimations, collectedEntities);
+    collectPreviewEntitiesRecursive(scene, animEntity, previewEntities, visitedAnimations, collectedEntities);
 
-    previewState.reserve(previewEntities.size());
-    for (Entity entity : previewEntities) {
-        previewState.push_back(buildPreviewEntityState(scene, entity));
+    std::unordered_set<Entity> alreadySnapshotted;
+    for (const PreviewEntityState& state : previewState) {
+        alreadySnapshotted.insert(state.entity);
     }
 
-    // Reset all child action entities to Stopped so animationUpdate calls actionStart on
-    // them (which initializes particle systems, sprite animations, etc.) regardless of their
-    // saved state in the scene file.
-    AnimationComponent& animComp = scene->getComponent<AnimationComponent>(selectedEntity);
+    for (Entity entity : previewEntities) {
+        if (alreadySnapshotted.insert(entity).second) {
+            previewState.push_back(buildPreviewEntityState(scene, entity));
+        }
+    }
+
+    // Reset this animation's child action entities to Stopped so animationUpdate calls
+    // actionStart on them (initializing particle systems, sprite animations, etc.)
+    // regardless of their saved state in the scene file.
+    AnimationComponent& animComp = scene->getComponent<AnimationComponent>(animEntity);
     for (const ActionFrame& frame : animComp.actions) {
         if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)) {
             if (ActionComponent* childAction = scene->findComponent<ActionComponent>(frame.action)) {
@@ -387,6 +413,19 @@ void editor::AnimationWindow::startPreview(Scene* scene, SceneProject* sceneProj
             }
         }
     }
+}
+
+void editor::AnimationWindow::startPreview(Scene* scene, SceneProject* sceneProject) {
+    if (isPreviewing || !canPreviewEntity(selectedEntity, scene)) {
+        return;
+    }
+
+    previewState.clear();
+    previewAnimations.clear();
+
+    addAnimationToPreview(scene, selectedEntity);
+    previewAnimations.push_back(selectedEntity);
+    previewPrimary = selectedEntity;
 
     ActionComponent& action = scene->getComponent<ActionComponent>(selectedEntity);
     action.timecount = 0;
@@ -395,6 +434,54 @@ void editor::AnimationWindow::startPreview(Scene* scene, SceneProject* sceneProj
     action.startTrigger = true;
 
     isPreviewing = true;
+}
+
+void editor::AnimationWindow::triggerTransitionPreview(Scene* scene, SceneProject* sceneProject) {
+    if (transitionTarget == NULL_ENTITY || transitionTarget == selectedEntity ||
+        !scene->isEntityCreated(transitionTarget) || !canPreviewEntity(transitionTarget, scene)) {
+        return;
+    }
+
+    if (!isPreviewing) {
+        startPreview(scene, sceneProject);
+    }
+    if (!isPreviewing) {
+        return; // current clip could not be previewed
+    }
+
+    float fadeTime = scene->getComponent<AnimationComponent>(transitionTarget).defaultFadeTime;
+
+    bool alreadyActive = false;
+    for (Entity e : previewAnimations) {
+        if (e == transitionTarget) { alreadyActive = true; break; }
+    }
+    if (!alreadyActive) {
+        addAnimationToPreview(scene, transitionTarget);
+        previewAnimations.push_back(transitionTarget);
+
+        // Start the incoming clip from the beginning (fadeIn only sets the start trigger,
+        // not the time), so the crossfade always blends in from frame 0.
+        if (ActionComponent* targetAction = scene->findComponent<ActionComponent>(transitionTarget)) {
+            targetAction->state = ActionState::Stopped;
+            targetAction->timecount = 0.0f;
+            targetAction->stopTrigger = false;
+            targetAction->pauseTrigger = false;
+        }
+    }
+
+    // Fade the currently running clip(s) out and the target in over its fade time.
+    for (Entity e : previewAnimations) {
+        if (e == transitionTarget || !scene->isEntityCreated(e) || !scene->findComponent<AnimationComponent>(e)) {
+            continue;
+        }
+        Animation(scene, e).fadeOut(fadeTime);
+    }
+    Animation(scene, transitionTarget).fadeIn(fadeTime);
+
+    previewPrimary = transitionTarget;
+    isPlaying = true;
+    selectedFrameIndex = -1;
+    sceneProject->needUpdateRender = true;
 }
 
 void editor::AnimationWindow::stopPreview(Scene* scene, SceneProject* sceneProject, bool applyBindPose) {
@@ -410,7 +497,22 @@ void editor::AnimationWindow::stopPreview(Scene* scene, SceneProject* sceneProje
         ProjectUtils::removeDynamicInstmesh(state.entity, state.components, scene);
     }
 
+    // Clear any mid-transition blend/fade state left on the previewed animations so it
+    // does not carry into a later runtime play (runtime fields are not serialized).
+    for (Entity animEntity : previewAnimations) {
+        if (animEntity != NULL_ENTITY && scene->isEntityCreated(animEntity)) {
+            if (AnimationComponent* animComp = scene->findComponent<AnimationComponent>(animEntity)) {
+                animComp->weight = 1.0f;
+                animComp->fadeTarget = 1.0f;
+                animComp->fadeSpeed = 0.0f;
+                animComp->stopOnFadeOut = false;
+            }
+        }
+    }
+
     previewState.clear();
+    previewAnimations.clear();
+    previewPrimary = NULL_ENTITY;
     isPreviewing = false;
     isDraggingFrame = false;
     draggingFrameIndex = -1;
@@ -624,6 +726,69 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     // Speed
     ImGui::SetNextItemWidth(50);
     ImGui::DragFloat("##anim_speed", &playbackSpeed, 0.01f, 0.01f, 10.0f, "%.1fx");
+    ImGui::SameLine();
+
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine();
+
+    // Transition preview: crossfade the playing clip into another over its Fade time
+    // (authored per-animation as "Fade time" in the Properties panel). Lets you see the
+    // blend that Model::playAnimation produces at runtime.
+    ImGui::Text("Blend to:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120);
+    std::string targetLabel = "(select)";
+    if (transitionTarget == selectedEntity) {
+        transitionTarget = NULL_ENTITY; // can't blend a clip into itself
+    }
+    if (transitionTarget != NULL_ENTITY && scene->isEntityCreated(transitionTarget)) {
+        if (AnimationComponent* targetAnim = scene->findComponent<AnimationComponent>(transitionTarget)) {
+            targetLabel = getAnimationEntityLabel(transitionTarget, *targetAnim, scene);
+        } else {
+            transitionTarget = NULL_ENTITY;
+        }
+    }
+    if (ImGui::BeginCombo("##anim_blend_target", targetLabel.c_str())) {
+        auto blendAnims = scene->getComponentArray<AnimationComponent>();
+        for (int i = 0; i < (int)blendAnims->size(); i++) {
+            Entity blendEntity = blendAnims->getEntity(i);
+            if (blendEntity == selectedEntity) continue;
+            AnimationComponent& blendAnim = blendAnims->getComponentFromIndex(i);
+            std::string blendLabel = getAnimationEntityLabel(blendEntity, blendAnim, scene);
+            bool blendSelected = (blendEntity == transitionTarget);
+            ImGui::PushID((int)blendEntity);
+            if (ImGui::Selectable(blendLabel.c_str(), blendSelected)) {
+                transitionTarget = blendEntity;
+            }
+            if (blendSelected) {
+                ImGui::SetItemDefaultFocus();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+
+    bool canBlend = isPreviewing && transitionTarget != NULL_ENTITY &&
+                    transitionTarget != selectedEntity &&
+                    scene->isEntityCreated(transitionTarget) &&
+                    canPreviewEntity(transitionTarget, scene);
+    ImGui::BeginDisabled(!canBlend);
+    if (ImGui::Button(ICON_FA_RIGHT_LEFT "##anim_blend_go")) {
+        triggerTransitionPreview(scene, sceneProject);
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered()) {
+        if (!isPreviewing) {
+            ImGui::SetTooltip("Play an animation first, then crossfade to the selected clip.");
+        } else if (transitionTarget == NULL_ENTITY) {
+            ImGui::SetTooltip("Select a clip to blend into.");
+        } else {
+            float ft = scene->findComponent<AnimationComponent>(transitionTarget)
+                ? scene->getComponent<AnimationComponent>(transitionTarget).defaultFadeTime : 0.0f;
+            ImGui::SetTooltip("Crossfade from the playing clip to the selected clip over its Fade time (%.2fs).", ft);
+        }
+    }
     ImGui::SameLine();
 
     ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
@@ -1363,25 +1528,44 @@ void editor::AnimationWindow::show() {
 
     // Playback update
     if (isPreviewing && sceneIsStopped) {
-        // Engine-driven preview: ActionSystem processes the animation
+        // Engine-driven preview: ActionSystem processes the animation(s). During a
+        // transition preview, previewAnimations holds both the outgoing and incoming clip
+        // and the engine blends them in one pose scope.
+        if (previewAnimations.empty()) {
+            previewAnimations.push_back(selectedEntity);
+            previewPrimary = selectedEntity;
+        }
+
         if (isPlaying) {
             if (prePlaySelectedFrameIndex == -1) {
                 prePlaySelectedFrameIndex = selectedFrameIndex;
             }
             selectedFrameIndex = -1;
             float dt = ImGui::GetIO().DeltaTime * playbackSpeed;
-            scene->getSystem<ActionSystem>()->updateAnimationPreview(dt, selectedEntity);
+            scene->getSystem<ActionSystem>()->updateAnimationPreview(dt, previewAnimations);
             sceneProject->needUpdateRender = true;
         }
 
-        // Sync currentTime from engine state
-        ActionComponent& action = scene->getComponent<ActionComponent>(selectedEntity);
+        // Playback continues while any previewed clip is still running.
+        bool anyRunning = false;
+        for (Entity e : previewAnimations) {
+            if (e != NULL_ENTITY && scene->isEntityCreated(e)) {
+                if (ActionComponent* ac = scene->findComponent<ActionComponent>(e)) {
+                    if (ac->state == ActionState::Running) { anyRunning = true; break; }
+                }
+            }
+        }
 
-        // Check if animation finished naturally
-        if (action.state == ActionState::Stopped && isPlaying) {
+        if (!anyRunning && isPlaying) {
             isPlaying = false;
         } else {
-            currentTime = action.timecount;
+            // Drive the playhead from the dominant clip (the transition target once blended).
+            Entity timeSource = previewPrimary;
+            if (timeSource == NULL_ENTITY || !scene->isEntityCreated(timeSource) ||
+                !scene->findComponent<ActionComponent>(timeSource)) {
+                timeSource = selectedEntity;
+            }
+            currentTime = scene->getComponent<ActionComponent>(timeSource).timecount;
         }
     } else if (isPlaying) {
         // Fallback: visual-only playback (when scene is playing or no preview)

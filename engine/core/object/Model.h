@@ -26,6 +26,16 @@ namespace doriax{
         Animation getAnimation(int index);
         Animation findAnimation(const std::string& name);
 
+        // Crossfade to an animation: fades out any currently running animations of
+        // this model and fades the target in. Overloads without a fade time use the
+        // target animation's authored defaultFadeTime.
+        void playAnimation(int index);
+        void playAnimation(int index, float fadeTime);
+        void playAnimation(const std::string& name);
+        void playAnimation(const std::string& name, float fadeTime);
+
+        void stopAnimations(float fadeTime);
+
         Bone getBone(const std::string& name);
         Bone getBone(int id);
 

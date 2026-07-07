@@ -45,6 +45,13 @@ namespace doriax::editor{
         bool snapToGrid;
         float snapInterval;
 
+        // Transition preview: currently active top-level animations blended together,
+        // the target clip chosen for the next crossfade, and the clip whose time drives
+        // the playhead.
+        std::vector<Entity> previewAnimations;
+        Entity transitionTarget;
+        Entity previewPrimary;
+
         // Cached entity
         Entity selectedEntity;
         uint32_t selectedSceneId;
@@ -89,6 +96,12 @@ namespace doriax::editor{
 
         void startPreview(Scene* scene, SceneProject* sceneProject);
         void stopPreview(Scene* scene, SceneProject* sceneProject, bool applyBindPose = false);
+
+        // Snapshot + reset one animation's action tree so it can be previewed (and later
+        // restored). Used for both the initial clip and any clip a transition blends in.
+        void addAnimationToPreview(Scene* scene, Entity animEntity);
+        // Crossfade the running preview clip(s) into transitionTarget over its fade time.
+        void triggerTransitionPreview(Scene* scene, SceneProject* sceneProject);
 
     public:
         static constexpr const char* WINDOW_NAME = "Animation";

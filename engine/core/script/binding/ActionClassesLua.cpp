@@ -85,6 +85,7 @@ void LuaBinding::registerActionClasses(lua_State *L){
             luabridge::overload<Object*>(&Action::setTarget),
             luabridge::overload<Entity>(&Action::setTarget))
         .addProperty("speed", &Action::getSpeed, &Action::setSpeed)
+        .addProperty("weight", &Action::getWeight, &Action::setWeight)
         .addFunction("isRunning", &Action::isRunning)
         .addFunction("isStopped", &Action::isStopped)
         .addFunction("isPaused", &Action::isPaused)
@@ -255,7 +256,11 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addProperty("loop", &Animation::isLoop, &Animation::setLoop)
         .addProperty("ownedActions", &Animation::isOwnedActions, &Animation::setOwnedActions)
         .addProperty("name", &Animation::getName, &Animation::setName)
-        .addFunction("addActionFrame", 
+        .addProperty("blendWeight", &Animation::getBlendWeight, &Animation::setBlendWeight)
+        .addProperty("defaultFadeTime", &Animation::getDefaultFadeTime, &Animation::setDefaultFadeTime)
+        .addFunction("fadeIn", &Animation::fadeIn)
+        .addFunction("fadeOut", &Animation::fadeOut)
+        .addFunction("addActionFrame",
             luabridge::overload<float, float, Entity, Entity>(&Animation::addActionFrame),
             luabridge::overload<float, Entity, Entity>(&Animation::addActionFrame),
             luabridge::overload<float, float, Entity>(&Animation::addActionFrame),

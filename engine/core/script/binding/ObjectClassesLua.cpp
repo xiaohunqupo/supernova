@@ -529,7 +529,13 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("loadModel", &Model::loadModel)
         .addFunction("getAnimation", &Model::getAnimation)
         .addFunction("findAnimation", &Model::findAnimation)
-        .addFunction("getBone", 
+        .addFunction("playAnimation",
+            luabridge::overload<int>(&Model::playAnimation),
+            luabridge::overload<int, float>(&Model::playAnimation),
+            luabridge::overload<const std::string&>(&Model::playAnimation),
+            luabridge::overload<const std::string&, float>(&Model::playAnimation))
+        .addFunction("stopAnimations", &Model::stopAnimations)
+        .addFunction("getBone",
             luabridge::overload<int>(&Model::getBone),
             luabridge::overload<const std::string&>(&Model::getBone))
         .addFunction("getMorphWeight", 
