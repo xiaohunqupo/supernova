@@ -68,6 +68,7 @@
 #include <cfloat>
 #include <algorithm>
 #include <unordered_set>
+#include <memory>
 
 using namespace doriax;
 
@@ -4774,6 +4775,24 @@ void editor::Properties::drawTransform(ComponentType cpType, SceneProject* scene
     endTable();
 }
 
+editor::Properties::ShaderForkAction editor::Properties::makeForkAction(std::unique_ptr<ForkShaderCmd> forkCmd, uint32_t sceneId){
+    if (!forkCmd->isValid())
+        return ShaderForkAction();
+
+    ShaderForkAction action;
+    action.base = forkCmd->getBase();
+
+    auto pendingFork = std::make_shared<std::unique_ptr<ForkShaderCmd>>(std::move(forkCmd));
+    action.confirm = [pendingFork, sceneId]() {
+        if (*pendingFork)
+            CommandHandle::get(sceneId)->addCommand(pendingFork->release());
+    };
+    action.cancel = [pendingFork]() {
+        pendingFork->reset();
+    };
+    return action;
+}
+
 void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType shaderType, SceneProject* sceneProject, std::vector<Entity> entities){
     // The custom shader is per-component. Forking copies the built-in <type>.vert/.frag
     // into the project's shaders/ folder; #includes still resolve to the engine sources
@@ -4792,23 +4811,16 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
         Command* shaderCmd = new PropertyCmd<std::string>(project, sceneProject->id, shaderEntity, cpType, "customShader", value);
         CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
     };
-    auto doFork = [&]() -> std::string {
+    auto prepareFork = [&]() -> ShaderForkAction {
         // Fork is a single undoable step (writes .vert/.frag + sets customShader);
         // undo deletes the forked files.
-        ForkShaderCmd* forkCmd = new ForkShaderCmd(project, sceneProject->id, shaderEntity, cpType, shaderType, sceneProject->scene->getEntityName(shaderEntity));
-        if (forkCmd->isValid()) {
-            std::string base = forkCmd->getBase();
-            CommandHandle::get(sceneProject->id)->addCommand(forkCmd);
-            return base;
-        }
-        delete forkCmd;
-        return "";
+        return makeForkAction(std::make_unique<ForkShaderCmd>(project, sceneProject->id, shaderEntity, cpType, shaderType, sceneProject->scene->getEntityName(shaderEntity)), sceneProject->id);
     };
 
     beginTable(cpType, getLabelSize("Shader"), "custom_shader_table");
     propertyHeader("Shader");
 
-    drawShaderRowContents(shaderType, currentShader, setShader, doFork, "custom_shader");
+    drawShaderRowContents(shaderType, currentShader, setShader, prepareFork, "custom_shader");
 
     endTable();
 }
@@ -4822,17 +4834,10 @@ void editor::Properties::drawSceneShaderRow(SceneProject* sceneProject, ShaderTy
         Command* shaderCmd = new ScenePropertyCmd<std::string>(project, sceneProject->id, scenePropertyName, value);
         CommandHandle::get(sceneProject->id)->addCommand(shaderCmd);
     };
-    auto doFork = [&]() -> std::string {
+    auto prepareFork = [&]() -> ShaderForkAction {
         // Single undoable step (writes .vert/.frag + sets the scene property);
         // undo deletes the forked files.
-        ForkShaderCmd* forkCmd = new ForkShaderCmd(project, sceneProject, shaderType, scenePropertyName, sceneProject->name + " " + label);
-        if (forkCmd->isValid()) {
-            std::string base = forkCmd->getBase();
-            CommandHandle::get(sceneProject->id)->addCommand(forkCmd);
-            return base;
-        }
-        delete forkCmd;
-        return "";
+        return makeForkAction(std::make_unique<ForkShaderCmd>(project, sceneProject, shaderType, scenePropertyName, sceneProject->name + " " + label), sceneProject->id);
     };
 
     ImGui::TableNextRow();
@@ -4840,12 +4845,12 @@ void editor::Properties::drawSceneShaderRow(SceneProject* sceneProject, ShaderTy
     ImGui::Text("%s", label);
     ImGui::TableSetColumnIndex(1);
 
-    drawShaderRowContents(shaderType, currentShader, setShader, doFork, scenePropertyName);
+    drawShaderRowContents(shaderType, currentShader, setShader, prepareFork, scenePropertyName);
 }
 
 void editor::Properties::drawShaderRowContents(ShaderType shaderType, const std::string& currentShader,
                                                const std::function<void(const std::string&)>& setShader,
-                                               const std::function<std::string()>& doFork,
+                                               const std::function<Properties::ShaderForkAction()>& prepareFork,
                                                const std::string& idSuffix){
     const std::filesystem::path projectPath = project->getProjectPath();
 
@@ -4886,10 +4891,25 @@ void editor::Properties::drawShaderRowContents(ShaderType shaderType, const std:
 
     ImGui::BeginDisabled(hasCustom);
     if (ImGui::Button((std::string(ICON_FA_CODE_FORK "##fork_") + idSuffix).c_str())) {
-        std::string base = doFork();
-        if (!base.empty()) {
-            openRelative(base + ".vert");
-            openRelative(base + ".frag");
+        ShaderForkAction fork = prepareFork();
+        if (!fork.base.empty() && fork.confirm) {
+            const std::string base = fork.base;
+            const std::filesystem::path openProjectPath = projectPath;
+            Backend::getApp().registerConfirmAlert(
+                "Fork Shader",
+                "Do you want to fork the built-in shader into \"" + base + "\"?",
+                [fork, base, openProjectPath]() {
+                    fork.confirm();
+                    if (CodeEditor* codeEditor = Backend::getApp().getCodeEditor()) {
+                        codeEditor->openFile((openProjectPath / (base + ".vert")).string(), true);
+                        codeEditor->openFile((openProjectPath / (base + ".frag")).string(), true);
+                    }
+                },
+                [fork]() {
+                    if (fork.cancel)
+                        fork.cancel();
+                }
+            );
         }
     }
     if (ImGui::IsItemHovered())
