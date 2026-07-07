@@ -124,6 +124,10 @@ namespace doriax{
 		Vector4 envColor; // rgb = env color (linear), w = env rotation (radians)
 	} fs_composite_t;
 
+	typedef struct fs_blit_t {
+		Vector4 params; // x = flip source Y on sample (GL swapchain destination), yzw unused
+	} fs_blit_t;
+
 	typedef struct vs_points_params_t {
 		Matrix4 mvpMatrix;
 		float pointScale;
@@ -164,6 +168,11 @@ namespace doriax{
 		// without face culling. Defaults to false and is never set at runtime, so
 		// exported games are unaffected.
 		bool disableFaceCulling = false;
+
+		// Editor-only override that suppresses the scene's fixed game resolution
+		// (edit-mode viewports render native; play mode re-enables it). Defaults
+		// to false and is never set at runtime, so exported games are unaffected.
+		bool disableFixedResolution = false;
 
 		static uint32_t pixelsWhite[64];
 		static uint32_t pixelsBlack[64];
@@ -281,12 +290,27 @@ namespace doriax{
 		int ssrBlurSlotParams;
 		int compositeSlotParams;
 
+		// Fixed game resolution: when enabled on the Engine main scene (Scene
+		// fixedResolution settings), the main camera renders into
+		// fixedResFramebuffer and a fullscreen blit pass upscales it to the
+		// real destination (view rect).
+		bool blitLoaded;
+		unsigned int fixedResWidth;
+		unsigned int fixedResHeight;
+		Framebuffer fixedResFramebuffer;   // offscreen scene color at the fixed size
+		CameraRender fixedResPassRender;   // drives the upscale blit pass
+		ObjectRender blitRender;           // fullscreen blit.frag draw
+		std::shared_ptr<ShaderRender> blitShader;
+		fs_blit_t fs_blit;
+		int blitSlotParams;
+
 		static void changeLoaded(void* data);
 		static void changeDestroy(void* data);
 
 		static bool samplesCameraTarget(const CameraComponent& camera, const MeshComponent& mesh);
 		static bool samplesCameraTarget(const CameraComponent& camera, const Texture& texture);
-		static bool isRenderingFlipped(const CameraComponent& camera);
+		bool isRenderingFlipped(const CameraComponent& camera) const;
+		bool isFixedResolutionActive() const;
 		void updateMVP(size_t index, Transform& transform, CameraComponent& camera, Transform& cameraTransform);
 
 		void createEmptyTextures();
@@ -358,6 +382,14 @@ namespace doriax{
 		// destination == nullptr renders the composite to the swapchain (backbuffer)
 		void renderSSR(CameraComponent& camera, FramebufferRender* destination);
 
+		// fixed game resolution
+		void loadBlit();
+		void destroyBlit();
+		bool ensureFixedResFramebuffer(unsigned int width, unsigned int height, TextureFilter filter);
+		// upscales fixedResFramebuffer to the view rect of the real destination
+		// (Engine framebuffer in the editor, swapchain in exported builds)
+		void renderFixedResolutionBlit();
+
 		bool drawUI(UIComponent& ui, Transform& transform, bool renderToTexture);
 		void destroyUI(Entity entity, UIComponent& ui);
 
@@ -393,6 +425,11 @@ namespace doriax{
 		// Editor-only viewport debug override (see member declaration). Toggling it
 		// reloads every mesh, since cull mode is baked into the pipeline at load time.
 		void setDisableFaceCulling(bool disableFaceCulling);
+
+		// Editor-only override (see member declaration). No reload needed: the
+		// editor always renders through Engine::getFramebuffer(), so PIP_RTT is
+		// already baked either way.
+		void setDisableFixedResolution(bool disableFixedResolution);
 
 		bool loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipelines, InstancedMeshComponent* instmesh, TerrainComponent* terrain);
 		bool loadPoints(Entity entity, PointsComponent& points, uint8_t pipelines);

@@ -950,6 +950,10 @@ Json sceneReadableProperties(SceneProject* sceneProject) {
     props["ssr_blur"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssr_blur")}};
     props["ssr_max_steps"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "ssr_max_steps")}};
     props["ssr_debug_mode"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "ssr_debug_mode")}};
+    props["fixed_resolution_enabled"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "fixed_resolution_enabled")}};
+    props["fixed_resolution_width"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "fixed_resolution_width")}};
+    props["fixed_resolution_height"] = {{"type", "int"}, {"value", Catalog::getSceneProperty<int>(scene, "fixed_resolution_height")}};
+    props["fixed_resolution_filter"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<TextureFilter>(scene, "fixed_resolution_filter") == TextureFilter::LINEAR ? 1 : 0)}};
     props["default_mesh_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_mesh_shader")}};
     props["default_ui_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_ui_shader")}};
     props["default_sky_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_sky_shader")}};
@@ -1826,7 +1830,8 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
         }
         cmd = new ScenePropertyCmd<Vector3>(project, sceneId, property, value);
     } else if (property == "ssao_enabled" ||
-               property == "ssao_debug" || property == "ssr_enabled") {
+               property == "ssao_debug" || property == "ssr_enabled" ||
+               property == "fixed_resolution_enabled") {
         if (!arguments.contains("bool_value") || !arguments["bool_value"].is_boolean()) {
             return failResult(property + " requires bool_value.");
         }
@@ -1840,11 +1845,22 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
             return failResult(property + " requires number_value.");
         }
         cmd = new ScenePropertyCmd<float>(project, sceneId, property, arguments["number_value"].get<float>());
-    } else if (property == "ssr_max_steps" || property == "ssr_debug_mode") {
+    } else if (property == "ssr_max_steps" || property == "ssr_debug_mode" ||
+               property == "fixed_resolution_width" || property == "fixed_resolution_height") {
         if (!arguments.contains("int_value") || !arguments["int_value"].is_number_integer()) {
             return failResult(property + " requires int_value.");
         }
         cmd = new ScenePropertyCmd<int>(project, sceneId, property, arguments["int_value"].get<int>());
+    } else if (property == "fixed_resolution_filter") {
+        if (!arguments.contains("int_value") || !arguments["int_value"].is_number_integer()) {
+            return failResult("fixed_resolution_filter requires int_value (0=nearest, 1=linear).");
+        }
+        const int filterValue = arguments["int_value"].get<int>();
+        if (filterValue != 0 && filterValue != 1) {
+            return failResult("fixed_resolution_filter must be 0 (nearest) or 1 (linear).");
+        }
+        cmd = new ScenePropertyCmd<TextureFilter>(project, sceneId, property,
+                                                  filterValue == 1 ? TextureFilter::LINEAR : TextureFilter::NEAREST);
     } else if (property == "light_state") {
         if (!arguments.contains("int_value") || !arguments["int_value"].is_number_integer()) {
             return failResult("light_state requires int_value.");

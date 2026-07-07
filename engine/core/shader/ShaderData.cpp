@@ -214,6 +214,8 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_fs_lighting2d";
     }else if (type == UniformBlockType::SHADOW2D_VS_PARAMS){
         ustr = "u_vs_shadow2dParams";
+    }else if (type == UniformBlockType::BLIT_FS_PARAMS){
+        ustr = "u_fs_blitParams";
     }
 
     if (ustr.empty()){

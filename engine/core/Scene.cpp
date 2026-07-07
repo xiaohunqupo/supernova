@@ -64,6 +64,11 @@ void Scene::init(){
     ssrBlur = 0.0;
     ssrDebugMode = 0;
 
+    fixedResolutionEnabled = false;
+    fixedResolutionWidth = 640;
+    fixedResolutionHeight = 360;
+    fixedResolutionFilter = TextureFilter::NEAREST;
+
     uiEventState = UIEventState::NOT_SET;
 
     defaultMeshShader = "";
@@ -296,6 +301,52 @@ void Scene::setSSRDebugMode(int mode){
 
 int Scene::getSSRDebugMode() const{
     return this->ssrDebugMode;
+}
+
+void Scene::setFixedResolutionEnabled(bool fixedResolutionEnabled){
+    if (this->fixedResolutionEnabled != fixedResolutionEnabled){
+        this->fixedResolutionEnabled = fixedResolutionEnabled;
+        // the offscreen target renders with PIP_RTT; (re)bake it on all
+        // renderables so a runtime toggle works in exported builds too
+        getSystem<RenderSystem>()->needReloadMeshes();
+        getSystem<RenderSystem>()->needReloadUIs();
+        getSystem<RenderSystem>()->needReloadSky();
+        getSystem<RenderSystem>()->needReloadPoints();
+        getSystem<RenderSystem>()->needReloadLines();
+    }
+}
+
+bool Scene::isFixedResolutionEnabled() const{
+    return this->fixedResolutionEnabled;
+}
+
+void Scene::setFixedResolutionWidth(unsigned int width){
+    this->fixedResolutionWidth = width;
+}
+
+unsigned int Scene::getFixedResolutionWidth() const{
+    return this->fixedResolutionWidth;
+}
+
+void Scene::setFixedResolutionHeight(unsigned int height){
+    this->fixedResolutionHeight = height;
+}
+
+unsigned int Scene::getFixedResolutionHeight() const{
+    return this->fixedResolutionHeight;
+}
+
+void Scene::setFixedResolutionSize(unsigned int width, unsigned int height){
+    this->fixedResolutionWidth = width;
+    this->fixedResolutionHeight = height;
+}
+
+void Scene::setFixedResolutionFilter(TextureFilter filter){
+    this->fixedResolutionFilter = filter;
+}
+
+TextureFilter Scene::getFixedResolutionFilter() const{
+    return this->fixedResolutionFilter;
 }
 
 void Scene::setLightState(LightState state){

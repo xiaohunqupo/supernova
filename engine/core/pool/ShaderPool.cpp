@@ -90,6 +90,10 @@ bool ShaderPool::parseShaderTypeToken(const std::string& typeToken, ShaderType& 
         shaderType = ShaderType::SHADOW2D;
         return true;
     }
+    if (typeToken == "blit") {
+        shaderType = ShaderType::BLIT;
+        return true;
+    }
 
     return false;
 }
@@ -335,6 +339,7 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
         case ShaderType::SSR_BLUR: return lowerCase ? "ssrblur" : "SSR Blur";
         case ShaderType::COMPOSITE: return lowerCase ? "composite" : "Composite";
         case ShaderType::SHADOW2D: return lowerCase ? "shadow2d" : "Shadow 2D";
+        case ShaderType::BLIT:   return lowerCase ? "blit"   : "Blit";
         default:                 return lowerCase ? "unknown": "Unknown";
     }
 }
@@ -354,6 +359,7 @@ int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
         case ShaderType::SSR_BLUR: return 0;
         case ShaderType::COMPOSITE: return 0;
         case ShaderType::SHADOW2D: return 0;
+        case ShaderType::BLIT:   return 0;
         default:                 return 0;
     }
 }

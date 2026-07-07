@@ -525,6 +525,10 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
     // meshes when the value changes, so this is a no-op every frame once settled.
     scene->getSystem<RenderSystem>()->setDisableFaceCulling(displaySettings.disableFaceCulling && !isPlaying);
 
+    // Fixed game resolution only applies while playing: edit-mode viewports stay
+    // at native resolution (gizmos and overlays would otherwise mismatch).
+    scene->getSystem<RenderSystem>()->setDisableFixedResolution(!isPlaying);
+
     if (isPlaying){
         return;
     }

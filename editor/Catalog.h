@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include "Scene.h"
 
 namespace doriax::editor{
@@ -180,8 +181,10 @@ namespace doriax::editor{
                 if constexpr (std::is_same_v<T, Vector3>) return Vector3(1.0, 1.0, 1.0);
                 if constexpr (std::is_same_v<T, bool>) return false;
                 if constexpr (std::is_same_v<T, float>) return 0.0f;
+                if constexpr (std::is_same_v<T, int>) return 0;
                 if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
                 if constexpr (std::is_same_v<T, ShadowQuality>) return ShadowQuality::LOW;
+                if constexpr (std::is_same_v<T, TextureFilter>) return TextureFilter::NEAREST;
                 if constexpr (std::is_same_v<T, std::string>) return std::string();
                 // Add other types as needed
             }
@@ -286,6 +289,26 @@ namespace doriax::editor{
                     return scene->getSSRDebugMode();
                 }
             }
+            else if (propertyName == "fixed_resolution_enabled") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    return scene->isFixedResolutionEnabled();
+                }
+            }
+            else if (propertyName == "fixed_resolution_width") {
+                if constexpr (std::is_same_v<T, int>) {
+                    return (int)scene->getFixedResolutionWidth();
+                }
+            }
+            else if (propertyName == "fixed_resolution_height") {
+                if constexpr (std::is_same_v<T, int>) {
+                    return (int)scene->getFixedResolutionHeight();
+                }
+            }
+            else if (propertyName == "fixed_resolution_filter") {
+                if constexpr (std::is_same_v<T, TextureFilter>) {
+                    return scene->getFixedResolutionFilter();
+                }
+            }
             else if (propertyName == "default_mesh_shader") {
                 if constexpr (std::is_same_v<T, std::string>) {
                     return scene->getDefaultMeshShader();
@@ -320,6 +343,7 @@ namespace doriax::editor{
             if constexpr (std::is_same_v<T, int>) return 0;
             if constexpr (std::is_same_v<T, LightState>) return LightState::AUTO;
                 if constexpr (std::is_same_v<T, ShadowQuality>) return ShadowQuality::LOW;
+            if constexpr (std::is_same_v<T, TextureFilter>) return TextureFilter::NEAREST;
             if constexpr (std::is_same_v<T, std::string>) return std::string();
             // Add other types as needed
         }
@@ -426,6 +450,26 @@ namespace doriax::editor{
             else if (propertyName == "ssr_debug_mode") {
                 if constexpr (std::is_same_v<T, int>) {
                     scene->setSSRDebugMode(value);
+                }
+            }
+            else if (propertyName == "fixed_resolution_enabled") {
+                if constexpr (std::is_same_v<T, bool>) {
+                    scene->setFixedResolutionEnabled(value);
+                }
+            }
+            else if (propertyName == "fixed_resolution_width") {
+                if constexpr (std::is_same_v<T, int>) {
+                    scene->setFixedResolutionWidth((unsigned int)std::max(1, (int)value));
+                }
+            }
+            else if (propertyName == "fixed_resolution_height") {
+                if constexpr (std::is_same_v<T, int>) {
+                    scene->setFixedResolutionHeight((unsigned int)std::max(1, (int)value));
+                }
+            }
+            else if (propertyName == "fixed_resolution_filter") {
+                if constexpr (std::is_same_v<T, TextureFilter>) {
+                    scene->setFixedResolutionFilter(value);
                 }
             }
             else if (propertyName == "default_mesh_shader") {

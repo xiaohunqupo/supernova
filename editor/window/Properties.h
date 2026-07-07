@@ -129,6 +129,7 @@ namespace doriax::editor{
         enum class ScenePropertyInputType {
             Checkbox,
             DragFloat,
+            DragInt,
             SliderFloat,
             ColorRGB,
             ColorRGBA,

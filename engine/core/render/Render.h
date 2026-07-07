@@ -52,7 +52,8 @@ namespace doriax{
         SSR,        // fullscreen screen-space reflections pass
         SSR_BLUR,   // fullscreen premultiplied blur of the SSR result (glossy)
         COMPOSITE,  // fullscreen composite of scene color + SSR reflections
-        SHADOW2D    // 1D polar shadow pass: occluder segments into a 2D-light atlas row
+        SHADOW2D,   // 1D polar shadow pass: occluder segments into a 2D-light atlas row
+        BLIT        // fullscreen upscale of the fixed-resolution scene color
     };
 
     enum class AttributeType{
@@ -137,7 +138,8 @@ namespace doriax{
         SSR_BLUR_FS_PARAMS,
         COMPOSITE_FS_PARAMS,
         FS_LIGHTING2D,
-        SHADOW2D_VS_PARAMS
+        SHADOW2D_VS_PARAMS,
+        BLIT_FS_PARAMS
     };
 
     enum class StorageBufferType{

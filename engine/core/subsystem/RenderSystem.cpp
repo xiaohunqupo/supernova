@@ -57,6 +57,11 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     ssrBlurSlotParams = -1;
     compositeSlotParams = -1;
 
+    blitLoaded = false;
+    fixedResWidth = 0;
+    fixedResHeight = 0;
+    blitSlotParams = -1;
+
     shadowAtlasSlotResolution = 0;
     needUpdateShadowAtlas = true;
     shadowPointAtlasSlotResolution = 0;
@@ -105,6 +110,7 @@ void RenderSystem::destroy(){
 
     destroySSAO();
     destroySSR();
+    destroyBlit();
     shadowAtlasFramebuffer.destroyFramebuffer();
     shadowAtlasSlotResolution = 0;
     hasShadowAtlas = false;
@@ -463,6 +469,11 @@ void RenderSystem::processLights(int numLights, CameraComponent& camera, Transfo
     // is in logical orientation, so flip Y on sample when the color pass is flipped).
     float vpW = Engine::getViewRect().getWidth();
     float vpH = Engine::getViewRect().getHeight();
+    if (isFixedResolutionActive() && !camera.renderToTexture){
+        // the main color pass renders into the fixed-resolution target
+        vpW = (float)scene->getFixedResolutionWidth();
+        vpH = (float)scene->getFixedResolutionHeight();
+    }
     fs_lighting.viewportInfo = Vector4(
         (vpW > 0.0f) ? 1.0f / vpW : 0.0f,
         (vpH > 0.0f) ? 1.0f / vpH : 0.0f,
@@ -1303,6 +1314,12 @@ void RenderSystem::setDisableFaceCulling(bool disableFaceCulling){
     // Cull mode is baked into the pipeline at creation time, so every mesh must be
     // reloaded for the override to take effect (editor-only debug view).
     needReloadMeshes();
+}
+
+void RenderSystem::setDisableFixedResolution(bool disableFixedResolution){
+    // No reload needed: the editor always renders through Engine::getFramebuffer(),
+    // so the PIP_RTT pipeline is already baked whether fixed resolution is on or off.
+    this->disableFixedResolution = disableFixedResolution;
 }
 
 bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipelines, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
@@ -2322,6 +2339,12 @@ void RenderSystem::renderSSAO(CameraComponent& camera, TextureRender* sharedDept
 
     unsigned int w = (unsigned int)Engine::getViewRect().getWidth();
     unsigned int h = (unsigned int)Engine::getViewRect().getHeight();
+    if (isFixedResolutionActive() && !camera.renderToTexture){
+        // the main color pass renders into the fixed-resolution target, so the
+        // AO buffer must match it (meshes convert gl_FragCoord with these sizes)
+        w = scene->getFixedResolutionWidth();
+        h = scene->getFixedResolutionHeight();
+    }
     if (!ensureSSAOFramebuffers(w, h))
         return;
 
@@ -2755,6 +2778,101 @@ void RenderSystem::renderSSR(CameraComponent& camera, FramebufferRender* destina
         compositeRender.draw(3, 1);
     }
     ssrPassRender.endRenderPass();
+}
+
+void RenderSystem::loadBlit(){
+    if (blitLoaded)
+        return;
+
+    // the fullscreen blit shader may still be building (async in the editor)
+    blitShader = ShaderPool::get(ShaderType::BLIT, 0);
+    if (!blitShader || !blitShader->isCreated())
+        return;
+
+    // the blit targets either the Engine framebuffer (PIP_RTT, editor) or the
+    // swapchain (PIP_DEFAULT, exported builds), so build both pipeline variants.
+    blitRender.beginLoad(PrimitiveType::TRIANGLES);
+    blitRender.setShader(blitShader.get());
+    blitSlotParams = blitShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::BLIT_FS_PARAMS);
+    if (!blitRender.endLoad(PIP_RTT | PIP_DEFAULT, false, CullingMode::BACK, WindingOrder::CCW))
+        return;
+
+    blitLoaded = true;
+}
+
+void RenderSystem::destroyBlit(){
+    if (blitLoaded){
+        blitRender.destroy();
+    }
+    if (blitShader){
+        blitShader.reset();
+        ShaderPool::remove(ShaderType::BLIT, 0);
+    }
+
+    fixedResFramebuffer.destroy();
+
+    fixedResWidth = 0;
+    fixedResHeight = 0;
+    blitSlotParams = -1;
+    blitLoaded = false;
+}
+
+bool RenderSystem::ensureFixedResFramebuffer(unsigned int width, unsigned int height, TextureFilter filter){
+    if (width == 0 || height == 0)
+        return false;
+
+    if (fixedResFramebuffer.isCreated() && fixedResWidth == width && fixedResHeight == height
+            && fixedResFramebuffer.getMinFilter() == filter)
+        return true;
+
+    fixedResFramebuffer.destroy();
+
+    // offscreen scene color at the fixed game resolution; the min/mag filter is
+    // what the upscale blit samples with (nearest = crisp pixels, linear = smooth)
+    fixedResFramebuffer.setWidth(width);
+    fixedResFramebuffer.setHeight(height);
+    fixedResFramebuffer.setMinFilter(filter);
+    fixedResFramebuffer.setMagFilter(filter);
+    fixedResFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    fixedResFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    fixedResFramebuffer.create();
+
+    fixedResWidth = width;
+    fixedResHeight = height;
+
+    return fixedResFramebuffer.isCreated();
+}
+
+void RenderSystem::renderFixedResolutionBlit(){
+    // bars outside the view rect keep the background color (same as the direct
+    // path, which clears the whole destination before applying the viewport)
+    fixedResPassRender.setClearColor(scene->getBackgroundColor());
+
+    PipelineType blitPip;
+    float flipGL = 0.0f;
+    if (Engine::getFramebuffer()){
+        if (!Engine::getFramebuffer()->isCreated()){
+            Engine::getFramebuffer()->create();
+        }
+        // source and destination are both flipped on GL, so no un-flip needed
+        fixedResPassRender.startRenderPass(&Engine::getFramebuffer()->getRender());
+        blitPip = PIP_RTT;
+    }else{
+        fixedResPassRender.startRenderPass();
+        blitPip = PIP_DEFAULT;
+        // the source was rendered flipped (PIP_RTT) but the GL swapchain is not
+        flipGL = Engine::isOpenGL() ? 1.0f : 0.0f;
+    }
+    fixedResPassRender.applyViewport(Engine::getViewRect());
+
+    if (blitRender.beginDraw(blitPip)){
+        ShaderData& bd = blitShader.get()->shaderData;
+        blitRender.addTexture(bd.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, &fixedResFramebuffer.getRender().getColorTexture());
+        fs_blit.params = Vector4(flipGL, 0.0f, 0.0f, 0.0f);
+        blitRender.applyUniformBlock(blitSlotParams, sizeof(fs_blit_t), &fs_blit);
+        blitRender.draw(3, 1);
+    }
+    fixedResPassRender.endRenderPass();
 }
 
 void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
@@ -3214,6 +3332,10 @@ float RenderSystem::getPointsViewportHeight(const CameraComponent& camera) const
     if (camera.renderToTexture && camera.framebuffer){
         return (float)camera.framebuffer->getHeight();
     }
+    if (isFixedResolutionActive()){
+        // the main color pass renders into the fixed-resolution target
+        return (float)scene->getFixedResolutionHeight();
+    }
     if (Framebuffer* engineFb = Engine::getFramebuffer()){
         if (engineFb->isCreated()){
             return (float)engineFb->getHeight();
@@ -3565,6 +3687,19 @@ Rect RenderSystem::getScissorRect(UILayoutComponent& layout, ImageComponent& img
 
     if (!camera.renderToTexture) {
 
+        float viewWidth = Engine::getViewRect().getWidth();
+        float viewHeight = Engine::getViewRect().getHeight();
+        float targetWidth = (float) System::instance().getScreenWidth();
+        float targetHeight = (float) System::instance().getScreenHeight();
+        if (isFixedResolutionActive()){
+            // the main color pass renders into the fixed-resolution target, whose
+            // viewport fills the whole target (no letterbox offset at this stage)
+            viewWidth = (float)scene->getFixedResolutionWidth();
+            viewHeight = (float)scene->getFixedResolutionHeight();
+            targetWidth = viewWidth;
+            targetHeight = viewHeight;
+        }
+
         float scaleX = transform.worldScale.x;
         float scaleY = transform.worldScale.y;
 
@@ -3577,17 +3712,17 @@ Rect RenderSystem::getScissorRect(UILayoutComponent& layout, ImageComponent& img
         float camOffsetX = -(camera.worldTarget.x + camera.leftClip);
         float camOffsetY = -(camera.worldTarget.y + camera.bottomClip);
 
-        float widthRatio = scaleX * (Engine::getViewRect().getWidth() / (float) Engine::getCanvasWidth());
-        float heightRatio = scaleY * (Engine::getViewRect().getHeight() / (float) Engine::getCanvasHeight());
+        float widthRatio = scaleX * (viewWidth / (float) Engine::getCanvasWidth());
+        float heightRatio = scaleY * (viewHeight / (float) Engine::getCanvasHeight());
 
-        objScreenPosX = (camOffsetX + (tempX * Engine::getViewRect().getWidth() + (float) System::instance().getScreenWidth()) / 2)  * camScaleX;
-        objScreenPosY = (camOffsetY + (tempY * Engine::getViewRect().getHeight() + (float) System::instance().getScreenHeight()) / 2) * camScaleY;
+        objScreenPosX = (camOffsetX + (tempX * viewWidth + targetWidth) / 2)  * camScaleX;
+        objScreenPosY = (camOffsetY + (tempY * viewHeight + targetHeight) / 2) * camScaleY;
         objScreenWidth = layout.width * widthRatio * camScaleX;
         objScreenHeight = layout.height * heightRatio * camScaleY;
 
         // flipped rendering puts UI y=0 at scissor row 0, so no bottom-left conversion
         if (camera.type == CameraType::CAMERA_UI && !isRenderingFlipped(camera))
-            objScreenPosY = (float) System::instance().getScreenHeight() - objScreenHeight - objScreenPosY;
+            objScreenPosY = targetHeight - objScreenHeight - objScreenPosY;
 
         if (!(img.patchMarginLeft == 0 && img.patchMarginTop == 0 && img.patchMarginRight == 0 && img.patchMarginBottom == 0)) {
             float borderScreenLeft = img.patchMarginLeft * widthRatio;
@@ -4600,11 +4735,20 @@ bool RenderSystem::samplesCameraTarget(const CameraComponent& camera, const Text
     return camera.renderToTexture && texture.getFramebuffer() == camera.framebuffer;
 }
 
-bool RenderSystem::isRenderingFlipped(const CameraComponent& camera){
+bool RenderSystem::isRenderingFlipped(const CameraComponent& camera) const{
     // OpenGL offscreen targets are bottom-up; rendering them with a Y-flipped
     // projection makes framebuffer textures top-left origin on every backend.
     // Must match the PIP_RTT pipeline selection (its winding is reversed on GL).
-    return (camera.renderToTexture || Engine::getFramebuffer()) && Engine::isOpenGL();
+    return (camera.renderToTexture || Engine::getFramebuffer() || isFixedResolutionActive()) && Engine::isOpenGL();
+}
+
+bool RenderSystem::isFixedResolutionActive() const{
+    // main scene only: layer scenes keep rendering at native resolution on top
+    return !disableFixedResolution
+        && scene->isFixedResolutionEnabled()
+        && scene->getFixedResolutionWidth() > 0
+        && scene->getFixedResolutionHeight() > 0
+        && Engine::getMainScene() == scene;
 }
 
 void RenderSystem::updateMVP(size_t index, Transform& transform, CameraComponent& camera, Transform& cameraTransform){
@@ -4782,7 +4926,7 @@ void RenderSystem::update(double dt){
             pipelines |= PIP_DEFAULT;
         }
 
-        if (camera.renderToTexture || Engine::getFramebuffer()){
+        if (camera.renderToTexture || Engine::getFramebuffer() || isFixedResolutionActive()){
             pipelines |= PIP_RTT;
         }
 
@@ -5121,6 +5265,14 @@ void RenderSystem::draw(){
     updateShadowBindings();
     updateAllTerrainRenderTextures();
 
+    // free the fixed-resolution target when the setting is turned off (the blit
+    // pipeline itself is kept; it is cheap and may be re-enabled)
+    if (!isFixedResolutionActive() && fixedResFramebuffer.isCreated()){
+        fixedResFramebuffer.destroy();
+        fixedResWidth = 0;
+        fixedResHeight = 0;
+    }
+
     //---------Depth shader----------
     if (hasShadows){
         auto lights = scene->getComponentArray<LightComponent>();
@@ -5313,12 +5465,30 @@ void RenderSystem::draw(){
         // real destination. SSR requires a framebuffer destination (editor / render-to-
         // texture / engine framebuffer): the meshes then already render flipped via
         // PIP_RTT into the offscreen, which the orientation math relies on.
+        // Fixed game resolution (main scene main camera only): the color pass is
+        // redirected into fixedResFramebuffer at the scene's fixed size, and
+        // renderFixedResolutionBlit() upscales it to the view rect afterwards.
+        bool useFixedRes = false;
+        if (isMainCamera && !camera.renderToTexture && isFixedResolutionActive()){
+            loadBlit();
+            if (blitLoaded && ensureFixedResFramebuffer(scene->getFixedResolutionWidth(),
+                    scene->getFixedResolutionHeight(), scene->getFixedResolutionFilter())){
+                useFixedRes = true;
+            }
+        }
+
         bool useSSR = false;
         FramebufferRender* ssrDestination = nullptr;
-        if (isMainCamera && scene->isSSREnabled() && (Engine::getFramebuffer() || camera.renderToTexture)){
+        if (isMainCamera && scene->isSSREnabled() && (Engine::getFramebuffer() || camera.renderToTexture || useFixedRes)){
             loadSSR();
             unsigned int sw = (unsigned int)Engine::getViewRect().getWidth();
             unsigned int sh = (unsigned int)Engine::getViewRect().getHeight();
+            if (useFixedRes){
+                // effects run at the fixed resolution: SSR composites into the
+                // fixed-res target, which the blit then upscales
+                sw = fixedResWidth;
+                sh = fixedResHeight;
+            }
             if (ssrLoaded && ensureSSRFramebuffers(sw, sh) && ensureGBufferFramebuffer(sw, sh)){
                 renderGBufferPass(camera);
                 useSSR = true;
@@ -5334,6 +5504,10 @@ void RenderSystem::draw(){
             TextureRender* sharedDepth = useSSR ? &gbufferFramebuffer.getRender().getColorAttachmentTexture(0) : nullptr;
             renderSSAO(camera, sharedDepth);
         }
+
+        // whether this camera's color pass targets an offscreen framebuffer
+        // (selects PIP_RTT pipelines and flipped rendering on GL)
+        bool offscreenTarget = camera.renderToTexture || Engine::getFramebuffer() || useFixedRes;
 
         if (Engine::getMainScene() == scene || camera.renderToTexture){
             camera.render.setClearColor(scene->getBackgroundColor());
@@ -5352,6 +5526,8 @@ void RenderSystem::draw(){
                     camera.framebuffer->create();
                 }
                 ssrDestination = &camera.framebuffer->getRender();
+            }else if (useFixedRes){
+                ssrDestination = &fixedResFramebuffer.getRender();
             }else{
                 if (!Engine::getFramebuffer()->isCreated()){
                     Engine::getFramebuffer()->create();
@@ -5360,6 +5536,9 @@ void RenderSystem::draw(){
             }
             camera.render.startRenderPass(&sceneColorFramebuffer.getRender());
             camera.render.applyViewport(Rect(0, 0, (float)ssrWidth, (float)ssrHeight));
+        }else if (useFixedRes){
+            // full offscreen target; letterbox/upscale happens in the blit pass
+            camera.render.startRenderPass(&fixedResFramebuffer.getRender());
         }else if (!camera.renderToTexture){
             if (Engine::getFramebuffer()){
                 if (!Engine::getFramebuffer()->isCreated()){
@@ -5390,7 +5569,7 @@ void RenderSystem::draw(){
                     updateSkyViewProjection(sky, camera);
                 }
 
-                drawSky(sky, camera.renderToTexture || Engine::getFramebuffer(), camera.invertCulling);
+                drawSky(sky, offscreenTarget, camera.invertCulling);
             }
         }
 
@@ -5468,7 +5647,7 @@ void RenderSystem::draw(){
 
                     if (!mesh.transparent || !camera.transparentSort){
                         //Draw opaque meshes if transparency is not necessary
-                        drawMesh(mesh, transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), instmesh, terrain, terrainView);
+                        drawMesh(mesh, transform, camera, cameraTransform, offscreenTarget, instmesh, terrain, terrainView);
                     }else{
                         transparentRenders.push({TransparentRenderType::MESH, &mesh, nullptr, instmesh, terrain, &transform, transform.distanceToCamera});
                     }
@@ -5482,7 +5661,7 @@ void RenderSystem::draw(){
                     isText = true;
                 }
                 if (transform.visible && !samplesCameraTarget(camera, ui.texture))
-                    drawUI(ui, transform, camera.renderToTexture || Engine::getFramebuffer());
+                    drawUI(ui, transform, offscreenTarget);
 
             }else if (signature.test(scene->getComponentId<PointsComponent>())){
                 PointsComponent& points = scene->getComponent<PointsComponent>(entity);
@@ -5495,7 +5674,7 @@ void RenderSystem::draw(){
 
                 if (transform.visible && !samplesCameraTarget(camera, points.texture)){
                     if (!points.transparent || !camera.transparentSort){
-                        drawPoints(points, transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+                        drawPoints(points, transform, camera, cameraTransform, offscreenTarget);
                     }else{
                         transparentRenders.push({TransparentRenderType::POINTS, nullptr, &points, nullptr, nullptr, &transform, transform.distanceToCamera});
                     }
@@ -5505,15 +5684,17 @@ void RenderSystem::draw(){
                 LinesComponent& lines = scene->getComponent<LinesComponent>(entity);
 
                 if (transform.visible)
-                    drawLines(lines, transform, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+                    drawLines(lines, transform, cameraTransform, offscreenTarget);
 
             }
 
             if (hasActiveScissor){
-                if (!camera.renderToTexture){
-                    camera.render.applyScissor(Rect(0, 0, System::instance().getScreenWidth(), System::instance().getScreenHeight()));
-                }else{
+                if (camera.renderToTexture){
                     camera.render.applyScissor(Rect(0, 0, camera.framebuffer->getWidth(), camera.framebuffer->getHeight()));
+                }else if (useFixedRes){
+                    camera.render.applyScissor(Rect(0, 0, fixedResWidth, fixedResHeight));
+                }else{
+                    camera.render.applyScissor(Rect(0, 0, System::instance().getScreenWidth(), System::instance().getScreenHeight()));
                 }
                 hasActiveScissor = false;
             }
@@ -5524,9 +5705,9 @@ void RenderSystem::draw(){
             TransparentRenderData renderData = transparentRenders.top();
 
             if (renderData.type == TransparentRenderType::MESH){
-                drawMesh(*renderData.mesh, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer(), renderData.instmesh, renderData.terrain, terrainView);
+                drawMesh(*renderData.mesh, *renderData.transform, camera, cameraTransform, offscreenTarget, renderData.instmesh, renderData.terrain, terrainView);
             }else if (renderData.type == TransparentRenderType::POINTS){
-                drawPoints(*renderData.points, *renderData.transform, camera, cameraTransform, camera.renderToTexture || Engine::getFramebuffer());
+                drawPoints(*renderData.points, *renderData.transform, camera, cameraTransform, offscreenTarget);
             }
 
             transparentRenders.pop();
@@ -5538,6 +5719,13 @@ void RenderSystem::draw(){
         // real destination (the swapchain or the captured framebuffer).
         if (useSSR){
             renderSSR(camera, ssrDestination);
+        }
+
+        // Fixed game resolution: upscale the offscreen scene color to the view
+        // rect of the real destination. Layer scenes draw after this (load
+        // action), so overlaid UI scenes stay at native resolution.
+        if (useFixedRes){
+            renderFixedResolutionBlit();
         }
 
     }

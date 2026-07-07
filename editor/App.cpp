@@ -1752,7 +1752,8 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     //      u_normalTexture on unlit, v_position guard) and the shadow2d 1D polar pass.
     // v11: uniform-driven shadow PCF (ShadowQuality) — USE_SHADOWS_PCF variant removed,
     //      shadows.glsl/lighting2d.glsl loop by radius from cameraDir.w / atlasInfo.w.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v11";
+    // v12: fixed game resolution — new blit fullscreen shader (blit.frag).
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v12";
 }
 
 void editor::App::pushTabNotificationStyle(){

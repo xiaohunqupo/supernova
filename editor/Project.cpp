@@ -1690,6 +1690,10 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
         keys.insert(ShaderPool::getShaderKey(ShaderType::SSR_BLUR, 0));
         keys.insert(ShaderPool::getShaderKey(ShaderType::COMPOSITE, 0));
     }
+
+    if (scene->isFixedResolutionEnabled()) {
+        keys.insert(ShaderPool::getShaderKey(ShaderType::BLIT, 0));
+    }
 }
 
 void editor::Project::invalidateCustomShaders() {

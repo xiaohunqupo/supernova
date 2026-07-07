@@ -184,6 +184,7 @@ static bool parseShaderTypeName(const std::string& value, ShaderType& out) {
     if (token == "ssrblur")                     { out = ShaderType::SSR_BLUR; return true; }
     if (token == "composite")                   { out = ShaderType::COMPOSITE; return true; }
     if (token == "shadow2d")                    { out = ShaderType::SHADOW2D; return true; }
+    if (token == "blit")                        { out = ShaderType::BLIT;   return true; }
     return false;
 }
 

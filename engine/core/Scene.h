@@ -72,6 +72,14 @@ namespace doriax{
         float ssrBlur;          // glossy blur amount [0..1] (0 = sharp/mirror)
         int ssrDebugMode;       // 0=off,1=reflection,2=normal,3=roughness,4=metallic,5=albedo,6=IBL specular
 
+        // fixed game resolution: when enabled and this scene is the Engine main
+        // scene, the main camera renders into an offscreen framebuffer of this
+        // size, upscaled to the view rect by RenderSystem
+        bool fixedResolutionEnabled;
+        unsigned int fixedResolutionWidth;
+        unsigned int fixedResolutionHeight;
+        TextureFilter fixedResolutionFilter;
+
         UIEventState uiEventState;
 
         // scene-wide custom shaders, used when a component's customShader is empty
@@ -174,6 +182,20 @@ namespace doriax{
 
         void setSSRDebugMode(int mode);
         int getSSRDebugMode() const;
+
+        void setFixedResolutionEnabled(bool fixedResolutionEnabled);
+        bool isFixedResolutionEnabled() const;
+
+        void setFixedResolutionWidth(unsigned int width);
+        unsigned int getFixedResolutionWidth() const;
+
+        void setFixedResolutionHeight(unsigned int height);
+        unsigned int getFixedResolutionHeight() const;
+
+        void setFixedResolutionSize(unsigned int width, unsigned int height);
+
+        void setFixedResolutionFilter(TextureFilter filter);
+        TextureFilter getFixedResolutionFilter() const;
 
         void setLightState(LightState state);
         LightState getLightState() const;

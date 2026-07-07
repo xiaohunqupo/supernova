@@ -1841,6 +1841,10 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["ssrMaxSteps"] = scene->getSSRMaxSteps();
     sceneNode["ssrIntensity"] = scene->getSSRIntensity();
     sceneNode["ssrBlur"] = scene->getSSRBlur();
+    sceneNode["fixedResolutionEnabled"] = scene->isFixedResolutionEnabled();
+    sceneNode["fixedResolutionWidth"] = scene->getFixedResolutionWidth();
+    sceneNode["fixedResolutionHeight"] = scene->getFixedResolutionHeight();
+    sceneNode["fixedResolutionFilter"] = textureFilterToString(scene->getFixedResolutionFilter());
     sceneNode["enableUIEvents"] = uiEventStateToString(scene->getEnableUIEvents());
 
     if (!scene->getDefaultMeshShader().empty())
@@ -1929,6 +1933,19 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
     }
     if (node["ssrBlur"]) {
         scene->setSSRBlur(node["ssrBlur"].as<float>());
+    }
+
+    if (node["fixedResolutionEnabled"]) {
+        scene->setFixedResolutionEnabled(node["fixedResolutionEnabled"].as<bool>());
+    }
+    if (node["fixedResolutionWidth"]) {
+        scene->setFixedResolutionWidth(node["fixedResolutionWidth"].as<unsigned int>());
+    }
+    if (node["fixedResolutionHeight"]) {
+        scene->setFixedResolutionHeight(node["fixedResolutionHeight"].as<unsigned int>());
+    }
+    if (node["fixedResolutionFilter"]) {
+        scene->setFixedResolutionFilter(stringToTextureFilter(node["fixedResolutionFilter"].as<std::string>()));
     }
 
     if (node["enableUIEvents"]) {

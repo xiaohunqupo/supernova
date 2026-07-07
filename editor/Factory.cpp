@@ -2218,6 +2218,9 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
     out << ind2 << "scene->setSSRMaxSteps(" << scene->getSSRMaxSteps() << ");\n";
     out << ind2 << "scene->setSSRIntensity(" << formatFloat(scene->getSSRIntensity()) << ");\n";
     out << ind2 << "scene->setSSRBlur(" << formatFloat(scene->getSSRBlur()) << ");\n";
+    out << ind2 << "scene->setFixedResolutionSize(" << formatUInt(scene->getFixedResolutionWidth()) << ", " << formatUInt(scene->getFixedResolutionHeight()) << ");\n";
+    out << ind2 << "scene->setFixedResolutionFilter(" << formatTextureFilter(scene->getFixedResolutionFilter()) << ");\n";
+    out << ind2 << "scene->setFixedResolutionEnabled(" << formatBool(scene->isFixedResolutionEnabled()) << ");\n";
     out << ind2 << "scene->setEnableUIEvents(" << formatUIEventState(scene->getEnableUIEvents()) << ");\n";
     if (!scene->getDefaultMeshShader().empty())
         out << ind2 << "scene->setDefaultMeshShader(" << formatString(scene->getDefaultMeshShader()) << ");\n";

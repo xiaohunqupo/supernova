@@ -403,6 +403,11 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
                 changed = ImGui::DragFloat4(("##" + propertyName).c_str(), (float*)&value.x);
             }
             break;
+        case ScenePropertyInputType::DragInt:
+            if constexpr (std::is_same_v<T, int>) {
+                changed = ImGui::DragInt(("##" + propertyName).c_str(), &value, 1.0f, (int)minValue, (int)maxValue);
+            }
+            break;
         case ScenePropertyInputType::SliderFloat:
             if constexpr (std::is_same_v<T, float>) {
                 ImGui::SetNextItemWidth(-1);
@@ -434,6 +439,14 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
                 changed = ImGui::Combo(("##" + propertyName).c_str(), &currentItem, qualityNames, IM_ARRAYSIZE(qualityNames));
                 if (changed) {
                     value = static_cast<ShadowQuality>(currentItem);
+                }
+            }
+            if constexpr (std::is_same_v<T, TextureFilter>) {
+                const char* filterNames[] = { "Nearest", "Linear" };
+                int currentItem = (value == TextureFilter::LINEAR) ? 1 : 0;
+                changed = ImGui::Combo(("##" + propertyName).c_str(), &currentItem, filterNames, IM_ARRAYSIZE(filterNames));
+                if (changed) {
+                    value = (currentItem == 1) ? TextureFilter::LINEAR : TextureFilter::NEAREST;
                 }
             }
             break;
@@ -12296,6 +12309,30 @@ void editor::Properties::show(){
 
                     ImGui::EndTable();
                 }
+            }
+
+            ImGui::SeparatorText("Fixed Resolution");
+
+            if (ImGui::BeginTable("scene_fixed_resolution_table", 2, tableFlags)) {
+                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Enabled").x);
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                drawScenePropertyRow<bool>(sceneProject, "fixed_resolution_enabled", "Enabled", ScenePropertyInputType::Checkbox, 0.0f, 1.0f,
+                    "Renders the main camera at a fixed resolution and upscales it to the view.\n"
+                    "Applies only in play mode and when this scene is the main scene; layer\n"
+                    "scenes stay at native resolution on top. Letterbox/crop still follows the\n"
+                    "project canvas and scaling mode.");
+
+                if (doriax::editor::Catalog::getSceneProperty<bool>(sceneProject->scene, "fixed_resolution_enabled")) {
+                    drawScenePropertyRow<int>(sceneProject, "fixed_resolution_width", "Width", ScenePropertyInputType::DragInt, 1.0f, 8192.0f);
+                    drawScenePropertyRow<int>(sceneProject, "fixed_resolution_height", "Height", ScenePropertyInputType::DragInt, 1.0f, 8192.0f);
+                    drawScenePropertyRow<TextureFilter>(sceneProject, "fixed_resolution_filter", "Filter", ScenePropertyInputType::Combo, 0.0f, 1.0f,
+                        "How the low-resolution image is sampled when upscaled:\n"
+                        "- Nearest: crisp pixels (pixel-art look)\n"
+                        "- Linear: smooth interpolation");
+                }
+
+                ImGui::EndTable();
             }
 
             // Scene default shaders: used by components of each type whose customShader is

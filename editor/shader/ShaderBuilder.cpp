@@ -453,6 +453,9 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }else if (shaderType == ShaderType::SHADOW2D){
         args.vert_file = "shadow2d.vert";
         args.frag_file = "shadow2d.frag";
+    }else if (shaderType == ShaderType::BLIT){
+        args.vert_file = "fullscreen.vert";
+        args.frag_file = "blit.frag";
     }else{
         return false;
     }
