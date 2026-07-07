@@ -86,7 +86,7 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 
 ## Getting Started
 
-Download a prebuilt editor from [doriaxengine.org](https://doriaxengine.org/#download) or build from source:
+Download a prebuilt editor from [doriax.org](https://doriax.org/#download) or build from source:
 
 ```bash
 git clone https://github.com/doriaxengine/doriax.git
@@ -99,7 +99,7 @@ The root project builds `doriax-editor`. On single-config generators the executa
 
 ## Documentation and Community
 
-- [Website](https://doriaxengine.org)
+- [Website](https://doriax.org)
 - [Discord](https://discord.gg/yXXDyJf3gT)
 
 ## Repository Layout
