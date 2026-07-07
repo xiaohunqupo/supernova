@@ -364,7 +364,7 @@ void editor::Properties::flushDirtyMaterials(float deltaTime) {
 }
 
 template<typename T>
-void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float minValue, float maxValue, const std::string& help, float inputWidth) {
+void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const std::string& propertyName, const char* label, ScenePropertyInputType inputType, float inputWidth, float minValue, float maxValue, const std::string& help) {
     T value = Catalog::getSceneProperty<T>(sceneProject->scene, propertyName);
     bool changed = false;
 
@@ -12190,7 +12190,7 @@ void editor::Properties::show(){
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                 drawScenePropertyRow<Vector4>(sceneProject, "background_color", "Background", ScenePropertyInputType::ColorRGBA);
-                drawScenePropertyRow<LightState>(sceneProject, "light_state", "Lights", ScenePropertyInputType::Combo);
+                drawScenePropertyRow<LightState>(sceneProject, "light_state", "Lights", ScenePropertyInputType::Combo, 5 * ImGui::GetFontSize());
 
                 ImGui::EndTable();
             }
@@ -12203,7 +12203,7 @@ void editor::Properties::show(){
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<Vector3>(sceneProject, "ambient_light_2d_color", "Color", ScenePropertyInputType::ColorRGB);
-                    drawScenePropertyRow<float>(sceneProject, "ambient_light_2d_intensity", "Intensity", ScenePropertyInputType::SliderFloat, 0.0f, 1.0f);
+                    drawScenePropertyRow<float>(sceneProject, "ambient_light_2d_intensity", "Intensity", ScenePropertyInputType::SliderFloat, -1.0f, 0.0f, 1.0f);
 
                     ImGui::EndTable();
                 }
@@ -12214,14 +12214,13 @@ void editor::Properties::show(){
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, shadowQualityLabelColWidth);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-                    drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_2d_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
+                    drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_2d_quality", "Filter Quality", ScenePropertyInputType::Combo, shadowQualityComboWidth, 0.0f, 1.0f,
                         "Smoothness of 2D light shadow edges. The penumbra width is set per light (Shadow Softness):\n"
                         "- None: 1 sample, no filtering, hard edges (softness is ignored)\n"
                         "- Low: 5 samples\n"
                         "- Medium: 9 samples\n"
                         "- High: 13 samples, smooth even with very wide penumbras\n"
-                        "Higher values cost more per lit pixel. Raise it if wide penumbras show banding.",
-                        shadowQualityComboWidth);
+                        "Higher values cost more per lit pixel. Raise it if wide penumbras show banding.");
 
                     ImGui::EndTable();
                 }
@@ -12236,7 +12235,7 @@ void editor::Properties::show(){
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<Vector3>(sceneProject, "global_illumination_color", "Color", ScenePropertyInputType::ColorRGB);
-                    drawScenePropertyRow<float>(sceneProject, "global_illumination_intensity", "Intensity", ScenePropertyInputType::SliderFloat, 0.0f, 1.0f);
+                    drawScenePropertyRow<float>(sceneProject, "global_illumination_intensity", "Intensity", ScenePropertyInputType::SliderFloat, -1.0f, 0.0f, 1.0f);
 
                     ImGui::EndTable();
                 }
@@ -12247,14 +12246,13 @@ void editor::Properties::show(){
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, shadowQualityLabelColWidth);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-                    drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_quality", "Filter Quality", ScenePropertyInputType::Combo, 0.0f, 1.0f,
+                    drawScenePropertyRow<ShadowQuality>(sceneProject, "shadows_quality", "Filter Quality", ScenePropertyInputType::Combo, shadowQualityComboWidth, 0.0f, 1.0f,
                         "Smoothness of shadow edges (PCF size):\n"
                         "- None: 1 sample, hard edges\n"
                         "- Low: 3x3 samples\n"
                         "- Medium: 5x5 samples\n"
                         "- High: 7x7 samples\n"
-                        "Higher values cost more per shadowed pixel.",
-                        shadowQualityComboWidth);
+                        "Higher values cost more per shadowed pixel.");
 
                     ImGui::EndTable();
                 }
@@ -12268,9 +12266,9 @@ void editor::Properties::show(){
                     drawScenePropertyRow<bool>(sceneProject, "ssao_enabled", "Enabled", ScenePropertyInputType::Checkbox);
 
                     if (doriax::editor::Catalog::getSceneProperty<bool>(sceneProject->scene, "ssao_enabled")) {
-                        drawScenePropertyRow<float>(sceneProject, "ssao_radius", "Radius", ScenePropertyInputType::SliderFloat, 0.05f, 2.0f);
-                        drawScenePropertyRow<float>(sceneProject, "ssao_intensity", "Intensity", ScenePropertyInputType::SliderFloat, 0.1f, 4.0f);
-                        drawScenePropertyRow<float>(sceneProject, "ssao_bias", "Bias", ScenePropertyInputType::SliderFloat, 0.0f, 0.1f);
+                        drawScenePropertyRow<float>(sceneProject, "ssao_radius", "Radius", ScenePropertyInputType::SliderFloat, -1.0f, 0.05f, 2.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssao_intensity", "Intensity", ScenePropertyInputType::SliderFloat, -1.0f, 0.1f, 4.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssao_bias", "Bias", ScenePropertyInputType::SliderFloat, -1.0f, 0.0f, 0.1f);
                         drawScenePropertyRow<bool>(sceneProject, "ssao_debug", "Debug View", ScenePropertyInputType::Checkbox);
                     }
 
@@ -12286,10 +12284,10 @@ void editor::Properties::show(){
                     drawScenePropertyRow<bool>(sceneProject, "ssr_enabled", "Enabled", ScenePropertyInputType::Checkbox);
 
                     if (doriax::editor::Catalog::getSceneProperty<bool>(sceneProject->scene, "ssr_enabled")) {
-                        drawScenePropertyRow<float>(sceneProject, "ssr_max_distance", "Max Distance", ScenePropertyInputType::SliderFloat, 1.0f, 50.0f);
-                        drawScenePropertyRow<float>(sceneProject, "ssr_thickness", "Thickness", ScenePropertyInputType::SliderFloat, 0.05f, 4.0f);
-                        drawScenePropertyRow<float>(sceneProject, "ssr_intensity", "Intensity", ScenePropertyInputType::SliderFloat, 0.0f, 2.0f);
-                        drawScenePropertyRow<float>(sceneProject, "ssr_blur", "Glossy Blur", ScenePropertyInputType::SliderFloat, 0.0f, 1.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssr_max_distance", "Max Distance", ScenePropertyInputType::SliderFloat, -1.0f, 1.0f, 50.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssr_thickness", "Thickness", ScenePropertyInputType::SliderFloat, -1.0f, 0.05f, 4.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssr_intensity", "Intensity", ScenePropertyInputType::SliderFloat, -1.0f, 0.0f, 2.0f);
+                        drawScenePropertyRow<float>(sceneProject, "ssr_blur", "Glossy Blur", ScenePropertyInputType::SliderFloat, -1.0f, 0.0f, 1.0f);
 
                         // Debug View: visualize the SSR G-buffer channels (centralized in the composite)
                         {
@@ -12299,7 +12297,7 @@ void editor::Properties::show(){
                             ImGui::TableSetColumnIndex(0);
                             ImGui::Text("Debug View");
                             ImGui::TableSetColumnIndex(1);
-                            ImGui::SetNextItemWidth(-1);
+                            ImGui::SetNextItemWidth(8 * ImGui::GetFontSize());
                             if (ImGui::Combo("##ssr_debug_mode", &debugMode, ssrDebugNames, IM_ARRAYSIZE(ssrDebugNames))) {
                                 Command* cmd = new ScenePropertyCmd<int>(project, sceneProject->id, "ssr_debug_mode", debugMode);
                                 CommandHandle::get(sceneProject->id)->addCommand(cmd);
@@ -12317,16 +12315,16 @@ void editor::Properties::show(){
                 ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Enabled").x);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-                drawScenePropertyRow<bool>(sceneProject, "fixed_resolution_enabled", "Enabled", ScenePropertyInputType::Checkbox, 0.0f, 1.0f,
+                drawScenePropertyRow<bool>(sceneProject, "fixed_resolution_enabled", "Enabled", ScenePropertyInputType::Checkbox, -1.0f, 0.0f, 1.0f,
                     "Renders the main camera at a fixed resolution and upscales it to the view.\n"
                     "Applies only in play mode and when this scene is the main scene; layer\n"
                     "scenes stay at native resolution on top. Letterbox/crop still follows the\n"
                     "project canvas and scaling mode.");
 
                 if (doriax::editor::Catalog::getSceneProperty<bool>(sceneProject->scene, "fixed_resolution_enabled")) {
-                    drawScenePropertyRow<int>(sceneProject, "fixed_resolution_width", "Width", ScenePropertyInputType::DragInt, 1.0f, 8192.0f);
-                    drawScenePropertyRow<int>(sceneProject, "fixed_resolution_height", "Height", ScenePropertyInputType::DragInt, 1.0f, 8192.0f);
-                    drawScenePropertyRow<TextureFilter>(sceneProject, "fixed_resolution_filter", "Filter", ScenePropertyInputType::Combo, 0.0f, 1.0f,
+                    drawScenePropertyRow<int>(sceneProject, "fixed_resolution_width", "Width", ScenePropertyInputType::DragInt, 6 * ImGui::GetFontSize(), 1.0f, 8192.0f);
+                    drawScenePropertyRow<int>(sceneProject, "fixed_resolution_height", "Height", ScenePropertyInputType::DragInt, 6 * ImGui::GetFontSize(), 1.0f, 8192.0f);
+                    drawScenePropertyRow<TextureFilter>(sceneProject, "fixed_resolution_filter", "Filter", ScenePropertyInputType::Combo, 7 * ImGui::GetFontSize(), 0.0f, 1.0f,
                         "How the low-resolution image is sampled when upscaled:\n"
                         "- Nearest: crisp pixels (pixel-art look)\n"
                         "- Linear: smooth interpolation");
