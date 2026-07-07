@@ -420,7 +420,10 @@ void Texture::destroy(){
 void Texture::invalidateRender(){
     if (!id.empty() && render) {
         render.reset();
-        TexturePool::remove(id);
+        // remove() would keep the cached (stale) texture alive while any other Texture copy
+        // still references it — undo-history copies alone guarantee that in the editor — so
+        // mark it stale and let the next getRender() with data rebuild it in-place.
+        TexturePool::invalidate(id);
     }
 }
 

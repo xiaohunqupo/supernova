@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <array>
+#include <set>
 
 namespace doriax{
 
@@ -18,12 +19,14 @@ namespace doriax{
     class DORIAX_API TexturePool{
     private:
         static textures_t& getMap();
+        static std::set<std::string>& getInvalidated();
 
     public:
         static std::shared_ptr<TextureRender> get(const std::string& id);
         static std::shared_ptr<TextureRender> get(const std::string& id, TextureType type, const std::shared_ptr<std::array<TextureData,6>> &data, TextureFilter minFilter, TextureFilter magFilter, TextureWrap wrapU, TextureWrap wrapV);
         static void add(const std::string& id, std::shared_ptr<TextureRender> render);
         static void remove(const std::string& id);
+        static void invalidate(const std::string& id);
 
         // necessary for engine shutdown
         static void clear();

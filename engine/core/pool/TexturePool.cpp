@@ -16,11 +16,18 @@ textures_t& TexturePool::getMap(){
     return *map;
 };
 
+// Ids marked by invalidate() whose backend texture must be rebuilt. The stale texture is
+// kept alive (holders may still bind it) until get() with fresh data swaps it in-place.
+std::set<std::string>& TexturePool::getInvalidated(){
+    static std::set<std::string>* invalidated = new std::set<std::string>();
+    return *invalidated;
+};
+
 std::shared_ptr<TextureRender> TexturePool::get(const std::string& id){
 	auto& map = getMap();
 	auto it = map.find(id);
 
-    if (it != map.end() && it->second && it->second->isCreated()){
+    if (it != map.end() && it->second && it->second->isCreated() && getInvalidated().count(id) == 0){
         return it->second;
     }
 
@@ -32,7 +39,9 @@ std::shared_ptr<TextureRender> TexturePool::get(const std::string& id, TextureTy
 	auto it = map.find(id);
 	std::shared_ptr<TextureRender> shared = (it != map.end()) ? it->second : nullptr;
 
-	if (shared && shared->isCreated()){
+	bool stale = getInvalidated().count(id) > 0;
+
+	if (shared && shared->isCreated() && !stale){
 		return shared;
 	}
 
@@ -61,6 +70,12 @@ std::shared_ptr<TextureRender> TexturePool::get(const std::string& id, TextureTy
 		shared = std::make_shared<TextureRender>();
 	}
 
+	// Stale entry with fresh data: swap the backend texture now, inside a single call with
+	// no draw in between, so holders never bind a destroyed texture.
+	if (stale && shared->isCreated()){
+		shared->destroyTexture();
+	}
+
 	if (!shared->createTexture(id, data->at(0).getWidth(), data->at(0).getHeight(), data->at(0).getColorFormat(), type, numFaces, data_array, size_array, minFilter, magFilter, wrapU, wrapV)){
 		shared->destroyTexture();
 		if (it != map.end()){
@@ -71,6 +86,7 @@ std::shared_ptr<TextureRender> TexturePool::get(const std::string& id, TextureTy
 	//Log::debug("Create texture %s", id.c_str());
 
 	map[id] = shared;
+	getInvalidated().erase(id);
 
 	return shared;
 }
@@ -91,11 +107,36 @@ void TexturePool::remove(const std::string& id){
 			}
 			//Log::debug("Remove texture %s", id.c_str());
 			map.erase(it);
+			getInvalidated().erase(id);
 		}
 	}else{
 		if (Engine::isViewLoaded()){
 			Log::debug("Trying to destroy a non existent texture: %s", id.c_str());
 		}
+	}
+}
+
+// Unlike remove(), forces a rebuild even while other Texture instances still reference the
+// pooled TextureRender. The backend texture is NOT destroyed here: reloading can take
+// frames (async file load / SVG rasterization) and holders keep binding the old texture
+// meanwhile, so it must stay alive. The id is only marked stale — get() then reports a miss
+// so callers reload, and get() with data destroys and recreates the texture in-place inside
+// the same shared object, letting every holder pick up the rebuilt texture. Unreferenced
+// entries are destroyed and erased immediately, like remove().
+void TexturePool::invalidate(const std::string& id){
+	auto& map = getMap();
+	auto it = map.find(id);
+	if (it == map.end()){
+		return;
+	}
+
+	if (!it->second || it->second.use_count() <= 1){
+		if (it->second){
+			it->second->destroyTexture();
+		}
+		map.erase(it);
+	}else{
+		getInvalidated().insert(id);
 	}
 }
 
@@ -106,4 +147,5 @@ void TexturePool::clear(){
 	}
 	//Log::debug("Remove all textures");
 	getMap().clear();
+	getInvalidated().clear();
 }
