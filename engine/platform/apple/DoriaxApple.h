@@ -16,6 +16,7 @@ public:
 
     virtual void setMouseCursor(doriax::CursorType type) override;
     virtual void setShowCursor(bool showCursor) override;
+    virtual void setMouseLocked(bool mouseLocked) override;
 
     virtual int getScreenWidth() override;
     virtual int getScreenHeight() override;

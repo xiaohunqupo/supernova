@@ -6,6 +6,8 @@
 @implementation EngineView{
     NSMutableAttributedString* _markedText;
     NSTrackingArea* _trackingArea;
+    CGPoint _mousePoint;
+    BOOL _hasMousePoint;
 }
 
 static short int keycodes[256];
@@ -35,6 +37,8 @@ static const NSRange _emptyRange = { NSNotFound, 0 };
 - (void)engineInit{
     _trackingArea = nil;
     _markedText = [[NSMutableAttributedString alloc] init];
+    _mousePoint = CGPointZero;
+    _hasMousePoint = NO;
     
     [self createKeyCodeArray];
 }
@@ -93,6 +97,25 @@ static const NSRange _emptyRange = { NSNotFound, 0 };
     return CGPointMake(mouseX, mouseY);
 }
 
+-(CGPoint)getTrackedMousePoint:(NSEvent*)event{
+    if (!doriax::Engine::isMouseLocked()){
+        _mousePoint = [self getMousePoint:event];
+        _hasMousePoint = YES;
+        return _mousePoint;
+    }
+
+    if (!_hasMousePoint){
+        _mousePoint = [self getMousePoint:event];
+        _hasMousePoint = YES;
+        return _mousePoint;
+    }
+
+    const NSSize delta = [self convertSizeToBacking:NSMakeSize([event deltaX], [event deltaY])];
+    _mousePoint.x += delta.width;
+    _mousePoint.y -= delta.height;
+    return _mousePoint;
+}
+
 - (void)mouseEntered:(NSEvent*)event {
     doriax::Engine::systemMouseEnter();
     if (doriax::Engine::getMouseCursor() != doriax::CursorType::ARROW){
@@ -106,37 +129,37 @@ static const NSRange _emptyRange = { NSNotFound, 0 };
 
 - (void)mouseDown:(NSEvent*)event {
     const int mods = (int)[self convertModFlags:[event modifierFlags]];
-    const CGPoint point = [self getMousePoint:event];
+    const CGPoint point = [self getTrackedMousePoint:event];
     doriax::Engine::systemMouseDown(D_MOUSE_BUTTON_LEFT, point.x, point.y, mods);
 }
 
 - (void)rightMouseDown:(NSEvent*)event {
     const int mods = (int)[self convertModFlags:[event modifierFlags]];
-    const CGPoint point = [self getMousePoint:event];
+    const CGPoint point = [self getTrackedMousePoint:event];
     doriax::Engine::systemMouseDown(D_MOUSE_BUTTON_RIGHT, point.x, point.y, mods);
 }
 
 - (void)otherMouseDown:(NSEvent*)event {
     const int mods = (int)[self convertModFlags:[event modifierFlags]];
-    const CGPoint point = [self getMousePoint:event];
+    const CGPoint point = [self getTrackedMousePoint:event];
     doriax::Engine::systemMouseDown(D_MOUSE_BUTTON_MIDDLE, point.x, point.y, mods);
 }
 
 - (void)mouseUp:(NSEvent*)event {
     const int mods = (int)[self convertModFlags:[event modifierFlags]];
-    const CGPoint point = [self getMousePoint:event];
+    const CGPoint point = [self getTrackedMousePoint:event];
     doriax::Engine::systemMouseUp(D_MOUSE_BUTTON_LEFT, point.x, point.y, mods);
 }
 
 - (void)rightMouseUp:(NSEvent*)event {
     const int mods = (int)[self convertModFlags:[event modifierFlags]];
-    const CGPoint point = [self getMousePoint:event];
+    const CGPoint point = [self getTrackedMousePoint:event];
     doriax::Engine::systemMouseUp(D_MOUSE_BUTTON_RIGHT, point.x, point.y, mods);
 }
 
 - (void)otherMouseUp:(NSEvent*)event {
     const int mods = (int)[self convertModFlags:[event modifierFlags]];
-    const CGPoint point = [self getMousePoint:event];
+    const CGPoint point = [self getTrackedMousePoint:event];
     doriax::Engine::systemMouseUp(D_MOUSE_BUTTON_MIDDLE, point.x, point.y, mods);
 }
 
@@ -154,7 +177,7 @@ static const NSRange _emptyRange = { NSNotFound, 0 };
 
 - (void)mouseMoved:(NSEvent*)event {
     const int mods = (int)[self convertModFlags:[event modifierFlags]];
-    const CGPoint point = [self getMousePoint:event];
+    const CGPoint point = [self getTrackedMousePoint:event];
     doriax::Engine::systemMouseMove(point.x, point.y, mods);
 }
 

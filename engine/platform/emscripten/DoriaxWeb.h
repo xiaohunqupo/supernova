@@ -17,6 +17,9 @@ private:
     static int screenWidth;
     static int screenHeight;
 
+    static double mousePosX;
+    static double mousePosY;
+
     static int sampleCount;
 
     static EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *userData);
@@ -56,6 +59,7 @@ public:
 
     virtual void setMouseCursor(doriax::CursorType type) override;
     virtual void setShowCursor(bool showCursor) override;
+    virtual void setMouseLocked(bool mouseLocked) override;
 
     virtual std::string getUserDataPath() override;
 

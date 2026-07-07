@@ -235,6 +235,23 @@ void DoriaxGLFW::setShowCursor(bool showCursor){
     }
 }
 
+void DoriaxGLFW::setMouseLocked(bool mouseLocked){
+    if (mouseLocked){
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }else{
+        setShowCursor(doriax::Engine::isShowCursor());
+    }
+}
+
+void DoriaxGLFW::setMousePosition(float x, float y){
+    float xscale, yscale;
+    glfwGetWindowContentScale(window, &xscale, &yscale);
+
+    mousePosX = x;
+    mousePosY = y;
+    glfwSetCursorPos(window, x / xscale, y / yscale);
+}
+
 std::string DoriaxGLFW::getAssetPath(){
     return "assets";
 }

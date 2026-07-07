@@ -6,6 +6,9 @@
 #include "sokol_app.h"
 #include "sokol_glue.h"
 
+static float mousePosX = 0.0f;
+static float mousePosY = 0.0f;
+
 void sokol_init(void) {
     doriax::Engine::systemViewLoaded();
     doriax::Engine::systemViewChanged();
@@ -51,13 +54,28 @@ static void sokol_event(const sapp_event* e) {
     }else if (e->type == SAPP_EVENTTYPE_RESUMED){
         doriax::Engine::systemResume();  
     }else if (e->type == SAPP_EVENTTYPE_MOUSE_UP){
-        doriax::Engine::systemMouseUp(convMouseButtom(e->mouse_button), e->mouse_x, e->mouse_y, e->modifiers);  
+        const bool mouseLocked = sapp_mouse_locked();
+        if (!mouseLocked){
+            mousePosX = e->mouse_x;
+            mousePosY = e->mouse_y;
+        }
+        doriax::Engine::systemMouseUp(convMouseButtom(e->mouse_button), mousePosX, mousePosY, e->modifiers);
     }else if (e->type == SAPP_EVENTTYPE_MOUSE_DOWN){
-        doriax::Engine::systemMouseDown(convMouseButtom(e->mouse_button), e->mouse_x, e->mouse_y, e->modifiers);
-    }else if (e->type == SAPP_EVENTTYPE_MOUSE_UP){
-        doriax::Engine::systemMouseUp(convMouseButtom(e->mouse_button), e->mouse_x, e->mouse_y, e->modifiers);
+        const bool mouseLocked = sapp_mouse_locked();
+        if (!mouseLocked){
+            mousePosX = e->mouse_x;
+            mousePosY = e->mouse_y;
+        }
+        doriax::Engine::systemMouseDown(convMouseButtom(e->mouse_button), mousePosX, mousePosY, e->modifiers);
     }else if (e->type == SAPP_EVENTTYPE_MOUSE_MOVE){
-        doriax::Engine::systemMouseMove(e->mouse_x, e->mouse_y, e->modifiers);
+        if (sapp_mouse_locked()){
+            mousePosX += e->mouse_dx;
+            mousePosY += e->mouse_dy;
+        }else{
+            mousePosX = e->mouse_x;
+            mousePosY = e->mouse_y;
+        }
+        doriax::Engine::systemMouseMove(mousePosX, mousePosY, e->modifiers);
     }else if (e->type == SAPP_EVENTTYPE_MOUSE_SCROLL){
         doriax::Engine::systemMouseScroll(e->scroll_x, e->scroll_y, e->modifiers);
     }else if (e->type == SAPP_EVENTTYPE_MOUSE_ENTER){

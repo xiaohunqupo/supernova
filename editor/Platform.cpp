@@ -38,6 +38,10 @@ void editor::Platform::setShowCursor(bool showCursor){
     Backend::setShowCursor(showCursor);
 }
 
+void editor::Platform::setMouseLocked(bool mouseLocked){
+    Backend::setMouseLocked(mouseLocked);
+}
+
 void editor::Platform::platformLog(const int type, const char *fmt, va_list args){
     char buf[4096];
     vsnprintf(buf, sizeof(buf), fmt, args);

@@ -77,6 +77,7 @@ std::atomic<bool> Engine::asyncLoading = false;
 
 CursorType Engine::mouseCursorType = CursorType::ARROW;
 bool Engine::showCursor = true;
+bool Engine::mouseLocked = false;
 
 Semaphore Engine::drawSemaphore;
 
@@ -403,7 +404,7 @@ CursorType Engine::getMouseCursor(){
 }
 
 void Engine::setShowCursor(bool showCursor){
-    if (viewLoaded){
+    if (viewLoaded && !mouseLocked){
         System::instance().setShowCursor(showCursor);
     }
     Engine::showCursor = showCursor;
@@ -411,6 +412,36 @@ void Engine::setShowCursor(bool showCursor){
 
 bool Engine::isShowCursor(){
     return showCursor;
+}
+
+void Engine::setMouseLocked(bool mouseLocked){
+    Engine::mouseLocked = mouseLocked;
+    if (viewLoaded){
+        System::instance().setMouseLocked(mouseLocked);
+        if (!mouseLocked){
+            System::instance().setShowCursor(showCursor);
+        }
+    }
+}
+
+bool Engine::isMouseLocked(){
+    return mouseLocked;
+}
+
+void Engine::setMousePosition(float x, float y){
+    Input::setMousePosition(x, y);
+
+    if (!viewLoaded)
+        return;
+
+    float screenX = viewRect.getX();
+    float screenY = viewRect.getY();
+    if (canvasWidth != 0)
+        screenX += (x / (float)canvasWidth) * viewRect.getWidth();
+    if (canvasHeight != 0)
+        screenY += (y / (float)canvasHeight) * viewRect.getHeight();
+
+    System::instance().setMousePosition(screenX, screenY);
 }
 
 Platform Engine::getPlatform(){
@@ -689,6 +720,9 @@ void Engine::systemViewLoaded(){
     if (!showCursor){
         System::instance().setShowCursor(showCursor);
     }
+    if (mouseLocked){
+        System::instance().setMouseLocked(mouseLocked);
+    }
 
     getAsyncThreadDepthStorage() = 0;
 
@@ -915,7 +949,7 @@ bool Engine::transformCoordPos(float& x, float& y){
     x = (float)Engine::getCanvasWidth() * x;
     y = (float)Engine::getCanvasHeight() * y;
     
-    if (allowEventsOutCanvas)
+    if (allowEventsOutCanvas || mouseLocked)
         return true;
     
     return ((x >= 0) && (x <= Engine::getCanvasWidth()) && (y >= 0) && (y <= Engine::getCanvasHeight()));

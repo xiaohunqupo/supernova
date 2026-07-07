@@ -26,6 +26,9 @@ bool DoriaxWeb::enabledIDB;
 int DoriaxWeb::screenWidth;
 int DoriaxWeb::screenHeight;
 
+double DoriaxWeb::mousePosX;
+double DoriaxWeb::mousePosY;
+
 int DoriaxWeb::sampleCount = 0;
 
 extern "C" {
@@ -247,6 +250,14 @@ void DoriaxWeb::setShowCursor(bool showCursor){
     }
 }
 
+void DoriaxWeb::setMouseLocked(bool mouseLocked){
+    if (mouseLocked){
+        emscripten_request_pointerlock(canvas.c_str(), 1);
+    }else{
+        emscripten_exit_pointerlock();
+    }
+}
+
 std::string DoriaxWeb::getUserDataPath(){
     return "/datafs";
 }
@@ -388,11 +399,22 @@ EM_BOOL DoriaxWeb::mouse_callback(int eventType, const EmscriptenMouseEvent *e, 
 
     int width = DoriaxWeb::screenWidth;
     int height = DoriaxWeb::screenHeight;
+    EmscriptenPointerlockChangeEvent pointerLockStatus = {};
+    emscripten_get_pointerlock_status(&pointerLockStatus);
+    bool mouseLocked = pointerLockStatus.isActive;
 
-    if (e->targetX < 0) return 0;
-    if (e->targetY < 0) return 0;
-    if (e->targetX > width) return 0;
-    if (e->targetY > height) return 0;
+    if (!mouseLocked){
+        if (e->targetX < 0) return 0;
+        if (e->targetY < 0) return 0;
+        if (e->targetX > width) return 0;
+        if (e->targetY > height) return 0;
+
+        mousePosX = e->targetX;
+        mousePosY = e->targetY;
+    }else{
+        mousePosX += e->movementX;
+        mousePosY += e->movementY;
+    }
 
     int modifiers = 0;
     if (e->ctrlKey) modifiers |= D_MODIFIER_CONTROL;
@@ -400,12 +422,12 @@ EM_BOOL DoriaxWeb::mouse_callback(int eventType, const EmscriptenMouseEvent *e, 
     if (e->altKey) modifiers |= D_MODIFIER_ALT;
     if (e->metaKey) modifiers |= D_MODIFIER_SUPER;
 
-    doriax::Engine::systemMouseMove(e->targetX, e->targetY, modifiers);
+    doriax::Engine::systemMouseMove((float)mousePosX, (float)mousePosY, modifiers);
     if (eventType == EMSCRIPTEN_EVENT_MOUSEDOWN && e->buttons != 0){
-        doriax::Engine::systemMouseDown(doriax_mouse_button(e->button), e->targetX, e->targetY, modifiers);
+        doriax::Engine::systemMouseDown(doriax_mouse_button(e->button), (float)mousePosX, (float)mousePosY, modifiers);
     }
     if (eventType == EMSCRIPTEN_EVENT_MOUSEUP){
-        doriax::Engine::systemMouseUp(doriax_mouse_button(e->button), e->targetX, e->targetY, modifiers);
+        doriax::Engine::systemMouseUp(doriax_mouse_button(e->button), (float)mousePosX, (float)mousePosY, modifiers);
     }
     if (eventType == EMSCRIPTEN_EVENT_MOUSEENTER){
         doriax::Engine::systemMouseEnter();

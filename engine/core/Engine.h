@@ -236,6 +236,7 @@ namespace doriax {
 
         static CursorType mouseCursorType;
         static bool showCursor;
+        static bool mouseLocked;
 
         static Semaphore drawSemaphore;
 
@@ -319,6 +320,10 @@ namespace doriax {
 
         static void setShowCursor(bool showCursor);
         static bool isShowCursor();
+
+        static void setMouseLocked(bool mouseLocked);
+        static bool isMouseLocked();
+        static void setMousePosition(float x, float y);
         
         static Platform getPlatform();
         static GraphicBackend getGraphicBackend();

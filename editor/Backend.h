@@ -16,6 +16,7 @@ namespace doriax::editor{
         static void disableMouseCursor();
         static void enableMouseCursor();
         static void setShowCursor(bool showCursor);
+        static void setMouseLocked(bool mouseLocked);
         static void setGameCursorInSceneRect(bool inSceneRect);
         static void closeWindow();
 

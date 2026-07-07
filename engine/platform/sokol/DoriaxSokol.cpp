@@ -66,6 +66,10 @@ void DoriaxSokol::setShowCursor(bool showCursor){
     sapp_show_mouse(showCursor);
 }
 
+void DoriaxSokol::setMouseLocked(bool mouseLocked){
+    sapp_lock_mouse(mouseLocked);
+}
+
 std::string DoriaxSokol::getAssetPath(){
     return "assets";
 }

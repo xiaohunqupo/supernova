@@ -297,6 +297,14 @@ void editor::Backend::setShowCursor(bool showCursor) {
     applyGameCursorVisibility();
 }
 
+void editor::Backend::setMouseLocked(bool mouseLocked) {
+    if (mouseLocked) {
+        disableMouseCursor();
+    } else {
+        enableMouseCursor();
+    }
+}
+
 void editor::Backend::setGameCursorInSceneRect(bool inSceneRect) {
     gameCursorInSceneRect = inSceneRect;
     applyGameCursorVisibility();

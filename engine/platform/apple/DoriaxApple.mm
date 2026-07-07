@@ -1,7 +1,14 @@
 #include "DoriaxApple.h"
 
+#include "Engine.h"
+
 #import "Renderer.h"
 #import <Foundation/Foundation.h>
+
+#if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+#import <AppKit/AppKit.h>
+#import <ApplicationServices/ApplicationServices.h>
+#endif
 
 #if TARGET_OS_IPHONE
 #import <MetalKit/MetalKit.h>
@@ -9,6 +16,24 @@
 #import "ios/AdMobAdapter.h"
 
 static AdMobAdapter* admob = nil;
+#endif
+
+#if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+static bool appleMouseLocked = false;
+static bool appleCursorHidden = false;
+
+// [NSCursor hide]/[NSCursor unhide] are reference-counted and not idempotent,
+// so track the net state and only toggle on an actual transition.
+static void setAppleCursorHidden(bool hidden){
+    if (hidden == appleCursorHidden)
+        return;
+    if (hidden){
+        [NSCursor hide];
+    }else{
+        [NSCursor unhide];
+    }
+    appleCursorHidden = hidden;
+}
 #endif
 
 DoriaxApple::DoriaxApple(){
@@ -19,6 +44,11 @@ DoriaxApple::DoriaxApple(){
 }
 
 DoriaxApple::~DoriaxApple(){
+#if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    CGAssociateMouseAndMouseCursorPosition(true);
+    appleMouseLocked = false;
+    setAppleCursorHidden(false);
+#endif
 #if TARGET_OS_IPHONE
     admob = nil;
 #endif
@@ -93,10 +123,22 @@ void DoriaxApple::setMouseCursor(doriax::CursorType type){
 
 void DoriaxApple::setShowCursor(bool showCursor){
 #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-    if (!showCursor){
-        [NSCursor hide];
+    setAppleCursorHidden(!showCursor);
+#endif
+}
+
+void DoriaxApple::setMouseLocked(bool mouseLocked){
+#if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    if (appleMouseLocked == mouseLocked)
+        return;
+
+    CGAssociateMouseAndMouseCursorPosition(!mouseLocked);
+    appleMouseLocked = mouseLocked;
+
+    if (mouseLocked){
+        setAppleCursorHidden(true);
     }else{
-        [NSCursor unhide];
+        setAppleCursorHidden(!doriax::Engine::isShowCursor());
     }
 #endif
 }

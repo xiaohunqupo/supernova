@@ -62,6 +62,14 @@ void System::setShowCursor(bool showCursor){
 
 }
 
+void System::setMouseLocked(bool mouseLocked){
+
+}
+
+void System::setMousePosition(float x, float y){
+
+}
+
 int System::getSampleCount(){
     return 1;
 }

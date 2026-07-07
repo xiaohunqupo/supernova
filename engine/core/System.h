@@ -91,6 +91,8 @@ namespace doriax {
 
         virtual void setMouseCursor(CursorType type);
         virtual void setShowCursor(bool showCursor);
+        virtual void setMouseLocked(bool mouseLocked);
+        virtual void setMousePosition(float x, float y);
 
         virtual FILE* platformFopen(const char* fname, const char* mode);
         virtual bool syncFileSystem();
