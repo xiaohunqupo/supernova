@@ -44,6 +44,7 @@ private:
     ActionResult addComponent(const Json& arguments);
     ActionResult removeComponent(const Json& arguments);
     ActionResult setComponentProperty(const Json& arguments);
+    ActionResult setTextureSettings(const Json& arguments);
     ActionResult createScene(const Json& arguments);
     ActionResult renameScene(const Json& arguments);
     ActionResult saveScene(const Json& arguments);

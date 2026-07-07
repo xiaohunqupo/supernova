@@ -592,6 +592,11 @@ std::string editor::Factory::formatTexture(int indentSpaces, const Texture& text
         }
     }
 
+    // After setPath, which resets the scale to 1.0
+    if (texture.getSvgScale() != 1.0f) {
+        code << ind << variableName << ".setSvgScale(" << formatFloat(texture.getSvgScale()) << ");\n";
+    }
+
     code << ind << variableName << ".setMinFilter(" << formatTextureFilter(texture.getMinFilter()) << ");\n";
     code << ind << variableName << ".setMagFilter(" << formatTextureFilter(texture.getMagFilter()) << ");\n";
     code << ind << variableName << ".setWrapU(" << formatTextureWrap(texture.getWrapU()) << ");\n";

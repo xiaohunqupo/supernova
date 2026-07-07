@@ -609,8 +609,13 @@ Json propertyValueToJson(const PropertyData& property) {
             return *static_cast<int*>(property.ref);
         case PropertyType::UInt:
             return *static_cast<unsigned int*>(property.ref);
-        case PropertyType::Texture:
-            return static_cast<Texture*>(property.ref)->getPath();
+        case PropertyType::Texture: {
+            // Report scaled SVG sources in the round-trippable "<path>?svgScale=N" form:
+            // Texture(path) absorbs the suffix, so the model can echo it back into
+            // texture_path (and tweak the scale) without a dedicated field.
+            const Texture* tex = static_cast<Texture*>(property.ref);
+            return TextureData::buildSvgScalePath(tex->getPath(), tex->getSvgScale());
+        }
         case PropertyType::Entity:
             return *static_cast<Entity*>(property.ref);
         case PropertyType::EntityReference: {
@@ -624,7 +629,9 @@ Json propertyValueToJson(const PropertyData& property) {
                         {"metallicFactor", material.metallicFactor},
                         {"roughnessFactor", material.roughnessFactor},
                         {"emissiveFactor", vector3Json(material.emissiveFactor)},
-                        {"baseColorTexture", material.baseColorTexture.getPath()}};
+                        {"baseColorTexture", TextureData::buildSvgScalePath(
+                            material.baseColorTexture.getPath(),
+                            material.baseColorTexture.getSvgScale())}};
         }
         case PropertyType::Custom:
             return Json{{"unsupported", "custom"}};
@@ -1172,6 +1179,7 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "add_component") return addComponent(arguments);
     if (name == "remove_component") return removeComponent(arguments);
     if (name == "set_component_property") return setComponentProperty(arguments);
+    if (name == "set_texture_settings") return setTextureSettings(arguments);
     if (name == "create_scene") return createScene(arguments);
     if (name == "rename_scene") return renameScene(arguments);
     if (name == "save_scene") return saveScene(arguments);
@@ -1662,6 +1670,93 @@ ActionResult EditorActionExecutor::setComponentProperty(const Json& arguments) {
     if (!cmd) return failResult(error);
     CommandHandle::get(sceneId)->addCommandNoMerge(cmd.release());
     return okResult("Set component property through the command history.");
+}
+
+ActionResult EditorActionExecutor::setTextureSettings(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+    ComponentType component;
+    if (!parseComponentType(arguments.value("component", ""), component)) return failResult("Unknown component type.");
+
+    auto properties = Catalog::findEntityProperties(sceneProject->scene, entity, component);
+    const std::string propertyName = arguments.value("property", "");
+    auto it = properties.find(propertyName);
+    if (it == properties.end() || !it->second.ref) return failResult("Property not found or not editable.");
+    if (it->second.type != PropertyType::Texture) return failResult("Property is not a Texture.");
+
+    Texture* current = static_cast<Texture*>(it->second.ref);
+    Texture modified = *current;
+    std::string error;
+
+    // Reject unknown enum strings instead of silently defaulting: the Stream converters
+    // fall back to linear/repeat, so a value only counts when it round-trips.
+    auto applyFilter = [&](const char* field, bool magnification) -> bool {
+        if (!arguments.contains(field)) return true;
+        if (!arguments[field].is_string()) {
+            error = std::string(field) + " must be a string.";
+            return false;
+        }
+        const std::string value = arguments[field].get<std::string>();
+        TextureFilter filter = Stream::stringToTextureFilter(value);
+        if (Stream::textureFilterToString(filter) != value) {
+            error = "Invalid " + std::string(field) + ": " + value;
+            return false;
+        }
+        if (magnification && filter != TextureFilter::NEAREST && filter != TextureFilter::LINEAR) {
+            error = "mag_filter accepts only nearest or linear.";
+            return false;
+        }
+        if (magnification) modified.setMagFilter(filter); else modified.setMinFilter(filter);
+        return true;
+    };
+    auto applyWrap = [&](const char* field, bool vertical) -> bool {
+        if (!arguments.contains(field)) return true;
+        if (!arguments[field].is_string()) {
+            error = std::string(field) + " must be a string.";
+            return false;
+        }
+        const std::string value = arguments[field].get<std::string>();
+        TextureWrap wrap = Stream::stringToTextureWrap(value);
+        if (Stream::textureWrapToString(wrap) != value) {
+            error = "Invalid " + std::string(field) + ": " + value;
+            return false;
+        }
+        if (vertical) modified.setWrapV(wrap); else modified.setWrapU(wrap);
+        return true;
+    };
+
+    if (!applyFilter("min_filter", false)) return failResult(error);
+    if (!applyFilter("mag_filter", true)) return failResult(error);
+    if (!applyWrap("wrap_u", false)) return failResult(error);
+    if (!applyWrap("wrap_v", true)) return failResult(error);
+
+    if (arguments.contains("svg_scale")) {
+        if (!arguments["svg_scale"].is_number()) return failResult("svg_scale must be a number.");
+        float scale = arguments["svg_scale"].get<float>();
+        if (!(scale > 0.0f)) return failResult("svg_scale must be greater than zero.");
+        if (!TextureData::hasSvgExtension(modified.getPath().c_str())) {
+            return failResult("svg_scale only applies to .svg texture sources.");
+        }
+        modified.setSvgScale(scale);
+    }
+
+    if (modified == *current) {
+        return okResult("Texture settings already match the requested values.");
+    }
+
+    // Sampler settings are baked into the GPU texture, so the command's callback drops the
+    // cached render on both execute and undo (same pattern as the editor's settings popup).
+    Scene* scene = sceneProject->scene;
+    auto onChanged = [scene, entity, component, propertyName]() {
+        Texture* ref = Catalog::getPropertyRef<Texture>(scene, entity, component, propertyName);
+        if (ref) ref->invalidateRender();
+    };
+    CommandHandle::get(sceneId)->addCommandNoMerge(new PropertyCmd<Texture>(
+        project, sceneId, entity, component, propertyName, modified, onChanged));
+    return okResult("Texture settings applied through the command history.");
 }
 
 ActionResult EditorActionExecutor::createScene(const Json& arguments) {

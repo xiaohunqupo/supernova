@@ -121,7 +121,7 @@ Json propertyValueFields(std::initializer_list<std::pair<const char*, Json>> ext
         {"vector3_value", vector3Schema("Vector3 or Color3 property value")},
         {"vector4_value", vector4Schema("Vector4 or Color4 property value")},
         {"quat_value", quaternionSchema("Quaternion property value")},
-        {"texture_path", stringSchema("Project-relative texture/resource path for Texture properties")},
+        {"texture_path", stringSchema("Project-relative texture/resource path for Texture properties. For .svg sources an optional '?svgScale=N' suffix sets the rasterization scale (e.g. 'ui/icon.svg?svgScale=2')")},
         {"entity_value", integerSchema("Entity id for Entity or EntityReference properties")},
         {"entity_scene_id", integerSchema("Scene id for EntityReference properties. Omit to use scene_id")}
     });
@@ -329,6 +329,23 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"component", stringSchema("Component name")},
                 {"property", stringSchema("Property path from inspect_component, e.g. position or submeshes[0].material.baseColorTexture")}
             }), {"component", "property"}),
+            false
+        },
+        {
+            "set_texture_settings",
+            "Set sampler settings and/or SVG scale of a Texture component property; only the provided fields change, the texture source is kept. Filters: nearest, linear, nearest_mipmap_nearest, nearest_mipmap_linear, linear_mipmap_nearest, linear_mipmap_linear (mag_filter accepts only nearest or linear). Wraps: repeat, mirrored_repeat, clamp_to_edge, clamp_to_border.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"component", stringSchema("Component name")},
+                {"property", stringSchema("Texture property path from inspect_component, e.g. texture or submeshes[0].material.baseColorTexture")},
+                {"min_filter", stringSchema("Minification filter")},
+                {"mag_filter", stringSchema("Magnification filter: nearest or linear")},
+                {"wrap_u", stringSchema("Wrap mode along U")},
+                {"wrap_v", stringSchema("Wrap mode along V")},
+                {"svg_scale", numberSchema("Rasterization scale for .svg sources (e.g. 2.0 = twice the intrinsic size)")}
+            }, {"component", "property"}),
             false
         },
         {
@@ -1087,6 +1104,18 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         }
         return hasAnyValueField(arguments) ? ok() : fail("set_component_property requires one typed value field.");
     }
+    if (name == "set_texture_settings") {
+        if (!hasEntitySelector(arguments)) return fail("set_texture_settings requires entity_id or entity_name.");
+        if (!hasString(arguments, "component") || !hasString(arguments, "property")) {
+            return fail("set_texture_settings requires component and property.");
+        }
+        if (!arguments.contains("min_filter") && !arguments.contains("mag_filter") &&
+            !arguments.contains("wrap_u") && !arguments.contains("wrap_v") &&
+            !arguments.contains("svg_scale")) {
+            return fail("set_texture_settings requires at least one of min_filter, mag_filter, wrap_u, wrap_v, svg_scale.");
+        }
+        return ok();
+    }
     if (name == "create_scene") {
         return hasString(arguments, "name") && hasString(arguments, "type")
             ? ok() : fail("create_scene requires name and type.");
@@ -1375,6 +1404,9 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "set_component_property") {
         return "Set " + arguments.value("component", "component") + "." + arguments.value("property", "property");
+    }
+    if (name == "set_texture_settings") {
+        return "Set texture settings of " + arguments.value("component", "component") + "." + arguments.value("property", "property");
     }
     if (name == "create_scene") {
         return "Create " + arguments.value("type", "scene") + " scene \"" + arguments.value("name", "Scene") + "\"";

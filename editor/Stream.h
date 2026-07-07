@@ -45,12 +45,6 @@ namespace doriax::editor {
         static std::string windingOrderToString(WindingOrder order);
         static WindingOrder stringToWindingOrder(const std::string& str);
 
-        static std::string textureFilterToString(TextureFilter filter);
-        static TextureFilter stringToTextureFilter(const std::string& str);
-
-        static std::string textureWrapToString(TextureWrap wrap);
-        static TextureWrap stringToTextureWrap(const std::string& str);
-
         static std::string lightTypeToString(LightType type);
         static LightType stringToLightType(const std::string& str);
 
@@ -172,6 +166,14 @@ namespace doriax::editor {
         static bool isModelBackedMesh(const Entity entity, const EntityRegistry* registry, Signature signature);
 
     public:
+        // Public because the enum names are also the wire format of AI editor actions
+        // (EditorActionExecutor validates values by round-tripping through these).
+        static std::string textureFilterToString(TextureFilter filter);
+        static TextureFilter stringToTextureFilter(const std::string& str);
+
+        static std::string textureWrapToString(TextureWrap wrap);
+        static TextureWrap stringToTextureWrap(const std::string& str);
+
         static YAML::Node encodeProject(Project* project);
         static void decodeProject(Project* project, const YAML::Node& node);
 
