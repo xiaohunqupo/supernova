@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-3d-scene.png" alt="Doriax Engine Editor">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-lighting.png" alt="Doriax Engine Editor">
 </p>
 
 ## Overview
@@ -34,6 +34,7 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 ## Why Doriax
 
 - Integrated editor for 2D and 3D scene creation
+- Built-in AI assistant that creates entities and scripts from natural language
 - Project generation, build orchestration, and export tooling
 - Shader compilation and cross-platform shader translation for exported projects
 - Lua for fast iteration and C++ for native performance
@@ -47,16 +48,20 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 - 3D scene editing with cameras, lighting, models, and play mode
 - Animation tools, timeline editing, and bone workflows
 - Integrated code editor and scripting workflow for Lua and C++
+- AI assistant: a built-in chat that works as an agent inside the editor — describe a task in plain language and it creates entities, writes and edits Lua or C++ scripts, and builds your project, using configurable AI models
 - Custom shaders: fork and edit the built-in Mesh, UI, Points, Lines, and Sky shaders per component, with live recompile in the viewport
 - Shader-aware export pipeline that prepares scenes, assets, scripts, engine files, and compiled shaders
 
 <p align="center">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-office-scene.png" alt="Doriax Engine office scene" width="48%">
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-2d-tilemap.png" alt="Doriax Engine 2D tilemap editor" width="48%">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-animation.png" alt="Doriax Engine animation timeline" width="48%">
 </p>
 <p align="center">
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-code.png" alt="Doriax Engine integrated code editor" width="48%">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-ui.png" alt="Doriax Engine UI tools" width="48%">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/runtime-first-ui-scene.png" alt="Doriax Engine UI tools" width="48%">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-ai-chat.png" alt="Doriax Engine AI assistant creating entities and scripts" width="80%">
 </p>
 
 ## Engine Features
