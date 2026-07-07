@@ -23,20 +23,25 @@ Texture::Texture(){
     this->magFilter = TextureFilter::LINEAR;
     this->wrapU = TextureWrap::REPEAT;
     this->wrapV = TextureWrap::REPEAT;
+    this->svgScale = 1.0f;
 }
 
 Texture::Texture(const std::string& path){
     this->render = NULL;
     this->framebuffer = NULL;
 
-    this->paths[0] = path;
+    // Legacy form "<path>?svgScale=N" is absorbed into the svgScale field so paths[] always
+    // holds a real file path.
+    this->svgScale = 1.0f;
+    this->paths[0] = TextureData::parseSvgScalePath(path, &this->svgScale);
 
-    this->id = path;
     this->type = TextureType::TEXTURE_2D;
     this->numFaces = 1;
     this->loadFromPath = true;
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
+
+    this->id = buildPathTextureId();
 
     this->minFilter = TextureFilter::LINEAR;
     this->magFilter = TextureFilter::LINEAR;
@@ -63,6 +68,7 @@ Texture::Texture(const std::string& id, TextureData data){
     this->magFilter = TextureFilter::LINEAR;
     this->wrapU = TextureWrap::REPEAT;
     this->wrapV = TextureWrap::REPEAT;
+    this->svgScale = 1.0f;
 }
 
 Texture::Texture(Framebuffer* framebuffer){
@@ -80,6 +86,7 @@ Texture::Texture(Framebuffer* framebuffer){
     this->magFilter = TextureFilter::LINEAR;
     this->wrapU = TextureWrap::REPEAT;
     this->wrapV = TextureWrap::REPEAT;
+    this->svgScale = 1.0f;
 }
 
 Texture::Texture(const Texture& rhs){
@@ -99,6 +106,7 @@ Texture::Texture(const Texture& rhs){
     magFilter = rhs.magFilter;
     wrapU = rhs.wrapU;
     wrapV = rhs.wrapV;
+    svgScale = rhs.svgScale;
 }
 
 Texture& Texture::operator=(const Texture& rhs){
@@ -119,9 +127,10 @@ Texture& Texture::operator=(const Texture& rhs){
         magFilter = rhs.magFilter;
         wrapU = rhs.wrapU;
         wrapV = rhs.wrapV;
+        svgScale = rhs.svgScale;
     }
 
-    return *this; 
+    return *this;
 }
 
 bool Texture::operator == ( const Texture& rhs ) const{
@@ -141,7 +150,8 @@ bool Texture::operator == ( const Texture& rhs ) const{
         minFilter == rhs.minFilter &&
         magFilter == rhs.magFilter &&
         wrapU == rhs.wrapU &&
-        wrapV == rhs.wrapV
+        wrapV == rhs.wrapV &&
+        svgScale == rhs.svgScale
      );
 }
 
@@ -162,7 +172,8 @@ bool Texture::operator != ( const Texture& rhs ) const{
         minFilter != rhs.minFilter ||
         magFilter != rhs.magFilter ||
         wrapU != rhs.wrapU ||
-        wrapV != rhs.wrapV
+        wrapV != rhs.wrapV ||
+        svgScale != rhs.svgScale
     );
 }
 
@@ -173,8 +184,10 @@ Texture::~Texture(){
 void Texture::setPath(const std::string& path){
     destroy();
 
-    this->paths[0] = path;
-    this->id = path;
+    // Legacy form "<path>?svgScale=N" is absorbed into the svgScale field so paths[] always
+    // holds a real file path. A new path resets the scale of the previous source.
+    this->svgScale = 1.0f;
+    this->paths[0] = TextureData::parseSvgScalePath(path, &this->svgScale);
     this->framebuffer = NULL;
     this->type = TextureType::TEXTURE_2D;
     this->numFaces = 1;
@@ -182,6 +195,7 @@ void Texture::setPath(const std::string& path){
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
 
+    this->id = buildPathTextureId();
     this->render = TexturePool::get(id);
 }
 
@@ -195,6 +209,7 @@ void Texture::setData(const std::string& id, TextureData data){
     this->loadFromPath = false;
     this->releaseDataAfterLoad = false;
     this->needLoad = true;
+    this->svgScale = 1.0f;
 
     this->data = std::make_shared<std::array<TextureData,6>>();
     this->data->at(0) = data;
@@ -228,6 +243,7 @@ void Texture::setCubeMap(const std::string& path){
     this->loadFromPath = true;
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
+    this->svgScale = 1.0f;
 
     this->id = "cube|" + path;
     this->render = TexturePool::get(id);
@@ -252,6 +268,7 @@ void Texture::setCubePath(size_t index, const std::string& path){
     this->loadFromPath = true;
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
+    this->svgScale = 1.0f;
 
     this->id = buildCubeTextureId(paths);
     this->render = TexturePool::get(id);
@@ -279,6 +296,7 @@ void Texture::setCubePaths(const std::string& front, const std::string& back,
     this->loadFromPath = true;
     this->releaseDataAfterLoad = true;
     this->needLoad = true;
+    this->svgScale = 1.0f;
 
     this->id = buildCubeTextureId(paths);
     this->render = TexturePool::get(id);
@@ -294,6 +312,7 @@ void Texture::setCubeDatas(const std::string& id, TextureData front, TextureData
     this->loadFromPath = false;
     this->releaseDataAfterLoad = false;
     this->needLoad = true;
+    this->svgScale = 1.0f;
 
     this->data = std::make_shared<std::array<TextureData,6>>();
     // OpenGL-style cubemap naming:
@@ -319,6 +338,7 @@ void Texture::setFramebuffer(Framebuffer* framebuffer){
     this->loadFromPath = false;
     this->releaseDataAfterLoad = false;
     this->needLoad = false;
+    this->svgScale = 1.0f;
 }
 
 // Returns true if every required face of the texture data still owns its
@@ -343,6 +363,16 @@ std::string Texture::buildCubeTextureId(const std::string paths[6]) {
         id += "|" + paths[f];
     }
     return id;
+}
+
+// The rasterization scale is part of the texture identity: the same SVG at two scales must
+// produce two pool entries. Non-SVG sources keep the plain path as id, and scale 1.0 maps
+// to the plain path too, so ids stay identical to the pre-svgScale-field format.
+std::string Texture::buildPathTextureId() const {
+    if (TextureData::hasSvgExtension(paths[0].c_str())) {
+        return TextureData::buildSvgScalePath(paths[0], svgScale);
+    }
+    return paths[0];
 }
 
 TextureLoadResult Texture::load() {
@@ -383,7 +413,14 @@ TextureLoadResult Texture::load() {
     }
 
     if (loadFromPath) {
-        std::array<std::string, 6> aPaths = {paths[0], paths[1], paths[2], paths[3], paths[4], paths[5]};
+        // The loader receives the scale re-encoded as the "?svgScale=N" suffix it already
+        // parses; paths[] itself stays a clean filesystem path.
+        std::array<std::string, 6> aPaths;
+        for (int f = 0; f < 6; f++) {
+            aPaths[f] = TextureData::hasSvgExtension(paths[f].c_str())
+                ? TextureData::buildSvgScalePath(paths[f], svgScale)
+                : paths[f];
+        }
         result = TextureDataPool::loadFromFile(id, aPaths, numFaces);
         if (result && result.data) {
             data = result.data;
@@ -612,6 +649,31 @@ void Texture::setWrapV(TextureWrap wrapV){
         framebuffer->setWrapV(wrapV);
     }
     this->wrapV = wrapV;
+}
+
+void Texture::setSvgScale(float scale){
+    if (!(scale > 0.0f)){
+        scale = 1.0f;
+    }
+    if (scale == svgScale){
+        return;
+    }
+
+    // The scale is part of the texture identity for SVG path sources, so changing it means
+    // pointing at a different pool entry: release the old one and reload, like setPath().
+    if (loadFromPath && TextureData::hasSvgExtension(paths[0].c_str())){
+        destroy();
+        svgScale = scale;
+        id = buildPathTextureId();
+        needLoad = true;
+        render = TexturePool::get(id);
+    }else{
+        svgScale = scale;
+    }
+}
+
+float Texture::getSvgScale() const{
+    return svgScale;
 }
 
 TextureWrap Texture::getWrapV() const{

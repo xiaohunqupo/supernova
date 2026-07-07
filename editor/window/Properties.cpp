@@ -1083,28 +1083,17 @@ void editor::Properties::drawTextureSettingsPopup(const char* popupId, Component
     }
     const Texture defaults = textureProp.def ? *static_cast<Texture*>(textureProp.def) : Texture();
 
-    // SVG rasterization scale is only relevant for vector sources. The scale is carried in
-    // the texture path as "<path>?svgScale=N", so changing it rebuilds the texture from a
-    // new path while preserving the current sampler settings.
-    float svgCurrentScale = 1.0f;
-    std::string svgCleanPath = TextureData::parseSvgScalePath(current->getPath(), &svgCurrentScale);
-    bool isSvg = TextureData::hasSvgExtension(svgCleanPath.c_str());
+    // SVG rasterization scale is only relevant for vector sources.
+    bool isSvg = TextureData::hasSvgExtension(current->getPath().c_str());
+    float svgCurrentScale = current->getSvgScale();
 
-    // Rebuild each SVG entity from its own clean path at the given scale, carrying over the
-    // sampler settings so a scale change never resets the user's filter/wrap.
+    // setSvgScale re-keys the pool entry (the scale is part of the texture identity) while
+    // the sampler fields stay untouched, so a scale change never resets filter/wrap.
     auto applyScale = [&](float scale){
         applyToTextures([scale](Texture& t){
-            float curScale = 1.0f;
-            std::string cleanPath = TextureData::parseSvgScalePath(t.getPath(), &curScale);
-            if (!TextureData::hasSvgExtension(cleanPath.c_str()))
+            if (!TextureData::hasSvgExtension(t.getPath().c_str()))
                 return false;
-
-            Texture rebuilt(TextureData::buildSvgScalePath(cleanPath, scale));
-            rebuilt.setMinFilter(t.getMinFilter());
-            rebuilt.setMagFilter(t.getMagFilter());
-            rebuilt.setWrapU(t.getWrapU());
-            rebuilt.setWrapV(t.getWrapV());
-            t = rebuilt;
+            t.setSvgScale(scale);
             return true;
         });
     };
@@ -1149,10 +1138,7 @@ void editor::Properties::drawTextureSettingsPopup(const char* popupId, Component
         auto editIt = svgScaleEditing.find(editKey);
         float editScale = (editIt != svgScaleEditing.end()) ? editIt->second : svgCurrentScale;
 
-        // The reset target is the scale carried in the default texture's path (1x when the
-        // default has no svgScale suffix).
-        float svgDefaultScale = 1.0f;
-        TextureData::parseSvgScalePath(defaults.getPath(), &svgDefaultScale);
+        float svgDefaultScale = defaults.getSvgScale();
 
         bool resetScale = propertyHeader("SVG Scale", 6 * ImGui::GetFontSize(), std::fabs(svgCurrentScale - svgDefaultScale) > 1e-4f, false);
         if (ImGui::DragFloat("##texset_svgscale", &editScale, 0.05f, 0.1f, 16.0f, "%.2fx")) {
@@ -3361,7 +3347,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         bool isCameraTexture = CameraTextureLink::isCameraTexture(newValue);
 
         float thumbSize = ImGui::GetFrameHeight() * 3;
-        Texture* thumbTexture = findThumbnail(TextureData::parseSvgScalePath(newValue.getPath()));
+        Texture* thumbTexture = findThumbnail(newValue.getPath());
         if (thumbTexture) {
             ImU32 border_col = ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
             if (dif){

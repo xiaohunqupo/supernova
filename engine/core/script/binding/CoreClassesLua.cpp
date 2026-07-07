@@ -448,6 +448,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addProperty("magFilter", &Texture::getMagFilter, &Texture::setMagFilter)
         .addProperty("wrapU", &Texture::getWrapU, &Texture::setWrapU)
         .addProperty("wrapV", &Texture::getWrapV, &Texture::setWrapV)
+        .addProperty("svgScale", &Texture::getSvgScale, &Texture::setSvgScale)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

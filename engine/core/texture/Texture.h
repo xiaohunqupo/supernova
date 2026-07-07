@@ -20,6 +20,8 @@ namespace doriax{
             static bool hasTexturePixels(const std::shared_ptr<std::array<TextureData,6>>& data, size_t numFaces);
             static std::string buildCubeTextureId(const std::string paths[6]);
 
+            std::string buildPathTextureId() const;
+
             std::shared_ptr<TextureRender> render = NULL;
             Framebuffer* framebuffer;
             unsigned long lastFramebufferVersion = 0;
@@ -41,6 +43,9 @@ namespace doriax{
             TextureFilter magFilter;
             TextureWrap wrapU;
             TextureWrap wrapV;
+
+            // rasterization scale for SVG sources (1.0 = natural size); ignored for rasters
+            float svgScale;
 
         public:
             Texture();
@@ -107,6 +112,9 @@ namespace doriax{
 
             void setWrapV(TextureWrap wrapV);
             TextureWrap getWrapV() const;
+
+            void setSvgScale(float scale);
+            float getSvgScale() const;
     };
 }
 

@@ -985,6 +985,7 @@ YAML::Node editor::Stream::encodeTexture(const Texture& texture, bool embedData)
     node["magFilter"] = textureFilterToString(texture.getMagFilter());
     node["wrapU"] = textureWrapToString(texture.getWrapU());
     node["wrapV"] = textureWrapToString(texture.getWrapV());
+    if (texture.getSvgScale() != 1.0f) node["svgScale"] = texture.getSvgScale();
     node["releaseDataAfterLoad"] = texture.isReleaseDataAfterLoad();
     return node;
 }
@@ -1051,6 +1052,8 @@ Texture editor::Stream::decodeTexture(const YAML::Node& node) {
         if (node["magFilter"]) texture.setMagFilter(stringToTextureFilter(node["magFilter"].as<std::string>()));
         if (node["wrapU"]) texture.setWrapU(stringToTextureWrap(node["wrapU"].as<std::string>()));
         if (node["wrapV"]) texture.setWrapV(stringToTextureWrap(node["wrapV"].as<std::string>()));
+        // Old scenes carry the scale inside the path ("?svgScale=N"), absorbed by setPath()
+        if (node["svgScale"]) texture.setSvgScale(node["svgScale"].as<float>());
 
         //if (node["isFramebuffer"] && node["isFramebuffer"].as<bool>()) {
         //    texture.setIsFramebuffer(true);
