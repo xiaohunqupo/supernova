@@ -61,7 +61,8 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/runtime-first-ui-scene.png" alt="Doriax Engine UI tools" width="48%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-ai-chat.png" alt="Doriax Engine AI assistant creating entities and scripts" width="80%">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-ai-chat.png" alt="Doriax Engine AI assistant creating entities and scripts" width="48%">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bones.png" alt="Doriax Engine bone animation editor" width="48%">
 </p>
 
 ## Engine Features
