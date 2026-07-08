@@ -445,6 +445,9 @@ std::string doriaxLuaScriptGuide(const std::string& className) {
            "(type strings: bool, int, float, string, vector2, vector3, vector4, color3, color4, entity); at runtime read/write them as self.<name>, e.g. self.speed. "
            "The engine injects self.scene and self.entity; self.entity is a numeric Entity id, not an object receiver. For an existing cube/shape, "
            "use local shape = Shape(self.scene, self.entity); shape:setColor(1.0, 0.0, 0.0, 1.0). "
+           "There is no Transform (or other component) global in Lua: to read or move an entity, wrap it with local obj = Object(self.scene, self.entity); "
+           "read obj.position (a Vector3 with .x/.y/.z) and write it with obj:setPosition(x, y, z) (likewise obj.rotation and obj.scale). "
+           "For keyboard/mouse input use the Input class, e.g. if Input.isKeyPressed(Input.KEY_LEFT) then ... end (KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_SPACE, etc.), and scale motion by Engine.deltatime. "
            "Per-frame and input logic must be registered in :init() with the global RegisterEngineEvent(self, \"onUpdate\") and a matching function " + className + ":onUpdate() ... end; "
            "valid event names: onUpdate, onFixedUpdate, onDraw, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onTouchStart, onTouchMove, onTouchEnd. "
            "For component/UI events use the global RegisterEvent(self, eventObject, \"method\"), getting the event object from a wrapper, e.g. local b = Button(self.scene, self.entity); RegisterEvent(self, b:getButtonComponent().onPress, \"onPress\"). "
@@ -494,6 +497,7 @@ std::string validateDoriaxLuaScriptContent(const std::string& content) {
         {"getentity", "Doriax Lua scripts receive self.entity directly; there is no getEntity() helper."},
         {"get_component", "Doriax Lua scripts should use runtime wrappers returned by search_engine_api, not get_component()."},
         {"getcomponent", "Doriax Lua scripts should use runtime wrappers returned by search_engine_api, not getComponent()."},
+        {"transform(self", "There is no Transform global in Doriax Lua; components are not constructed like Transform(self.scene, self.entity). To read or move an entity use local obj = Object(self.scene, self.entity); read obj.position and write obj:setPosition(x, y, z)."},
         {"set_property", "Doriax Lua scripts should call runtime APIs, not editor-style set_property()."},
         {"setproperty", "Doriax Lua scripts should call runtime APIs, not editor-style setProperty()."},
         {"vector4.new", "Doriax Lua constructors use Vector4(...), not Vector4.new(...)."},
