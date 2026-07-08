@@ -11,14 +11,37 @@ editor::RenameFileCmd::RenameFileCmd(Project* project, std::string oldName, std:
     this->directory = fs::path(directory);
 }
 
+void editor::RenameFileCmd::moveThumbnail(const fs::path& oldThumbnail, const fs::path& renamedFile){
+    if (!project || oldThumbnail.empty()) {
+        return;
+    }
+
+    std::error_code ec;
+    // Nothing to move when the file never had a cached thumbnail.
+    if (!fs::exists(oldThumbnail, ec) || ec) {
+        return;
+    }
+
+    fs::path newThumbnail = project->getThumbnailPath(renamedFile);
+    if (newThumbnail.empty() || newThumbnail == oldThumbnail) {
+        return;
+    }
+
+    fs::create_directories(newThumbnail.parent_path(), ec);
+    fs::rename(oldThumbnail, newThumbnail, ec);
+}
+
 bool editor::RenameFileCmd::execute(){
     fs::path sourceFs = directory / oldFilename;
     fs::path destFs = directory / newFilename;
     try {
         if (fs::exists(sourceFs)) {
             bool isDir = fs::is_directory(sourceFs);
+            // Resolve the thumbnail path before the rename, while the source still exists.
+            fs::path oldThumbnail = project ? project->getThumbnailPath(sourceFs) : fs::path();
             fs::rename(sourceFs, destFs);
             if (project) {
+                moveThumbnail(oldThumbnail, destFs);
                 std::string extension = sourceFs.extension().string();
                 if (isDir || Util::isMaterialFile(extension)) {
                     project->remapMaterialFilePath(sourceFs, destFs);
@@ -54,8 +77,11 @@ void editor::RenameFileCmd::undo(){
     try {
         if (fs::exists(sourceFs)) {
             bool isDir = fs::is_directory(sourceFs);
+            // Resolve the thumbnail path before the rename, while the source still exists.
+            fs::path oldThumbnail = project ? project->getThumbnailPath(sourceFs) : fs::path();
             fs::rename(sourceFs, destFs);
             if (project) {
+                moveThumbnail(oldThumbnail, destFs);
                 std::string extension = sourceFs.extension().string();
                 if (isDir || Util::isMaterialFile(extension)) {
                     project->remapMaterialFilePath(sourceFs, destFs);

@@ -155,6 +155,7 @@ editor::ResourcesWindow::ResourcesWindow(Project* project, CodeEditor* codeEdito
     this->isExternalDragHovering = false;
     this->clipboardCut = false;
     this->isRenaming = false;
+    this->renameSelectPending = false;
     this->isCreatingNewDirectory = false;
     this->timeSinceLastCheck = 0.0f;
     this->windowOpen = true;
@@ -939,6 +940,7 @@ void editor::ResourcesWindow::renderFileListing(bool showDirectories){
                 if (ImGui::MenuItem(ICON_FA_TRASH " Delete")) showDeleteConfirmation = true;
                 if (ImGui::MenuItem(ICON_FA_I_CURSOR " Rename")){
                     isRenaming = true;
+                    renameSelectPending = true;
                     fileBeingRenamed = file.name;
                     strncpy(nameBuffer, file.name.c_str(), sizeof(nameBuffer) - 1);
                     nameBuffer[sizeof(nameBuffer) - 1] = '\0';
@@ -1444,7 +1446,24 @@ void editor::ResourcesWindow::handleRename(){
 
         ImGui::SetNextItemWidth(-1);
 
-        bool enterPressed = ImGui::InputText("##rename", nameBuffer, sizeof(nameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+        // On the first frame, preselect the file name without its extension.
+        auto selectNameCallback = [](ImGuiInputTextCallbackData* data) -> int {
+            bool& pending = *static_cast<bool*>(data->UserData);
+            if (!pending) return 0;
+
+            std::string_view name(data->Buf, data->BufTextLen);
+            size_t dotPos = name.find_last_of('.');
+            // A leading dot means a hidden file with no extension: select everything.
+            int selEnd = (dotPos != std::string_view::npos && dotPos > 0) ? (int)dotPos : data->BufTextLen;
+
+            data->CursorPos = selEnd;
+            data->SelectionStart = 0;
+            data->SelectionEnd = selEnd;
+            pending = false;
+            return 0;
+        };
+
+        bool enterPressed = ImGui::InputText("##rename", nameBuffer, sizeof(nameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways, selectNameCallback, &renameSelectPending);
 
         // Calculate total width of the buttons
         float buttonWidth = 120.0f;

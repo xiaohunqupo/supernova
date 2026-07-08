@@ -19,6 +19,9 @@ namespace doriax::editor{
         fs::path newFilename;
         fs::path directory;
 
+        // Relocates the cached thumbnail so a rename doesn't force it to regenerate.
+        void moveThumbnail(const fs::path& oldThumbnail, const fs::path& renamedFile);
+
     public:
         RenameFileCmd(Project* project, std::string oldName, std::string newName, std::string directory);
 

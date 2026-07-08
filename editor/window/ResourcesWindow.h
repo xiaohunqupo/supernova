@@ -122,6 +122,7 @@ namespace doriax::editor {
         char nameBuffer[256];
 
         bool isRenaming;
+        bool renameSelectPending;
         std::string fileBeingRenamed;
 
         bool isCreatingNewDirectory;
