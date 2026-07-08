@@ -200,6 +200,7 @@ namespace doriax::editor{
         void updateWindowTitle(const std::string& projectName) override;
         void stopTransientPreviews() override;
         void saveAllCodeEditors() override;
+        void requestScenePlayFocus(uint32_t sceneId) override;
 
         void registerAlert(std::string title, std::string message) override;
         void registerAlert(std::string title, std::string message, std::string note); // note is rendered highlighted below the message

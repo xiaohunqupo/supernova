@@ -2519,6 +2519,7 @@ void editor::Project::finalizeStart(SceneProject* mainSceneProject, std::vector<
     if (mainSceneProject) {
         mainSceneProject->playState = ScenePlayState::PLAYING;
         mainSceneProject->needUpdateRender = true;
+        editor::getEditorHost().requestScenePlayFocus(mainSceneProject->id);
         editor::getEditorHost().resetLastActivatedScene();
         Out::success("Scene '%s' started", mainSceneProject->name.c_str());
     }
@@ -6179,6 +6180,7 @@ void editor::Project::start(uint32_t sceneId) {
 
     sceneProject->playState = ScenePlayState::LOADING;
     editor::getEditorHost().saveAllCodeEditors();
+    editor::getEditorHost().requestScenePlayFocus(sceneId);
 
     std::thread startupThread([this, session, sceneId]() {
         runPlayStartup(session, sceneId);
@@ -6251,6 +6253,7 @@ void editor::Project::resume(uint32_t sceneId) {
             }
             Engine::pauseGameEvents(false);
             sceneProject->playState = ScenePlayState::PLAYING;
+            editor::getEditorHost().requestScenePlayFocus(sceneId);
         }
         return;
     }

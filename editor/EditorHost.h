@@ -26,6 +26,7 @@ namespace doriax::editor {
         virtual void updateWindowTitle(const std::string& projectName);
         virtual void stopTransientPreviews();
         virtual void saveAllCodeEditors();
+        virtual void requestScenePlayFocus(uint32_t sceneId);
 
         virtual void registerAlert(std::string title, std::string message);
         virtual void registerConfirmAlert(std::string title, std::string message, std::function<void()> onYes, std::function<void()> onNo = nullptr);

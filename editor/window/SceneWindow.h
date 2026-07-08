@@ -39,6 +39,7 @@ namespace doriax::editor {
         std::map<uint32_t, bool> lookActive;
         std::map<uint32_t, ImVec2> lookReturnPos;
         std::map<uint32_t, float> walkSpeed;
+        std::map<uint32_t, bool> focusCanvasOnNextFrame;
 
         // Engine keys sent down during play but not yet released, and the
         // scene the play session belongs to. Engine Input state is static,
@@ -73,6 +74,7 @@ namespace doriax::editor {
         bool isFocused() const;
         void resetProjectState();
         void clearSceneState(uint32_t sceneId);
+        void requestPlayFocus(uint32_t sceneId);
 
         void focusOnEntities(SceneProject* sceneProject, const std::vector<Entity>& entities);
         bool viewThroughCamera(uint32_t sceneId, Entity cameraEntity);

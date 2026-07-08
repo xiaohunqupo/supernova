@@ -82,6 +82,7 @@ void editor::SceneWindow::resetProjectState() {
     lookActive.clear();
     lookReturnPos.clear();
     walkSpeed.clear();
+    focusCanvasOnNextFrame.clear();
     width.clear();
     height.clear();
     hasNotification.clear();
@@ -99,6 +100,7 @@ void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
     lookActive.erase(sceneId);
     lookReturnPos.erase(sceneId);
     walkSpeed.erase(sceneId);
+    focusCanvasOnNextFrame.erase(sceneId);
     width.erase(sceneId);
     height.erase(sceneId);
     hasNotification.erase(sceneId);
@@ -106,6 +108,17 @@ void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
     closeSceneQueue.erase(
         std::remove(closeSceneQueue.begin(), closeSceneQueue.end(), sceneId),
         closeSceneQueue.end());
+}
+
+void editor::SceneWindow::requestPlayFocus(uint32_t sceneId) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->opened) {
+        return;
+    }
+
+    project->setSelectedSceneId(sceneId);
+    focusCanvasOnNextFrame[sceneId] = true;
+    focusSceneWindow(*sceneProject);
 }
 
 bool editor::SceneWindow::viewThroughCamera(uint32_t sceneId, Entity cameraEntity) {
@@ -137,8 +150,7 @@ void editor::SceneWindow::stopViewingCamera(uint32_t sceneId) {
 }
 
 void editor::SceneWindow::focusSceneWindow(const SceneProject& sceneProject) const {
-    const std::string windowTitle = getWindowTitle(sceneProject);
-    ImGui::SetWindowFocus(windowTitle.c_str());
+    ImGui::SetWindowFocus(("###Scene" + std::to_string(sceneProject.id)).c_str());
 }
 
 std::string editor::SceneWindow::getWindowTitle(const SceneProject& sceneProject) const {
@@ -1837,6 +1849,13 @@ void editor::SceneWindow::show() {
 
             ImGui::BeginChild(("Canvas" + std::to_string(sceneProject.id)).c_str());
             {
+                if (focusCanvasOnNextFrame[sceneProject.id]) {
+                    ImGui::SetWindowFocus();
+                    focusCanvasOnNextFrame[sceneProject.id] = false;
+                    windowFocused = true;
+                    project->setSelectedSceneId(sceneProject.id);
+                }
+
                 int widthNew = ImGui::GetContentRegionAvail().x;
                 int heightNew = ImGui::GetContentRegionAvail().y;
 

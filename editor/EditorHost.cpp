@@ -45,6 +45,9 @@ void EditorHost::stopTransientPreviews() {
 void EditorHost::saveAllCodeEditors() {
 }
 
+void EditorHost::requestScenePlayFocus(uint32_t) {
+}
+
 void EditorHost::registerAlert(std::string title, std::string message) {
     if (!title.empty()) {
         Out::warning("%s: %s", title.c_str(), message.c_str());

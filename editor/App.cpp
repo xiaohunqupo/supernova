@@ -1435,6 +1435,19 @@ void editor::App::prepareForProjectSwitch() {
     dockspaceNeedsRebuild = true;
 }
 
+void editor::App::requestScenePlayFocus(uint32_t sceneId) {
+    if (!isMainThread()) {
+        enqueueMainThreadTask([this, sceneId]() {
+            requestScenePlayFocus(sceneId);
+        });
+        return;
+    }
+
+    if (sceneWindow) {
+        sceneWindow->requestPlayFocus(sceneId);
+    }
+}
+
 void editor::App::addNewCodeWindowToDock(fs::path path, bool force){
     if (isInitialized){
         dockTabWindow("###" + path.string(), force);
