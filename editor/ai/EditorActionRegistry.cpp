@@ -983,6 +983,26 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"scene_id", integerSchema("Scene id for scene scope. Omit to use the selected scene")}
             }),
             false
+        },
+        {
+            "search_engine_source",
+            "Grep the authoritative Doriax engine source (the real C++ headers and Lua binding files under the editor's engine/ tree) for exact ground-truth signatures, overloads, enum values, macros, and key codes. Prefer this over guessing: search_engine_api is a curated index that uses Lua-style names and omits C++ overloads, so verify real signatures here before writing engine API code. Note key codes are Input.KEY_* in Lua but D_KEY_* macros in C++.",
+            objectSchema({
+                {"query", stringSchema("Case-insensitive text to find in the engine source, e.g. 'Quaternion(', 'D_KEY_', 'isKeyPressed', 'setPosition'")},
+                {"path_filter", stringSchema("Optional substring the file path must contain, e.g. 'Input.h', 'math/', 'binding'")},
+                {"max_results", integerSchema("Maximum matching lines to return, 1-80. Defaults to 40")}
+            }, {"query"}),
+            true
+        },
+        {
+            "read_engine_source",
+            "Read a file from the authoritative Doriax engine source tree. Paths are relative to the engine/ root, e.g. core/math/Quaternion.h, core/Input.h, core/object/Object.h, or core/script/binding/CoreClassesLua.cpp. Use after search_engine_source to see full signatures and enums in context.",
+            objectSchema({
+                {"path", stringSchema("Engine-source-relative file path, e.g. core/math/Quaternion.h")},
+                {"start_line", integerSchema("Optional 1-based first line to return")},
+                {"end_line", integerSchema("Optional 1-based last line to return")}
+            }, {"path"}),
+            true
         }
     };
     return definitions;
@@ -1061,6 +1081,12 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
     }
     if (name == "search_engine_api") {
         return hasString(arguments, "query") ? ok() : fail("search_engine_api requires query.");
+    }
+    if (name == "search_engine_source") {
+        return hasString(arguments, "query") ? ok() : fail("search_engine_source requires query.");
+    }
+    if (name == "read_engine_source") {
+        return hasString(arguments, "path") ? ok() : fail("read_engine_source requires path.");
     }
     if (name == "inspect_entity" || name == "delete_entity" || name == "duplicate_entity") {
         return hasEntitySelector(arguments) ? ok() : fail(name + " requires entity_id or entity_name.");

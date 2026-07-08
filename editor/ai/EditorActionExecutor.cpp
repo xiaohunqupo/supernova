@@ -12,6 +12,7 @@
 #include "Exporter.h"
 #include "Stream.h"
 #include "util/ProjectUtils.h"
+#include "util/FileUtils.h"
 #include "component/Body3DComponent.h"
 #include "component/MeshComponent.h"
 #include "component/ScriptComponent.h"
@@ -445,22 +446,24 @@ std::string doriaxLuaScriptGuide(const std::string& className) {
            "(type strings: bool, int, float, string, vector2, vector3, vector4, color3, color4, entity); at runtime read/write them as self.<name>, e.g. self.speed. "
            "The engine injects self.scene and self.entity; self.entity is a numeric Entity id, not an object receiver. For an existing cube/shape, "
            "use local shape = Shape(self.scene, self.entity); shape:setColor(1.0, 0.0, 0.0, 1.0). "
-           "There is no Transform (or other component) global in Lua: to read or move an entity, wrap it with local obj = Object(self.scene, self.entity); "
-           "read obj.position (a Vector3 with .x/.y/.z) and write it with obj:setPosition(x, y, z) (likewise obj.rotation and obj.scale). "
-           "For keyboard/mouse input use the Input class, e.g. if Input.isKeyPressed(Input.KEY_LEFT) then ... end (KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_SPACE, etc.), and scale motion by Engine.deltatime. "
+           "There is no Transform (or other component) global in Lua: to read or move an entity, wrap it with local obj = Object(self.scene, self.entity) "
+           "then use obj.position / obj:setPosition(...) and similar (check the Object binding via read_engine_source for exact members). "
+           "For keyboard/mouse input use the Input class (Input.isKeyPressed(Input.KEY_LEFT), etc.), scaling motion by Engine.deltatime. "
            "Per-frame and input logic must be registered in :init() with the global RegisterEngineEvent(self, \"onUpdate\") and a matching function " + className + ":onUpdate() ... end; "
            "valid event names: onUpdate, onFixedUpdate, onDraw, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onTouchStart, onTouchMove, onTouchEnd. "
            "For component/UI events use the global RegisterEvent(self, eventObject, \"method\"), getting the event object from a wrapper, e.g. local b = Button(self.scene, self.entity); RegisterEvent(self, b:getButtonComponent().onPress, \"onPress\"). "
            "Engine state uses Lua properties, e.g. local dt = Engine.deltatime (not getDeltatime). No manual unregister is needed; the engine cleans up events when the script is destroyed. "
            "To print or log, use Log.print(\"text \" .. tostring(value)) (Log.warn/Log.error for severity), not bare print(). "
-           "Use search_engine_api for real signatures before writing engine API code.";
+           "Use ONLY APIs that actually exist in the Doriax engine source: search_engine_api is a quick index, and search_engine_source/read_engine_source read the real Lua bindings "
+           "(e.g. core/script/binding/CoreClassesLua.cpp, ObjectClassesLua.cpp). Confirm exact names there before writing them; if a symbol is not in that source it does not exist, so never invent APIs or borrow them from other engines.";
 }
 
 std::string doriaxCppScriptGuide(ScriptType type, const std::string& parentClass) {
     std::ostringstream guide;
     guide << "Doriax C++ scripts compile against flat engine API headers copied to .doriax/engine-api. "
           << "Use quoted includes such as \"Mesh.h\", \"ScriptBase.h\", \"Engine.h\", and \"ScriptProperty.h\". "
-          << "Never use #include <core/...> or #include \"core/...\". ";
+          << "Never use #include <core/...> or #include \"core/...\". "
+          << "A Doriax script class needs no class-declaration or reflection macro (no D_OBJECT/GDCLASS/GENERATED_BODY/Q_OBJECT): just inherit the base class and declare a (doriax::Scene*, doriax::Entity) constructor. Prefer editing the class skeleton create_script already generated rather than rewriting it from scratch. ";
     if (type == ScriptType::SCRIPT_CLASS) {
         guide << "cpp_script_class inherits doriax::ScriptBase for general entity logic. "
               << "Register frame callbacks with REGISTER_ENGINE_EVENT(onUpdate) in the constructor, "
@@ -472,9 +475,11 @@ std::string doriaxCppScriptGuide(ScriptType type, const std::string& parentClass
               << "Register frame callbacks with REGISTER_ENGINE_EVENT(onUpdate) in the constructor and unregister them in the destructor when using onUpdate(). "
               << "For mesh/cube color on a Mesh entity, prefer cpp_subclass extending Mesh (or Shape), not ScriptBase.";
     }
-    guide << " To print or log, include \"Log.h\" and call Log::print(\"pos %f %f %f\", p.x, p.y, p.z) (Log::warn/Log::error for severity); Engine has no log method, and do not use printf or std::cout. "
+    guide << " Use ONLY C++ symbols (types, methods, macros, enums, overloads) that exist in the Doriax engine source; if it is not in the source it does not exist, so never invent it or borrow it from another engine. For exact signatures, overloads, enum values, and macros, grep the real headers with search_engine_source and read them with read_engine_source (e.g. core/Input.h, core/math/Quaternion.h) instead of guessing from search_engine_api, which uses Lua-style names and omits C++ overloads. Watch the common trap: keyboard key codes in C++ are D_KEY_* macros from \"Input.h\" (Input::KEY_* is Lua-only), so look up the exact macro and any constructor overloads (e.g. Quaternion) in source before using them. "
+          << "Verified entity-control recipe: on an Object wrapper (Object obj(getScene(), getEntity()), or directly on this in a cpp_subclass) read obj.getPosition()/obj.getRotation() and write obj.setPosition(x, y, z)/obj.setRotation(q). Object has NO getForward()/getDirection(); get a facing vector by rotating a basis vector with the rotation, e.g. Vector3 forward = obj.getRotation() * Vector3(0, 0, -1) (Quaternion also has xAxis()/yAxis()/zAxis()). Build an axis-angle rotation with the ANGLE FIRST: Quaternion(float angleRadians, const Vector3& axis), e.g. Quaternion(speed * Engine::getDeltatime(), Vector3(0, 1, 0)) -- never Quaternion(axis, angle). "
+          << "To print or log, include \"Log.h\" and call Log::print(\"pos %f %f %f\", p.x, p.y, p.z) (Log::warn/Log::error for severity); Engine has no log method, and do not use printf or std::cout. "
           << "For component/UI events (button press, click, scrollbar change, etc.) subscribe in the constructor with REGISTER_COMPONENT_EVENT(Component, event, method) or its shortcuts REGISTER_UI_EVENT/REGISTER_BUTTON_EVENT/REGISTER_SCROLLBAR_EVENT/REGISTER_PANEL_EVENT, and pair each with its UNREGISTER_* in the destructor; search_engine_api for the exact macro and the component's event names. "
-          << "Call search_engine_api for real signatures before writing engine API code. "
+          << "Use search_engine_api for a quick symbol overview, but confirm exact signatures against the real source (search_engine_source/read_engine_source) before writing engine API code. "
           << "DPROPERTY(\"Name\") exposes a public member as an editor property (optional; removing it clears stale editor properties); DPROPERTY(\"Name\", Type) forces the editor type such as Color3/Color4.";
     return guide.str();
 }
@@ -533,6 +538,10 @@ std::string validateDoriaxCppScriptContent(const std::string& content) {
         {"void oninit", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onInit()."},
         {"on_start", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not on_start()."},
         {"onstart(", "Doriax C++ scripts use onUpdate() with REGISTER_ENGINE_EVENT, not onStart()."},
+        {"d_object(", "Doriax C++ script classes use no class-declaration or reflection macro. Delete D_OBJECT; just inherit the base class (e.g. doriax::ScriptBase) and declare a (doriax::Scene*, doriax::Entity) constructor. DPROPERTY only marks editor properties."},
+        {"gdclass(", "Doriax is not Godot: there is no GDCLASS macro. Inherit the base class (e.g. doriax::ScriptBase) and declare a (doriax::Scene*, doriax::Entity) constructor; no class-registration macro exists."},
+        {"generated_body(", "Doriax is not Unreal: there is no GENERATED_BODY macro. Inherit the base class (e.g. doriax::ScriptBase) and declare a (doriax::Scene*, doriax::Entity) constructor; no class-registration macro exists."},
+        {"q_object", "Doriax script classes use no Q_OBJECT or any class-registration macro. Inherit the base class (e.g. doriax::ScriptBase) and declare a (doriax::Scene*, doriax::Entity) constructor."},
         {"engine::log", "Engine has no log method. Include \"Log.h\" and use Log::print(\"value %f\", x) (Log::warn/Log::error for severity)."}
     };
 
@@ -1176,6 +1185,8 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "inspect_component") return inspectComponent(arguments);
     if (name == "list_component_types") return listComponentTypes();
     if (name == "search_engine_api") return searchEngineApi(arguments);
+    if (name == "search_engine_source") return searchEngineSource(arguments);
+    if (name == "read_engine_source") return readEngineSource(arguments);
     if (name == "create_entity") return createEntity(arguments);
     if (name == "set_entity_transform") return setEntityTransform(arguments);
     if (name == "rename_entity") return renameEntity(arguments);
@@ -3131,6 +3142,117 @@ ActionResult EditorActionExecutor::readResourceFile(const Json& arguments) {
                     Json{{"path", rel.lexically_normal().generic_string()},
                          {"bytes", content.size()},
                          {"content", content}});
+}
+
+static bool isEngineSourceExt(const std::string& ext) {
+    static const std::set<std::string> allowed = {
+        ".h", ".hpp", ".inl", ".cpp", ".cc", ".c", ".lua"
+    };
+    return allowed.count(ext) > 0;
+}
+
+ActionResult EditorActionExecutor::searchEngineSource(const Json& arguments) {
+    const std::string rawQuery = arguments.value("query", "");
+    if (rawQuery.empty()) return failResult("search_engine_source requires a non-empty query.");
+    const std::string query = lower(rawQuery);
+    const std::string pathFilter = lower(arguments.value("path_filter", ""));
+    int maxResults = arguments.value("max_results", 40);
+    maxResults = std::max(1, std::min(80, maxResults));
+
+    const fs::path engineRoot = FileUtils::getExecutableDir() / "engine";
+    if (!fs::exists(engineRoot)) {
+        return failResult("Engine source not found next to the editor (expected <editor>/engine).");
+    }
+    // core/ holds the scriptable API surface (math, object, input, components, bindings);
+    // skip the huge third-party libs/ tree so results stay fast and relevant.
+    fs::path searchRoot = engineRoot / "core";
+    if (!fs::exists(searchRoot)) searchRoot = engineRoot;
+
+    Json matches = Json::array();
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(searchRoot, fs::directory_options::skip_permission_denied, ec), end;
+         it != end && !ec && static_cast<int>(matches.size()) < maxResults;
+         it.increment(ec)) {
+        const fs::path path = it->path();
+        if (it->is_directory(ec)) {
+            const std::string dir = path.filename().string();
+            if (dir == "libs" || dir == "build" || dir == ".git") it.disable_recursion_pending();
+            continue;
+        }
+        if (!isEngineSourceExt(lower(path.extension().string()))) continue;
+
+        fs::path rel = fs::relative(path, engineRoot, ec);
+        if (ec) continue;
+        const std::string relText = rel.generic_string();
+        if (!pathFilter.empty() && lower(relText).find(pathFilter) == std::string::npos) continue;
+
+        std::string content;
+        if (!readWholeFile(path, content)) continue;
+        if (content.size() > 1024 * 1024) continue; // skip very large files
+
+        std::istringstream stream(content);
+        std::string line;
+        int lineNo = 0;
+        while (std::getline(stream, line) && static_cast<int>(matches.size()) < maxResults) {
+            ++lineNo;
+            if (lower(line).find(query) == std::string::npos) continue;
+            size_t start = line.find_first_not_of(" \t");
+            std::string trimmed = (start == std::string::npos) ? line : line.substr(start);
+            if (trimmed.size() > 240) trimmed = trimmed.substr(0, 240) + " ...";
+            matches.push_back({{"path", relText}, {"line", lineNo}, {"text", trimmed}});
+        }
+    }
+
+    return okResult("Found " + std::to_string(matches.size()) +
+                    " engine source match(es). Use read_engine_source for full context.",
+                    Json{{"matches", matches}});
+}
+
+ActionResult EditorActionExecutor::readEngineSource(const Json& arguments) {
+    if (!arguments.contains("path") || !arguments["path"].is_string()) {
+        return failResult("read_engine_source requires path.");
+    }
+    fs::path rel = fs::path(arguments["path"].get<std::string>()).lexically_normal();
+    if (!PathUtils::isSafeRelativePath(rel)) {
+        return failResult("path must be a safe engine-source-relative path, e.g. core/math/Quaternion.h.");
+    }
+    if (!isEngineSourceExt(lower(rel.extension().string()))) {
+        return failResult("read_engine_source only reads engine source files (.h, .hpp, .inl, .cpp, .lua).");
+    }
+
+    const fs::path engineRoot = FileUtils::getExecutableDir() / "engine";
+    const fs::path fullPath = engineRoot / rel;
+    if (!fs::exists(fullPath)) {
+        return failResult("Engine source file not found: " + rel.generic_string());
+    }
+
+    std::string content;
+    if (!readWholeFile(fullPath, content)) return failResult("Failed to open engine source file.");
+
+    const int startLine = arguments.value("start_line", 0);
+    const int endLine = arguments.value("end_line", 0);
+    if (startLine > 0 || endLine > 0) {
+        std::istringstream stream(content);
+        std::string line;
+        int lineNo = 0;
+        std::string slice;
+        while (std::getline(stream, line)) {
+            ++lineNo;
+            if (startLine > 0 && lineNo < startLine) continue;
+            if (endLine > 0 && lineNo > endLine) break;
+            slice += line;
+            slice += '\n';
+        }
+        content = slice;
+    }
+
+    constexpr size_t kMaxBytes = 256 * 1024;
+    if (content.size() > kMaxBytes) {
+        content = content.substr(0, kMaxBytes) + "\n... (truncated)";
+    }
+
+    return okResult("Read engine source file.",
+                    Json{{"path", rel.generic_string()}, {"content", content}});
 }
 
 ActionResult EditorActionExecutor::setMainCamera(const Json& arguments) {
