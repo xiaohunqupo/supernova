@@ -1688,7 +1688,7 @@ void editor::ResourcesWindow::thumbnailWorker() {
             try {
                 // Run the load under the async-thread flag: building the multi-node child-entity
                 // hierarchy mutates the ECS, which is only safe on the main thread, so off-thread the
-                // loader flattens into one mesh instead (per-node transforms are lost for the preview).
+                // loader bakes node transforms into one static preview mesh instead.
                 // GPU work is deferred to the main thread; ModelRender frames whatever entities exist.
                 // Cap texture decode resolution too: a 128px preview never needs full 4K maps.
                 Engine::AsyncThreadScope loadAsyncScope;

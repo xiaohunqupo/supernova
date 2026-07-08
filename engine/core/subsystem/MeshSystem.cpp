@@ -2783,20 +2783,17 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         if (model.gltfModel->nodes[nodeIdx].skin >= 0) { anyNodeSkinned = true; break; }
     }
     // Building the child entities mutates the ECS, which is only safe on the main thread. Off-thread
-    // loads (e.g. the ResourcesWindow thumbnail worker) flatten into the root mesh instead — building
-    // the hierarchy there corrupts the registry's component maps.
+    // loads (e.g. the ResourcesWindow thumbnail worker) bake/flatten into the root mesh instead —
+    // building the hierarchy there corrupts the registry's component maps.
     bool useChildEntities = (meshNodes.size() > 1) && !Engine::isAsyncThread();
 
-    // Off-thread preview of a multi-node model can't build child entities, so instead bake each
-    // node's world transform into its (flattened) vertices. This keeps the preview laid out correctly
-    // without touching the ECS. Skinned nodes ignore their transform, so they are never baked — they
-    // stay flattened in bind pose for the preview. Not used for the real scene load (child entities).
-    bool bakingFlatten = (meshNodes.size() > 1) && !anyNodeSkinned && !useChildEntities;
-
-    if (meshNodes.size() > 1 && !useChildEntities && !bakingFlatten) {
-        Log::verbose("GLTF model (%s) has %zu skinned mesh nodes loaded off-thread; flattening to submeshes on one entity for preview",
-                     filename.c_str(), meshNodes.size());
-    }
+    // Off-thread previews cannot safely build child/skeleton entities, so bake glTF node globals into
+    // a flat static mesh instead. Skinned nodes are baked too, but a skinned mesh node's own transform
+    // is ignored (the skeleton drives it): in bind pose the on-thread render collapses every joint to
+    // the model root global `matrix`, so that is what gets baked — reproducing the scene layout without
+    // a live skeleton. Non-skinned nodes bake their own global transform. (Async is always the flatten
+    // path, so useChildEntities is already false here.)
+    bool bakingFlatten = Engine::isAsyncThread() && (meshNodes.size() > 1 || anyNodeSkinned);
 
     if (meshNode < 0) {
         meshNode = meshNodes[0];
@@ -2899,7 +2896,12 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         Matrix4 nodeBakeMatrix;
         Matrix3 nodeBakeNormalMatrix;
         if (bakingFlatten) {
-            nodeBakeMatrix = getGLTFMeshGlobalMatrix(nodeIdx, model, nodesParent);
+            // A skinned mesh node ignores its own transform (the skeleton drives it); the on-thread
+            // render collapses its bind pose to the model root global `matrix`, so bake that. Non-skinned
+            // nodes are placed by their own global transform.
+            nodeBakeMatrix = (model.gltfModel->nodes[nodeIdx].skin >= 0)
+                                 ? matrix
+                                 : getGLTFMeshGlobalMatrix(nodeIdx, model, nodesParent);
             nodeBakeNormalMatrix = nodeBakeMatrix.linear().inverse(1e-6f).transpose();
         }
 
@@ -3116,6 +3118,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 int attrBufferView = accessor.bufferView;
                 size_t attrByteOffset = accessor.byteOffset;
                 int byteStride = accessor.ByteStride(model.gltfModel->bufferViews[accessor.bufferView]);
+                if (bakingFlatten && (attrib.first == "JOINTS_0" || attrib.first == "WEIGHTS_0")) {
+                    continue; // baked preview is static geometry; drop the skinning attributes
+                }
                 if (bakingFlatten && (attrib.first == "POSITION" || attrib.first == "NORMAL")) {
                     int baked = bakeGLTFTransformedAttribute(accessor, nodeBakeMatrix, nodeBakeNormalMatrix,
                                                              attrib.first == "NORMAL", model);
@@ -3403,18 +3408,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             }
 
             if (Engine::isAsyncThread()) {
-                // Off-thread preview built no skeleton (above), so pose the skinned mesh into bind pose
-                // by hand instead of leaving bonesMatrix at identity. In bind pose every joint's skin
-                // matrix collapses to the SAME value, inverse(matrix): the armature transform `matrix`
-                // carried on the root cancels per-bone, so worldVertex = matrix * inverse(matrix) * raw
-                // = raw — matching the on-thread scene render and the inverse(matrix)*raw bind-pose AABB.
-                // Leaving identity would instead render matrix*raw (here a 0.01-scale speck) while the
-                // camera frames raw → an empty thumbnail. Async is always the flatten path, so the
-                // skinned geometry lives on the root entity's mesh.
-                MeshComponent& rootMesh = scene->getComponent<MeshComponent>(entity);
-                Matrix4 bindSkin = matrix.inverse();
-                for (int b = 0; b < MAX_BONES; b++)
-                    rootMesh.bonesMatrix[b] = bindSkin;
+                // Off-thread skinned previews are baked into static geometry above (skinning attributes
+                // dropped), so there is no skeleton to pose and bonesMatrix stays at the identity it was
+                // reset to at load start. Just refresh the transform so the preview gets framed.
                 transform.needUpdate = true;
             } else if (model.skeleton != NULL_ENTITY) {
                 // Repopulate bonesMatrix before the first render frame. loadGLTF reset every bonesMatrix
@@ -3659,7 +3655,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
         calculateMeshAABB(mesh);
 
-        if (anyNodeSkinned)
+        if (anyNodeSkinned && !bakingFlatten)
             applySkinnedBindPoseAABB(mesh, matrix);
 
         if (mesh.loaded)
