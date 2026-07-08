@@ -42,6 +42,11 @@ namespace doriax::editor {
         static void setOutputWindow(OutputWindow* outputWindow);
         static OutputWindow* getOutputWindow();
 
+        // Recent output-window log as prefixed text (oldest-first). onlyProblems keeps
+        // Error/Warning/Build entries. Empty if no output window is attached. Call on
+        // the main thread. Used by the AI to read build/runtime errors from the log.
+        static std::string getRecentLog(size_t maxEntries, bool onlyProblems);
+
         // Basic logging methods
         static void info(const std::string& message);
         static void success(const std::string& message);

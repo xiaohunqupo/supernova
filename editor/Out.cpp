@@ -33,6 +33,13 @@ OutputWindow* Out::getOutputWindow() {
     return outputWindow;
 }
 
+std::string Out::getRecentLog(size_t maxEntries, bool onlyProblems) {
+    if (OutputWindow* window = getOutputWindow()) {
+        return window->getRecentLogText(maxEntries, onlyProblems);
+    }
+    return {};
+}
+
 void Out::info(const std::string& message) {
     logMessage(LogType::Info, message, "[INFO] ", std::cout);
 }

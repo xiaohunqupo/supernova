@@ -35,6 +35,7 @@ private:
     ActionResult searchEngineApi(const Json& arguments);
     ActionResult searchEngineSource(const Json& arguments);
     ActionResult readEngineSource(const Json& arguments);
+    ActionResult readOutputLog(const Json& arguments);
     ActionResult createEntity(const Json& arguments);
     ActionResult setEntityTransform(const Json& arguments);
     ActionResult renameEntity(const Json& arguments);

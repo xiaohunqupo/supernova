@@ -1003,6 +1003,15 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"end_line", integerSchema("Optional 1-based last line to return")}
             }, {"path"}),
             true
+        },
+        {
+            "read_output_log",
+            "Read the editor's recent output log: build/compiler messages, warnings, errors, and runtime script crashes. Use this to VERIFY a script after starting the scene with control_play_mode -- a C++ compile error appears here as a build failure ('C++ script build failed' plus compiler output), and a Lua or C++ runtime error appears as a 'Script crash in scene ...' entry. If you see errors, stop play, fix the script, and verify again.",
+            objectSchema({
+                {"max_lines", integerSchema("Maximum number of recent log entries to return, 1-600. Defaults to 150")},
+                {"errors_only", boolSchema("When true, return only error/warning/build entries")}
+            }),
+            true
         }
     };
     return definitions;
@@ -1087,6 +1096,9 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
     }
     if (name == "read_engine_source") {
         return hasString(arguments, "path") ? ok() : fail("read_engine_source requires path.");
+    }
+    if (name == "read_output_log") {
+        return ok();
     }
     if (name == "inspect_entity" || name == "delete_entity" || name == "duplicate_entity") {
         return hasEntitySelector(arguments) ? ok() : fail(name + " requires entity_id or entity_name.");

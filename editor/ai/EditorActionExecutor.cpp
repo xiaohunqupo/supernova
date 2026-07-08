@@ -480,7 +480,8 @@ std::string doriaxCppScriptGuide(ScriptType type, const std::string& parentClass
           << "To print or log, include \"Log.h\" and call Log::print(\"pos %f %f %f\", p.x, p.y, p.z) (Log::warn/Log::error for severity); Engine has no log method, and do not use printf or std::cout. "
           << "For component/UI events (button press, click, scrollbar change, etc.) subscribe in the constructor with REGISTER_COMPONENT_EVENT(Component, event, method) or its shortcuts REGISTER_UI_EVENT/REGISTER_BUTTON_EVENT/REGISTER_SCROLLBAR_EVENT/REGISTER_PANEL_EVENT, and pair each with its UNREGISTER_* in the destructor; search_engine_api for the exact macro and the component's event names. "
           << "Use search_engine_api for a quick symbol overview, but confirm exact signatures against the real source (search_engine_source/read_engine_source) before writing engine API code. "
-          << "DPROPERTY(\"Name\") exposes a public member as an editor property (optional; removing it clears stale editor properties); DPROPERTY(\"Name\", Type) forces the editor type such as Color3/Color4.";
+          << "DPROPERTY(\"Name\") exposes a public member as an editor property (optional; removing it clears stale editor properties); DPROPERTY(\"Name\", Type) forces the editor type such as Color3/Color4. "
+          << "After writing the .h and .cpp, verify the script actually works: start the scene with control_play_mode (action=start), then read_output_log to check for a C++ build failure (compiler errors) or a runtime 'Script crash'. If it is still building, read_output_log again. If there are errors, stop play, fix with update_script_file, and verify again -- repeat until the log is clean, then stop play, before telling the user the script is ready.";
     return guide.str();
 }
 
@@ -1187,6 +1188,7 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "search_engine_api") return searchEngineApi(arguments);
     if (name == "search_engine_source") return searchEngineSource(arguments);
     if (name == "read_engine_source") return readEngineSource(arguments);
+    if (name == "read_output_log") return readOutputLog(arguments);
     if (name == "create_entity") return createEntity(arguments);
     if (name == "set_entity_transform") return setEntityTransform(arguments);
     if (name == "rename_entity") return renameEntity(arguments);
@@ -2509,10 +2511,18 @@ ActionResult EditorActionExecutor::updateScriptFile(const Json& arguments) {
     }
     Out::info("AI updated script file: %s", relString.c_str());
 
-    return okResult("Updated script file.",
+    const std::string verifyStep =
+        "Verify this change before telling the user it works: start the scene with "
+        "control_play_mode (action=start), then read_output_log to check for a C++ build "
+        "failure or a runtime 'Script crash'. If it is still building, read_output_log again. "
+        "If there are errors, fix them with update_script_file and verify again; when the log "
+        "is clean, stop play with control_play_mode (action=stop).";
+
+    return okResult("Updated script file. Now verify it by running the scene (see next_step).",
                     Json{{"path", relString},
                          {"bytes", content.size()},
-                         {"refreshed_script_components", refreshedComponents}});
+                         {"refreshed_script_components", refreshedComponents},
+                         {"next_step", verifyStep}});
 }
 
 ActionResult EditorActionExecutor::createBundleFromEntity(const Json& arguments) {
@@ -3253,6 +3263,21 @@ ActionResult EditorActionExecutor::readEngineSource(const Json& arguments) {
 
     return okResult("Read engine source file.",
                     Json{{"path", rel.generic_string()}, {"content", content}});
+}
+
+ActionResult EditorActionExecutor::readOutputLog(const Json& arguments) {
+    int maxLines = arguments.value("max_lines", 150);
+    maxLines = std::max(1, std::min(600, maxLines));
+    const bool errorsOnly = arguments.value("errors_only", false);
+
+    std::string log = Out::getRecentLog(static_cast<size_t>(maxLines), errorsOnly);
+
+    constexpr size_t kMaxBytes = 24 * 1024;
+    if (log.size() > kMaxBytes) {
+        log = "... (older output truncated)\n" + log.substr(log.size() - kMaxBytes);
+    }
+
+    return okResult("Recent editor output log.", Json{{"log", log}});
 }
 
 ActionResult EditorActionExecutor::setMainCamera(const Json& arguments) {

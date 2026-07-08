@@ -214,6 +214,28 @@ static std::string getTypePrefixString(LogType type) {
     }
 }
 
+std::string OutputWindow::getRecentLogText(size_t maxEntries, bool onlyProblems) const {
+    if (maxEntries == 0) return {};
+
+    // Walk from the newest entry backwards, collecting up to maxEntries.
+    std::vector<const LogData*> selected;
+    for (auto it = logs.rbegin(); it != logs.rend() && selected.size() < maxEntries; ++it) {
+        if (onlyProblems && it->type != LogType::Error && it->type != LogType::Warning && it->type != LogType::Build) {
+            continue;
+        }
+        selected.push_back(&(*it));
+    }
+
+    // Emit oldest-first so the text reads in chronological order.
+    std::string out;
+    for (auto it = selected.rbegin(); it != selected.rend(); ++it) {
+        out += getTypePrefixString((*it)->type);
+        out += (*it)->message;
+        out.push_back('\n');
+    }
+    return out;
+}
+
 void OutputWindow::rebuildBuffer(float wrapWidth) {
     if (!ImGui::GetCurrentContext() || !ImGui::GetCurrentWindow()) {
         return;
