@@ -73,16 +73,18 @@ bool looksLikeMainOpenAiChatModel(const std::string& id, int64_t created, int64_
     const std::string token = lower(id);
     if (!looksLikeOpenAiChatFamily(token)) return false;
 
+    // Keep chat aliases (including *-preview). Drop specialized modalities and
+    // non-chat endpoints that share the gpt-/o* namespace.
     if (containsAny(token, {
             "audio", "batch", "computer-use", "dall-e", "edit", "embedding",
-            "image", "instruct", "moderation", "preview", "realtime",
+            "image", "instruct", "moderation", "realtime",
             "search", "transcribe", "tts", "vision", "whisper"
         })) {
         return false;
     }
 
     // Provider model lists expose both aliases and dated snapshots. The aliases
-    // are the stable "main" entries users normally want in a picker.
+    // (stable and preview) are the entries users normally want in a picker.
     if (containsIsoDateToken(token) || containsCompactDateToken(token)) {
         return false;
     }
@@ -98,19 +100,27 @@ bool looksLikeMainOpenAiChatModel(const std::string& id, int64_t created, int64_
 }
 
 bool looksLikeMainGeminiModel(const std::string& id) {
-    static const char* mainModels[] = {
-        "gemini-3.5-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite"
-    };
-    for (const char* model : mainModels) {
-        if (id == model) {
-            return true;
-        }
+    const std::string token = lower(id);
+    if (!startsWithAny(token, {"gemini-"})) return false;
+
+    // Specialized / non-chat modalities stay out of the picker.
+    if (containsAny(token, {
+            "audio", "computer-use", "deep-research", "embedding", "image",
+            "imagen", "live", "lyria", "nano-banana", "robotics", "tts", "veo"
+        })) {
+        return false;
     }
-    return false;
+
+    // Main chat families: pro / flash / flash-lite, including -preview aliases.
+    if (!containsAny(token, {"-pro", "-flash"})) return false;
+
+    // Dated snapshots (e.g. gemini-2.5-flash-preview-09-2025) are noisy; keep
+    // undated stable and preview ids.
+    if (containsIsoDateToken(token) || containsCompactDateToken(token)) {
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace
