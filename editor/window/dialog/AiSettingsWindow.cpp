@@ -33,6 +33,7 @@ void AiSettingsWindow::open(ai::AiService* service) {
 
     ai::Settings settings = AppSettings::getAiSettings();
     m_maxOutputTokens = settings.maxOutputTokens;
+    m_maxToolRounds = settings.maxToolRounds;
     std::snprintf(m_endpointBuffer.data(), m_endpointBuffer.size(), "%s", settings.customEndpoint.c_str());
     for (auto& buffer : m_keyBuffers) {
         buffer.fill('\0');
@@ -54,6 +55,7 @@ void AiSettingsWindow::apply() {
     ai::Settings settings = AppSettings::getAiSettings();
     settings.customEndpoint = m_endpointBuffer.data();
     settings.maxOutputTokens = std::clamp(m_maxOutputTokens, 256, 16000);
+    settings.maxToolRounds = std::clamp(m_maxToolRounds, 1, 100);
     AppSettings::setAiSettings(settings);
     if (m_service) {
         m_service->setSettings(settings);
@@ -192,6 +194,24 @@ void AiSettingsWindow::drawSettings() {
     ImGui::SetNextItemWidth(-1);
     ImGui::InputInt("##MaxOutput", &m_maxOutputTokens, 256, 1024);
     m_maxOutputTokens = std::clamp(m_maxOutputTokens, 256, 16000);
+
+    // Max tool steps (agent loop continuations after tool results)
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Max Tool Steps");
+    ImGui::SetItemTooltip(
+        "How many model turns that request tools are allowed per user message. "
+        "Raise this if you see \"Reached the tool-step limit\" on long tasks.");
+    if (m_maxToolRounds != defaults.maxToolRounds &&
+        resetToDefaultButton("reset_maxtoolrounds",
+                             "Reset to default (" + std::to_string(defaults.maxToolRounds) + ")")) {
+        m_maxToolRounds = defaults.maxToolRounds;
+    }
+    ImGui::TableNextColumn();
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputInt("##MaxToolRounds", &m_maxToolRounds, 1, 4);
+    m_maxToolRounds = std::clamp(m_maxToolRounds, 1, 100);
 
     ImGui::EndTable();
 

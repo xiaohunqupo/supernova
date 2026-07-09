@@ -40,6 +40,10 @@ struct Settings {
     // cap truncates the call mid-JSON and the partial call is dropped (looks like an empty
     // reply). Output tokens are only billed when generated, so a high cap is safe.
     int maxOutputTokens = 8192;
+    // One "round" is a model turn that requests tools (results are fed back on the next).
+    // Script tasks that ground in engine source (inspect + several searches + write + verify)
+    // need enough headroom to finish in one user message.
+    int maxToolRounds = 24;
 };
 
 struct ToolCall {

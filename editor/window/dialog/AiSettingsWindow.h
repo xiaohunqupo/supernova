@@ -22,6 +22,7 @@ private:
     std::array<bool, kProviderCount> m_keySet{};
     std::array<char, 512> m_endpointBuffer{};
     int m_maxOutputTokens = 8192;
+    int m_maxToolRounds = 24;
 
     void drawSettings();
     void refreshKeyState();

@@ -238,8 +238,9 @@ void AiService::update() {
     bool dispatch = false;
     {
         std::lock_guard<std::mutex> lock(mutex);
-        if (!needsContinuationLocked() || toolRounds >= kMaxToolRounds) {
-            if (needsContinuationLocked() && toolRounds >= kMaxToolRounds) {
+        const int maxRounds = std::max(1, settings.maxToolRounds);
+        if (!needsContinuationLocked() || toolRounds >= maxRounds) {
+            if (needsContinuationLocked() && toolRounds >= maxRounds) {
                 appendAssistantMessageLocked(
                     "Reached the tool-step limit for this request. Send another message to continue.");
                 finishTurnLocked(false);

@@ -141,6 +141,7 @@ bool AppSettings::loadSettings() {
             if (aiNode["custom_endpoint"]) aiSettings.customEndpoint = aiNode["custom_endpoint"].as<std::string>();
             if (aiNode["approval_mode"]) aiSettings.approvalMode = ai::approvalModeFromString(aiNode["approval_mode"].as<std::string>());
             if (aiNode["max_output_tokens"]) aiSettings.maxOutputTokens = aiNode["max_output_tokens"].as<int>();
+            if (aiNode["max_tool_rounds"]) aiSettings.maxToolRounds = aiNode["max_tool_rounds"].as<int>();
             if (aiSettings.model.empty()) {
                 aiSettings.model = ai::defaultModelForProvider(aiSettings.provider);
             }
@@ -213,6 +214,7 @@ bool AppSettings::saveSettings() {
         aiNode["custom_endpoint"] = aiSettings.customEndpoint;
         aiNode["approval_mode"] = ai::toString(aiSettings.approvalMode);
         aiNode["max_output_tokens"] = aiSettings.maxOutputTokens;
+        aiNode["max_tool_rounds"] = aiSettings.maxToolRounds;
         settingsData["ai_assistant"] = aiNode;
 
         // Save to file

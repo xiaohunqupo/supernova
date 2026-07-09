@@ -42,13 +42,6 @@ public:
     const HttpClient& getHttpClient() const { return httpClient; }
 
 private:
-    // One "round" is a model turn that requests tools (results are fed back on the next).
-    // Grounding scripts in the engine source (inspect + create_script + several
-    // search_engine_source/read_engine_source lookups + write + verify) easily needs more
-    // than a handful, so keep enough headroom that a normal script task finishes in one
-    // request instead of stalling on the tool-step limit.
-    static constexpr int kMaxToolRounds = 24;
-
     mutable std::mutex mutex;
     Settings settings;
     std::vector<ChatMessage> messages;
