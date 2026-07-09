@@ -784,20 +784,32 @@ void AiChatWindow::prefetchModels() {
     }
 }
 
-void AiChatWindow::show() {
-    if (!windowOpen) {
-        isWindowVisible = false;
-        return;
-    }
-
+void AiChatWindow::update() {
     if (!syncedInitialSettings) {
         service.setSettings(AppSettings::getAiSettings());
         syncedInitialSettings = true;
     }
     loadLatestConversationForCurrentProject();
 
-    if (!isWindowVisible) {
-        updateMessageNotification();
+    // Drive the agent loop even when the panel is closed/collapsed or the OS
+    // window is minimized: auto-run eligible proposals, then continue any
+    // follow-up request triggered by completed tool results.
+    if (!service.isBusy()) {
+        autoRunProposals();
+        service.update();
+        persistConversation();
+    }
+    updateMessageNotification();
+}
+
+void AiChatWindow::show() {
+    // Always pump first so in-flight requests keep progressing when the tab is
+    // hidden, collapsed, or the editor window is not focused.
+    update();
+
+    if (!windowOpen) {
+        isWindowVisible = false;
+        return;
     }
 
     if (focusRequested) {
@@ -815,7 +827,6 @@ void AiChatWindow::show() {
         if (hasNotification) App::popTabNotificationStyle();
         windowFocused = false;
         isWindowVisible = false;
-        updateMessageNotification();
         ImGui::End();
         settingsWindow.show();
         return;
@@ -825,15 +836,6 @@ void AiChatWindow::show() {
     isWindowVisible = true;
     hasNotification = false;
     windowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-
-    // Drive the agent loop: auto-run eligible proposals, then let the service
-    // send any follow-up request triggered by completed tool results.
-    if (!service.isBusy()) {
-        autoRunProposals();
-        service.update();
-        updateMessageNotification();
-        persistConversation();
-    }
 
     drawHeader();
     ImGui::Separator();

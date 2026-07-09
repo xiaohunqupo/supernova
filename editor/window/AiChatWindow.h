@@ -122,6 +122,11 @@ public:
 
     AiChatWindow(Project* project, ResourcesWindow* resourcesWindow);
 
+    // Advances the agent loop (tool continuations, auto-run, persistence).
+    // Safe to call every frame even when the panel is closed, collapsed, or
+    // the OS window is minimized — the HTTP worker is independent of focus.
+    void update();
+
     void show();
     void setOpen(bool open);
     bool isOpen() const;

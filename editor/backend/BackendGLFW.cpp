@@ -160,41 +160,78 @@ int editor::Backend::init(int argc, char* argv[]) {
     });
 
     // Main loop
+    int currentSwapInterval = 1;
+    bool prevFocused = true;
     while (!glfwWindowShouldClose(window)) {
         // Poll and handle events
         glfwPollEvents();
+
+        // Skip presenting while iconified: SwapBuffers can block on Wayland and
+        // stall clipboard + AI. Keep polling/updating so both keep working.
+        const bool iconified = glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0;
+
+        // With vsync on, SwapBuffers can block waiting for a frame callback the
+        // compositor won't send while the window is unfocused/occluded, which
+        // stalls the event loop that serves clipboard paste requests. Keep vsync
+        // while focused (smooth, uncapped to refresh) and drop it when unfocused
+        // so swap never blocks; a short sleep below then paces the idle loop.
+        const bool focused = glfwGetWindowAttrib(window, GLFW_FOCUSED) != 0;
+        if (focused != prevFocused) {
+            const int desiredInterval = focused ? 1 : 0;
+            if (desiredInterval != currentSwapInterval) {
+                glfwSwapInterval(desiredInterval);
+                currentSwapInterval = desiredInterval;
+            }
+            prevFocused = focused;
+        }
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        app.engineRender();
+        if (!iconified) {
+            app.engineRender();
 
-        // Get window size
-        int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
+            int display_w, display_h;
+            glfwGetFramebufferSize(window, &display_w, &display_h);
 
-        render.setClearColor(Vector4(0.45f, 0.55f, 0.60f, 1.00f));
-        render.startRenderPass(display_w, display_h);
+            render.setClearColor(Vector4(0.45f, 0.55f, 0.60f, 1.00f));
+            render.startRenderPass(display_w, display_h);
+        } else {
+            // engineRender() (skipped while minimized) is what normally drains
+            // main-thread tasks. Keep draining them so AI-driven work, logging,
+            // and async load callbacks still complete while minimized.
+            app.processMainThreadTasks();
+        }
 
+        // Always run editor UI/update (AI agent pump, clipboard ownership via
+        // continued event processing) even while the OS window is minimized.
         app.show();
 
         ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        if (!iconified) {
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            render.endRenderPass();
 
-        render.endRenderPass();
+            // Multi-viewport: render torn-off windows in their own GL contexts, then
+            // restore the main context so sokol's next-frame pass runs on the right one.
+            if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+                GLFWwindow* backup_current_context = glfwGetCurrentContext();
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+                glfwMakeContextCurrent(backup_current_context);
+            }
 
-        // Multi-viewport: render torn-off windows in their own GL contexts, then
-        // restore the main context so sokol's next-frame pass runs on the right one.
-        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            GLFWwindow* backup_current_context = glfwGetCurrentContext();
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-            glfwMakeContextCurrent(backup_current_context);
+            glfwSwapBuffers(window);
+
+            // When unfocused vsync is off, so pace the loop to avoid a busy spin.
+            if (!focused) {
+                ImGui_ImplGlfw_Sleep(16);
+            }
+        } else {
+            ImGui_ImplGlfw_Sleep(16);
         }
-
-        glfwSwapBuffers(window);
     }
 
     // Save window size and state before closing

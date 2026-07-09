@@ -175,6 +175,8 @@ int editor::Backend::init(int argc, char* argv[]) {
 
     // Main loop
     bool done = false;
+    int currentSwapInterval = 1;
+    bool prevFocused = true;
     while (!done) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -205,38 +207,73 @@ int editor::Backend::init(int argc, char* argv[]) {
             continue;
         }
 
+        // Skip presenting while minimized: SwapWindow can block on Wayland and
+        // stall clipboard + AI. Keep polling/updating so both keep working.
+        const Uint32 windowFlags = SDL_GetWindowFlags(window);
+        const bool minimized = (windowFlags & SDL_WINDOW_MINIMIZED) != 0;
+
+        // With vsync on, SwapWindow can block waiting for a frame callback the
+        // compositor won't send while the window is unfocused/occluded, which
+        // stalls the event loop that serves clipboard paste requests. Keep vsync
+        // while focused and drop it when unfocused so swap never blocks; a short
+        // delay below then paces the idle loop.
+        const bool focused = (windowFlags & SDL_WINDOW_INPUT_FOCUS) != 0;
+        if (focused != prevFocused) {
+            const int desiredInterval = focused ? 1 : 0;
+            if (desiredInterval != currentSwapInterval) {
+                SDL_GL_SetSwapInterval(desiredInterval);
+                currentSwapInterval = desiredInterval;
+            }
+            prevFocused = focused;
+        }
+
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        app.engineRender();
+        if (!minimized) {
+            app.engineRender();
 
-        // Get window size
-        int display_w, display_h;
-        SDL_GL_GetDrawableSize(window, &display_w, &display_h);
+            int display_w, display_h;
+            SDL_GL_GetDrawableSize(window, &display_w, &display_h);
 
-        render.setClearColor(Vector4(0.45f, 0.55f, 0.60f, 1.00f));
-        render.startRenderPass(display_w, display_h);
+            render.setClearColor(Vector4(0.45f, 0.55f, 0.60f, 1.00f));
+            render.startRenderPass(display_w, display_h);
+        } else {
+            // engineRender() (skipped while minimized) is what normally drains
+            // main-thread tasks. Keep draining them so AI-driven work, logging,
+            // and async load callbacks still complete while minimized.
+            app.processMainThreadTasks();
+        }
 
+        // Always run editor UI/update even while minimized (AI + clipboard).
         app.show();
 
         ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        if (!minimized) {
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            render.endRenderPass();
 
-        render.endRenderPass();
+            // Multi-viewport: render torn-off windows in their own GL contexts, then
+            // restore the main context so sokol's next-frame pass runs on the right one.
+            if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+                SDL_Window*   backup_window  = SDL_GL_GetCurrentWindow();
+                SDL_GLContext backup_context = SDL_GL_GetCurrentContext();
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+                SDL_GL_MakeCurrent(backup_window, backup_context);
+            }
 
-        // Multi-viewport: render torn-off windows in their own GL contexts, then
-        // restore the main context so sokol's next-frame pass runs on the right one.
-        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            SDL_Window*   backup_window  = SDL_GL_GetCurrentWindow();
-            SDL_GLContext backup_context = SDL_GL_GetCurrentContext();
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-            SDL_GL_MakeCurrent(backup_window, backup_context);
+            SDL_GL_SwapWindow(window);
+
+            // When unfocused vsync is off, so pace the loop to avoid a busy spin.
+            if (!focused) {
+                SDL_Delay(16);
+            }
+        } else {
+            SDL_Delay(16);
         }
-
-        SDL_GL_SwapWindow(window);
     }
 
     // Save window size and state before closing
