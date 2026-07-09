@@ -14,6 +14,8 @@ namespace doriax{
     class DORIAX_API Camera: public Object{
 
     private:
+        static constexpr float ELEVATION_DOT_LIMIT = 0.9998477f; // sin(89 degrees)
+
         void applyOrthoDefaults(CameraComponent& cameraComponent);
         void applyPerspectiveDefaults(CameraComponent& cameraComponent);
 

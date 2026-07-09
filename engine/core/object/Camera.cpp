@@ -406,6 +406,12 @@ void Camera::elevateView(float angle){
 
         if (camera.useTarget){
             Vector3 viewCenter = camera.target - transf.position;
+            Vector3 dirNorm = viewCenter.normalized();
+
+            // Clamp elevation to prevent flipping over the poles (~89 degrees)
+            float dotUp = dirNorm.dotProduct(camera.up);
+            if (dotUp < -ELEVATION_DOT_LIMIT && angle < 0) return;
+            if (dotUp >  ELEVATION_DOT_LIMIT && angle > 0) return;
 
             Matrix4 rotation;
             rotation = Matrix4::rotateMatrix(angle, viewCenter.crossProduct(camera.up));
@@ -433,9 +439,8 @@ void Camera::elevatePosition(float angle){
 
         // Clamp elevation to prevent flipping over the poles (~89 degrees)
         float dotUp = dirNorm.dotProduct(camera.up);
-        const float limit = 0.99f;
-        if (dotUp < -limit && angle > 0) return;
-        if (dotUp >  limit && angle < 0) return;
+        if (dotUp < -ELEVATION_DOT_LIMIT && angle > 0) return;
+        if (dotUp >  ELEVATION_DOT_LIMIT && angle < 0) return;
 
         Matrix4 rotation;
         rotation = Matrix4::rotateMatrix(angle, positionCenter.crossProduct(camera.up));
