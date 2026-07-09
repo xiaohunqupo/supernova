@@ -7677,9 +7677,31 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
         // Add icon to distinguish from component headers
         std::string headerText = ICON_FA_FILE_CODE " " + scriptLabel + typeLabel;
 
-        bool headerOpen = ImGui::CollapsingHeader(headerText.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+        // AllowOverlap so the trailing trash button can receive clicks
+        bool headerOpen = ImGui::CollapsingHeader(
+            headerText.c_str(),
+            ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
 
-        // Right-click menu on the script header
+        const ImVec2 headerMin = ImGui::GetItemRectMin();
+        const ImVec2 headerMax = ImGui::GetItemRectMax();
+        const ImVec2 cursorAfterHeader = ImGui::GetCursorPos();
+
+        auto removeScriptAtIndex = [&]() {
+            for (const Entity& entity : entities) {
+                ScriptComponent& sc = sceneProject->scene->getComponent<ScriptComponent>(entity);
+                std::vector<ScriptEntry> newScripts = sc.scripts;
+                if (scriptIdx < newScripts.size()) {
+                    newScripts.erase(newScripts.begin() + scriptIdx);
+                    project->updateScriptProperties(sceneProject, entity, newScripts);
+                    cmd = new PropertyCmd<std::vector<ScriptEntry>>(project, sceneProject->id, entity, ComponentType::ScriptComponent, "scripts", newScripts);
+                    CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+                }
+            }
+            if (cmd) cmd->setNoMerge();
+            removedScriptThisFrame = true;
+        };
+
+        // Context menu must run while the header is still the last item
         if (ImGui::BeginPopupContextItem(("script_options_menu_" + std::to_string(scriptIdx)).c_str())) {
             ImGui::TextDisabled("Script options");
             ImGui::Separator();
@@ -7719,27 +7741,35 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
             }
 
             if (ImGui::MenuItem(ICON_FA_TRASH " Remove")) {
-                // Remove this script entry from all selected entities
-                for (const Entity& entity : entities) {
-                    ScriptComponent& sc = sceneProject->scene->getComponent<ScriptComponent>(entity);
-                    std::vector<ScriptEntry> newScripts = sc.scripts;
-                    if (scriptIdx < newScripts.size()) {
-                        newScripts.erase(newScripts.begin() + scriptIdx);
-
-                        // Refresh parsed properties for remaining scripts
-                        project->updateScriptProperties(sceneProject, entity, newScripts);
-
-                        // Apply change through command system
-                        cmd = new PropertyCmd<std::vector<ScriptEntry>>(project, sceneProject->id, entity, ComponentType::ScriptComponent, "scripts", newScripts);
-                        CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
-                    }
-                }
-                if (cmd) cmd->setNoMerge();
-
-                removedScriptThisFrame = true;
+                removeScriptAtIndex();
             }
 
             ImGui::EndPopup();
+        }
+
+        // Trash button overlaid on the right of the collapsing header
+        if (!removedScriptThisFrame) {
+            const float framePadX = ImGui::GetStyle().FramePadding.x / 4.0f;
+            const ImVec2 deleteButtonSize(ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x + framePadX * 2.0f, 0.0f);
+
+            ImGui::SetCursorScreenPos(ImVec2(
+                headerMax.x - deleteButtonSize.x,
+                headerMin.y + (headerMax.y - headerMin.y - ImGui::GetFrameHeight()) * 0.5f));
+
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(framePadX, ImGui::GetStyle().FramePadding.y));
+            const bool removeClicked = ImGui::Button(ICON_FA_TRASH_CAN "##delete_script", deleteButtonSize);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Remove script");
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            ImGui::SetCursorPos(cursorAfterHeader);
+
+            if (removeClicked) {
+                removeScriptAtIndex();
+            }
         }
 
         if (headerOpen && !removedScriptThisFrame) {
@@ -7915,6 +7945,15 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
                     std::string newName = nameBuffer;
                     std::string newSource = srcPath.string();
                     std::string newHeader = hdrPath.string();
+
+                    // Empty class name falls back to header (or source) filename stem
+                    if (newName.empty()) {
+                        newName = !hdrPath.empty() ? hdrPath.stem().string() : srcPath.stem().string();
+                        if (!newName.empty()) {
+                            strncpy(nameBuffer, newName.c_str(), sizeof(nameBuffer) - 1);
+                            nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+                        }
+                    }
 
                     for (const Entity& entity : entities) {
                         ScriptComponent& sc = sceneProject->scene->getComponent<ScriptComponent>(entity);
