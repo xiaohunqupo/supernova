@@ -2,19 +2,27 @@
 
 #include "App.h"
 #include "AppSettings.h"
+#include "Backend.h"
 #include "ai/EditorActionExecutor.h"
 #include "ai/SecretStore.h"
 #include "external/IconsFontAwesome6.h"
+#include "util/Util.h"
+#include "window/CodeEditor.h"
 #include "window/Widgets.h"
 #include "window/widget/InputTextContextMenu.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <vector>
+
+namespace fs = std::filesystem;
 
 namespace doriax::editor {
 
@@ -33,6 +41,9 @@ struct PromptWrapContext {
     float maxLineWidth = 0.0f;
     std::vector<int>* softWraps = nullptr;
     std::string* displayText = nullptr;
+    int* mentionDisplayCursor = nullptr;
+    int* pendingMentionRawCursor = nullptr;
+    AiChatWindow* window = nullptr;
 };
 
 struct PromptWrapResult {
@@ -168,12 +179,126 @@ int promptDisplayPosToRawPos(int displayPos, const std::vector<int>& softWraps) 
 int promptRawPosToDisplayPos(int rawPos, const std::vector<int>& softWrapRawOffsets) {
     int inserted = 0;
     for (int wrapRawPos : softWrapRawOffsets) {
+        // A wrap at rawPos inserts a soft newline before that raw character, so
+        // the caret for rawPos sits after the inserted newline.
         if (wrapRawPos > rawPos) {
             break;
         }
         ++inserted;
     }
     return std::max(0, rawPos + inserted);
+}
+
+std::vector<int> softWrapRawOffsetsFromDisplay(const std::vector<int>& softWrapDisplayOffsets) {
+    std::vector<int> rawOffsets;
+    rawOffsets.reserve(softWrapDisplayOffsets.size());
+    for (int displayWrap : softWrapDisplayOffsets) {
+        rawOffsets.push_back(promptDisplayPosToRawPos(displayWrap, softWrapDisplayOffsets));
+    }
+    return rawOffsets;
+}
+
+int promptRawCursorToDisplay(int rawCursor, int displayLen, const std::vector<int>& softWraps) {
+    const int rawLen = std::max(0, displayLen - static_cast<int>(softWraps.size()));
+    return std::clamp(
+        promptRawPosToDisplayPos(std::clamp(rawCursor, 0, rawLen),
+                                 softWrapRawOffsetsFromDisplay(softWraps)),
+        0, displayLen);
+}
+
+// Characters allowed inside an unquoted @token (also used while scanning the active query).
+bool isMentionTokenChar(unsigned char c) {
+    return std::isalnum(c) || c == '_' || c == '-' || c == '/' || c == '.';
+}
+
+bool mentionBodyNeedsQuotes(const std::string& body) {
+    if (body.empty()) {
+        return false;
+    }
+    for (unsigned char c : body) {
+        if (!isMentionTokenChar(c)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Scene/entity names (and paths) may contain spaces; quote those so the token
+// stays one mention: @"New Scene"
+std::string formatMentionInsert(std::string body) {
+    if (!body.empty() && body.front() == '@') {
+        body.erase(body.begin());
+    }
+    // Already formatted as a quoted body ("New Scene") — don't wrap again.
+    if (body.size() >= 2 && body.front() == '"' && body.back() == '"') {
+        return "@" + body;
+    }
+    if (!mentionBodyNeedsQuotes(body)) {
+        return "@" + body;
+    }
+
+    std::string out = "@\"";
+    out.reserve(body.size() + 4);
+    for (char c : body) {
+        if (c == '"' || c == '\\') {
+            out.push_back('\\');
+        }
+        out.push_back(c);
+    }
+    out.push_back('"');
+    return out;
+}
+
+// Mentions are "@token" or @"quoted token" runs at a word boundary in the raw prompt.
+std::vector<std::pair<int, int>> findPromptMentionSpans(const std::string& raw) {
+    std::vector<std::pair<int, int>> spans;
+    const int n = static_cast<int>(raw.size());
+    for (int i = 0; i < n; ++i) {
+        if (raw[static_cast<size_t>(i)] != '@') {
+            continue;
+        }
+        const bool boundary = i == 0 ||
+            std::isspace(static_cast<unsigned char>(raw[static_cast<size_t>(i - 1)]));
+        if (!boundary) {
+            continue;
+        }
+
+        int end = i + 1;
+        if (end < n && raw[static_cast<size_t>(end)] == '"') {
+            ++end;
+            while (end < n) {
+                const char c = raw[static_cast<size_t>(end)];
+                if (c == '\\' && end + 1 < n) {
+                    end += 2;
+                    continue;
+                }
+                ++end;
+                if (c == '"') {
+                    break;
+                }
+            }
+            spans.emplace_back(i, end);
+            continue;
+        }
+
+        while (end < n && isMentionTokenChar(
+                   static_cast<unsigned char>(raw[static_cast<size_t>(end)]))) {
+            ++end;
+        }
+        if (end > i + 1) {
+            spans.emplace_back(i, end);
+        }
+    }
+    return spans;
+}
+
+bool rawPosInMentionSpan(int rawPos, const std::vector<std::pair<int, int>>& spans) {
+    for (const auto& span : spans) {
+        if (rawPos >= span.first && rawPos < span.second) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string stripPromptSoftWraps(const char* text, int len,
@@ -355,21 +480,58 @@ void rewrapPromptAfterContextMenuEdit(char* buffer, size_t bufferSize,
 }
 
 int promptWrapCallback(ImGuiInputTextCallbackData* data) {
+    auto* context = static_cast<PromptWrapContext*>(data->UserData);
+    if (!context || !context->softWraps || !context->displayText) {
+        return 0;
+    }
+
     if (data->EventFlag != ImGuiInputTextFlags_CallbackEdit &&
         data->EventFlag != ImGuiInputTextFlags_CallbackAlways) {
         return 0;
     }
 
-    auto* context = static_cast<PromptWrapContext*>(data->UserData);
-    if (!context || !context->softWraps || !context->displayText) {
-        return 0;
-    }
+    // Keep the post-mention caret pinned to a raw offset while soft-wraps settle.
+    const bool pinMentionCaret = context->pendingMentionRawCursor &&
+                                 *context->pendingMentionRawCursor >= 0;
 
     if (rewrapPromptBuffer(data->Buf, data->BufSize, context->maxLineWidth,
                            *context->softWraps, *context->displayText,
                            &data->CursorPos, &data->SelectionStart,
                            &data->SelectionEnd, &data->BufTextLen)) {
         data->BufDirty = true;
+    }
+
+    if (pinMentionCaret) {
+        const int displayCursor = promptRawCursorToDisplay(
+            *context->pendingMentionRawCursor, data->BufTextLen, *context->softWraps);
+        data->CursorPos = displayCursor;
+        data->SelectionStart = displayCursor;
+        data->SelectionEnd = displayCursor;
+        if (context->mentionDisplayCursor) {
+            *context->mentionDisplayCursor = displayCursor;
+        }
+    } else if (context->mentionDisplayCursor) {
+        *context->mentionDisplayCursor = data->CursorPos;
+    }
+
+    // Multiline InputText uses Up/Down for caret motion, so steal those keys
+    // while the @ picker is open and keep the caret put.
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackAlways && context->window) {
+        const int savedCursor = data->CursorPos;
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true) &&
+            context->window->handleMentionHistoryKey(ImGuiKey_UpArrow)) {
+            data->CursorPos = savedCursor;
+            data->SelectionStart = savedCursor;
+            data->SelectionEnd = savedCursor;
+        } else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true) &&
+                   context->window->handleMentionHistoryKey(ImGuiKey_DownArrow)) {
+            data->CursorPos = savedCursor;
+            data->SelectionStart = savedCursor;
+            data->SelectionEnd = savedCursor;
+        }
+        if (!pinMentionCaret && context->mentionDisplayCursor) {
+            *context->mentionDisplayCursor = data->CursorPos;
+        }
     }
 
     return 0;
@@ -951,11 +1113,35 @@ void AiChatWindow::drawComposer(float inputHeight) {
         ImGui::SetKeyboardFocusHere();
         refocusInput = false;
     }
+
+    // Resolve the input id before drawing so we can claim Enter/Tab while the
+    // @ picker is open (otherwise multiline InputText validates and clears focus).
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImGuiID inputId = window->GetID("##AiInput");
+    mentionInputId = inputId;
+
+    if (mention.open && !mention.items.empty()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
+            ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
+            applySelectedMention();
+            ImGui::SetKeyOwner(ImGuiKey_Enter, ImGuiKeyOwner_Any, ImGuiInputFlags_LockThisFrame);
+            ImGui::SetKeyOwner(ImGuiKey_KeypadEnter, ImGuiKeyOwner_Any, ImGuiInputFlags_LockThisFrame);
+        } else if (ImGui::IsKeyPressed(ImGuiKey_Tab, false)) {
+            applySelectedMention();
+            ImGui::SetKeyOwner(ImGuiKey_Tab, ImGuiKeyOwner_Any, ImGuiInputFlags_LockThisFrame);
+        }
+    }
+
     PromptWrapContext wrapContext{
         std::max(0.0f, inputWidth - style.FramePadding.x * 2.0f),
         &inputSoftWraps,
-        &inputDisplayText
+        &inputDisplayText,
+        &mentionDisplayCursor,
+        &pendingMentionRawCursor,
+        this
     };
+    // Hide native InputText glyphs so we can redraw with mention coloring.
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
     if (ImGui::InputTextMultiline("##AiInput", inputBuffer.data(), inputBuffer.size(),
                                   ImVec2(inputWidth, inputHeight),
                                   ImGuiInputTextFlags_EnterReturnsTrue |
@@ -964,9 +1150,42 @@ void AiChatWindow::drawComposer(float inputHeight) {
                                   ImGuiInputTextFlags_CallbackEdit |
                                   ImGuiInputTextFlags_CallbackAlways,
                                   promptWrapCallback, &wrapContext)) {
-        submitted = true;
+        // Enter submits only when the mention popup is closed; otherwise it
+        // would steal the key from applySelectedMention.
+        if (!mention.open && pendingMentionRawCursor < 0) {
+            submitted = true;
+        }
     }
+    ImGui::PopStyleColor();
     bool inputActive = ImGui::IsItemActive();
+    bool inputFocused = ImGui::IsItemFocused();
+    ImVec2 inputMin = ImGui::GetItemRectMin();
+    ImVec2 inputMax = ImGui::GetItemRectMax();
+
+    // Restore caret after an @ insertion using the raw offset so soft-wrap
+    // reflows during refocus don't leave the caret mid-glyph.
+    if (pendingMentionRawCursor >= 0) {
+        if (!inputActive) {
+            refocusInput = true;
+        }
+        if (ImGuiInputTextState* state = ImGui::GetInputTextState(inputId)) {
+            const int cursor = promptRawCursorToDisplay(
+                pendingMentionRawCursor, state->TextLen, inputSoftWraps);
+            if (state->WantReloadUserBuf) {
+                state->ReloadSelectionStart = cursor;
+                state->ReloadSelectionEnd = cursor;
+            } else if (inputActive) {
+                state->SetSelection(cursor, cursor);
+                state->CursorAnimReset();
+                state->CursorFollow = true;
+                pendingMentionRawCursor = -1;
+                mentionDisplayCursor = cursor;
+            }
+        }
+    }
+
+    drawPromptMentionOverlay(inputMin, inputMax, inputId);
+
     InputTextContextMenu::Options inputMenuOptions;
     inputMenuOptions.userData = &wrapContext;
     inputMenuOptions.copyRange = copyPromptContextMenuRange;
@@ -974,10 +1193,21 @@ void AiChatWindow::drawComposer(float inputHeight) {
     InputTextContextMenu::drawForLastItem(inputBuffer.data(), inputBuffer.size(),
                                           inputMenuOptions);
 
-    if (!inputActive && !submitted) {
+    if (!inputActive && !submitted && pendingMentionRawCursor < 0) {
         rewrapPromptBuffer(inputBuffer.data(), static_cast<int>(inputBuffer.size()),
                            wrapContext.maxLineWidth, inputSoftWraps, inputDisplayText);
     }
+
+    if (inputFocused || inputActive || mention.open || pendingMentionRawCursor >= 0) {
+        updateMentionFromInput(mentionDisplayCursor, inputMin.x, inputMin.y, inputMax.y,
+                               style.FramePadding.x, wrapContext.maxLineWidth);
+        if (handleMentionKeys()) {
+            submitted = false;
+        }
+    } else {
+        closeMentionPopup();
+    }
+
     if (submitted) {
         submitMessage();
         submitted = false;
@@ -1010,10 +1240,544 @@ void AiChatWindow::drawComposer(float inputHeight) {
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() - style.ItemSpacing.y);
     drawComposerControls();
+    drawMentionPopup();
 
     if (submitted) {
         submitMessage();
     }
+}
+
+void AiChatWindow::closeMentionPopup() {
+    mention = MentionState{};
+}
+
+void AiChatWindow::drawPromptMentionOverlay(ImVec2 inputMin, ImVec2 inputMax, ImGuiID inputId) {
+    if (inputDisplayText.empty()) {
+        inputDisplayText.assign(inputBuffer.data());
+    }
+    const char* text = inputDisplayText.c_str();
+    const int textLen = static_cast<int>(inputDisplayText.size());
+    if (textLen <= 0) {
+        return;
+    }
+
+    const std::vector<std::pair<int, int>> spans = findPromptMentionSpans(
+        stripPromptSoftWraps(text, textLen, inputSoftWraps));
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImVec2 scroll(0.0f, 0.0f);
+    if (ImGuiInputTextState* state = ImGui::GetInputTextState(inputId)) {
+        scroll = state->Scroll;
+    }
+
+    // Match InputTextEx multiline origin: frame + border + FramePadding.
+    const float border = style.FrameBorderSize;
+    const ImVec2 textOrigin(inputMin.x + border + style.FramePadding.x,
+                            inputMin.y + border + style.FramePadding.y);
+    const float lineHeight = ImGui::GetFontSize();
+    const float lineBaseX = textOrigin.x - scroll.x;
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->PushClipRect(
+        ImVec2(inputMin.x + border, inputMin.y + border),
+        ImVec2(inputMax.x - border, inputMax.y - border),
+        true);
+
+    const ImU32 normalColor = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 mentionColor = ImGui::GetColorU32(ImGuiCol_TextLink);
+
+    int i = 0;
+    int lineStart = 0;
+    float lineY = textOrigin.y - scroll.y;
+    while (i < textLen) {
+        if (text[i] == '\n') {
+            ++i;
+            lineStart = i;
+            lineY += lineHeight;
+            continue;
+        }
+
+        const int runStart = i;
+        const bool isMention = rawPosInMentionSpan(
+            promptDisplayPosToRawPos(runStart, inputSoftWraps), spans);
+        while (i < textLen && text[i] != '\n') {
+            if (rawPosInMentionSpan(promptDisplayPosToRawPos(i, inputSoftWraps), spans) !=
+                isMention) {
+                break;
+            }
+            ++i;
+        }
+
+        // Measure from line start (InputText caret math). Advancing a truncated
+        // pen per run drifts left across multiple @mentions.
+        const float runX = lineBaseX + ImGui::CalcTextSize(text + lineStart, text + runStart).x;
+        draw->AddText(ImVec2(IM_TRUNC(runX), IM_TRUNC(lineY)),
+                      isMention ? mentionColor : normalColor,
+                      text + runStart, text + i);
+    }
+
+    draw->PopClipRect();
+}
+
+namespace {
+
+bool mentionMatch(const std::string& candidate, const std::string& query, int& outScore) {
+    outScore = 0;
+    if (query.empty()) {
+        outScore = 1;
+        return true;
+    }
+
+    auto toLower = [](std::string value) {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        return value;
+    };
+
+    const std::string cand = toLower(candidate);
+    const std::string q = toLower(query);
+    if (q.size() > cand.size()) {
+        return false;
+    }
+    if (cand.compare(0, q.size(), q) == 0) {
+        outScore = 2000;
+        return true;
+    }
+
+    size_t found = cand.find(q);
+    if (found != std::string::npos) {
+        outScore = 1200 - static_cast<int>(std::min<size_t>(found, 100));
+        return true;
+    }
+
+    size_t qi = 0;
+    size_t last = std::string::npos;
+    for (size_t i = 0; i < cand.size() && qi < q.size(); ++i) {
+        if (cand[i] != q[qi]) continue;
+        bool consecutive = last != std::string::npos && i == last + 1;
+        bool boundary = i == 0 || candidate[i - 1] == '/' || candidate[i - 1] == '_' ||
+                        candidate[i - 1] == '-' || candidate[i - 1] == ' ' ||
+                        (std::isupper(static_cast<unsigned char>(candidate[i])) &&
+                         !std::isupper(static_cast<unsigned char>(candidate[i - 1])));
+        if (qi == 0 && i != 0 && !boundary) break;
+        if (!consecutive && !boundary && qi > 0) continue;
+        last = i;
+        ++qi;
+    }
+    if (qi == q.size()) {
+        outScore = 800;
+        return true;
+    }
+    return false;
+}
+
+} // namespace
+
+const char* AiChatWindow::mentionKindIcon(MentionKind kind) {
+    switch (kind) {
+        case MentionKind::Selection: return ICON_FA_CROSSHAIRS;
+        case MentionKind::Project: return ICON_FA_FOLDER;
+        case MentionKind::Scene: return ICON_FA_CLAPPERBOARD;
+        case MentionKind::Entity: return ICON_FA_CUBE;
+        case MentionKind::OpenFile: return ICON_FA_CODE;
+        case MentionKind::File: return ICON_FA_FILE;
+    }
+    return ICON_FA_AT;
+}
+
+const char* AiChatWindow::mentionKindLabel(MentionKind kind) {
+    switch (kind) {
+        case MentionKind::Selection: return "Selection";
+        case MentionKind::Project: return "Project";
+        case MentionKind::Scene: return "Scene";
+        case MentionKind::Entity: return "Entity";
+        case MentionKind::OpenFile: return "Open file";
+        case MentionKind::File: return "File";
+    }
+    return "Mention";
+}
+
+int AiChatWindow::mentionKindBoost(MentionKind kind) {
+    switch (kind) {
+        case MentionKind::Selection: return 80;
+        case MentionKind::Project: return 70;
+        case MentionKind::Scene: return 40;
+        case MentionKind::Entity: return 30;
+        case MentionKind::OpenFile: return 50;
+        case MentionKind::File: return 10;
+    }
+    return 0;
+}
+
+void AiChatWindow::collectMentionCandidates(std::vector<MentionItem>& out) const {
+    out.clear();
+    if (!project) {
+        return;
+    }
+
+    auto addItem = [&](MentionKind kind, std::string label, std::string insertText,
+                       std::string detail) {
+        if (label.empty() || insertText.empty()) {
+            return;
+        }
+        out.push_back({kind, std::move(label), std::move(insertText), std::move(detail), 0});
+    };
+
+    addItem(MentionKind::Project, "project", "@project", "Current project");
+
+    SceneProject* selectedScene = project->getSelectedScene();
+    if (selectedScene) {
+        std::vector<Entity> selected = project->getSelectedEntities(selectedScene->id);
+        if (!selected.empty()) {
+            std::string detail = selected.size() == 1
+                ? selectedScene->scene->getEntityName(selected.front())
+                : std::to_string(selected.size()) + " entities";
+            addItem(MentionKind::Selection, "selection", "@selection", detail);
+        }
+    }
+
+    for (const SceneProject& sceneProject : project->getScenes()) {
+        std::string detail = sceneProject.filepath.empty()
+            ? "Scene"
+            : sceneProject.filepath.generic_string();
+        addItem(MentionKind::Scene, sceneProject.name,
+                formatMentionInsert(sceneProject.name), detail);
+    }
+
+    if (selectedScene && selectedScene->scene) {
+        for (Entity entity : selectedScene->entities) {
+            std::string name = selectedScene->scene->getEntityName(entity);
+            if (name.empty()) {
+                name = "Entity " + std::to_string(static_cast<unsigned>(entity));
+            }
+            addItem(MentionKind::Entity, name, formatMentionInsert(name),
+                    "Entity #" + std::to_string(static_cast<unsigned>(entity)));
+        }
+    }
+
+    if (CodeEditor* codeEditor = Backend::getApp().getCodeEditor()) {
+        for (const fs::path& path : codeEditor->getOpenPaths()) {
+            std::string rel = path.generic_string();
+            addItem(MentionKind::OpenFile, rel, formatMentionInsert(rel), "Open in editor");
+        }
+    }
+
+    const fs::path projectPath = project->getProjectPath();
+    if (!projectPath.empty() && fs::exists(projectPath)) {
+        std::error_code ec;
+        for (fs::recursive_directory_iterator it(projectPath, ec), end;
+             it != end && !ec; it.increment(ec)) {
+            if (ec) break;
+            const fs::path& path = it->path();
+            if (path.filename().string().rfind('.', 0) == 0) {
+                if (it->is_directory(ec)) {
+                    it.disable_recursion_pending();
+                }
+                continue;
+            }
+            if (path.filename() == ".doriax" || path.filename() == "build") {
+                if (it->is_directory(ec)) {
+                    it.disable_recursion_pending();
+                }
+                continue;
+            }
+            if (!it->is_regular_file(ec)) {
+                continue;
+            }
+
+            const std::string pathStr = path.string();
+            const bool useful =
+                Util::isSceneFile(pathStr) || Util::isScriptFile(pathStr) ||
+                Util::isLuaFile(pathStr) || Util::isImageFile(pathStr) ||
+                Util::isMaterialFile(pathStr) || Util::isModelFile(pathStr) ||
+                Util::isShaderFile(pathStr) || Util::isAudioFile(pathStr) ||
+                Util::isFontFile(pathStr) || Util::isBundleFile(pathStr);
+            if (!useful) {
+                continue;
+            }
+
+            fs::path rel = fs::relative(path, projectPath, ec);
+            if (ec || rel.empty()) {
+                continue;
+            }
+            std::string relStr = rel.generic_string();
+            addItem(MentionKind::File, relStr, formatMentionInsert(relStr), "Project file");
+            if (out.size() > 2500) {
+                break;
+            }
+        }
+    }
+}
+
+void AiChatWindow::refreshMentionItems() {
+    std::vector<MentionItem> candidates;
+    collectMentionCandidates(candidates);
+
+    mention.items.clear();
+    for (MentionItem& item : candidates) {
+        int score = 0;
+        if (!mentionMatch(item.label, mention.query, score) &&
+            !mentionMatch(item.insertText, mention.query, score) &&
+            !mentionMatch(item.detail, mention.query, score)) {
+            continue;
+        }
+        item.score = score + mentionKindBoost(item.kind);
+        mention.items.push_back(std::move(item));
+    }
+
+    std::sort(mention.items.begin(), mention.items.end(),
+              [](const MentionItem& a, const MentionItem& b) {
+                  if (a.score != b.score) return a.score > b.score;
+                  if (a.kind != b.kind) return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+                  return a.label < b.label;
+              });
+
+    constexpr size_t kMaxVisible = 40;
+    if (mention.items.size() > kMaxVisible) {
+        mention.items.resize(kMaxVisible);
+    }
+
+    if (mention.selectedIndex >= static_cast<int>(mention.items.size())) {
+        mention.selectedIndex = std::max(0, static_cast<int>(mention.items.size()) - 1);
+    }
+    mention.scrollToSelected = true;
+}
+
+void AiChatWindow::updateMentionFromInput(int displayCursor, float inputMinX, float inputMinY,
+                                          float inputMaxY, float framePaddingX, float maxLineWidth) {
+    const std::string raw = stripPromptSoftWraps(
+        inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())), inputSoftWraps);
+    const int rawCursor = promptDisplayPosToRawPos(displayCursor, inputSoftWraps);
+    const int clampedCursor = std::clamp(rawCursor, 0, static_cast<int>(raw.size()));
+
+    int atPos = -1;
+    for (int i = clampedCursor - 1; i >= 0; --i) {
+        const unsigned char c = static_cast<unsigned char>(raw[static_cast<size_t>(i)]);
+        if (c == '@') {
+            const bool boundary = i == 0 ||
+                std::isspace(static_cast<unsigned char>(raw[static_cast<size_t>(i - 1)]));
+            if (boundary) {
+                atPos = i;
+            }
+            break;
+        }
+        if (!isMentionTokenChar(c)) {
+            break;
+        }
+    }
+
+    if (atPos < 0) {
+        closeMentionPopup();
+        return;
+    }
+
+    const std::string query = raw.substr(static_cast<size_t>(atPos + 1),
+                                         static_cast<size_t>(clampedCursor - atPos - 1));
+    const bool queryChanged = !mention.open || mention.query != query || mention.atRawPos != atPos;
+    mention.open = true;
+    mention.atRawPos = atPos;
+    mention.queryRawEnd = clampedCursor;
+    mention.query = query;
+    mention.inputItemMinY = inputMinY;
+    mention.inputItemMaxY = inputMaxY;
+    mention.maxLineWidth = maxLineWidth;
+
+    int lineStart = 0;
+    for (int i = clampedCursor - 1; i >= 0; --i) {
+        if (raw[static_cast<size_t>(i)] == '\n') {
+            lineStart = i + 1;
+            break;
+        }
+    }
+    const std::string linePrefix = raw.substr(static_cast<size_t>(lineStart),
+                                              static_cast<size_t>(clampedCursor - lineStart));
+    const float caretX = inputMinX + framePaddingX + ImGui::CalcTextSize(linePrefix.c_str()).x;
+    mention.popupPos = ImVec2(caretX, inputMaxY + 2.0f);
+
+    if (queryChanged || mention.items.empty()) {
+        refreshMentionItems();
+        mention.selectedIndex = 0;
+    }
+}
+
+bool AiChatWindow::applySelectedMention() {
+    if (!mention.open || mention.items.empty() ||
+        mention.selectedIndex < 0 ||
+        mention.selectedIndex >= static_cast<int>(mention.items.size())) {
+        return false;
+    }
+
+    const MentionItem item = mention.items[static_cast<size_t>(mention.selectedIndex)];
+    std::string raw = stripPromptSoftWraps(
+        inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())), inputSoftWraps);
+
+    const int atPos = mention.atRawPos;
+    const int endPos = mention.queryRawEnd;
+    if (atPos < 0 || endPos < atPos || endPos > static_cast<int>(raw.size())) {
+        closeMentionPopup();
+        return false;
+    }
+
+    std::string insert = formatMentionInsert(item.insertText);
+    if (endPos >= static_cast<int>(raw.size()) ||
+        !std::isspace(static_cast<unsigned char>(raw[static_cast<size_t>(endPos)]))) {
+        insert.push_back(' ');
+    }
+
+    const int rawCursor = atPos + static_cast<int>(insert.size());
+    raw.replace(static_cast<size_t>(atPos), static_cast<size_t>(endPos - atPos), insert);
+    if (raw.size() >= inputBuffer.size()) {
+        raw.resize(inputBuffer.size() - 1);
+    }
+
+    const float maxLineWidth = mention.maxLineWidth > 0.0f
+        ? mention.maxLineWidth
+        : ImGui::GetFontSize() * 8.0f;
+    PromptWrapResult wrapped = rewrapPromptText(raw, maxLineWidth, inputBuffer.size() - 1);
+    if (wrapped.displayText.size() >= inputBuffer.size()) {
+        wrapped.displayText.resize(inputBuffer.size() - 1);
+    }
+    std::memcpy(inputBuffer.data(), wrapped.displayText.data(), wrapped.displayText.size());
+    inputBuffer[wrapped.displayText.size()] = '\0';
+    inputSoftWraps = std::move(wrapped.softWrapDisplayOffsets);
+    inputDisplayText = wrapped.displayText;
+
+    const int displayCursor = std::clamp(
+        promptRawPosToDisplayPos(rawCursor, wrapped.softWrapRawOffsets),
+        0, static_cast<int>(inputDisplayText.size()));
+
+    // InputText keeps a private copy while active; reload it and park the caret
+    // after the inserted mention via the raw offset (stable across soft-wrap).
+    pendingMentionRawCursor = rawCursor;
+    mentionDisplayCursor = displayCursor;
+    refocusInput = true;
+    if (mentionInputId != 0) {
+        if (ImGuiInputTextState* state = ImGui::GetInputTextState(mentionInputId)) {
+            state->WantReloadUserBuf = true;
+            state->ReloadSelectionStart = displayCursor;
+            state->ReloadSelectionEnd = displayCursor;
+        }
+    }
+
+    closeMentionPopup();
+    return true;
+}
+
+bool AiChatWindow::handleMentionHistoryKey(ImGuiKey key) {
+    if (!mention.open || mention.items.empty()) {
+        return false;
+    }
+    if (key == ImGuiKey_UpArrow) {
+        mention.selectedIndex = std::max(0, mention.selectedIndex - 1);
+        mention.scrollToSelected = true;
+        return true;
+    }
+    if (key == ImGuiKey_DownArrow) {
+        mention.selectedIndex = std::min(static_cast<int>(mention.items.size()) - 1,
+                                         mention.selectedIndex + 1);
+        mention.scrollToSelected = true;
+        return true;
+    }
+    return false;
+}
+
+bool AiChatWindow::handleMentionKeys() {
+    if (!mention.open) {
+        return false;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        closeMentionPopup();
+        return true;
+    }
+    // Enter/Tab are claimed before InputText while the picker is open.
+    return false;
+}
+
+void AiChatWindow::drawMentionPopup() {
+    if (!mention.open) {
+        return;
+    }
+
+    const float popupWidth = 360.0f;
+    const float itemHeight = ImGui::GetTextLineHeight() + 6.0f;
+    const float maxVisible = 8.0f;
+    const float popupHeight = mention.items.empty()
+        ? itemHeight + 12.0f
+        : std::min(maxVisible, static_cast<float>(mention.items.size())) * itemHeight + 8.0f;
+
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 pos = mention.popupPos;
+    if (pos.x + popupWidth > viewport->WorkPos.x + viewport->WorkSize.x) {
+        pos.x = viewport->WorkPos.x + viewport->WorkSize.x - popupWidth - 8.0f;
+    }
+    if (pos.x < viewport->WorkPos.x + 8.0f) {
+        pos.x = viewport->WorkPos.x + 8.0f;
+    }
+    if (pos.y + popupHeight > viewport->WorkPos.y + viewport->WorkSize.y) {
+        pos.y = mention.inputItemMinY - popupHeight - 2.0f;
+    }
+
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(ImVec2(popupWidth, popupHeight));
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
+
+    if (ImGui::Begin("##AiMentionPopup", nullptr, flags)) {
+        if (mention.items.empty()) {
+            ImGui::TextDisabled("No matches for @%s", mention.query.c_str());
+        } else {
+            for (int i = 0; i < static_cast<int>(mention.items.size()); ++i) {
+                const MentionItem& item = mention.items[static_cast<size_t>(i)];
+                const bool selected = i == mention.selectedIndex;
+                ImGui::PushID(i);
+
+                if (selected && mention.scrollToSelected) {
+                    ImGui::SetScrollHereY();
+                    mention.scrollToSelected = false;
+                }
+
+                if (ImGui::Selectable("##mention", selected, ImGuiSelectableFlags_None,
+                                      ImVec2(0, itemHeight))) {
+                    mention.selectedIndex = i;
+                    applySelectedMention();
+                    ImGui::PopID();
+                    break;
+                }
+
+                ImVec2 rowMin = ImGui::GetItemRectMin();
+                ImDrawList* draw = ImGui::GetWindowDrawList();
+                const char* icon = mentionKindIcon(item.kind);
+                const ImU32 iconColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+                const ImU32 textColor = ImGui::GetColorU32(ImGuiCol_Text);
+                const float textY = rowMin.y + (itemHeight - ImGui::GetTextLineHeight()) * 0.5f;
+                draw->AddText(ImVec2(rowMin.x + 6.0f, textY), iconColor, icon);
+
+                const float iconWidth = ImGui::CalcTextSize(icon).x + 10.0f;
+                draw->AddText(ImVec2(rowMin.x + iconWidth, textY), textColor, item.label.c_str());
+
+                std::string kind = mentionKindLabel(item.kind);
+                if (!item.detail.empty() && item.detail != item.label) {
+                    kind += " · " + item.detail;
+                }
+                const ImVec2 kindSize = ImGui::CalcTextSize(kind.c_str());
+                const float kindX = rowMin.x + ImGui::GetItemRectSize().x - kindSize.x - 8.0f;
+                if (kindX > rowMin.x + iconWidth + ImGui::CalcTextSize(item.label.c_str()).x + 12.0f) {
+                    draw->AddText(ImVec2(kindX, textY), iconColor, kind.c_str());
+                }
+
+                ImGui::PopID();
+            }
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(3);
 }
 
 void AiChatWindow::drawComposerControls() {
@@ -1256,6 +2020,7 @@ void AiChatWindow::submitMessage() {
         inputBuffer.fill('\0');
         inputSoftWraps.clear();
         inputDisplayText.clear();
+        closeMentionPopup();
         scrollToBottom = true;
         refocusInput = true;
     }
