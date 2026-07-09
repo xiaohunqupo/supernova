@@ -484,6 +484,7 @@ void AiService::runProviderRequest(ProviderRequest request) {
             assistant.role = ChatRole::Assistant;
             assistant.content = parsed.text;
             assistant.toolCalls = parsed.toolCalls;
+            assistant.thinkingBlocks = parsed.thinkingBlocks;
             messages.push_back(assistant);
             for (const ToolCall& call : parsed.toolCalls) {
                 addToolCallProposalLocked(call);

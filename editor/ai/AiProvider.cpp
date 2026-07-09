@@ -369,6 +369,13 @@ Json buildAnthropicPayload(const ProviderRequest& request) {
             });
         } else if (message.role == ChatRole::Assistant) {
             Json content = Json::array();
+            // Thinking blocks must precede text/tool_use and be echoed verbatim
+            // (including signature) when adaptive/extended thinking is active.
+            for (const auto& block : message.thinkingBlocks) {
+                if (block.is_object()) {
+                    content.push_back(block);
+                }
+            }
             if (!message.content.empty()) {
                 content.push_back({{"type", "text"}, {"text", message.content}});
             }
@@ -416,7 +423,10 @@ ProviderResponse parseAnthropicBody(const std::string& body) {
     }
     for (const auto& part : root["content"]) {
         const std::string type = part.value("type", "");
-        if (type == "text" && part.contains("text") && part["text"].is_string()) {
+        if (type == "thinking" || type == "redacted_thinking") {
+            // Keep the full block (signature included) for tool-use round-trips.
+            result.thinkingBlocks.push_back(part);
+        } else if (type == "text" && part.contains("text") && part["text"].is_string()) {
             if (!result.text.empty()) result.text += "\n";
             result.text += part["text"].get<std::string>();
         } else if (type == "tool_use") {
@@ -507,11 +517,24 @@ Json buildGeminiPayload(const ProviderRequest& request) {
             if (!message.content.empty()) {
                 parts.push_back({{"text", message.content}});
             }
+            bool firstFunctionCall = true;
             for (const auto& call : message.toolCalls) {
-                parts.push_back({{"functionCall", {
+                Json part = {{"functionCall", {
                     {"name", call.name},
                     {"args", call.arguments.is_object() ? call.arguments : Json::object()}
-                }}});
+                }}};
+                // Gemini 3 requires thoughtSignature on the first functionCall of
+                // each model step. Echo the opaque token when we have it; otherwise
+                // use the documented bypass so older history does not 400.
+                std::string signature = call.thoughtSignature;
+                if (signature.empty() && firstFunctionCall) {
+                    signature = "skip_thought_signature_validator";
+                }
+                if (!signature.empty()) {
+                    part["thoughtSignature"] = signature;
+                }
+                parts.push_back(part);
+                firstFunctionCall = false;
             }
             if (!parts.empty()) {
                 contents.push_back({{"role", "model"}, {"parts", parts}});
@@ -564,6 +587,9 @@ ProviderResponse parseGeminiBody(const std::string& body) {
             call.id = fn.value("name", "");
             call.name = fn.value("name", "");
             call.arguments = parseArgumentObject(fn.value("args", Json::object()));
+            // Sibling of functionCall on the Part (REST camelCase).
+            call.thoughtSignature = part.value("thoughtSignature",
+                part.value("thought_signature", ""));
             if (!call.name.empty()) result.toolCalls.push_back(call);
         }
     }

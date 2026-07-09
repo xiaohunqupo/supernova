@@ -28,9 +28,16 @@ Json messageToJson(const ChatMessage& message) {
     if (!message.toolCalls.empty()) {
         Json calls = Json::array();
         for (const ToolCall& call : message.toolCalls) {
-            calls.push_back({{"id", call.id}, {"name", call.name}, {"arguments", call.arguments}});
+            Json entry = {{"id", call.id}, {"name", call.name}, {"arguments", call.arguments}};
+            if (!call.thoughtSignature.empty()) {
+                entry["thought_signature"] = call.thoughtSignature;
+            }
+            calls.push_back(entry);
         }
         out["tool_calls"] = calls;
+    }
+    if (!message.thinkingBlocks.empty()) {
+        out["thinking_blocks"] = message.thinkingBlocks;
     }
     return out;
 }
@@ -48,7 +55,16 @@ ChatMessage messageFromJson(const Json& node) {
             call.id = callNode.value("id", "");
             call.name = callNode.value("name", "");
             call.arguments = callNode.value("arguments", Json::object());
+            call.thoughtSignature = callNode.value("thought_signature",
+                callNode.value("thoughtSignature", ""));
             message.toolCalls.push_back(call);
+        }
+    }
+    if (node.contains("thinking_blocks") && node["thinking_blocks"].is_array()) {
+        for (const Json& block : node["thinking_blocks"]) {
+            if (block.is_object()) {
+                message.thinkingBlocks.push_back(block);
+            }
         }
     }
     return message;

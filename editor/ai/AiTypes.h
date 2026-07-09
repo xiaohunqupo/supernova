@@ -46,6 +46,10 @@ struct ToolCall {
     std::string id;
     std::string name;
     Json arguments = Json::object();
+    // Opaque Gemini thought signature (REST: thoughtSignature). Required on the
+    // first functionCall part of each model step for Gemini 3 / thinking models;
+    // must be echoed verbatim on the next request.
+    std::string thoughtSignature;
 };
 
 struct ChatMessage {
@@ -55,6 +59,11 @@ struct ChatMessage {
     // Set on assistant messages that requested one or more tool calls. Kept in the
     // history so follow-up requests can present a well-formed tool round-trip.
     std::vector<ToolCall> toolCalls;
+
+    // Anthropic thinking / redacted_thinking content blocks (with signature).
+    // Claude Sonnet 5+ enables adaptive thinking by default; these must be echoed
+    // verbatim ahead of tool_use when continuing a tool-use turn.
+    std::vector<Json> thinkingBlocks;
 
     // Set on tool-result messages (role == Tool).
     std::string toolCallId;
@@ -80,6 +89,8 @@ struct ProviderRequest {
 struct ProviderResponse {
     std::string text;
     std::vector<ToolCall> toolCalls;
+    // Anthropic thinking / redacted_thinking blocks from the model turn.
+    std::vector<Json> thinkingBlocks;
     std::string error;
     // Provider stop reason such as finish_reason "length", stop_reason "max_tokens",
     // or Gemini finishReason "MAX_TOKENS".
