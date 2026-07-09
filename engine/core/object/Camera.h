@@ -57,10 +57,16 @@ namespace doriax{
         void setType(CameraType type);
         CameraType getType() const;
 
+        // Target mode is ON by default and setTarget() turns it back on. While it is
+        // on the view matrix is lookAt(worldPosition, worldTarget, worldUp) and the
+        // entity's Transform rotation is ignored, so setRotation() followed by
+        // setTarget() leaves the rotation with no effect on the view.
         void setTarget(Vector3 target);
         void setTarget(const float x, const float y, const float z);
         Vector3 getTarget() const;
 
+        // Orient the camera from its Transform rotation instead of a target point:
+        // forward becomes rotation * Vector3(0, 0, -1).
         void disableTarget();
         bool isUsingTarget() const;
 

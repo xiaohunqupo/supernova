@@ -80,6 +80,9 @@ namespace doriax{
 
         bool transparentSort = true;
 
+        // when true (the default, and re-enabled by Camera::setTarget) updateCamera
+        // builds the view from lookAt(position, target, up) and ignores the Transform
+        // rotation; when false the rotation drives it (forward = rotation * -Z)
         bool useTarget = true;
         bool autoResize = true;
 
