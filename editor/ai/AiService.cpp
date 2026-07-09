@@ -209,6 +209,8 @@ bool AiService::sendUserMessage(const std::string& text) {
         std::lock_guard<std::mutex> lock(mutex);
         messages.push_back({ChatRole::User, text});
         toolRounds = 0;
+        turnActive = true;
+        turnFailed = false;
         request = buildRequestSnapshotLocked();
     }
     dispatchRequest(std::move(request));
@@ -233,19 +235,27 @@ void AiService::update() {
     }
 
     ProviderRequest request;
+    bool dispatch = false;
     {
         std::lock_guard<std::mutex> lock(mutex);
         if (!needsContinuationLocked() || toolRounds >= kMaxToolRounds) {
             if (needsContinuationLocked() && toolRounds >= kMaxToolRounds) {
                 appendAssistantMessageLocked(
                     "Reached the tool-step limit for this request. Send another message to continue.");
+                finishTurnLocked(false);
+            } else if (turnActive && !hasPendingProposalsLocked()) {
+                // Agent turn settled (final reply, or waiting is over with no more work).
+                finishTurnLocked(!turnFailed);
             }
             return;
         }
         ++toolRounds;
         request = buildRequestSnapshotLocked();
+        dispatch = true;
     }
-    dispatchRequest(std::move(request));
+    if (dispatch) {
+        dispatchRequest(std::move(request));
+    }
 }
 
 std::vector<ChatMessage> AiService::getMessages() const {
@@ -266,6 +276,8 @@ void AiService::clearConversation() {
     messages.clear();
     proposals.clear();
     toolRounds = 0;
+    turnActive = false;
+    turnFailed = false;
 }
 
 void AiService::loadConversation(std::vector<ChatMessage> newMessages) {
@@ -276,6 +288,8 @@ void AiService::loadConversation(std::vector<ChatMessage> newMessages) {
     messages = std::move(newMessages);
     proposals.clear();
     toolRounds = 0;
+    turnActive = false;
+    turnFailed = false;
 }
 
 ActionResult AiService::executeProposal(uint64_t proposalId, EditorActionExecutor& executor) {
@@ -315,6 +329,7 @@ ActionResult AiService::executeProposal(uint64_t proposalId, EditorActionExecuto
         toolMessage.role = ChatRole::Tool;
         toolMessage.toolCallId = proposal.toolCallId;
         toolMessage.toolName = proposal.toolName;
+        toolMessage.toolDescription = proposal.description;
         toolMessage.toolSuccess = result.success;
         toolMessage.content = result.success ? result.message : ("Error: " + result.message);
         if (!result.data.empty()) {
@@ -323,9 +338,7 @@ ActionResult AiService::executeProposal(uint64_t proposalId, EditorActionExecuto
         messages.push_back(toolMessage);
     }
 
-    if (result.success) {
-        Out::success("AI action completed: %s", proposal.description.c_str());
-    } else {
+    if (!result.success) {
         Out::error("AI action failed: %s", result.message.c_str());
     }
 
@@ -349,6 +362,7 @@ void AiService::removeProposal(uint64_t proposalId) {
         toolMessage.role = ChatRole::Tool;
         toolMessage.toolCallId = proposal.toolCallId;
         toolMessage.toolName = proposal.toolName;
+        toolMessage.toolDescription = proposal.description;
         toolMessage.toolSuccess = false;
         toolMessage.content = "The user dismissed this action.";
         messages.push_back(toolMessage);
@@ -428,11 +442,32 @@ bool AiService::needsContinuationLocked() const {
     return true;
 }
 
+bool AiService::hasPendingProposalsLocked() const {
+    for (const auto& proposal : proposals) {
+        if (!proposal.executed) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void AiService::finishTurnLocked(bool success) {
+    if (!turnActive) {
+        return;
+    }
+    turnActive = false;
+    turnFailed = false;
+    if (success) {
+        Out::success("AI chat session completed");
+    }
+}
+
 void AiService::runProviderRequest(ProviderRequest request) {
     if (request.apiKey.empty()) {
         std::lock_guard<std::mutex> lock(mutex);
         appendAssistantMessageLocked("No API key set for " + toString(request.settings.provider) +
                                      ". Open AI settings to add one before sending requests.");
+        turnFailed = true;
         busy.store(false);
         return;
     }
@@ -446,6 +481,7 @@ void AiService::runProviderRequest(ProviderRequest request) {
         if (cancelRequested.load()) {
             std::lock_guard<std::mutex> lock(mutex);
             appendAssistantMessageLocked("Request cancelled.");
+            turnFailed = true;
             busy.store(false);
             return;
         }
@@ -467,6 +503,7 @@ void AiService::runProviderRequest(ProviderRequest request) {
         std::lock_guard<std::mutex> lock(mutex);
         if (!parsed.error.empty()) {
             appendAssistantMessageLocked(parsed.error);
+            turnFailed = true;
         } else if (parsed.toolCalls.empty() && parsed.truncated) {
             // A truncated reply often drops an incomplete tool call mid-JSON, so
             // it arrives with no usable tool call. Use provider usage, when
@@ -477,8 +514,10 @@ void AiService::runProviderRequest(ProviderRequest request) {
                 message = parsed.text + "\n\n" + message;
             }
             appendAssistantMessageLocked(message);
+            turnFailed = true;
         } else if (parsed.text.empty() && parsed.toolCalls.empty()) {
             appendAssistantMessageLocked("The provider returned no text or tool calls.");
+            turnFailed = true;
         } else {
             ChatMessage assistant;
             assistant.role = ChatRole::Assistant;
@@ -519,6 +558,7 @@ void AiService::addToolCallProposalLocked(const ToolCall& call) {
         toolMessage.role = ChatRole::Tool;
         toolMessage.toolCallId = call.id;
         toolMessage.toolName = call.name;
+        toolMessage.toolDescription = proposal.description;
         toolMessage.toolSuccess = false;
         toolMessage.content = "Error: " + validation.error;
         messages.push_back(toolMessage);

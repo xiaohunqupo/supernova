@@ -4,6 +4,7 @@
 #include "AppSettings.h"
 #include "Backend.h"
 #include "ai/EditorActionExecutor.h"
+#include "ai/EditorActionRegistry.h"
 #include "ai/SecretStore.h"
 #include "external/IconsFontAwesome6.h"
 #include "util/Util.h"
@@ -1047,13 +1048,16 @@ void AiChatWindow::drawTranscript(float height) {
                 break;
             case ai::ChatRole::Tool: {
                 spacer();
-                std::string firstLine = message.content.substr(0, message.content.find('\n'));
+                std::string label = message.toolDescription;
+                if (label.empty() && !message.toolName.empty()) {
+                    label = ai::EditorActionRegistry::describe(message.toolName, ai::Json::object());
+                }
+                if (label.empty()) {
+                    label = "Action";
+                }
                 std::string header = std::string(message.toolSuccess ? ICON_FA_CIRCLE_CHECK
                                                                       : ICON_FA_CIRCLE_XMARK)
-                                   + "  " + message.toolName;
-                if (!firstLine.empty()) {
-                    header += " - " + firstLine;
-                }
+                                   + "  " + label;
                 paragraphs.push_back({header, message.toolSuccess ? okCol : errCol});
                 break;
             }

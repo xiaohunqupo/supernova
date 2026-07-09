@@ -24,6 +24,7 @@ Json messageToJson(const ChatMessage& message) {
     out["content"] = message.content;
     if (!message.toolCallId.empty()) out["tool_call_id"] = message.toolCallId;
     if (!message.toolName.empty()) out["tool_name"] = message.toolName;
+    if (!message.toolDescription.empty()) out["tool_description"] = message.toolDescription;
     if (message.role == ChatRole::Tool) out["tool_success"] = message.toolSuccess;
     if (!message.toolCalls.empty()) {
         Json calls = Json::array();
@@ -48,6 +49,7 @@ ChatMessage messageFromJson(const Json& node) {
     message.content = node.value("content", "");
     message.toolCallId = node.value("tool_call_id", "");
     message.toolName = node.value("tool_name", "");
+    message.toolDescription = node.value("tool_description", "");
     message.toolSuccess = node.value("tool_success", true);
     if (node.contains("tool_calls") && node["tool_calls"].is_array()) {
         for (const Json& callNode : node["tool_calls"]) {

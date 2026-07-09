@@ -68,6 +68,8 @@ struct ChatMessage {
     // Set on tool-result messages (role == Tool).
     std::string toolCallId;
     std::string toolName;
+    // Human-readable label for the transcript (from EditorActionRegistry::describe).
+    std::string toolDescription;
     bool toolSuccess = true;
 };
 

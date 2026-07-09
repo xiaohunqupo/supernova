@@ -58,6 +58,9 @@ private:
     std::atomic<bool> cancelRequested{false};
     uint64_t nextProposalId = 1;
     int toolRounds = 0;
+    // Tracks one user-message agent turn (send → final assistant reply).
+    bool turnActive = false;
+    bool turnFailed = false;
     HttpClient httpClient;
 
     std::string buildSystemPrompt() const;
@@ -65,6 +68,8 @@ private:
     void dispatchRequest(ProviderRequest request);
     void runProviderRequest(ProviderRequest request);
     bool needsContinuationLocked() const;
+    bool hasPendingProposalsLocked() const;
+    void finishTurnLocked(bool success);
     void appendAssistantMessageLocked(const std::string& text);
     void addToolCallProposalLocked(const ToolCall& call);
 };

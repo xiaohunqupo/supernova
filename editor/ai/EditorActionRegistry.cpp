@@ -2,6 +2,7 @@
 
 #include "AiPathUtils.h"
 
+#include <cctype>
 #include <filesystem>
 #include <sstream>
 
@@ -1403,6 +1404,15 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     if (name == "search_engine_api") {
         return "Search engine API for \"" + arguments.value("query", "") + "\"";
     }
+    if (name == "search_engine_source") {
+        return "Search engine source for \"" + arguments.value("query", "") + "\"";
+    }
+    if (name == "read_engine_source") {
+        return "Read engine source " + arguments.value("path", "");
+    }
+    if (name == "read_output_log") {
+        return "Read editor output log";
+    }
     if (name == "create_entity") {
         out << "Create " << arguments.value("type", "entity")
             << " entity \"" << arguments.value("name", "Entity") << "\"";
@@ -1465,7 +1475,11 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
         return "Set scene property " + arguments.value("property", "");
     }
     if (name == "control_play_mode") {
-        return arguments.value("action", "Control") + " play mode";
+        std::string action = arguments.value("action", "control");
+        if (!action.empty()) {
+            action[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(action[0])));
+        }
+        return action + " play mode";
     }
     if (name == "add_child_scene") {
         return "Add child scene " + std::to_string(arguments.value("child_scene_id", 0));
