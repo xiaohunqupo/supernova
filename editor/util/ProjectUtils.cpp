@@ -602,7 +602,9 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<Body3DComponent>(entity, {});
             }else{
-                registry->addComponent<Body3DComponent>(entity, Stream::decodeBody3DComponent(componentNode));
+                Transform* bodyTransform = registry->findComponent<Transform>(entity);
+                const Vector3 bodyScale = bodyTransform ? bodyTransform->scale : Vector3::UNIT_SCALE;
+                registry->addComponent<Body3DComponent>(entity, Stream::decodeBody3DComponent(componentNode, nullptr, bodyScale));
             }
             break;
         case ComponentType::BoneComponent:

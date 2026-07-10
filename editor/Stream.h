@@ -166,6 +166,10 @@ namespace doriax::editor {
         static bool isModelBackedMesh(const Entity entity, const EntityRegistry* registry, Signature signature);
 
     public:
+        // Scaled single-shape offset above which physics may become unstable;
+        // shared by the load-time warning and the Properties inspector warning
+        static constexpr float MAX_SINGLE_SHAPE_PHYSICS_OFFSET = 50.0f;
+
         // Public because the enum names are also the wire format of AI editor actions
         // (EditorActionExecutor validates values by round-tripping through these).
         static std::string textureFilterToString(TextureFilter filter);
@@ -298,7 +302,7 @@ namespace doriax::editor {
         static Body2DComponent decodeBody2DComponent(const YAML::Node& node, const Body2DComponent* oldBody = nullptr);
 
         static YAML::Node encodeBody3DComponent(const Body3DComponent& body);
-        static Body3DComponent decodeBody3DComponent(const YAML::Node& node, const Body3DComponent* oldBody = nullptr);
+        static Body3DComponent decodeBody3DComponent(const YAML::Node& node, const Body3DComponent* oldBody = nullptr, const Vector3& bodyScale = Vector3::UNIT_SCALE);
 
         static YAML::Node encodeJoint2DComponent(const Joint2DComponent& joint);
         static Joint2DComponent decodeJoint2DComponent(const YAML::Node& node, const Joint2DComponent* oldJoint = nullptr);

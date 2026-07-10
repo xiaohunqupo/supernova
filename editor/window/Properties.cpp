@@ -9783,7 +9783,10 @@ void editor::Properties::drawBody3DComponent(ComponentType cpType, SceneProject*
     for (size_t s = 0; s < numShapes; s++){
         Body3DComponent& bodyRef = sceneProject->scene->getComponent<Body3DComponent>(entities[0]);
         Shape3D& shape = bodyRef.shapes[s];
-        const bool suspiciousSingleShapeOffset = bodyRef.numShapes == 1 && shape.position.length() > 50.0f;
+        Transform* bodyTransform = sceneProject->scene->findComponent<Transform>(entities[0]);
+        const Vector3 bodyScale = bodyTransform ? bodyTransform->scale : Vector3::UNIT_SCALE;
+        const float physicsOffset = (shape.position * bodyScale).length();
+        const bool suspiciousSingleShapeOffset = bodyRef.numShapes == 1 && physicsOffset > Stream::MAX_SINGLE_SHAPE_PHYSICS_OFFSET;
 
         ImGui::SeparatorText(("Shape " + std::to_string(s + 1)).c_str());
         ImGui::PushID((int)s);
@@ -9917,7 +9920,7 @@ void editor::Properties::drawBody3DComponent(ComponentType cpType, SceneProject*
             ImGui::TextUnformatted("Warning");
             ImGui::TableSetColumnIndex(1);
             ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 196, 64, 255));
-            ImGui::TextUnformatted("Large local collider offset can destabilize joints.");
+            ImGui::TextUnformatted("Large scaled collider offset can destabilize joints.");
             ImGui::PopStyleColor();
             ImGui::SameLine();
 

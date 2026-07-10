@@ -3209,7 +3209,9 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
     compName = Catalog::getComponentName(ComponentType::Body3DComponent, true);
     if (compNode[compName]) {
         Body3DComponent* existing = registry->findComponent<Body3DComponent>(entity);
-        Body3DComponent body = decodeBody3DComponent(compNode[compName], existing);
+        Transform* bodyTransform = registry->findComponent<Transform>(entity);
+        const Vector3 bodyScale = bodyTransform ? bodyTransform->scale : Vector3::UNIT_SCALE;
+        Body3DComponent body = decodeBody3DComponent(compNode[compName], existing, bodyScale);
         if (!signature.test(registry->getComponentId<Body3DComponent>())){
             registry->addComponent<Body3DComponent>(entity, body);
         }else{
@@ -5206,9 +5208,8 @@ YAML::Node editor::Stream::encodeBody3DComponent(const Body3DComponent& body) {
     return node;
 }
 
-Body3DComponent editor::Stream::decodeBody3DComponent(const YAML::Node& node, const Body3DComponent* oldBody) {
+Body3DComponent editor::Stream::decodeBody3DComponent(const YAML::Node& node, const Body3DComponent* oldBody, const Vector3& bodyScale) {
     Body3DComponent body;
-    constexpr float kMaxSingleShapeLocalOffset = 50.0f;
 
     if (oldBody) {
         body = *oldBody;
@@ -5227,9 +5228,9 @@ Body3DComponent editor::Stream::decodeBody3DComponent(const YAML::Node& node, co
             if (node["shapes"][i]["position"]) {
                 body.shapes[i].position = decodeVector3(node["shapes"][i]["position"]);
 
-                if (body.numShapes == 1 && body.shapes[i].position.length() > kMaxSingleShapeLocalOffset) {
-                    Log::warn("Body3D shape local position is too large (%.2f). Resetting to [0, 0, 0] to avoid unstable physics.", body.shapes[i].position.length());
-                    body.shapes[i].position = Vector3::ZERO;
+                const float physicsOffset = (body.shapes[i].position * bodyScale).length();
+                if (body.numShapes == 1 && physicsOffset > MAX_SINGLE_SHAPE_PHYSICS_OFFSET) {
+                    Log::warn("Body3D shape position after transform scale is too large (%.2f). Physics may be unstable.", physicsOffset);
                 }
             }
             if (node["shapes"][i]["rotation"]) {
