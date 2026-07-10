@@ -398,6 +398,8 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
         case ScenePropertyInputType::DragFloat:
             if constexpr (std::is_same_v<T, float>) {
                 changed = ImGui::DragFloat(("##" + propertyName).c_str(), &value, 0.01f);
+            } else if constexpr (std::is_same_v<T, Vector2>) {
+                changed = ImGui::DragFloat2(("##" + propertyName).c_str(), (float*)&value.x);
             } else if constexpr (std::is_same_v<T, Vector3>) {
                 changed = ImGui::DragFloat3(("##" + propertyName).c_str(), (float*)&value.x);
             } else if constexpr (std::is_same_v<T, Vector4>) {
@@ -12366,6 +12368,25 @@ void editor::Properties::show(){
                                 CommandHandle::get(sceneProject->id)->addCommand(cmd);
                             }
                         }
+                    }
+
+                    ImGui::EndTable();
+                }
+            }
+
+            if (sceneProject->sceneType != SceneType::SCENE_UI) {
+                ImGui::SeparatorText("Physics");
+
+                if (ImGui::BeginTable("scene_physics_table", 2, tableFlags)) {
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Gravity").x);
+                    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                    if (sceneProject->sceneType == SceneType::SCENE_3D) {
+                        drawScenePropertyRow<Vector3>(sceneProject, "physics_gravity_3d", "Gravity", ScenePropertyInputType::DragFloat, -1.0f, 0.0f, 1.0f,
+                            "Gravity applied to 3D physics bodies (meters/s^2).");
+                    } else {
+                        drawScenePropertyRow<Vector2>(sceneProject, "physics_gravity_2d", "Gravity", ScenePropertyInputType::DragFloat, -1.0f, 0.0f, 1.0f,
+                            "Gravity applied to 2D physics bodies (meters/s^2).");
                     }
 
                     ImGui::EndTable();

@@ -598,6 +598,14 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addFunction("getAmbientLight2DColorLinear", &Scene::getAmbientLight2DColorLinear)
         .addFunction("setAmbientLight2D", (void (Scene::*)(float, Vector3))&Scene::setAmbientLight2D)
         .addProperty("shadow2DQuality", &Scene::getShadow2DQuality, &Scene::setShadow2DQuality)
+        .addProperty("gravity2D", &Scene::getGravity2D, (void (Scene::*)(Vector2))&Scene::setGravity2D)
+        .addFunction("setGravity2D",
+            luabridge::overload<Vector2>(&Scene::setGravity2D),
+            luabridge::overload<float, float>(&Scene::setGravity2D))
+        .addProperty("gravity3D", &Scene::getGravity3D, (void (Scene::*)(Vector3))&Scene::setGravity3D)
+        .addFunction("setGravity3D",
+            luabridge::overload<Vector3>(&Scene::setGravity3D),
+            luabridge::overload<float, float, float>(&Scene::setGravity3D))
         .addProperty("ssaoEnabled", &Scene::isSSAOEnabled, &Scene::setSSAOEnabled)
         .addProperty("ssaoRadius", &Scene::getSSAORadius, &Scene::setSSAORadius)
         .addProperty("ssaoIntensity", &Scene::getSSAOIntensity, &Scene::setSSAOIntensity)

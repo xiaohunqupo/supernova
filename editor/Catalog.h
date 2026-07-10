@@ -179,6 +179,7 @@ namespace doriax::editor{
                 // Return default values if scene is null
                 if constexpr (std::is_same_v<T, Vector4>) return Vector4(0.0, 0.0, 0.0, 1.0);
                 if constexpr (std::is_same_v<T, Vector3>) return Vector3(1.0, 1.0, 1.0);
+                if constexpr (std::is_same_v<T, Vector2>) return Vector2(0.0, 0.0);
                 if constexpr (std::is_same_v<T, bool>) return false;
                 if constexpr (std::is_same_v<T, float>) return 0.0f;
                 if constexpr (std::is_same_v<T, int>) return 0;
@@ -222,6 +223,16 @@ namespace doriax::editor{
             else if (propertyName == "shadows_2d_quality") {
                 if constexpr (std::is_same_v<T, ShadowQuality>) {
                     return scene->getShadow2DQuality();
+                }
+            }
+            else if (propertyName == "physics_gravity_2d") {
+                if constexpr (std::is_same_v<T, Vector2>) {
+                    return scene->getGravity2D();
+                }
+            }
+            else if (propertyName == "physics_gravity_3d") {
+                if constexpr (std::is_same_v<T, Vector3>) {
+                    return scene->getGravity3D();
                 }
             }
             else if (propertyName == "light_state") {
@@ -338,6 +349,7 @@ namespace doriax::editor{
             // Return default value if property not found
             if constexpr (std::is_same_v<T, Vector4>) return Vector4(0.0, 0.0, 0.0, 1.0);
             if constexpr (std::is_same_v<T, Vector3>) return Vector3(1.0, 1.0, 1.0);
+            if constexpr (std::is_same_v<T, Vector2>) return Vector2(0.0, 0.0);
             if constexpr (std::is_same_v<T, bool>) return false;
             if constexpr (std::is_same_v<T, float>) return 0.0f;
             if constexpr (std::is_same_v<T, int>) return 0;
@@ -385,6 +397,16 @@ namespace doriax::editor{
             else if (propertyName == "shadows_2d_quality") {
                 if constexpr (std::is_same_v<T, ShadowQuality>) {
                     scene->setShadow2DQuality(value);
+                }
+            }
+            else if (propertyName == "physics_gravity_2d") {
+                if constexpr (std::is_same_v<T, Vector2>) {
+                    scene->setGravity2D(value);
+                }
+            }
+            else if (propertyName == "physics_gravity_3d") {
+                if constexpr (std::is_same_v<T, Vector3>) {
+                    scene->setGravity3D(value);
                 }
             }
             else if (propertyName == "light_state") {

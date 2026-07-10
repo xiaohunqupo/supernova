@@ -162,6 +162,14 @@ void LuaBinding::registerECSClasses(lua_State *L){
             luabridge::overload<Vector3>(&PhysicsSystem::setGravity),
             luabridge::overload<float, float>(&PhysicsSystem::setGravity),
             luabridge::overload<float, float, float>(&PhysicsSystem::setGravity))
+        .addProperty("gravity2D", (Vector2(PhysicsSystem::*)() const)&PhysicsSystem::getGravity2D, (void(PhysicsSystem::*)(Vector2))&PhysicsSystem::setGravity2D)
+        .addFunction("setGravity2D",
+            luabridge::overload<Vector2>(&PhysicsSystem::setGravity2D),
+            luabridge::overload<float, float>(&PhysicsSystem::setGravity2D))
+        .addProperty("gravity3D", (Vector3(PhysicsSystem::*)() const)&PhysicsSystem::getGravity3D, (void(PhysicsSystem::*)(Vector3))&PhysicsSystem::setGravity3D)
+        .addFunction("setGravity3D",
+            luabridge::overload<Vector3>(&PhysicsSystem::setGravity3D),
+            luabridge::overload<float, float, float>(&PhysicsSystem::setGravity3D))
         .addProperty("pointsToMeterScale2D", &PhysicsSystem::getPointsToMeterScale2D,  &PhysicsSystem::setPointsToMeterScale2D)
         .addProperty("lock3DBodies", &PhysicsSystem::isLock3DBodies, &PhysicsSystem::setLock3DBodies)
         .addProperty("beginContact2D", [] (PhysicsSystem* self, lua_State* L) { return &self->beginContact2D; }, [] (PhysicsSystem* self, lua_State* L) { self->beginContact2D = L; })

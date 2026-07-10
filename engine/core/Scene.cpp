@@ -418,6 +418,31 @@ ShadowQuality Scene::getShadow2DQuality() const{
     return this->shadow2DQuality;
 }
 
+Vector2 Scene::getGravity2D() const{
+    // getSystem is non-const but this lookup does not mutate the scene
+    return const_cast<Scene*>(this)->getSystem<PhysicsSystem>()->getGravity2D();
+}
+
+void Scene::setGravity2D(Vector2 gravity){
+    getSystem<PhysicsSystem>()->setGravity2D(gravity);
+}
+
+void Scene::setGravity2D(float x, float y){
+    getSystem<PhysicsSystem>()->setGravity2D(x, y);
+}
+
+Vector3 Scene::getGravity3D() const{
+    return const_cast<Scene*>(this)->getSystem<PhysicsSystem>()->getGravity3D();
+}
+
+void Scene::setGravity3D(Vector3 gravity){
+    getSystem<PhysicsSystem>()->setGravity3D(gravity);
+}
+
+void Scene::setGravity3D(float x, float y, float z){
+    getSystem<PhysicsSystem>()->setGravity3D(x, y, z);
+}
+
 void Scene::setDefaultMeshShader(const std::string& path){
     if (this->defaultMeshShader != path){
         this->defaultMeshShader = path;

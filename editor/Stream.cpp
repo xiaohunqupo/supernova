@@ -1841,6 +1841,8 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
     sceneNode["ssrMaxSteps"] = scene->getSSRMaxSteps();
     sceneNode["ssrIntensity"] = scene->getSSRIntensity();
     sceneNode["ssrBlur"] = scene->getSSRBlur();
+    sceneNode["gravity2D"] = encodeVector2(scene->getGravity2D());
+    sceneNode["gravity3D"] = encodeVector3(scene->getGravity3D());
     sceneNode["fixedResolutionEnabled"] = scene->isFixedResolutionEnabled();
     sceneNode["fixedResolutionWidth"] = scene->getFixedResolutionWidth();
     sceneNode["fixedResolutionHeight"] = scene->getFixedResolutionHeight();
@@ -1934,6 +1936,10 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
     if (node["ssrBlur"]) {
         scene->setSSRBlur(node["ssrBlur"].as<float>());
     }
+
+    // absent key restores the engine default so decoding into a reused scene (play restore) is exact
+    scene->setGravity2D(node["gravity2D"] ? decodeVector2(node["gravity2D"]) : Vector2(0.0f, -9.81f));
+    scene->setGravity3D(node["gravity3D"] ? decodeVector3(node["gravity3D"]) : Vector3(0.0f, -9.81f, 0.0f));
 
     if (node["fixedResolutionEnabled"]) {
         scene->setFixedResolutionEnabled(node["fixedResolutionEnabled"].as<bool>());

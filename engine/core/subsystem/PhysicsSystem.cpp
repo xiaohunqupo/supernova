@@ -66,7 +66,8 @@ PhysicsSystem::PhysicsSystem(Scene* scene): SubSystem(scene){
 
 	this->scene = scene;
 
-    this->gravity = Vector3(0, -9.81f, 0);
+    this->gravity2D = Vector2(0, -9.81f);
+    this->gravity3D = Vector3(0, -9.81f, 0);
     this->pointsToMeterScale2D = 64.0;
 
     // The Box2D world is created lazily (see ensureWorld2D): Box2D's global b2_worlds[] pool is
@@ -98,7 +99,7 @@ PhysicsSystem::PhysicsSystem(Scene* scene): SubSystem(scene){
 
     // Now we can create the actual physics system.
     world3D.Init(cMaxBodies, cNumBodyMutexes, cMaxBodyPairs, cMaxContactConstraints, *broad_phase_layer_interface, *object_vs_broadphase_layer_filter, *object_vs_object_layer_filter);
-    world3D.SetGravity(JPH::Vec3(this->gravity.x, this->gravity.y, this->gravity.z));
+    world3D.SetGravity(JPH::Vec3(this->gravity3D.x, this->gravity3D.y, this->gravity3D.z));
 
     temp_allocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
     job_system = new JPH::JobSystemThreadPool (JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, JPH::thread::hardware_concurrency() - 1);
@@ -118,7 +119,7 @@ void PhysicsSystem::ensureWorld2D(){
     }
 
     b2WorldDef worldDef = b2DefaultWorldDef();
-    worldDef.gravity = {this->gravity.x, this->gravity.y};
+    worldDef.gravity = {this->gravity2D.x, this->gravity2D.y};
     world2D = b2CreateWorld(&worldDef);
 
     if (!b2World_IsValid(world2D)){
@@ -151,18 +152,45 @@ PhysicsSystem::~PhysicsSystem(){
     //JPH::UnregisterTypes();
 }
 
-Vector3 PhysicsSystem::getGravity() const{
-    return gravity;
+Vector2 PhysicsSystem::getGravity2D() const{
+    return gravity2D;
 }
 
-void PhysicsSystem::setGravity(Vector3 gravity){
-    if (this->gravity != gravity){
-        this->gravity = gravity;
+void PhysicsSystem::setGravity2D(Vector2 gravity){
+    if (this->gravity2D != gravity){
+        this->gravity2D = gravity;
         if (b2World_IsValid(world2D)){
             b2World_SetGravity(world2D, {gravity.x, gravity.y});
         }
+    }
+}
+
+void PhysicsSystem::setGravity2D(float x, float y){
+    setGravity2D(Vector2(x, y));
+}
+
+Vector3 PhysicsSystem::getGravity3D() const{
+    return gravity3D;
+}
+
+void PhysicsSystem::setGravity3D(Vector3 gravity){
+    if (this->gravity3D != gravity){
+        this->gravity3D = gravity;
         world3D.SetGravity(JPH::Vec3(gravity.x, gravity.y, gravity.z));
     }
+}
+
+void PhysicsSystem::setGravity3D(float x, float y, float z){
+    setGravity3D(Vector3(x, y, z));
+}
+
+Vector3 PhysicsSystem::getGravity() const{
+    return gravity3D;
+}
+
+void PhysicsSystem::setGravity(Vector3 gravity){
+    setGravity2D(Vector2(gravity.x, gravity.y));
+    setGravity3D(gravity);
 }
 
 void PhysicsSystem::setGravity(float x, float y){

@@ -10,6 +10,7 @@
 #include "EntityRegistry.h"
 #include "Export.h"
 #include "render/Render.h"
+#include "math/Vector2.h"
 #include <string>
 #include <vector>
 
@@ -218,6 +219,15 @@ namespace doriax{
 
         void setShadow2DQuality(ShadowQuality quality);
         ShadowQuality getShadow2DQuality() const;
+
+        // convenience forwarders to PhysicsSystem gravity
+        Vector2 getGravity2D() const;
+        void setGravity2D(Vector2 gravity);
+        void setGravity2D(float x, float y);
+
+        Vector3 getGravity3D() const;
+        void setGravity3D(Vector3 gravity);
+        void setGravity3D(float x, float y, float z);
 
         void setDefaultMeshShader(const std::string& path);
         const std::string& getDefaultMeshShader() const;

@@ -33,7 +33,8 @@ namespace doriax{
 	class DORIAX_API PhysicsSystem : public SubSystem {
 
 	private:
-		Vector3 gravity;
+		Vector2 gravity2D;
+		Vector3 gravity3D;
 
 		b2WorldId world2D;
 		float pointsToMeterScale2D;
@@ -75,6 +76,15 @@ namespace doriax{
 		PhysicsSystem(Scene* scene);
 		virtual ~PhysicsSystem();
 
+		Vector2 getGravity2D() const;
+		void setGravity2D(Vector2 gravity);
+		void setGravity2D(float x, float y);
+
+		Vector3 getGravity3D() const;
+		void setGravity3D(Vector3 gravity);
+		void setGravity3D(float x, float y, float z);
+
+		// sets both 2D (x, y) and 3D worlds
 		Vector3 getGravity() const;
 		void setGravity(Vector3 gravity);
 		void setGravity(float x, float y);

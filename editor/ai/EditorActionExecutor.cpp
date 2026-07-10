@@ -1090,6 +1090,8 @@ Json sceneReadableProperties(SceneProject* sceneProject) {
     props["ambient_light_2d_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ambient_light_2d_intensity")}};
     props["shadows_quality"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<ShadowQuality>(scene, "shadows_quality"))}};
     props["shadows_2d_quality"] = {{"type", "int"}, {"value", static_cast<int>(Catalog::getSceneProperty<ShadowQuality>(scene, "shadows_2d_quality"))}};
+    props["physics_gravity_2d"] = {{"type", "vector2"}, {"value", vector2Json(Catalog::getSceneProperty<Vector2>(scene, "physics_gravity_2d"))}};
+    props["physics_gravity_3d"] = {{"type", "vector3"}, {"value", vector3Json(Catalog::getSceneProperty<Vector3>(scene, "physics_gravity_3d"))}};
     props["ssao_enabled"] = {{"type", "bool"}, {"value", Catalog::getSceneProperty<bool>(scene, "ssao_enabled")}};
     props["ssao_radius"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssao_radius")}};
     props["ssao_intensity"] = {{"type", "float"}, {"value", Catalog::getSceneProperty<float>(scene, "ssao_intensity")}};
@@ -2168,6 +2170,18 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
         Vector3 value = Catalog::getSceneProperty<Vector3>(sceneProject->scene, property);
         if (!parseVector3(arguments.value("vector3_value", Json::object()), value)) {
             return failResult(property + " requires vector3_value.");
+        }
+        cmd = new ScenePropertyCmd<Vector3>(project, sceneId, property, value);
+    } else if (property == "physics_gravity_2d") {
+        Vector2 value = Catalog::getSceneProperty<Vector2>(sceneProject->scene, property);
+        if (!parseVector2(arguments.value("vector2_value", Json::object()), value)) {
+            return failResult("physics_gravity_2d requires vector2_value.");
+        }
+        cmd = new ScenePropertyCmd<Vector2>(project, sceneId, property, value);
+    } else if (property == "physics_gravity_3d") {
+        Vector3 value = Catalog::getSceneProperty<Vector3>(sceneProject->scene, property);
+        if (!parseVector3(arguments.value("vector3_value", Json::object()), value)) {
+            return failResult("physics_gravity_3d requires vector3_value.");
         }
         cmd = new ScenePropertyCmd<Vector3>(project, sceneId, property, value);
     } else if (property == "ssao_enabled" ||
