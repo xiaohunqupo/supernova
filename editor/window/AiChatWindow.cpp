@@ -938,26 +938,32 @@ void AiChatWindow::drawHeader() {
 
 void AiChatWindow::drawHistoryPopup() {
     if (!ImGui::BeginPopup("AI History##AiHistoryPopup")) {
+        pendingDeleteId.clear();
         return;
+    }
+
+    if (ImGui::IsWindowAppearing()) {
+        historyCache = conversationStore.list();
+        pendingDeleteId.clear();
     }
 
     ImGui::TextDisabled(ICON_FA_COMMENTS "  Conversations");
     ImGui::Separator();
 
-    std::vector<ai::ConversationMeta> conversations = conversationStore.list();
-    if (conversations.empty()) {
+    if (historyCache.empty()) {
         ImGui::TextDisabled("No saved conversations yet");
         ImGui::EndPopup();
         return;
     }
 
+    const bool busy = service.isBusy();
     float trashWidth = ImGui::GetFrameHeight();
     float ageWidth = ImGui::CalcTextSize("999mo").x;
     float rowWidth = 360.0f;
     int64_t now = currentEpochSeconds();
     std::string toDelete;
 
-    for (const auto& meta : conversations) {
+    for (const auto& meta : historyCache) {
         ImGui::PushID(meta.id.c_str());
         bool isCurrent = meta.id == currentConversationId;
 
@@ -965,23 +971,52 @@ void AiChatWindow::drawHistoryPopup() {
         float titleWidth = rowWidth - trashWidth - ageWidth - style.ItemSpacing.x * 2.0f;
         std::string label = elideToWidth(meta.title.empty() ? "Conversation" : meta.title,
                                          titleWidth);
+        ImGui::BeginDisabled(busy);
         if (ImGui::Selectable(label.c_str(), isCurrent,
                               ImGuiSelectableFlags_AllowOverlap, ImVec2(titleWidth, 0))) {
             loadConversation(meta.id);
             ImGui::CloseCurrentPopup();
         }
+        ImGui::EndDisabled();
+        if (busy && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Wait for the current reply to finish");
+        }
         ImGui::SameLine();
         ImGui::TextDisabled("%s", compactRelativeTime(meta.updatedAt, now).c_str());
         ImGui::SameLine();
-        if (Widgets::iconButton("##DeleteConversation", ICON_FA_TRASH, ImVec2(trashWidth, ImGui::GetFrameHeight()))) {
-            toDelete = meta.id;
+
+        // Deleting the active conversation while a reply is in flight is blocked:
+        // the in-memory chat cannot be cleared then, and the next persist would
+        // silently resurrect the file under a new id.
+        const bool deleteBlocked = busy && isCurrent;
+        const bool armed = pendingDeleteId == meta.id;
+        ImGui::BeginDisabled(deleteBlocked);
+        if (armed) ImGui::PushStyleColor(ImGuiCol_Text, kErrorColor);
+        if (Widgets::iconButton("##DeleteConversation", ICON_FA_TRASH,
+                                ImVec2(trashWidth, ImGui::GetFrameHeight()))) {
+            if (armed) {
+                toDelete = meta.id;
+            } else {
+                pendingDeleteId = meta.id;
+            }
         }
-        ImGui::SetItemTooltip("Delete conversation");
+        if (armed) ImGui::PopStyleColor();
+        ImGui::EndDisabled();
+        if (deleteBlocked) {
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Wait for the current reply to finish");
+            }
+        } else {
+            ImGui::SetItemTooltip(armed ? "Click again to permanently delete"
+                                        : "Delete conversation");
+        }
         ImGui::PopID();
     }
 
     if (!toDelete.empty()) {
         conversationStore.remove(toDelete);
+        pendingDeleteId.clear();
+        historyCache = conversationStore.list();
         if (toDelete == currentConversationId) {
             service.clearConversation();
             currentConversationId.clear();
@@ -2142,6 +2177,11 @@ void AiChatWindow::loadLatestConversationForCurrentProject() {
 }
 
 void AiChatWindow::persistConversation() {
+    // Without a project path the store would resolve to a CWD-relative
+    // ".doriax" folder; the auto-loader has the matching guard.
+    if (!project || project->getProjectPath().empty()) {
+        return;
+    }
     std::vector<ai::ChatMessage> messages = service.getMessages();
     if (messages.size() == lastSavedMessageCount) {
         return; // nothing new since the last save

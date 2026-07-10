@@ -55,6 +55,9 @@ ChatMessage messageFromJson(const Json& node) {
     message.toolSuccess = node.value("tool_success", true);
     if (node.contains("tool_calls") && node["tool_calls"].is_array()) {
         for (const Json& callNode : node["tool_calls"]) {
+            if (!callNode.is_object()) {
+                continue;
+            }
             ToolCall call;
             call.id = callNode.value("id", "");
             call.name = callNode.value("name", "");
@@ -86,7 +89,9 @@ fs::path ConversationStore::conversationsDir() const {
 
 std::string ConversationStore::newId() {
     static std::atomic<uint64_t> counter{0};
-    return std::to_string(nowSeconds()) + "-" + std::to_string(counter.fetch_add(1));
+    int64_t millis = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::to_string(millis) + "-" + std::to_string(counter.fetch_add(1));
 }
 
 void ConversationStore::save(const std::string& id, const std::string& title,
@@ -107,9 +112,24 @@ void ConversationStore::save(const std::string& id, const std::string& title,
         root["messages"].push_back(messageToJson(message));
     }
 
-    std::ofstream out(dir / (id + ".json"), std::ios::trunc);
-    if (out) {
+    // Write to a temp file and rename so a crash mid-write never truncates an
+    // existing conversation. list() skips the temp file (extension is ".tmp").
+    fs::path finalPath = dir / (id + ".json");
+    fs::path tmpPath = dir / (id + ".json.tmp");
+    {
+        std::ofstream out(tmpPath, std::ios::trunc);
+        if (!out) return;
         out << root.dump(2);
+        out.flush();
+        if (!out) {
+            out.close();
+            fs::remove(tmpPath, ec);
+            return;
+        }
+    }
+    fs::rename(tmpPath, finalPath, ec);
+    if (ec) {
+        fs::remove(tmpPath, ec);
     }
 }
 
@@ -124,6 +144,9 @@ bool ConversationStore::load(const std::string& id, std::vector<ChatMessage>& ou
 
     outMessages.clear();
     for (const Json& node : root["messages"]) {
+        if (!node.is_object()) {
+            continue; // tolerate hand-edited or corrupted entries
+        }
         outMessages.push_back(messageFromJson(node));
     }
     return true;
@@ -147,14 +170,17 @@ std::vector<ConversationMeta> ConversationStore::list() const {
         if (!root.is_object()) continue;
 
         ConversationMeta meta;
-        meta.id = root.value("id", it->path().stem().string());
+        // The filename is what load() opens, so it is the id's ground truth
+        // even if the embedded "id" field disagrees (copied/renamed files).
+        meta.id = it->path().stem().string();
         meta.title = root.value("title", std::string("Conversation"));
         meta.updatedAt = root.value("updated_at", static_cast<int64_t>(0));
         result.push_back(std::move(meta));
     }
 
     std::sort(result.begin(), result.end(), [](const ConversationMeta& a, const ConversationMeta& b) {
-        return a.updatedAt > b.updatedAt;
+        if (a.updatedAt != b.updatedAt) return a.updatedAt > b.updatedAt;
+        return a.id > b.id; // stable order for equal timestamps
     });
     return result;
 }

@@ -77,6 +77,10 @@ private:
     std::vector<int> inputSoftWraps;
     std::string inputDisplayText;
     std::string currentConversationId;
+    // Snapshot of saved conversations, refreshed when the history popup opens
+    // (and after a delete) so list() doesn't re-parse every file per frame.
+    std::vector<ai::ConversationMeta> historyCache;
+    std::string pendingDeleteId; // armed delete awaiting a confirming second click
     std::string autoLoadedProjectPath;
     size_t lastSavedMessageCount = 0;
     size_t lastObservedMessageCount = 0;
