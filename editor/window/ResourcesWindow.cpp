@@ -19,8 +19,6 @@
 #include "command/type/DeleteFileCmd.h"
 #include "command/type/CreateEntityBundleCmd.h"
 
-#include "window/Widgets.h"
-
 #include "Backend.h"
 #include "App.h"
 #include "Stream.h"
@@ -464,6 +462,29 @@ void editor::ResourcesWindow::renderHeader() {
     }
 }
 
+// ImGui hides label text after "##", so breadcrumb items (directory names that
+// may contain "##") draw their text manually over a label-less widget; callers
+// wrap these in PushID for uniqueness
+static bool verbatimTextButton(const std::string& label) {
+    const char* begin = label.c_str();
+    const char* end = begin + label.size();
+    ImVec2 textSize = ImGui::CalcTextSize(begin, end);
+    ImVec2 padding = ImGui::GetStyle().FramePadding;
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    bool pressed = ImGui::Button("##BreadcrumbItem", ImVec2(textSize.x + padding.x * 2.0f, textSize.y + padding.y * 2.0f));
+    ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + padding.x, pos.y + padding.y), ImGui::GetColorU32(ImGuiCol_Text), begin, end);
+    return pressed;
+}
+
+static bool verbatimTextSelectable(const std::string& label) {
+    const char* begin = label.c_str();
+    const char* end = begin + label.size();
+    ImVec2 textSize = ImGui::CalcTextSize(begin, end);
+    bool pressed = ImGui::Selectable("##BreadcrumbHiddenItem", false, 0, ImVec2(textSize.x, 0.0f));
+    ImGui::GetWindowDrawList()->AddText(ImGui::GetItemRectMin(), ImGui::GetColorU32(ImGuiCol_Text), begin, end);
+    return pressed;
+}
+
 void editor::ResourcesWindow::renderPathBreadcrumb(const ImVec2& size) {
     fs::path rootPath = project->getProjectPath();
 
@@ -525,12 +546,13 @@ void editor::ResourcesWindow::renderPathBreadcrumb(const ImVec2& size) {
         ImGui::SameLine();
     }
 
+    bool segmentTooltipShown = false;
     for (size_t i = firstVisible; i < segments.size(); i++) {
         ImGui::TextDisabled("/");
         ImGui::SameLine();
         ImGui::PushID(static_cast<int>(i));
         bool isCurrent = (segments[i].second == currentPath);
-        if (ImGui::Button(segments[i].first.c_str()) && !isCurrent) {
+        if (verbatimTextButton(segments[i].first) && !isCurrent) {
             navigateTo = segments[i].second;
         }
         if (!isCurrent && ImGui::BeginDragDropTarget()) {
@@ -541,6 +563,7 @@ void editor::ResourcesWindow::renderPathBreadcrumb(const ImVec2& size) {
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("%s", segments[i].second.string().c_str());
+            segmentTooltipShown = true;
         }
         ImGui::PopID();
         ImGui::SameLine();
@@ -551,14 +574,19 @@ void editor::ResourcesWindow::renderPathBreadcrumb(const ImVec2& size) {
 
     if (ImGui::BeginPopup("##BreadcrumbMorePopup")) {
         for (size_t i = 0; i < firstVisible; i++) {
-            if (ImGui::MenuItem(segments[i].first.c_str())) {
+            ImGui::PushID(static_cast<int>(i));
+            if (verbatimTextSelectable(segments[i].first)) {
                 navigateTo = segments[i].second;
             }
+            ImGui::PopID();
         }
         ImGui::EndPopup();
     }
 
     ImGui::EndChild();
+    if (!segmentTooltipShown && !currentPath.empty()) {
+        ImGui::SetItemTooltip("%s", currentPath.string().c_str());
+    }
     ImGui::PopStyleColor();
 
     if (!navigateTo.empty()) {
