@@ -55,6 +55,7 @@
 #include "subsystem/ActionSystem.h"
 #include "subsystem/PhysicsSystem.h"
 #include "subsystem/AudioSystem.h"
+#include "action/Action.h"
 #include "pool/TexturePool.h"
 #include "yaml-cpp/yaml.h"
 #include "soloud.h"
@@ -10643,7 +10644,7 @@ void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject*
             sceneProject->needUpdateRender = true;
 
             actionComp = scene->findComponent<ActionComponent>(entity);
-            if (actionComp && actionComp->state == ActionState::Stopped) {
+            if (actionComp && actionComp->state != ActionState::Running) {
                 actionPreviewPlaying = false;
             }
         }
@@ -10694,10 +10695,9 @@ void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject*
         // Standalone action preview (no AnimationComponent)
         if (actionPreviewPlaying) {
             if (ImGui::Button(ICON_FA_PAUSE "##action_pause")) {
-                if (actionComp) {
-                    actionComp->pauseTrigger = true;
+                if (actionComp && actionComp->state == ActionState::Running) {
+                    Action(scene, entity).pause();
                 }
-                actionPreviewPlaying = false;
             }
         } else {
             if (ImGui::Button(ICON_FA_PLAY "##action_play")) {
@@ -10710,7 +10710,7 @@ void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject*
                         startActionPreview(entity, scene, sceneProject);
                         actionComp = scene->findComponent<ActionComponent>(entity);
                     } else {
-                        actionComp->startTrigger = true;
+                        Action(scene, entity).start();
                     }
                 }
                 actionPreviewPlaying = true;

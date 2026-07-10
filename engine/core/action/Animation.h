@@ -21,9 +21,10 @@ namespace doriax{
         bool isLoop() const;
         void setLoop(bool loop);
 
-        // Crossfade helpers. fadeIn starts the animation ramping its blend weight
-        // 0->1 over `duration` seconds; fadeOut ramps the (already running)
-        // animation to 0 and stops it. A duration <= 0 is instant.
+        // Crossfade helpers. fadeIn starts a stopped animation at weight 0 or
+        // reverses a running fade from its current weight, then ramps it to 1.
+        // fadeOut ramps a running animation to 0 and stops it. A duration <= 0
+        // is instant.
         void fadeIn(float duration);
         void fadeOut(float duration);
 

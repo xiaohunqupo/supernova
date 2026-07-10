@@ -19,7 +19,12 @@ Action::~Action(){
 void Action::start(){
     ActionComponent& action = getComponent<ActionComponent>();
 
-    action.startTrigger = true;
+    // start() means "ensure running". Repeated calls while already running are
+    // idempotent and must not leave a trigger that can resurrect the action after
+    // a later stop. setTarget() sets stop/start directly when a restart is needed.
+    action.startTrigger = action.state != ActionState::Running;
+    action.stopTrigger = false;
+    action.pauseTrigger = false;
 }
 
 void Action::pause(){

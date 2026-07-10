@@ -284,6 +284,8 @@ void ActionSystem::actionStart(Entity entity){
         AnimationComponent& animcomp = scene->getComponent<AnimationComponent>(entity);
         if (animcomp.fadeSpeed <= 0.0f){
             animcomp.weight = 1.0f;
+            animcomp.fadeTarget = 1.0f;
+            animcomp.stopOnFadeOut = false;
         }
     }
 
@@ -331,64 +333,99 @@ void ActionSystem::actionComponentStart(ActionComponent& action){
 }
 
 void ActionSystem::actionStop(Entity entity){
-    ActionComponent& action = scene->getComponent<ActionComponent>(entity);
-    Signature signature = scene->getSignature(entity);
-
-    actionComponentStop(action);
-
-    if (signature.test(scene->getComponentId<TimedActionComponent>())){
-        TimedActionComponent& timedaction = scene->getComponent<TimedActionComponent>(entity);
-
-        timedActionStop(timedaction);
+    if (entity == NULL_ENTITY || !scene->isEntityCreated(entity)){
+        return;
     }
 
-    if (action.target != NULL_ENTITY){
-        Signature targetSignature = scene->getSignature(action.target);
+    ActionComponent* action = scene->findComponent<ActionComponent>(entity);
+    if (!action){
+        return;
+    }
 
-        if (signature.test(scene->getComponentId<SpriteAnimationComponent>())){
-            SpriteAnimationComponent& spriteanim = scene->getComponent<SpriteAnimationComponent>(entity);
-            if (targetSignature.test(scene->getComponentId<SpriteComponent>()) && targetSignature.test(scene->getComponentId<MeshComponent>())){
-                SpriteComponent& sprite = scene->getComponent<SpriteComponent>(action.target);
-                MeshComponent& mesh = scene->getComponent<MeshComponent>(action.target);
+    // Snapshot everything needed after onStop before invoking user code. A callback
+    // may clear animation frames, remove components, or destroy this entity.
+    Entity target = action->target;
+    std::vector<Entity> animationChildren;
+    if (AnimationComponent* animcomp = scene->findComponent<AnimationComponent>(entity)){
+        animationChildren = animationChildEntities(*animcomp);
 
-                spriteActionStop(mesh, sprite, spriteanim);
+        // Reset runtime fade state before callbacks. A callback may deliberately
+        // start/fade the animation again, in which case its newer state is kept.
+        animcomp->weight = 0.0f;
+        animcomp->fadeTarget = 0.0f;
+        animcomp->fadeSpeed = 0.0f;
+        animcomp->stopOnFadeOut = false;
+    }
 
-            }
+    actionComponentStop(*action);
+    animationStopChildren(animationChildren);
+
+    if (!scene->isEntityCreated(entity)){
+        return;
+    }
+
+    if (TimedActionComponent* timedaction = scene->findComponent<TimedActionComponent>(entity)){
+        timedActionStop(*timedaction);
+    }
+
+    if (target != NULL_ENTITY && scene->isEntityCreated(target)){
+        SpriteAnimationComponent* spriteanim = scene->findComponent<SpriteAnimationComponent>(entity);
+        SpriteComponent* sprite = scene->findComponent<SpriteComponent>(target);
+        MeshComponent* mesh = scene->findComponent<MeshComponent>(target);
+
+        if (spriteanim && sprite && mesh){
+            spriteActionStop(*mesh, *sprite, *spriteanim);
         }
     }
 }
 
 void ActionSystem::actionComponentStop(ActionComponent& action){
+    // Dispatch from a copy so a callback can remove/destroy the component that
+    // owns the original subscription list without invalidating call().
+    auto onStop = action.onStop;
+
     action.state = ActionState::Stopped;
     action.stopTrigger = false;
     action.timecount = 0;
 
-    action.onStop.call();
+    onStop.call();
 }
 
 void ActionSystem::actionPause(Entity entity){
-    ActionComponent& action = scene->getComponent<ActionComponent>(entity);
+    if (entity == NULL_ENTITY || !scene->isEntityCreated(entity)){
+        return;
+    }
 
-    actionComponentPause(action);
+    ActionComponent* action = scene->findComponent<ActionComponent>(entity);
+    if (!action){
+        return;
+    }
+
+    // Snapshot child tracks before onPause callbacks, mirroring actionStop.
+    std::vector<Entity> animationChildren;
+    if (AnimationComponent* animcomp = scene->findComponent<AnimationComponent>(entity)){
+        animationChildren = animationChildEntities(*animcomp);
+    }
+
+    actionComponentPause(*action);
+    animationPauseChildren(animationChildren);
 }
 
 void ActionSystem::actionComponentPause(ActionComponent& action){
+    // Dispatch from a copy so a callback can remove/destroy the component that
+    // owns the original subscription list without invalidating call().
+    auto onPause = action.onPause;
+
     action.state = ActionState::Paused;
     action.pauseTrigger = false;
 
-    action.onPause.call();
+    onPause.call();
 }
 
 void ActionSystem::actionUpdate(double dt, ActionComponent& action){
     action.timecount += dt * action.speed;
 
     action.onStep.call();
-}
-
-void ActionSystem::actionDestroy(ActionComponent& action){
-    if (action.ownedTarget && action.target != NULL_ENTITY){
-        scene->destroyEntity(action.target);
-    }
 }
 
 void ActionSystem::animationUpdate(double dt, Entity entity, ActionComponent& action, AnimationComponent& animcomp){
@@ -410,23 +447,6 @@ void ActionSystem::animationUpdate(double dt, Entity entity, ActionComponent& ac
         }
 
         if (animcomp.weight <= 0.0f && animcomp.stopOnFadeOut){
-            animcomp.weight = 0.0f;
-            animcomp.fadeSpeed = 0.0f;
-            animcomp.stopOnFadeOut = false;
-
-            // Stop child actions so they no longer contribute to the pose blend.
-            for (const ActionFrame& frame : animcomp.actions){
-                if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)){
-                    Signature childSig = scene->getSignature(frame.action);
-                    if (childSig.test(scene->getComponentId<ActionComponent>())){
-                        ActionComponent& childAction = scene->getComponent<ActionComponent>(frame.action);
-                        if (childAction.state == ActionState::Running){
-                            actionStop(frame.action);
-                        }
-                    }
-                }
-            }
-
             actionStop(entity);
             return;
         }
@@ -469,10 +489,51 @@ void ActionSystem::animationUpdate(double dt, Entity entity, ActionComponent& ac
     }
 }
 
-void ActionSystem::animationDestroy(AnimationComponent& animcomp){
-    if (animcomp.ownedActions){
-        for (int i = 0; i < animcomp.actions.size(); i++){
-            scene->destroyEntity(animcomp.actions[i].action);
+std::vector<Entity> ActionSystem::animationChildEntities(const AnimationComponent& animcomp){
+    std::vector<Entity> children;
+    children.reserve(animcomp.actions.size());
+    for (const ActionFrame& frame : animcomp.actions){
+        children.push_back(frame.action);
+    }
+    return children;
+}
+
+void ActionSystem::animationStopChildren(const std::vector<Entity>& children){
+    // Child tracks are regular actions and are also visited by the system's
+    // all-actions pass. The entity list is a pre-callback snapshot, so callbacks
+    // may safely mutate or clear the parent's action frames while children stop.
+    for (Entity child : children){
+        if (child == NULL_ENTITY || !scene->isEntityCreated(child)){
+            continue;
+        }
+
+        ActionComponent* childAction = scene->findComponent<ActionComponent>(child);
+        if (!childAction){
+            continue;
+        }
+
+        if (childAction->state == ActionState::Running || childAction->state == ActionState::Paused){
+            actionStop(child);
+        }
+    }
+}
+
+void ActionSystem::animationPauseChildren(const std::vector<Entity>& children){
+    // Child tracks advance on their own in the all-actions pass, so a paused clip
+    // would keep animating unless its children pause with it. animationUpdate
+    // restarts them when the parent resumes.
+    for (Entity child : children){
+        if (child == NULL_ENTITY || !scene->isEntityCreated(child)){
+            continue;
+        }
+
+        ActionComponent* childAction = scene->findComponent<ActionComponent>(child);
+        if (!childAction){
+            continue;
+        }
+
+        if (childAction->state == ActionState::Running){
+            actionPause(child);
         }
     }
 }
@@ -1823,9 +1884,48 @@ void ActionSystem::onComponentAdded(Entity entity, ComponentId componentId) {
 void ActionSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
 	if (componentId == scene->getComponentId<ActionComponent>()) {
 		ActionComponent& action = scene->getComponent<ActionComponent>(entity);
-		actionDestroy(action);
+
+		// Snapshot before stopping children: their onStop callbacks are user code
+		// that may add/remove components and invalidate this reference.
+		const bool wasPlaying = action.state == ActionState::Running || action.state == ActionState::Paused;
+		const bool ownedTarget = action.ownedTarget;
+		const Entity target = action.target;
+
+		// A playing animation that loses its ActionComponent can no longer drive or
+		// stop its child tracks; stop them now so they don't run on orphaned.
+		// A Stopped parent's running children are standalone user-driven actions
+		// and are deliberately left alone.
+		if (wasPlaying) {
+			if (AnimationComponent* animation = scene->findComponent<AnimationComponent>(entity)) {
+				animationStopChildren(animationChildEntities(*animation));
+			}
+		}
+
+		if (ownedTarget && target != NULL_ENTITY && scene->isEntityCreated(target)) {
+			scene->destroyEntity(target);
+		}
 	} else if (componentId == scene->getComponentId<AnimationComponent>()) {
 		AnimationComponent& animation = scene->getComponent<AnimationComponent>(entity);
-		animationDestroy(animation);
+
+		// Snapshot before callbacks, same reason as above.
+		const bool ownedActions = animation.ownedActions;
+		const std::vector<Entity> children = animationChildEntities(animation);
+
+		// The clip being removed can no longer drive or stop anything: stop the
+		// whole action (children included) so the remaining bare ActionComponent
+		// doesn't keep running through the all-actions pass.
+		if (ActionComponent* action = scene->findComponent<ActionComponent>(entity)) {
+			if (action->state == ActionState::Running || action->state == ActionState::Paused) {
+				actionStop(entity);
+			}
+		}
+
+		if (ownedActions) {
+			for (Entity child : children) {
+				if (child != NULL_ENTITY && scene->isEntityCreated(child)) {
+					scene->destroyEntity(child);
+				}
+			}
+		}
 	}
 }

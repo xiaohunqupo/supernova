@@ -71,10 +71,10 @@ namespace doriax{
 		void actionComponentPause(ActionComponent& action);
 		void actionUpdate(double dt, ActionComponent& action);
 
-		void actionDestroy(ActionComponent& action);
-
 		void animationUpdate(double dt, Entity entity, ActionComponent& action, AnimationComponent& animcomp);
-		void animationDestroy(AnimationComponent& animcomp);
+		std::vector<Entity> animationChildEntities(const AnimationComponent& animcomp);
+		void animationStopChildren(const std::vector<Entity>& children);
+		void animationPauseChildren(const std::vector<Entity>& children);
 
 		// Sprite action functions
 		void setSpriteTextureRect(MeshComponent& mesh, SpriteComponent& sprite, SpriteAnimationComponent& spriteanim);

@@ -6,6 +6,8 @@
 
 #include "component/AnimationComponent.h"
 
+#include <algorithm>
+
 using namespace doriax;
 
 Animation::Animation(Scene* scene): Action(scene){
@@ -44,6 +46,18 @@ void Animation::setLoop(bool loop){
 
 void Animation::fadeIn(float duration){
     AnimationComponent& animation = getComponent<AnimationComponent>();
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    const bool alreadyRunning = action.state == ActionState::Running;
+
+    // A new fade-in supersedes a pending stop/pause and must not leave a start
+    // trigger behind when the animation is already running. Otherwise that stale
+    // trigger can restart the clip after a later fade-out reaches zero.
+    action.startTrigger = false;
+    action.stopTrigger = false;
+    action.pauseTrigger = false;
+
+    animation.weight = std::clamp(animation.weight, 0.0f, 1.0f);
 
     if (duration <= 0.0f){
         animation.weight = 1.0f;
@@ -51,22 +65,52 @@ void Animation::fadeIn(float duration){
         animation.fadeSpeed = 0.0f;
         animation.stopOnFadeOut = false;
     }else{
-        animation.weight = 0.0f;
+        if (!alreadyRunning){
+            animation.weight = 0.0f;
+        }
+
         animation.fadeTarget = 1.0f;
-        animation.fadeSpeed = 1.0f / duration;
+        animation.fadeSpeed = (animation.weight < 1.0f ? 1.0f - animation.weight : 0.0f) / duration;
         animation.stopOnFadeOut = false;
     }
 
-    start();
+    if (!alreadyRunning){
+        start();
+    }
 }
 
 void Animation::fadeOut(float duration){
     AnimationComponent& animation = getComponent<AnimationComponent>();
     ActionComponent& action = getComponent<ActionComponent>();
 
-    if (action.state != ActionState::Running){
+    // A clip that has not reached the action-system tick yet can still have a
+    // pending start. Cancel it directly instead of allowing both clips to start.
+    if (action.state == ActionState::Stopped){
+        action.startTrigger = false;
+        action.stopTrigger = false;
+        action.pauseTrigger = false;
+        animation.weight = 0.0f;
+        animation.fadeTarget = 0.0f;
+        animation.fadeSpeed = 0.0f;
+        animation.stopOnFadeOut = false;
         return;
     }
+
+    // Paused animations cannot advance a fade, so remove them immediately.
+    if (action.state == ActionState::Paused){
+        action.startTrigger = false;
+        action.pauseTrigger = false;
+        animation.weight = 0.0f;
+        animation.fadeTarget = 0.0f;
+        animation.fadeSpeed = 0.0f;
+        animation.stopOnFadeOut = false;
+        stop();
+        return;
+    }
+
+    action.startTrigger = false;
+    action.stopTrigger = false;
+    action.pauseTrigger = false;
 
     if (duration <= 0.0f){
         stop();
@@ -91,9 +135,9 @@ float Animation::getBlendWeight() const{
 void Animation::setBlendWeight(float weight){
     AnimationComponent& animation = getComponent<AnimationComponent>();
 
-    animation.weight = weight;
+    animation.weight = std::clamp(weight, 0.0f, 1.0f);
     animation.fadeSpeed = 0.0f;
-    animation.fadeTarget = weight;
+    animation.fadeTarget = animation.weight;
 }
 
 float Animation::getDefaultFadeTime() const{

@@ -428,10 +428,12 @@ void editor::AnimationWindow::startPreview(Scene* scene, SceneProject* sceneProj
     previewPrimary = selectedEntity;
 
     ActionComponent& action = scene->getComponent<ActionComponent>(selectedEntity);
+    action.state = ActionState::Stopped;
     action.timecount = 0;
+    action.startTrigger = false;
     action.stopTrigger = false;
     action.pauseTrigger = false;
-    action.startTrigger = true;
+    Animation(scene, selectedEntity).fadeIn(0.0f);
 
     isPreviewing = true;
 }
@@ -459,8 +461,8 @@ void editor::AnimationWindow::triggerTransitionPreview(Scene* scene, SceneProjec
         addAnimationToPreview(scene, transitionTarget);
         previewAnimations.push_back(transitionTarget);
 
-        // Start the incoming clip from the beginning (fadeIn only sets the start trigger,
-        // not the time), so the crossfade always blends in from frame 0.
+        // A newly added clip starts from frame 0. Reversing an already active
+        // transition intentionally preserves its current playback time.
         if (ActionComponent* targetAction = scene->findComponent<ActionComponent>(transitionTarget)) {
             targetAction->state = ActionState::Stopped;
             targetAction->timecount = 0.0f;

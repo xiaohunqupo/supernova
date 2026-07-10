@@ -144,7 +144,8 @@ void Model::playAnimation(int index, float fadeTime){
             !signature.test(scene->getComponentId<ActionComponent>()))
             continue;
 
-        if (scene->getComponent<ActionComponent>(animEntity).state == ActionState::Running){
+        ActionComponent& action = scene->getComponent<ActionComponent>(animEntity);
+        if (action.state == ActionState::Running || action.state == ActionState::Paused || action.startTrigger){
             Animation(scene, animEntity).fadeOut(fadeTime);
         }
     }
@@ -211,7 +212,8 @@ void Model::stopAnimations(float fadeTime){
             !signature.test(scene->getComponentId<ActionComponent>()))
             continue;
 
-        if (scene->getComponent<ActionComponent>(animEntity).state == ActionState::Running){
+        ActionComponent& action = scene->getComponent<ActionComponent>(animEntity);
+        if (action.state == ActionState::Running || action.state == ActionState::Paused || action.startTrigger){
             Animation(scene, animEntity).fadeOut(fadeTime);
         }
     }
