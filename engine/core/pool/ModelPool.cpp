@@ -91,3 +91,22 @@ void ModelPool::clear(){
     getMap().clear();
     getObjMap().clear();
 }
+
+void ModelPool::clearUnused(){
+    auto& map = getMap();
+    for (auto it = map.begin(); it != map.end();){
+        if (!it->second || it->second.use_count() <= 1){
+            it = map.erase(it);
+        }else{
+            ++it;
+        }
+    }
+    auto& objMap = getObjMap();
+    for (auto it = objMap.begin(); it != objMap.end();){
+        if (!it->second || it->second.use_count() <= 1){
+            it = objMap.erase(it);
+        }else{
+            ++it;
+        }
+    }
+}

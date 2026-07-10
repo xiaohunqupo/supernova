@@ -38,6 +38,7 @@
 #include "util/Util.h"
 
 #include "texture/Texture.h"
+#include "Engine.h"
 #include "pool/ShaderPool.h"
 #include "shader/ShaderBuilder.h"
 #include "SceneManager.h"
@@ -2363,6 +2364,10 @@ void editor::Project::resetConfigs() {
     scenes.clear();
     entityBundles.clear();
     editor::getEditorHost().resetLastActivatedScene();
+
+    // Scenes are gone: drop unreferenced pool assets from the previous project.
+    // Keep entries still held by the editor/engine (fonts, active shaders, etc.).
+    Engine::clearUnusedPools();
 
     // Reset state
     name = "";

@@ -112,6 +112,9 @@ namespace doriax{
 
 		// necessary for engine shutdown
 		static void clear();
+		// Destroys shaders no one else references and resets per-project state
+		// (missing/failed lists, custom shader registry)
+		static void clearUnused();
     };
 }
 

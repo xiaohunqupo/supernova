@@ -406,3 +406,23 @@ void TextureDataPool::clear(){
 	}
 	getMap().clear();
 }
+
+void TextureDataPool::clearUnused(){
+    {
+		std::lock_guard<std::mutex> lock(cacheMutex);
+		for (auto& [id, future] : pendingBuilds) {
+			if (future.valid()) {
+				future.wait(); // Wait for completion before clearing
+			}
+		}
+		pendingBuilds.clear();
+	}
+	auto& map = getMap();
+	for (auto it = map.begin(); it != map.end();){
+		if (!it->second || it->second.use_count() <= 1){
+			it = map.erase(it);
+		}else{
+			++it;
+		}
+	}
+}

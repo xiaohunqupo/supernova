@@ -53,3 +53,14 @@ void FontPool::remove(const std::string& id){
 void FontPool::clear(){
 	getMap().clear();
 }
+
+void FontPool::clearUnused(){
+	auto& map = getMap();
+	for (auto it = map.begin(); it != map.end();){
+		if (!it->second || it->second.use_count() <= 1){
+			it = map.erase(it);
+		}else{
+			++it;
+		}
+	}
+}

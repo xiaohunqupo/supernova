@@ -149,3 +149,19 @@ void TexturePool::clear(){
 	getMap().clear();
 	getInvalidated().clear();
 }
+
+void TexturePool::clearUnused(){
+	auto& map = getMap();
+	auto& invalidated = getInvalidated();
+	for (auto it = map.begin(); it != map.end();){
+		if (!it->second || it->second.use_count() <= 1){
+			if (it->second){
+				it->second->destroyTexture();
+			}
+			invalidated.erase(it->first);
+			it = map.erase(it);
+		}else{
+			++it;
+		}
+	}
+}

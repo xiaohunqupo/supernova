@@ -79,6 +79,7 @@ void OutputWindow::clear() {
     logs.clear();
     storedLogLineCount = 0;
     needsRebuild = false;
+    hasNotification = false;
     lastScrollY = 0.0f;
     userScrollInputPending = false;
     pendingScrollToBottom = false;

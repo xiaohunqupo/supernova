@@ -1431,6 +1431,7 @@ void editor::App::clearSceneWindowState(uint32_t sceneId) {
 void editor::App::prepareForProjectSwitch() {
     MeshSystem::cancelAllAsyncModelLoads();
     codeEditor->closeAll();
+    outputWindow->clear();
     sceneWindow->resetProjectState();
     dockspaceNeedsRebuild = true;
 }

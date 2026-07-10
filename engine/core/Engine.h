@@ -353,6 +353,9 @@ namespace doriax {
 
         static void setFramebuffer(Framebuffer* framebuffer);
         static Framebuffer* getFramebuffer();
+        static void clearPools();
+        // Drops pool entries no longer referenced (e.g. after scenes are destroyed on project switch)
+        static void clearUnusedPools();
 
         static void clearAllSubscriptions(bool includeLifecycle);
         static void removeSubscriptionsByTag(const std::string& substring);

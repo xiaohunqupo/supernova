@@ -706,4 +706,29 @@ void ShaderPool::clear(){
     }
     //Log::debug("Remove all shaders");
     getMap().clear();
+    getMissingShaders().clear();
+    failedShaders().clear();
+
+    std::lock_guard<std::mutex> lock(customShaderMutex());
+    customShaderNames().clear();
+}
+
+void ShaderPool::clearUnused(){
+    auto& map = getMap();
+    for (auto it = map.begin(); it != map.end();){
+        if (!it->second || it->second.use_count() <= 1){
+            if (it->second){
+                it->second->destroyShader();
+            }
+            it = map.erase(it);
+        }else{
+            ++it;
+        }
+    }
+    // Per-project bookkeeping: always reset so the next project does not inherit
+    // missing/failed entries or custom-shader name registrations.
+    getMissingShaders().clear();
+    failedShaders().clear();
+    std::lock_guard<std::mutex> lock(customShaderMutex());
+    customShaderNames().clear();
 }

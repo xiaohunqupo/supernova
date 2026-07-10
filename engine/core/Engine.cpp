@@ -592,6 +592,24 @@ Framebuffer* Engine::getFramebuffer(){
     return Engine::framebuffer;
 }
 
+void Engine::clearPools(){
+    TexturePool::clear();
+    SoundPool::clear();
+    TextureDataPool::clear();
+    ShaderPool::clear();
+    FontPool::clear();
+    ModelPool::clear();
+}
+
+void Engine::clearUnusedPools(){
+    TexturePool::clearUnused();
+    SoundPool::clearUnused();
+    TextureDataPool::clearUnused();
+    ShaderPool::clearUnused();
+    FontPool::clearUnused();
+    ModelPool::clearUnused();
+}
+
 void Engine::removeSubscriptionsByTag(const std::string& substring) {
     onUpdate.removeByTagSubstring(substring);
     onFixedUpdate.removeByTagSubstring(substring);
@@ -907,12 +925,7 @@ void Engine::systemViewDestroyed(){
 
     SystemRender::shutdown();
 
-    TexturePool::clear();
-    SoundPool::clear();
-    TextureDataPool::clear();
-    ShaderPool::clear();
-    FontPool::clear();
-    ModelPool::clear();
+    clearPools();
 
     drawSemaphore.release();
 

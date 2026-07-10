@@ -231,3 +231,23 @@ void SoundPool::clear(){
     }
     getMap().clear();
 }
+
+void SoundPool::clearUnused(){
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        for (auto& [id, future] : pendingBuilds) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+        pendingBuilds.clear();
+    }
+    auto& map = getMap();
+    for (auto it = map.begin(); it != map.end();){
+        if (!it->second || it->second.use_count() <= 1){
+            it = map.erase(it);
+        }else{
+            ++it;
+        }
+    }
+}

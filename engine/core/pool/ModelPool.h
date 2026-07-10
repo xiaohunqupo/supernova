@@ -34,6 +34,8 @@ namespace doriax{
 
         // necessary for engine shutdown
         static void clear();
+        // removes only entries no one else references (safe while other scenes are alive)
+        static void clearUnused();
     };
 }
 
