@@ -13,6 +13,7 @@
 #include "Stream.h"
 #include "util/ProjectUtils.h"
 #include "util/FileUtils.h"
+#include "component/Body2DComponent.h"
 #include "component/Body3DComponent.h"
 #include "component/MeshComponent.h"
 #include "component/ScriptComponent.h"
@@ -125,6 +126,138 @@ bool parseQuaternion(const Json& value, Quaternion& out) {
     if (value.contains("x") && value["x"].is_number()) out.x = value["x"].get<float>();
     if (value.contains("y") && value["y"].is_number()) out.y = value["y"].get<float>();
     if (value.contains("z") && value["z"].is_number()) out.z = value["z"].get<float>();
+    return true;
+}
+
+bool parseBodyType(const std::string& value, BodyType& out) {
+    const std::string token = lower(value);
+    if (token == "static") {
+        out = BodyType::STATIC;
+        return true;
+    }
+    if (token == "kinematic") {
+        out = BodyType::KINEMATIC;
+        return true;
+    }
+    if (token == "dynamic") {
+        out = BodyType::DYNAMIC;
+        return true;
+    }
+    return false;
+}
+
+bool parseBody3DMotionQuality(const std::string& value, Body3DMotionQuality& out) {
+    const std::string token = lower(value);
+    if (token == "discrete") {
+        out = Body3DMotionQuality::DISCRETE;
+        return true;
+    }
+    if (token == "linear_cast") {
+        out = Body3DMotionQuality::LINEAR_CAST;
+        return true;
+    }
+    return false;
+}
+
+bool parsePrimitiveShape3DType(const std::string& value, Shape3DType& out) {
+    const std::string token = lower(value);
+    if (token == "box") {
+        out = Shape3DType::BOX;
+        return true;
+    }
+    if (token == "sphere") {
+        out = Shape3DType::SPHERE;
+        return true;
+    }
+    if (token == "capsule") {
+        out = Shape3DType::CAPSULE;
+        return true;
+    }
+    if (token == "tapered_capsule") {
+        out = Shape3DType::TAPERED_CAPSULE;
+        return true;
+    }
+    if (token == "cylinder") {
+        out = Shape3DType::CYLINDER;
+        return true;
+    }
+    return false;
+}
+
+bool readPositiveFloat(const Json& arguments, const char* field, float& target, std::string& error) {
+    if (!arguments.contains(field)) return true;
+    if (!arguments[field].is_number()) {
+        error = std::string(field) + " must be a number.";
+        return false;
+    }
+    const float value = arguments[field].get<float>();
+    if (!(value > 0.0f)) {
+        error = std::string(field) + " must be greater than zero.";
+        return false;
+    }
+    target = value;
+    return true;
+}
+
+bool readNonNegativeFloat(const Json& arguments, const char* field, float& target, std::string& error) {
+    if (!arguments.contains(field)) return true;
+    if (!arguments[field].is_number()) {
+        error = std::string(field) + " must be a number.";
+        return false;
+    }
+    const float value = arguments[field].get<float>();
+    if (value < 0.0f) {
+        error = std::string(field) + " cannot be negative.";
+        return false;
+    }
+    target = value;
+    return true;
+}
+
+bool parseShape2DType(const std::string& value, Shape2DType& out) {
+    const std::string token = lower(value);
+    if (token == "box" || token == "polygon") {
+        out = Shape2DType::POLYGON;
+        return true;
+    }
+    if (token == "circle") {
+        out = Shape2DType::CIRCLE;
+        return true;
+    }
+    if (token == "capsule") {
+        out = Shape2DType::CAPSULE;
+        return true;
+    }
+    if (token == "segment") {
+        out = Shape2DType::SEGMENT;
+        return true;
+    }
+    if (token == "chain") {
+        out = Shape2DType::CHAIN;
+        return true;
+    }
+    return false;
+}
+
+bool parseVector2Array(const Json& value, HybridArray<Vector2, MAX_SHAPE_POINTS_2D>& out,
+                       uint8_t& count, std::string& error) {
+    if (!value.is_array()) {
+        error = "points must be an array of Vector2 objects.";
+        return false;
+    }
+    if (value.size() > MAX_SHAPE_POINTS_2D) {
+        error = "points exceeds the maximum number of 2D shape points.";
+        return false;
+    }
+    for (size_t i = 0; i < value.size(); ++i) {
+        Vector2 point = Vector2::ZERO;
+        if (!parseVector2(value[i], point)) {
+            error = "Each point must be a Vector2 object.";
+            return false;
+        }
+        out[i] = point;
+    }
+    count = static_cast<uint8_t>(value.size());
     return true;
 }
 
@@ -1204,6 +1337,8 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "select_entities") return selectEntities(arguments);
     if (name == "add_component") return addComponent(arguments);
     if (name == "remove_component") return removeComponent(arguments);
+    if (name == "add_body3d_shape") return addBody3DShape(arguments);
+    if (name == "add_body2d_shape") return addBody2DShape(arguments);
     if (name == "set_component_property") return setComponentProperty(arguments);
     if (name == "set_texture_settings") return setTextureSettings(arguments);
     if (name == "create_scene") return createScene(arguments);
@@ -1673,6 +1808,190 @@ ActionResult EditorActionExecutor::removeComponent(const Json& arguments) {
     }
     CommandHandle::get(sceneId)->addCommandNoMerge(new RemoveComponentCmd(project, sceneId, entity, component));
     return okResult("Removed component through the command history.");
+}
+
+ActionResult EditorActionExecutor::addBody3DShape(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    Shape3D shape;
+    if (!parsePrimitiveShape3DType(arguments.value("shape_type", ""), shape.type)) {
+        return failResult("Unsupported shape_type. Use box, sphere, capsule, tapered_capsule, or cylinder.");
+    }
+
+    std::string error;
+    if (!readPositiveFloat(arguments, "width", shape.width, error) ||
+        !readPositiveFloat(arguments, "height", shape.height, error) ||
+        !readPositiveFloat(arguments, "depth", shape.depth, error) ||
+        !readPositiveFloat(arguments, "radius", shape.radius, error) ||
+        !readPositiveFloat(arguments, "half_height", shape.halfHeight, error) ||
+        !readPositiveFloat(arguments, "top_radius", shape.topRadius, error) ||
+        !readPositiveFloat(arguments, "bottom_radius", shape.bottomRadius, error) ||
+        !readPositiveFloat(arguments, "density", shape.density, error)) {
+        return failResult(error);
+    }
+    if (arguments.contains("position") && !parseVector3(arguments["position"], shape.position)) {
+        return failResult("position must be a Vector3 object.");
+    }
+    if (arguments.contains("rotation") && !parseQuaternion(arguments["rotation"], shape.rotation)) {
+        return failResult("rotation must be a quaternion object.");
+    }
+
+    BodyType requestedBodyType = BodyType::STATIC;
+    if (arguments.contains("body_type")) {
+        if (!arguments["body_type"].is_string() ||
+            !parseBodyType(arguments["body_type"].get<std::string>(), requestedBodyType)) {
+            return failResult("body_type must be static, kinematic, or dynamic.");
+        }
+    }
+
+    Body3DMotionQuality requestedMotionQuality = Body3DMotionQuality::DISCRETE;
+    if (arguments.contains("motion_quality")) {
+        if (!arguments["motion_quality"].is_string() ||
+            !parseBody3DMotionQuality(arguments["motion_quality"].get<std::string>(), requestedMotionQuality)) {
+            return failResult("motion_quality must be discrete or linear_cast.");
+        }
+    }
+
+    Body3DComponent* body = sceneProject->scene->findComponent<Body3DComponent>(entity);
+    const size_t shapeIndex = body ? body->numShapes : 0;
+    if (shapeIndex >= MAX_SHAPES) {
+        return failResult("Body3D already has the maximum number of shapes.");
+    }
+
+    auto* multiCmd = new MultiPropertyCmd();
+    if (!body) {
+        multiCmd->addCommand(std::make_unique<AddComponentCmd>(project, sceneId, entity, ComponentType::Body3DComponent));
+    }
+    if (arguments.contains("body_type")) {
+        multiCmd->addPropertyCmd<BodyType>(project, sceneId, entity, ComponentType::Body3DComponent,
+                                           "type", requestedBodyType);
+    }
+    if (arguments.contains("motion_quality")) {
+        multiCmd->addPropertyCmd<Body3DMotionQuality>(project, sceneId, entity, ComponentType::Body3DComponent,
+                                                       "motionQuality", requestedMotionQuality);
+    }
+    multiCmd->addPropertyCmd<Shape3D>(project, sceneId, entity, ComponentType::Body3DComponent,
+                                      "shapes[" + std::to_string(shapeIndex) + "]", shape);
+    multiCmd->addPropertyCmd<size_t>(project, sceneId, entity, ComponentType::Body3DComponent,
+                                     "numShapes", shapeIndex + 1);
+    CommandHandle::get(sceneId)->addCommandNoMerge(multiCmd);
+
+    return okResult("Added a Body3D shape through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity},
+                         {"body_added", body == nullptr}, {"shape_index", shapeIndex},
+                         {"shape_type", arguments.value("shape_type", "")}});
+}
+
+ActionResult EditorActionExecutor::addBody2DShape(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    const std::string shapeName = lower(arguments.value("shape_type", ""));
+    Shape2D shape;
+    if (!parseShape2DType(shapeName, shape.type)) {
+        return failResult("Unsupported shape_type. Use box, circle, capsule, segment, polygon, or chain.");
+    }
+
+    std::string error;
+    if (!readNonNegativeFloat(arguments, "density", shape.density, error) ||
+        !readNonNegativeFloat(arguments, "friction", shape.friction, error) ||
+        !readNonNegativeFloat(arguments, "restitution", shape.restitution, error)) {
+        return failResult(error);
+    }
+    if (shape.restitution > 1.0f) return failResult("restitution must be between 0 and 1.");
+    if (arguments.contains("center") && !parseVector2(arguments["center"], shape.pointA)) {
+        return failResult("center must be a Vector2 object.");
+    }
+    if (arguments.contains("point_a") && !parseVector2(arguments["point_a"], shape.pointA)) {
+        return failResult("point_a must be a Vector2 object.");
+    }
+    if (arguments.contains("point_b") && !parseVector2(arguments["point_b"], shape.pointB)) {
+        return failResult("point_b must be a Vector2 object.");
+    }
+
+    if (shapeName == "box") {
+        float width = 0.0f;
+        float height = 0.0f;
+        if (!readPositiveFloat(arguments, "width", width, error) ||
+            !readPositiveFloat(arguments, "height", height, error)) {
+            return failResult(error);
+        }
+        if (!arguments.contains("width") || !arguments.contains("height")) {
+            return failResult("box requires width and height.");
+        }
+        const float halfWidth = width * 0.5f;
+        const float halfHeight = height * 0.5f;
+        shape.numVertices = 4;
+        shape.vertices[0] = shape.pointA + Vector2(-halfWidth, -halfHeight);
+        shape.vertices[1] = shape.pointA + Vector2(halfWidth, -halfHeight);
+        shape.vertices[2] = shape.pointA + Vector2(halfWidth, halfHeight);
+        shape.vertices[3] = shape.pointA + Vector2(-halfWidth, halfHeight);
+    } else if (shapeName == "circle") {
+        if (!readPositiveFloat(arguments, "radius", shape.radius, error)) return failResult(error);
+        if (!arguments.contains("radius")) return failResult("circle requires radius.");
+    } else if (shapeName == "capsule") {
+        if (!readPositiveFloat(arguments, "radius", shape.radius, error)) return failResult(error);
+        if (!arguments.contains("radius") || !arguments.contains("point_a") || !arguments.contains("point_b")) {
+            return failResult("capsule requires radius, point_a, and point_b.");
+        }
+        if (shape.pointA == shape.pointB) return failResult("capsule point_a and point_b must differ.");
+    } else if (shapeName == "segment") {
+        if (!arguments.contains("point_a") || !arguments.contains("point_b")) {
+            return failResult("segment requires point_a and point_b.");
+        }
+        if (shape.pointA == shape.pointB) return failResult("segment point_a and point_b must differ.");
+    } else {
+        if (!arguments.contains("points") || !parseVector2Array(arguments["points"], shape.vertices, shape.numVertices, error)) {
+            return failResult(arguments.contains("points") ? error : shapeName + " requires points.");
+        }
+        const uint8_t minPoints = shapeName == "polygon" ? 3 : 4;
+        if (shape.numVertices < minPoints) {
+            return failResult(shapeName + " requires at least " + std::to_string(minPoints) + " points.");
+        }
+        shape.loop = arguments.value("loop", false);
+    }
+
+    BodyType requestedBodyType = BodyType::STATIC;
+    if (arguments.contains("body_type")) {
+        if (!arguments["body_type"].is_string() ||
+            !parseBodyType(arguments["body_type"].get<std::string>(), requestedBodyType)) {
+            return failResult("body_type must be static, kinematic, or dynamic.");
+        }
+    }
+
+    Body2DComponent* body = sceneProject->scene->findComponent<Body2DComponent>(entity);
+    const size_t shapeIndex = body ? body->numShapes : 0;
+    if (shapeIndex >= MAX_SHAPES) {
+        return failResult("Body2D already has the maximum number of shapes.");
+    }
+
+    auto* multiCmd = new MultiPropertyCmd();
+    if (!body) {
+        multiCmd->addCommand(std::make_unique<AddComponentCmd>(project, sceneId, entity, ComponentType::Body2DComponent));
+    }
+    if (arguments.contains("body_type")) {
+        multiCmd->addPropertyCmd<BodyType>(project, sceneId, entity, ComponentType::Body2DComponent,
+                                           "type", requestedBodyType);
+    }
+    multiCmd->addPropertyCmd<Shape2D>(project, sceneId, entity, ComponentType::Body2DComponent,
+                                      "shapes[" + std::to_string(shapeIndex) + "]", shape);
+    multiCmd->addPropertyCmd<size_t>(project, sceneId, entity, ComponentType::Body2DComponent,
+                                     "numShapes", shapeIndex + 1);
+    CommandHandle::get(sceneId)->addCommandNoMerge(multiCmd);
+
+    return okResult("Added a Body2D shape through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity},
+                         {"body_added", body == nullptr}, {"shape_index", shapeIndex},
+                         {"shape_type", shapeName}});
 }
 
 ActionResult EditorActionExecutor::setComponentProperty(const Json& arguments) {

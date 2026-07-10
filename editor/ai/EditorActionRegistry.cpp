@@ -321,6 +321,56 @@ const std::vector<ToolDefinition>& cachedTools() {
             false
         },
         {
+            "add_body3d_shape",
+            "Add a Body3DComponent to an existing 3D entity when needed, then append one primitive collision shape to that SAME entity's body. Use this for a model/mesh that needs physics; do not create a separate body entity. Existing body shapes are preserved.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Model or mesh entity id that receives the Body3DComponent")},
+                {"entity_name", stringSchema("Model or mesh entity name, used only when entity_id is omitted")},
+                {"body_type", stringSchema("Optional body type: static, kinematic, or dynamic. A new body defaults to static when omitted")},
+                {"motion_quality", stringSchema("Optional motion quality: discrete or linear_cast")},
+                {"shape_type", stringSchema("Collision shape: box, sphere, capsule, tapered_capsule, or cylinder")},
+                {"position", vector3Schema("Optional shape local position in entity-local units")},
+                {"rotation", quaternionSchema("Optional shape local rotation")},
+                {"width", numberSchema("Box width; defaults to 1")},
+                {"height", numberSchema("Box height; defaults to 1")},
+                {"depth", numberSchema("Box depth; defaults to 1")},
+                {"radius", numberSchema("Sphere, capsule, or cylinder radius; defaults to 1")},
+                {"half_height", numberSchema("Capsule or cylinder half-height; defaults to 0.5")},
+                {"top_radius", numberSchema("Tapered capsule top radius; defaults to 0.5")},
+                {"bottom_radius", numberSchema("Tapered capsule bottom radius; defaults to 0.5")},
+                {"density", numberSchema("Shape density for dynamic bodies; defaults to 1000")}
+            }, {"shape_type"}),
+            false
+        },
+        {
+            "add_body2d_shape",
+            "Add a Body2DComponent to an existing 2D entity when needed, then append one collision shape to that SAME entity's body. Use this for a sprite, tilemap, or 2D mesh that needs physics; do not create a separate body entity. Existing body shapes are preserved.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Sprite, tilemap, or 2D mesh entity id that receives the Body2DComponent")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"body_type", stringSchema("Optional body type: static, kinematic, or dynamic. A new body defaults to static when omitted")},
+                {"shape_type", stringSchema("Collision shape: box, circle, capsule, segment, polygon, or chain")},
+                {"center", vector2Schema("Optional local center for a box or circle; defaults to 0,0")},
+                {"width", numberSchema("Box width; required for box")},
+                {"height", numberSchema("Box height; required for box")},
+                {"radius", numberSchema("Circle or capsule radius; required for circle and capsule")},
+                {"point_a", vector2Schema("First local point for capsule or segment")},
+                {"point_b", vector2Schema("Second local point for capsule or segment")},
+                {"points", {
+                    {"type", "array"},
+                    {"description", "Local points for polygon (at least 3) or chain (at least 4)"},
+                    {"items", vector2Schema("Point")}
+                }},
+                {"loop", boolSchema("Whether a chain closes back to its first point; defaults false")},
+                {"density", numberSchema("Shape density; defaults to 1")},
+                {"friction", numberSchema("Shape friction; defaults to 0.6")},
+                {"restitution", numberSchema("Shape restitution/bounce, 0-1; defaults to 0")}
+            }, {"shape_type"}),
+            false
+        },
+        {
             "set_component_property",
             "Set one supported component property through PropertyCmd. Use the typed value field matching the property type.",
             objectSchemaFromProperties(propertyValueFields({
@@ -1109,6 +1159,14 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         if (!hasEntitySelector(arguments)) return fail(name + " requires entity_id or entity_name.");
         return hasString(arguments, "component") ? ok() : fail(name + " requires component.");
     }
+    if (name == "add_body3d_shape") {
+        if (!hasEntitySelector(arguments)) return fail("add_body3d_shape requires entity_id or entity_name.");
+        return hasString(arguments, "shape_type") ? ok() : fail("add_body3d_shape requires shape_type.");
+    }
+    if (name == "add_body2d_shape") {
+        if (!hasEntitySelector(arguments)) return fail("add_body2d_shape requires entity_id or entity_name.");
+        return hasString(arguments, "shape_type") ? ok() : fail("add_body2d_shape requires shape_type.");
+    }
     if (name == "rename_entity") {
         if (!hasEntitySelector(arguments)) return fail("rename_entity requires entity_id or entity_name.");
         return hasString(arguments, "new_name") ? ok() : fail("rename_entity requires new_name.");
@@ -1449,6 +1507,12 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "remove_component") {
         return "Remove " + arguments.value("component", "component");
+    }
+    if (name == "add_body3d_shape") {
+        return "Add " + arguments.value("shape_type", "3D collision") + " shape to Body3D";
+    }
+    if (name == "add_body2d_shape") {
+        return "Add " + arguments.value("shape_type", "2D collision") + " shape to Body2D";
     }
     if (name == "set_component_property") {
         return "Set " + arguments.value("component", "component") + "." + arguments.value("property", "property");

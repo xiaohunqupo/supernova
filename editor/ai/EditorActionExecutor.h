@@ -46,6 +46,8 @@ private:
     ActionResult selectEntities(const Json& arguments);
     ActionResult addComponent(const Json& arguments);
     ActionResult removeComponent(const Json& arguments);
+    ActionResult addBody3DShape(const Json& arguments);
+    ActionResult addBody2DShape(const Json& arguments);
     ActionResult setComponentProperty(const Json& arguments);
     ActionResult setTextureSettings(const Json& arguments);
     ActionResult createScene(const Json& arguments);
