@@ -501,14 +501,31 @@ Json buildGeminiPayload(const ProviderRequest& request) {
         const ChatMessage& message = request.messages[i];
 
         if (message.role == ChatRole::Tool) {
-            // Merge a run of tool results into a single user turn.
+            // Merge a run of tool results into a single user turn. A user
+            // message right after the run (e.g. tool calls dismissed because
+            // the user typed something new) must ride in the SAME turn as a
+            // text part: Gemini expects function responses in the user turn
+            // immediately following the model's function call, and two
+            // consecutive user contents break role alternation.
             Json parts = Json::array();
             while (i < request.messages.size() && request.messages[i].role == ChatRole::Tool) {
                 const ChatMessage& tool = request.messages[i];
-                parts.push_back({{"functionResponse", {
+                Json response = {
                     {"name", tool.toolName},
                     {"response", {{"result", tool.content}}}
-                }}});
+                };
+                // Echo the model-issued call id; it is what disambiguates
+                // parallel calls to the same function. Legacy history stored
+                // the function name as the id (and an id Gemini never issued
+                // must not be sent back), so only a distinct id is a real one.
+                if (!tool.toolCallId.empty() && tool.toolCallId != tool.toolName) {
+                    response["id"] = tool.toolCallId;
+                }
+                parts.push_back({{"functionResponse", response}});
+                ++i;
+            }
+            while (i < request.messages.size() && request.messages[i].role == ChatRole::User) {
+                parts.push_back({{"text", request.messages[i].content}});
                 ++i;
             }
             contents.push_back({{"role", "user"}, {"parts", parts}});
@@ -527,10 +544,18 @@ Json buildGeminiPayload(const ProviderRequest& request) {
             }
             bool firstFunctionCall = true;
             for (const auto& call : message.toolCalls) {
-                Json part = {{"functionCall", {
+                Json functionCall = {
                     {"name", call.name},
                     {"args", call.arguments.is_object() ? call.arguments : Json::object()}
-                }}};
+                };
+                // Mirror a real model-issued id on the replayed functionCall;
+                // the matching functionResponse below must reference an id
+                // that is present on this call. Older saved Gemini history
+                // used the function name as a synthetic id, so do not echo it.
+                if (!call.id.empty() && call.id != call.name) {
+                    functionCall["id"] = call.id;
+                }
+                Json part = {{"functionCall", functionCall}};
                 // Gemini 3 requires thoughtSignature on the first functionCall of
                 // each model step. Echo the opaque token when we have it; otherwise
                 // use the documented bypass so older history does not 400.
@@ -591,9 +616,15 @@ ProviderResponse parseGeminiBody(const std::string& body) {
         if (part.contains("functionCall")) {
             const Json& fn = part["functionCall"];
             ToolCall call;
-            // Gemini matches function responses by name, so reuse it as the id.
-            call.id = fn.value("name", "");
+            // Keep the model-issued call id (required back in the matching
+            // functionResponse, and the only thing that tells parallel calls
+            // to the same function apart). Older models omit it; fall back to
+            // the name, which the serializer knows not to echo as an id.
+            call.id = fn.value("id", "");
             call.name = fn.value("name", "");
+            if (call.id.empty()) {
+                call.id = call.name;
+            }
             call.arguments = parseArgumentObject(fn.value("args", Json::object()));
             // Sibling of functionCall on the Part (REST camelCase).
             call.thoughtSignature = part.value("thoughtSignature",

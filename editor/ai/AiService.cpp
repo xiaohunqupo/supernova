@@ -8,8 +8,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <deque>
 #include <memory>
 #include <sstream>
+#include <unordered_map>
 
 namespace doriax::editor::ai {
 
@@ -215,6 +217,20 @@ bool AiService::sendUserMessage(const std::string& text) {
     ProviderRequest request;
     {
         std::lock_guard<std::mutex> lock(mutex);
+        // Typing a new message instead of approving is an implicit decline.
+        // Resolve pending tool calls before the user message goes into the
+        // history: an assistant tool call left unanswered ahead of a user
+        // message makes every provider reject the replayed conversation.
+        for (auto& proposal : proposals) {
+            if (!proposal.executed) {
+                dismissProposalLocked(proposal,
+                    "The user did not approve this action and sent a new message instead.");
+            }
+        }
+        // Loaded conversations arrive without proposals, so unanswered tool
+        // calls persisted in the history are repaired from the messages
+        // themselves.
+        repairUnansweredToolCallsLocked();
         ChatMessage userMessage;
         userMessage.role = ChatRole::User;
         userMessage.content = text;
@@ -364,23 +380,123 @@ void AiService::removeProposal(uint64_t proposalId) {
         if (proposal.id != proposalId || proposal.executed) {
             continue;
         }
-        // Resolve the call with a dismissal result rather than dropping it, so
-        // the assistant's tool call stays answered and the next request that
-        // replays the history remains well-formed.
-        proposal.executing = false;
-        proposal.executed = true;
-        proposal.result = {false, "Dismissed by the user.", Json::object()};
-
-        ChatMessage toolMessage;
-        toolMessage.role = ChatRole::Tool;
-        toolMessage.toolCallId = proposal.toolCallId;
-        toolMessage.toolName = proposal.toolName;
-        toolMessage.toolDescription = proposal.description;
-        toolMessage.toolSuccess = false;
-        toolMessage.content = "The user dismissed this action.";
-        messages.push_back(toolMessage);
+        dismissProposalLocked(proposal, "The user dismissed this action.");
         break;
     }
+}
+
+// Ensures every assistant tool call is answered exactly once, by a tool
+// result inside the contiguous run that follows its assistant message. Live
+// turns keep this shape through the proposal list; this covers histories that
+// arrive without proposals (loadConversation), where an unanswered call would
+// otherwise make providers reject the replay forever. A matching result
+// stranded later in the history (a stale proposal that was executed after the
+// conversation moved on) is relocated into place rather than duplicated, any
+// tool result left with no call to answer is dropped, and calls with no
+// result anywhere get a synthetic "declined" one.
+void AiService::repairUnansweredToolCallsLocked() {
+    // Pass 1: a tool message is anchored when it is the first result for one
+    // of its own assistant's calls, inside the run right after that assistant.
+    std::vector<bool> anchored(messages.size(), false);
+    for (size_t i = 0; i < messages.size(); ++i) {
+        if (messages[i].role != ChatRole::Assistant || messages[i].toolCalls.empty()) {
+            continue;
+        }
+        std::unordered_map<std::string, size_t> expected;
+        for (const ToolCall& call : messages[i].toolCalls) {
+            ++expected[call.id];
+        }
+        size_t j = i + 1;
+        while (j < messages.size() && messages[j].role == ChatRole::Tool) {
+            auto expectedIt = expected.find(messages[j].toolCallId);
+            if (expectedIt != expected.end() && expectedIt->second > 0) {
+                anchored[j] = true;
+                --expectedIt->second;
+            }
+            ++j;
+        }
+        i = j - 1;
+    }
+
+    // Everything else is an orphan: queue every result per call id as a
+    // candidate to relocate next to a matching call. Queues preserve the
+    // multiplicity of legacy ID-less parallel calls that share a name.
+    std::unordered_map<std::string, std::deque<ChatMessage>> late;
+    for (size_t i = 0; i < messages.size(); ++i) {
+        if (messages[i].role == ChatRole::Tool && !anchored[i]) {
+            const std::string callId = messages[i].toolCallId;
+            late[callId].push_back(std::move(messages[i]));
+        }
+    }
+
+    // Pass 2: rebuild, appending relocated or synthetic results for calls the
+    // anchored run leaves unanswered.
+    std::vector<ChatMessage> repaired;
+    repaired.reserve(messages.size());
+    for (size_t i = 0; i < messages.size(); ++i) {
+        if (messages[i].role == ChatRole::Tool && !anchored[i]) {
+            continue;
+        }
+        repaired.push_back(std::move(messages[i]));
+        if (repaired.back().role != ChatRole::Assistant || repaired.back().toolCalls.empty()) {
+            continue;
+        }
+        const std::vector<ToolCall> calls = repaired.back().toolCalls;
+
+        std::unordered_map<std::string, size_t> answered;
+        size_t j = i + 1;
+        while (j < messages.size() && messages[j].role == ChatRole::Tool) {
+            if (anchored[j]) {
+                ++answered[messages[j].toolCallId];
+                repaired.push_back(std::move(messages[j]));
+            }
+            ++j;
+        }
+        for (const ToolCall& call : calls) {
+            auto answeredIt = answered.find(call.id);
+            if (answeredIt != answered.end() && answeredIt->second > 0) {
+                --answeredIt->second;
+                continue;
+            }
+            auto lateIt = late.find(call.id);
+            if (lateIt != late.end() && !lateIt->second.empty()) {
+                repaired.push_back(std::move(lateIt->second.front()));
+                lateIt->second.pop_front();
+                if (lateIt->second.empty()) {
+                    late.erase(lateIt);
+                }
+                continue;
+            }
+            ChatMessage toolMessage;
+            toolMessage.role = ChatRole::Tool;
+            toolMessage.toolCallId = call.id;
+            toolMessage.toolName = call.name;
+            toolMessage.toolDescription = EditorActionRegistry::describe(call.name, call.arguments);
+            toolMessage.toolSuccess = false;
+            toolMessage.content = "This action was never run before the conversation moved on; treat it as declined.";
+            repaired.push_back(std::move(toolMessage));
+        }
+        i = j - 1;
+    }
+    messages = std::move(repaired);
+}
+
+// Resolve the call with a dismissal result rather than dropping it, so the
+// assistant's tool call stays answered and the next request that replays the
+// history remains well-formed.
+void AiService::dismissProposalLocked(ActionProposal& proposal, const std::string& note) {
+    proposal.executing = false;
+    proposal.executed = true;
+    proposal.result = {false, "Dismissed by the user.", Json::object()};
+
+    ChatMessage toolMessage;
+    toolMessage.role = ChatRole::Tool;
+    toolMessage.toolCallId = proposal.toolCallId;
+    toolMessage.toolName = proposal.toolName;
+    toolMessage.toolDescription = proposal.description;
+    toolMessage.toolSuccess = false;
+    toolMessage.content = note;
+    messages.push_back(toolMessage);
 }
 
 std::string AiService::buildSystemPrompt() const {

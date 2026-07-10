@@ -65,6 +65,8 @@ private:
     void finishTurnLocked(bool success);
     void appendAssistantMessageLocked(const std::string& text);
     void addToolCallProposalLocked(const ToolCall& call);
+    void dismissProposalLocked(ActionProposal& proposal, const std::string& note);
+    void repairUnansweredToolCallsLocked();
 };
 
 } // namespace doriax::editor::ai
