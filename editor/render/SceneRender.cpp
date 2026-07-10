@@ -404,7 +404,8 @@ OBB editor::SceneRender::getOBB(Entity entity, bool local, bool visual){
 // Instead we gather every member's world-space corners in the SELECTED entity's
 // local frame, build one local AABB, then transform it once with the selected
 // entity's matrix. The box is oriented to the selected node and tightly bounds the
-// whole subtree (and reduces to the exact single-mesh box for a leaf).
+// whole subtree (and reduces to the exact single-mesh box for a leaf). A singular
+// selected transform falls back to an axis-aligned world-space box.
 OBB editor::SceneRender::getFamilyVisualOBB(Entity entity, float offset){
     Signature signature = scene->getSignature(entity);
     if (!signature.test(scene->getComponentId<Transform>())) {
@@ -415,13 +416,18 @@ OBB editor::SceneRender::getFamilyVisualOBB(Entity entity, float offset){
         return entityOBB;
     }
 
-    Transform& selTransform = scene->getComponent<Transform>(entity);
-    Matrix4 invSel = selTransform.modelMatrix.inverse();
+    const Matrix4& selectedMatrix = scene->getComponent<Transform>(entity).modelMatrix;
+    const float selectedDeterminant = selectedMatrix.linear().determinant();
+    const bool useSelectedFrame = selectedMatrix.isValid()
+        && std::isfinite(selectedDeterminant)
+        && selectedDeterminant != 0.0f;
+
+    const Matrix4 worldToBounds = useSelectedFrame ? selectedMatrix.inverse() : Matrix4();
 
     auto transforms = scene->getComponentArray<Transform>();
     size_t index = transforms->getIndex(entity);
 
-    AABB localBounds; // null until first corner merged, in the selected node's local space
+    AABB familyBounds;
     std::vector<Entity> parentList;
     for (int i = index; i < transforms->size(); i++){
         Transform& transform = transforms->getComponentFromIndex(i);
@@ -441,18 +447,22 @@ OBB editor::SceneRender::getFamilyVisualOBB(Entity entity, float offset){
             continue;
         }
 
-        // Fold the member's true world-space corners into the selected node's frame.
         const Vector3* corners = memberOBB.getCorners();
         for (int c = 0; c < 8; c++){
-            localBounds.merge(invSel * corners[c]);
+            const Vector3 point = worldToBounds * corners[c];
+            if (point.isValid()){
+                familyBounds.merge(point);
+            }
         }
     }
 
-    if (localBounds.isNull()){
+    if (familyBounds.isNull()){
         return OBB();
     }
 
-    OBB result = transformAABBPreservingShear(selTransform.modelMatrix, localBounds);
+    OBB result = useSelectedFrame
+        ? transformAABBPreservingShear(selectedMatrix, familyBounds)
+        : familyBounds.getOBB();
     result.setHalfExtents(result.getHalfExtents() + Vector3(offset));
     return result;
 }
