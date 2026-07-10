@@ -346,7 +346,6 @@ namespace {
     };
 
     static const FastPropertyDescriptor kAnimationProperties[] = {
-        makeFastProperty<AnimationComponent, std::string, &AnimationComponent::name>("name", PropertyType::String, UpdateFlags_None),
         makeFastProperty<AnimationComponent, bool, &AnimationComponent::loop>("loop", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<AnimationComponent, float, &AnimationComponent::duration>("duration", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<AnimationComponent, bool, &AnimationComponent::ownedActions>("ownedActions", PropertyType::Bool, UpdateFlags_None),

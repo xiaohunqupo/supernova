@@ -5711,7 +5711,6 @@ SpriteAnimationComponent editor::Stream::decodeSpriteAnimationComponent(const YA
 YAML::Node editor::Stream::encodeAnimationComponent(const AnimationComponent& animation) {
     YAML::Node node;
 
-    node["name"] = animation.name;
     node["loop"] = animation.loop;
     node["duration"] = animation.duration;
     node["ownedActions"] = animation.ownedActions;
@@ -5738,7 +5737,6 @@ AnimationComponent editor::Stream::decodeAnimationComponent(const YAML::Node& no
         animation = *oldAnimation;
     }
 
-    if (node["name"]) animation.name = node["name"].as<std::string>();
     if (node["loop"]) animation.loop = node["loop"].as<bool>();
     if (node["duration"]) animation.duration = node["duration"].as<float>();
     if (node["ownedActions"]) animation.ownedActions = node["ownedActions"].as<bool>();

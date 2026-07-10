@@ -21,8 +21,6 @@ namespace doriax{
         bool ownedActions = false;
         bool loop = false;
 
-        std::string name;
-
         float duration = -1; // -1 is infinite
 
         // Default crossfade time (seconds) used by Model::playAnimation when no

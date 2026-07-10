@@ -3449,8 +3449,6 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
 
             AnimationComponent& animcomp = scene->getComponent<AnimationComponent>(anim);
 
-            animcomp.name = animation.name;
-
             std::string animName = animation.name.empty() ? "Animation " + std::to_string(i) : animation.name;
             scene->setEntityName(anim, animName);
 

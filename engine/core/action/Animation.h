@@ -40,9 +40,6 @@ namespace doriax{
         bool isOwnedActions() const;
         void setOwnedActions(bool ownedActions);
 
-        const std::string &getName() const;
-        void setName(const std::string &name);
-
         const float &getDuration() const;
         void setDuration(const float &duration);
 

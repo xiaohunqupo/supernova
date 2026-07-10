@@ -5633,14 +5633,10 @@ void editor::Properties::drawModelComponent(ComponentType cpType, SceneProject* 
         Entity animEntity = model.animations[i];
         std::string animationLabel = "Animation " + std::to_string(i);
         if (animEntity != NULL_ENTITY && sceneProject->scene->isEntityCreated(animEntity)) {
-            if (AnimationComponent* animComp = sceneProject->scene->findComponent<AnimationComponent>(animEntity)) {
-                if (!animComp->name.empty()) {
-                    animationLabel = animComp->name;
-                } else {
-                    std::string entityName = sceneProject->scene->getEntityName(animEntity);
-                    if (!entityName.empty()) {
-                        animationLabel = entityName;
-                    }
+            if (sceneProject->scene->findComponent<AnimationComponent>(animEntity)) {
+                std::string entityName = sceneProject->scene->getEntityName(animEntity);
+                if (!entityName.empty()) {
+                    animationLabel = entityName;
                 }
             }
         }
@@ -11471,7 +11467,6 @@ void editor::Properties::drawSpriteAnimationComponent(ComponentType cpType, Scen
 
 void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     beginTable(cpType, getLabelSize("Owned actions"));
-    propertyRow(RowPropertyType::String, cpType, "name", "Name", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "duration", "Duration", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "ownedActions", "Owned actions", sceneProject, entities);

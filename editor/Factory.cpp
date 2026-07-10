@@ -1791,7 +1791,6 @@ std::string editor::Factory::createAnimationComponent(int indentSpaces, EntityRe
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
     code << ind << "AnimationComponent animcomp;\n";
-    code << ind << "animcomp.name = " << formatString(anim.name) << ";\n";
     code << ind << "animcomp.loop = " << formatBool(anim.loop) << ";\n";
     code << ind << "animcomp.duration = " << formatFloat(anim.duration) << ";\n";
     code << ind << "animcomp.ownedActions = " << formatBool(anim.ownedActions) << ";\n";

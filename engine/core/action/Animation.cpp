@@ -164,18 +164,6 @@ void Animation::setOwnedActions(bool ownedActions){
     animation.ownedActions = ownedActions;
 }
 
-const std::string &Animation::getName() const{
-    AnimationComponent& animation = getComponent<AnimationComponent>();
-
-    return animation.name;
-}
-
-void Animation::setName(const std::string &name) {
-    AnimationComponent& animation = getComponent<AnimationComponent>();
-
-    animation.name = name;
-}
-
 const float &Animation::getDuration() const{
     AnimationComponent& animation = getComponent<AnimationComponent>();
 

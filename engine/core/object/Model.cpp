@@ -112,9 +112,7 @@ Animation Model::findAnimation(const std::string& name){
     for (int i = 0; i < model.animations.size(); i++){
         Signature signature = scene->getSignature(model.animations[i]);
         if (signature.test(scene->getComponentId<AnimationComponent>())){
-            AnimationComponent& animcomp = scene->getComponent<AnimationComponent>(model.animations[i]);
-
-            if (animcomp.name == name){
+            if (scene->getEntityName(model.animations[i]) == name){
                 return Animation(scene, model.animations[i]);
             }
         }
@@ -174,7 +172,7 @@ void Model::playAnimation(const std::string& name, float fadeTime){
     for (int i = 0; i < (int)model.animations.size(); i++){
         Signature signature = scene->getSignature(model.animations[i]);
         if (signature.test(scene->getComponentId<AnimationComponent>())){
-            if (scene->getComponent<AnimationComponent>(model.animations[i]).name == name){
+            if (scene->getEntityName(model.animations[i]) == name){
                 playAnimation(i, fadeTime);
                 return;
             }
@@ -190,7 +188,7 @@ void Model::playAnimation(const std::string& name){
     for (int i = 0; i < (int)model.animations.size(); i++){
         Signature signature = scene->getSignature(model.animations[i]);
         if (signature.test(scene->getComponentId<AnimationComponent>())){
-            if (scene->getComponent<AnimationComponent>(model.animations[i]).name == name){
+            if (scene->getEntityName(model.animations[i]) == name){
                 playAnimation(i, scene->getComponent<AnimationComponent>(model.animations[i]).defaultFadeTime);
                 return;
             }

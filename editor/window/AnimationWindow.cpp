@@ -171,8 +171,8 @@ std::string editor::AnimationWindow::getActionLabel(Entity actionEntity, Scene* 
     }
 
     if (sig.test(scene->getComponentId<AnimationComponent>())) {
-        AnimationComponent& a = scene->getComponent<AnimationComponent>(actionEntity);
-        if (!a.name.empty()) return a.name;
+        std::string name = scene->getEntityName(actionEntity);
+        if (!name.empty()) return name;
         return "Animation";
     }
 
@@ -540,8 +540,11 @@ void editor::AnimationWindow::stopPreview(Scene* scene, SceneProject* sceneProje
     }
 }
 
-std::string editor::AnimationWindow::getAnimationEntityLabel(Entity entity, AnimationComponent& anim, Scene* scene) const {
-    std::string label = anim.name.empty() ? "Animation" : anim.name;
+std::string editor::AnimationWindow::getAnimationEntityLabel(Entity entity, Scene* scene) const {
+    std::string label = scene->getEntityName(entity);
+    if (label.empty()) {
+        label = "Animation";
+    }
 
     ActionComponent* actionComp = scene->findComponent<ActionComponent>(entity);
     if (actionComp && actionComp->target != NULL_ENTITY && scene->isEntityCreated(actionComp->target)) {
@@ -557,7 +560,7 @@ std::string editor::AnimationWindow::getAnimationEntityLabel(Entity entity, Anim
 void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim, Scene* scene, SceneProject* sceneProject) {
     // Animation entity combo selector
     auto animations = scene->getComponentArray<AnimationComponent>();
-    std::string currentLabel = getAnimationEntityLabel(selectedEntity, anim, scene);
+    std::string currentLabel = getAnimationEntityLabel(selectedEntity, scene);
     bool canPreview = canPreviewEntity(selectedEntity, scene);
 
     float textWidth = ImGui::CalcTextSize(currentLabel.c_str()).x;
@@ -570,8 +573,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     if (ImGui::BeginCombo("##anim_entity_combo", currentLabel.c_str())) {
         for (int i = 0; i < (int)animations->size(); i++) {
             Entity entity = animations->getEntity(i);
-            AnimationComponent& animItem = animations->getComponentFromIndex(i);
-            std::string label = getAnimationEntityLabel(entity, animItem, scene);
+            std::string label = getAnimationEntityLabel(entity, scene);
 
             bool isSelected = (entity == selectedEntity);
             ImGui::PushID((int)entity);
@@ -762,8 +764,8 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
         transitionTarget = NULL_ENTITY; // can't blend a clip into itself
     }
     if (transitionTarget != NULL_ENTITY && scene->isEntityCreated(transitionTarget)) {
-        if (AnimationComponent* targetAnim = scene->findComponent<AnimationComponent>(transitionTarget)) {
-            targetLabel = getAnimationEntityLabel(transitionTarget, *targetAnim, scene);
+        if (scene->findComponent<AnimationComponent>(transitionTarget)) {
+            targetLabel = getAnimationEntityLabel(transitionTarget, scene);
         } else {
             transitionTarget = NULL_ENTITY;
         }
@@ -773,8 +775,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
         for (int i = 0; i < (int)blendAnims->size(); i++) {
             Entity blendEntity = blendAnims->getEntity(i);
             if (blendEntity == selectedEntity) continue;
-            AnimationComponent& blendAnim = blendAnims->getComponentFromIndex(i);
-            std::string blendLabel = getAnimationEntityLabel(blendEntity, blendAnim, scene);
+            std::string blendLabel = getAnimationEntityLabel(blendEntity, scene);
             bool blendSelected = (blendEntity == transitionTarget);
             ImGui::PushID((int)blendEntity);
             if (ImGui::Selectable(blendLabel.c_str(), blendSelected)) {
@@ -1617,7 +1618,7 @@ void editor::AnimationWindow::show() {
     if (displayEntity != selectedEntity) {
         displayAnim = &scene->getComponent<AnimationComponent>(displayEntity);
         ImGui::TextDisabled(ICON_FA_RIGHT_LEFT " Timeline: %s (transition preview)",
-                            getAnimationEntityLabel(displayEntity, *displayAnim, scene).c_str());
+                            getAnimationEntityLabel(displayEntity, scene).c_str());
     }
 
     // Timeline canvas

@@ -295,7 +295,6 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("actions", &AnimationComponent::actions)
         .addProperty("ownedActions", &AnimationComponent::ownedActions)
         .addProperty("loop", &AnimationComponent::loop)
-        .addProperty("m", &AnimationComponent::name)
         .addProperty("duration", &AnimationComponent::duration)
         .endClass();
 

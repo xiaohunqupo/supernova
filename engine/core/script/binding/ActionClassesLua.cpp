@@ -255,7 +255,6 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addConstructor <void(Scene*), void(Scene*, Entity)> ()
         .addProperty("loop", &Animation::isLoop, &Animation::setLoop)
         .addProperty("ownedActions", &Animation::isOwnedActions, &Animation::setOwnedActions)
-        .addProperty("name", &Animation::getName, &Animation::setName)
         .addProperty("blendWeight", &Animation::getBlendWeight, &Animation::setBlendWeight)
         .addProperty("defaultFadeTime", &Animation::getDefaultFadeTime, &Animation::setDefaultFadeTime)
         .addFunction("fadeIn", &Animation::fadeIn)

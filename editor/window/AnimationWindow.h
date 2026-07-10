@@ -83,7 +83,7 @@ namespace doriax::editor{
         float xToTime(float x, float timeStart, ImVec2 canvasPos) const;
 
         std::string getActionLabel(Entity actionEntity, Scene* scene) const;
-        std::string getAnimationEntityLabel(Entity entity, AnimationComponent& anim, Scene* scene) const;
+        std::string getAnimationEntityLabel(Entity entity, Scene* scene) const;
         bool canPreviewEntity(Entity entity, Scene* scene) const;
         void collectPreviewEntitiesRecursive(Scene* scene, Entity entity, std::vector<Entity>& entities,
                              std::unordered_set<Entity>& visitedAnimations,
