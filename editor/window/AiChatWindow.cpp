@@ -1030,11 +1030,23 @@ void AiChatWindow::drawTranscript(float height) {
         first = false;
     };
 
+    // Divider shown when a user message was sent with a different model than the
+    // one before it (never before the conversation's first message).
+    std::string lastModel;
+
     for (const auto& message : messages) {
         switch (message.role) {
             case ai::ChatRole::System:
                 break;
             case ai::ChatRole::User:
+                if (!message.model.empty()) {
+                    if (!lastModel.empty() && lastModel != message.model) {
+                        spacer();
+                        paragraphs.push_back({ai::ModelCatalog::humanizeModelId(message.model),
+                                              dimCol, nullptr, true});
+                    }
+                    lastModel = message.model;
+                }
                 spacer();
                 paragraphs.push_back({"You", userCol});
                 paragraphs.push_back({message.content, textCol});

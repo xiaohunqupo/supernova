@@ -20,18 +20,26 @@ namespace {
 // not the raw JSON envelope.
 std::string humanizeProviderError(long status, const std::string& detail) {
     std::string label;
-    if (status == 400) label = "Bad request";
+    bool recognized = true;
+    if (status == 400) label = "The provider rejected the request";
     else if (status == 401 || status == 403) label = "Authentication failed - check your API key";
-    else if (status == 404) label = "Not found - check the model name or endpoint";
+    else if (status == 404) label = "Model or endpoint not found - check your AI settings";
     else if (status == 429) label = "Rate limit or quota exceeded";
     else if (status >= 500) label = "The provider is unavailable, try again later";
-    else label = "Request failed";
-
-    std::string out = label + " (HTTP " + std::to_string(status) + ")";
-    if (!detail.empty()) {
-        out += ": " + detail;
+    else {
+        label = "Request failed";
+        recognized = false;
     }
-    return out;
+
+    // When the provider sent its own explanation, that alone reads best;
+    // the status code only adds value for statuses we can't name.
+    if (!detail.empty()) {
+        return label + ". " + detail;
+    }
+    if (!recognized) {
+        return label + " (HTTP " + std::to_string(status) + ").";
+    }
+    return label + ".";
 }
 
 std::string lowercase(std::string value) {
@@ -207,7 +215,11 @@ bool AiService::sendUserMessage(const std::string& text) {
     ProviderRequest request;
     {
         std::lock_guard<std::mutex> lock(mutex);
-        messages.push_back({ChatRole::User, text});
+        ChatMessage userMessage;
+        userMessage.role = ChatRole::User;
+        userMessage.content = text;
+        userMessage.model = settings.model;
+        messages.push_back(std::move(userMessage));
         toolRounds = 0;
         turnActive = true;
         turnFailed = false;
@@ -497,6 +509,9 @@ void AiService::runProviderRequest(ProviderRequest request) {
             // Reuse the provider parser to pull error.message out of the body.
             ProviderResponse errorBody = provider->parseResponse(httpResponse.body);
             parsed.error = humanizeProviderError(httpResponse.status, errorBody.error);
+            Out::error("AI provider request failed (HTTP %ld): %s",
+                httpResponse.status,
+                errorBody.error.empty() ? httpResponse.body.c_str() : errorBody.error.c_str());
         } else {
             parsed = provider->parseResponse(httpResponse.body);
         }

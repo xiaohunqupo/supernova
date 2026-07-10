@@ -60,6 +60,10 @@ struct ChatMessage {
     ChatRole role = ChatRole::User;
     std::string content;
 
+    // Model id active when a user message was sent; the transcript uses it to
+    // show a divider when the model changes mid-conversation.
+    std::string model;
+
     // Set on assistant messages that requested one or more tool calls. Kept in the
     // history so follow-up requests can present a well-formed tool round-trip.
     std::vector<ToolCall> toolCalls;

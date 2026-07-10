@@ -22,6 +22,7 @@ Json messageToJson(const ChatMessage& message) {
     Json out;
     out["role"] = toString(message.role);
     out["content"] = message.content;
+    if (!message.model.empty()) out["model"] = message.model;
     if (!message.toolCallId.empty()) out["tool_call_id"] = message.toolCallId;
     if (!message.toolName.empty()) out["tool_name"] = message.toolName;
     if (!message.toolDescription.empty()) out["tool_description"] = message.toolDescription;
@@ -47,6 +48,7 @@ ChatMessage messageFromJson(const Json& node) {
     ChatMessage message;
     message.role = chatRoleFromString(node.value("role", "user"));
     message.content = node.value("content", "");
+    message.model = node.value("model", "");
     message.toolCallId = node.value("tool_call_id", "");
     message.toolName = node.value("tool_name", "");
     message.toolDescription = node.value("tool_description", "");

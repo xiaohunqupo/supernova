@@ -17,6 +17,7 @@ public:
         std::string text;        // may contain '\n'; pass an empty string for a spacer line
         ImU32 color;
         ImFont* font = nullptr;  // nullptr = default UI font (e.g. set to a mono font for code)
+        bool rule = false;       // centered single-line label with a horizontal line on each side
     };
 
     void draw(const char* id, const ImVec2& size,
@@ -29,6 +30,7 @@ private:
     std::vector<ImU32> lineColors;    // one per line
     std::vector<ImFont*> lineFonts;   // one per line; nullptr = default font
     std::vector<char> lineHardBreak;  // 1 = real newline, 0 = soft wrap
+    std::vector<char> lineRule;       // 1 = rule line (centered text between horizontal lines)
 
     int selectionStart = -1;
     int selectionEnd = -1;

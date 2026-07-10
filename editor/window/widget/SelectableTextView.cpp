@@ -16,6 +16,7 @@ void SelectableTextView::rebuild(const std::vector<Paragraph>& paragraphs, float
     lineColors.clear();
     lineFonts.clear();
     lineHardBreak.clear();
+    lineRule.clear();
 
     if (wrapWidth <= 0.0f) {
         wrapWidth = 1.0f;
@@ -25,7 +26,7 @@ void SelectableTextView::rebuild(const std::vector<Paragraph>& paragraphs, float
     const float fontSize = ImGui::GetFontSize();
 
     auto pushLine = [&](const std::string& line, ImU32 color, ImFont* lineFont,
-                        bool hardBreak, bool appendNewline) {
+                        bool hardBreak, bool appendNewline, bool rule = false) {
         buf.append(line.c_str());
         if (appendNewline) {
             buf.append("\n");
@@ -34,12 +35,19 @@ void SelectableTextView::rebuild(const std::vector<Paragraph>& paragraphs, float
         lineColors.push_back(color);
         lineFonts.push_back(lineFont);
         lineHardBreak.push_back(hardBreak ? 1 : 0);
+        lineRule.push_back(rule ? 1 : 0);
     };
 
     for (size_t pi = 0; pi < paragraphs.size(); ++pi) {
         const Paragraph& para = paragraphs[pi];
         const bool lastPara = (pi + 1 == paragraphs.size());
         ImFont* font = para.font ? para.font : defaultFont;
+
+        if (para.rule) {
+            // Rule labels are short; keep them on one centered line instead of wrapping.
+            pushLine(para.text, para.color, para.font, true, !lastPara, true);
+            continue;
+        }
 
         std::string currentLine;
         float currentWidth = 0.0f;
@@ -298,6 +306,7 @@ void SelectableTextView::draw(const char* id, const ImVec2& size,
         hash ^= std::hash<std::string>{}(p.text) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
         hash ^= static_cast<size_t>(p.color) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
         hash ^= reinterpret_cast<size_t>(p.font) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
+        hash ^= static_cast<size_t>(p.rule ? 1 : 0) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
     }
     if (hash != builtHash || fabsf(builtWrapWidth - wrapW) > 0.5f) {
         rebuild(paragraphs, wrapW);
@@ -339,6 +348,20 @@ void SelectableTextView::draw(const char* id, const ImVec2& size,
         ImFont* lf = (line >= 0 && line < (int)lineFonts.size()) ? lineFonts[line] : nullptr;
         return lf ? lf : font;
     };
+    auto lineIsRule = [&](int line) -> bool {
+        return line >= 0 && line < (int)lineRule.size() && lineRule[line];
+    };
+    // Rule lines center their text; every x computation on such a line must
+    // account for this offset.
+    auto lineTextOffsetX = [&](int line) -> float {
+        if (!lineIsRule(line)) return 0.0f;
+        int ls = lineStartIndex(line);
+        int le = lineEndIndexExcl(line);
+        if (ls >= le) return 0.0f;
+        float textW = lineFontFor(line)->CalcTextSizeA(fontSize, FLT_MAX, 0.0f,
+                                                       buf.begin() + ls, buf.begin() + le).x;
+        return ImMax(0.0f, (wrapW - textW) * 0.5f);
+    };
 
     int hoveredLine = -1;
     float hoveredLocalX = 0.0f;
@@ -365,6 +388,7 @@ void SelectableTextView::draw(const char* id, const ImVec2& size,
 
             ImFont* lineFont = lineFontFor(line);
             const bool customFont = (lineFont != font);
+            const float textOffsetX = lineTextOffsetX(line);
 
             if (hasStoredSelection && selA >= 0 && selB > selA) {
                 int hs = std::max(ls, selA);
@@ -376,14 +400,35 @@ void SelectableTextView::draw(const char* id, const ImVec2& size,
                     float x0 = lineFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, s0, s1).x;
                     float x1 = lineFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, s1, s2).x;
                     ImGui::GetWindowDrawList()->AddRectFilled(
-                        ImVec2(linePos.x + x0, linePos.y),
-                        ImVec2(linePos.x + x0 + x1, linePos.y + lineBoxHeight),
+                        ImVec2(linePos.x + textOffsetX + x0, linePos.y),
+                        ImVec2(linePos.x + textOffsetX + x0 + x1, linePos.y + lineBoxHeight),
                         selBg);
                 }
             }
 
             ImU32 col = (line >= 0 && line < (int)lineColors.size())
                 ? lineColors[line] : ImGui::GetColorU32(ImGuiCol_Text);
+
+            if (lineIsRule(line) && ls < le) {
+                float textW = lineFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0f,
+                                                      buf.begin() + ls, buf.begin() + le).x;
+                const float gap = fontSize * 0.5f;
+                const float midY = linePos.y + lineBoxHeight * 0.5f;
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                if (textOffsetX > gap) {
+                    drawList->AddLine(ImVec2(linePos.x, midY),
+                                      ImVec2(linePos.x + textOffsetX - gap, midY), col);
+                }
+                float rightStart = textOffsetX + textW + gap;
+                if (rightStart < wrapW) {
+                    drawList->AddLine(ImVec2(linePos.x + rightStart, midY),
+                                      ImVec2(linePos.x + wrapW, midY), col);
+                }
+            }
+
+            if (textOffsetX > 0.0f) {
+                ImGui::SetCursorScreenPos(ImVec2(linePos.x + textOffsetX, linePos.y));
+            }
             if (customFont) ImGui::PushFont(lineFont, fontSize);
             ImGui::PushStyleColor(ImGuiCol_Text, col);
             if (ls < le) {
@@ -402,6 +447,7 @@ void SelectableTextView::draw(const char* id, const ImVec2& size,
         int ls = lineStartIndex(line);
         int le = lineEndIndexExcl(line);
         if (ls >= le) return ls;
+        localX -= lineTextOffsetX(line);
         ImFont* lineFont = lineFontFor(line);
         const char* s = buf.begin() + ls;
         const char* e = buf.begin() + le;
