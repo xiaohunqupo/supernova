@@ -199,6 +199,17 @@ void editor::AnimationWindow::selectEntity(Entity entity, uint32_t sceneId) {
     }
 }
 
+Entity editor::AnimationWindow::timelineClip(Scene* scene) const {
+    // During a transition preview the timeline follows the clip the preview blended
+    // into; selection and authoring stay on selectedEntity.
+    if (isPreviewing && scene && previewPrimary != NULL_ENTITY &&
+        scene->isEntityCreated(previewPrimary) &&
+        scene->findComponent<AnimationComponent>(previewPrimary)) {
+        return previewPrimary;
+    }
+    return selectedEntity;
+}
+
 bool editor::AnimationWindow::canPreviewEntity(Entity entity, Scene* scene) const {
     if (!scene || entity == NULL_ENTITY || !scene->isEntityCreated(entity)) {
         return false;
@@ -313,8 +324,11 @@ float editor::AnimationWindow::getAnimationDuration(const AnimationComponent& an
     return duration;
 }
 
-void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProject, float time) {
-    if (!scene || !sceneProject || !canPreviewEntity(selectedEntity, scene)) {
+void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProject, float time, Entity clipEntity) {
+    if (clipEntity == NULL_ENTITY) {
+        clipEntity = timelineClip(scene);
+    }
+    if (!scene || !sceneProject || !canPreviewEntity(clipEntity, scene)) {
         return;
     }
 
@@ -323,7 +337,7 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     }
 
     // Scrubbing exits any active transition: reset blend/fade state and preview only the
-    // selected clip (a two-clip crossfade is not meaningfully scrubbable on one timeline).
+    // timeline clip (a two-clip crossfade is not meaningfully scrubbable on one timeline).
     for (Entity e : previewAnimations) {
         if (e != NULL_ENTITY && scene->isEntityCreated(e)) {
             if (AnimationComponent* ac = scene->findComponent<AnimationComponent>(e)) {
@@ -335,16 +349,16 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
         }
     }
     previewAnimations.clear();
-    previewAnimations.push_back(selectedEntity);
-    previewPrimary = selectedEntity;
+    previewAnimations.push_back(clipEntity);
+    previewPrimary = clipEntity;
 
-    AnimationComponent& anim = scene->getComponent<AnimationComponent>(selectedEntity);
+    AnimationComponent& anim = scene->getComponent<AnimationComponent>(clipEntity);
     currentTime = std::max(0.0f, std::min(time, getAnimationDuration(anim)));
 
     restorePreviewState(scene);
     applyPreviewModelBindPose(scene);
 
-    ActionComponent& action = scene->getComponent<ActionComponent>(selectedEntity);
+    ActionComponent& action = scene->getComponent<ActionComponent>(clipEntity);
     action.state = ActionState::Stopped;
     action.timecount = 0.0f;
     action.stopTrigger = false;
@@ -370,7 +384,7 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     float stepSize = 1.0f / 60.0f;
     while (remainingTime > 0.0f) {
         float currentStep = std::min(stepSize, remainingTime);
-        scene->getSystem<ActionSystem>()->updateAnimationPreview(currentStep, selectedEntity);
+        scene->getSystem<ActionSystem>()->updateAnimationPreview(currentStep, clipEntity);
         remainingTime -= currentStep;
     }
 }
@@ -713,9 +727,13 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     ImGui::EndDisabled();
     ImGui::SameLine();
 
-    // Time display
+    // Time display. The field scrubs the timeline clip (the blend target during a
+    // transition preview), so its range must come from that clip too.
     ImGui::SetNextItemWidth(60);
-    float maxTime = getAnimationDuration(anim);
+    Entity toolbarClip = timelineClip(scene);
+    AnimationComponent& toolbarClipAnim = (toolbarClip != selectedEntity)
+        ? scene->getComponent<AnimationComponent>(toolbarClip) : anim;
+    float maxTime = getAnimationDuration(toolbarClipAnim);
     if (ImGui::DragFloat("##anim_time", &currentTime, 0.01f, 0.0f, maxTime, "%.2fs")) {
         if (sceneIsStopped && canPreview) {
             seekPreview(scene, sceneProject, currentTime);
@@ -898,7 +916,7 @@ void editor::AnimationWindow::drawTimeRuler(ImVec2 canvasPos, ImVec2 canvasSize,
 }
 
 bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, float timeStart, float timeEnd,
-                                         AnimationComponent& anim, SceneProject* sceneProject) {
+                                         AnimationComponent& anim, SceneProject* sceneProject, bool allowSelection) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     Scene* scene = sceneProject->scene;
     float rulerHeight = 20.0f;
@@ -1057,7 +1075,9 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                 }
             }
 
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            // Selection is index-based against selectedEntity's frame list, so it is
+            // disabled while the timeline displays a different clip (transition preview).
+            if (allowSelection && ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
                 selectedFrameIndex = (int)i;
                 if (allowEditing) {
                     float mouseX = ImGui::GetIO().MousePos.x;
@@ -1590,6 +1610,16 @@ void editor::AnimationWindow::show() {
 
     ImGui::Separator();
 
+    // While a transition preview is active the timeline (tracks, duration, playhead)
+    // follows the clip the blend targeted; selection and authoring stay on selectedEntity.
+    Entity displayEntity = timelineClip(scene);
+    AnimationComponent* displayAnim = animComp;
+    if (displayEntity != selectedEntity) {
+        displayAnim = &scene->getComponent<AnimationComponent>(displayEntity);
+        ImGui::TextDisabled(ICON_FA_RIGHT_LEFT " Timeline: %s (transition preview)",
+                            getAnimationEntityLabel(displayEntity, *displayAnim, scene).c_str());
+    }
+
     // Timeline canvas
     ImVec2 canvasPos = ImGui::GetCursorScreenPos();
     ImVec2 canvasSize = ImGui::GetContentRegionAvail();
@@ -1616,7 +1646,8 @@ void editor::AnimationWindow::show() {
                             IM_COL32(30, 30, 30, 255));
 
     drawTimeRuler(canvasPos, canvasSize, timeStart, timeEnd);
-    bool mouseOverFrame = drawTracks(canvasPos, canvasSize, timeStart, timeEnd, *animComp, sceneProject);
+    bool mouseOverFrame = drawTracks(canvasPos, canvasSize, timeStart, timeEnd, *displayAnim, sceneProject,
+                                     displayEntity == selectedEntity);
     bool scrubbed = drawPlayhead(canvasPos, canvasSize, timeStart, timeEnd);
 
     ImVec2 mousePos = ImGui::GetIO().MousePos;
@@ -1628,10 +1659,10 @@ void editor::AnimationWindow::show() {
     }
 
     if (scrubbed) {
-        if (sceneIsStopped && canPreviewEntity(selectedEntity, scene)) {
-            seekPreview(scene, sceneProject, currentTime);
+        if (sceneIsStopped && canPreviewEntity(displayEntity, scene)) {
+            seekPreview(scene, sceneProject, currentTime, displayEntity);
         } else {
-            currentTime = std::max(0.0f, std::min(currentTime, getAnimationDuration(*animComp)));
+            currentTime = std::max(0.0f, std::min(currentTime, getAnimationDuration(*displayAnim)));
         }
     }
 
@@ -1640,7 +1671,7 @@ void editor::AnimationWindow::show() {
 
     // Horizontal scroll
     float totalTime = 10.0f; // default visible range
-    if (animComp->duration > 0) totalTime = animComp->duration * 1.5f;
+    if (displayAnim->duration > 0) totalTime = displayAnim->duration * 1.5f;
     float maxScroll = std::max(0.0f, totalTime * pixelsPerSecond - canvasSize.x + labelWidth);
     if (scrollX > maxScroll) scrollX = maxScroll;
 
@@ -1684,7 +1715,8 @@ void editor::AnimationWindow::externalPlay(Entity entity, uint32_t sceneId) {
     } else if (sceneIsStopped && isPreviewing) {
         ActionComponent& action = sceneProject->scene->getComponent<ActionComponent>(selectedEntity);
         if (action.state == ActionState::Stopped) {
-            seekPreview(scene, sceneProject, 0.0f);
+            // Explicit "play this entity" request: seek it, not the timeline clip.
+            seekPreview(scene, sceneProject, 0.0f, selectedEntity);
         }
     }
     isPlaying = true;
@@ -1706,5 +1738,6 @@ void editor::AnimationWindow::externalPause() {
 }
 
 void editor::AnimationWindow::seekPreviewExternal(Scene* scene, SceneProject* sceneProject, float time) {
-    seekPreview(scene, sceneProject, time);
+    // External callers scrub the selected clip, not a transition-preview target.
+    seekPreview(scene, sceneProject, time, selectedEntity);
 }

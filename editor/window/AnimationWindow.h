@@ -75,7 +75,7 @@ namespace doriax::editor{
         void drawToolbar(float width, AnimationComponent& anim, Scene* scene, SceneProject* sceneProject);
         void drawTimeRuler(ImVec2 canvasPos, ImVec2 canvasSize, float timeStart, float timeEnd);
         bool drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, float timeStart, float timeEnd,
-                AnimationComponent& anim, SceneProject* sceneProject);
+                AnimationComponent& anim, SceneProject* sceneProject, bool allowSelection);
         bool drawPlayhead(ImVec2 canvasPos, ImVec2 canvasSize, float timeStart, float timeEnd);
 
         float snapTime(float time) const;
@@ -92,7 +92,12 @@ namespace doriax::editor{
         void restorePreviewState(Scene* scene) const;
         void applyPreviewModelBindPose(Scene* scene) const;
         float getAnimationDuration(const AnimationComponent& anim) const;
-        void seekPreview(Scene* scene, SceneProject* sceneProject, float time);
+        // Seek clipEntity (NULL_ENTITY = the current timeline clip) to `time`,
+        // collapsing any active transition preview to that single clip.
+        void seekPreview(Scene* scene, SceneProject* sceneProject, float time, Entity clipEntity = NULL_ENTITY);
+        // Clip the timeline displays: the blend target while a transition preview is
+        // active, otherwise selectedEntity.
+        Entity timelineClip(Scene* scene) const;
 
         void startPreview(Scene* scene, SceneProject* sceneProject);
         void stopPreview(Scene* scene, SceneProject* sceneProject, bool applyBindPose = false);
