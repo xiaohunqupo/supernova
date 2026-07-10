@@ -82,6 +82,7 @@ namespace doriax::editor {
         bool firstOpen;
         bool requestSort;
         fs::path currentPath;
+        fs::path treeSelectedPath;
         std::vector<editor::FileEntry> files;
 
         Texture folderIcon;

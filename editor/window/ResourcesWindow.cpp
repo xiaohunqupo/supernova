@@ -1212,7 +1212,7 @@ void editor::ResourcesWindow::renderDirectoryTree(const fs::path& rootPath) {
     std::string rootDisplayName = rootPath.filename().string();
     if (rootDisplayName.empty()) rootDisplayName = rootPath.string(); // Handle root paths like C:/ or /
 
-    bool isRootSelected = (currentPath == rootPath);
+    bool isRootSelected = (treeSelectedPath == rootPath);
     ImGuiTreeNodeFlags rootFlags = ImGuiTreeNodeFlags_OpenOnArrow;
     if (isRootSelected) rootFlags |= ImGuiTreeNodeFlags_Selected;
 
@@ -1262,9 +1262,12 @@ void editor::ResourcesWindow::renderDirectoryTree(const fs::path& rootPath) {
     // Render the current directory node with the selected icon
     bool nodeOpen = ImGui::TreeNodeEx("##node", rootFlags, "%s %s", icon, rootDisplayName.c_str());
 
+    // Single click only selects the node; double click navigates to it
     if (ImGui::IsItemClicked()) {
-        currentPath = rootPath;
-        scanDirectory(currentPath);
+        treeSelectedPath = rootPath;
+    }
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        scanDirectory(rootPath);
     }
 
     // Handle drag and drop target
@@ -1300,6 +1303,9 @@ void editor::ResourcesWindow::scanDirectory(const fs::path& path) {
     if (!std::filesystem::is_directory(currentPath, ec) || ec) {
         currentPath = project->getProjectPath();
     }
+
+    // Keep the directory tree highlight in sync with any navigation
+    treeSelectedPath = currentPath;
 
     requestSort = true;
 
@@ -2213,9 +2219,15 @@ void editor::ResourcesWindow::show() {
 
     ImGuiTableFlags table_flags_for_sort_specs = ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Borders;
 
+    // Full-height header vertically centered on a text-height row, overlapping the
+    // spacing above/below (same layout pattern as the scene window toolbar)
+    float headerRowY = ImGui::GetCursorPosY();
+    ImGui::SetCursorPosY(headerRowY - (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f);
+    renderHeader();
+    ImGui::SetCursorPosY(headerRowY + ImGui::GetTextLineHeightWithSpacing());
+    ImGui::Separator();
+
     if (effectiveLayout == LayoutType::GRID) {
-        renderHeader();
-        ImGui::Separator();
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         if (ImGui::BeginTable("for_sort_specs_only", 2, table_flags_for_sort_specs, ImVec2(0.0f, ImGui::GetFrameHeight()))) {
             ImGui::TableSetupColumn("Name");
@@ -2236,8 +2248,6 @@ void editor::ResourcesWindow::show() {
     } else if (effectiveLayout == LayoutType::SPLIT) {
         float splitterWidth = 4.0f;
         ImGui::BeginChild("LeftPanel", ImVec2(leftPanelWidth, 0), true);
-        renderHeader();
-        ImGui::Separator();
         renderDirectoryTree(project->getProjectPath());
         ImGui::EndChild();
         ImGui::SameLine();
