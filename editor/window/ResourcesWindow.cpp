@@ -399,8 +399,8 @@ void editor::ResourcesWindow::renderHeader() {
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
-    Vector2 pathDisplaySize = Vector2(-ImGui::CalcTextSize(ICON_FA_GEAR).x - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().FramePadding.x * 2, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
-    Widgets::pathDisplay("##ResourcesPath", currentPath, pathDisplaySize, project->getProjectPath());
+    ImVec2 pathDisplaySize = ImVec2(-ImGui::CalcTextSize(ICON_FA_GEAR).x - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().FramePadding.x * 2, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
+    renderPathBreadcrumb(pathDisplaySize);
     ImGui::SameLine();
     if (ImGui::Button(ICON_FA_GEAR)) {
         ImGui::OpenPopup("SettingsPopup");
@@ -461,6 +461,112 @@ void editor::ResourcesWindow::renderHeader() {
         }
 
         ImGui::EndPopup();
+    }
+}
+
+void editor::ResourcesWindow::renderPathBreadcrumb(const ImVec2& size) {
+    fs::path rootPath = project->getProjectPath();
+
+    // Segments between the project root and the current directory, each paired
+    // with its absolute path so it can be clicked and used as a drop target
+    std::vector<std::pair<std::string, fs::path>> segments;
+    if (!currentPath.empty() && currentPath != rootPath && currentPath.string().find(rootPath.string()) == 0) {
+        fs::path accumulated = rootPath;
+        for (const auto& part : currentPath.lexically_relative(rootPath)) {
+            if (part == "." || part.empty()) continue;
+            accumulated /= part;
+            segments.emplace_back(part.string(), accumulated);
+        }
+    }
+
+    // Navigation and drops are deferred to after the child so scanDirectory and
+    // handleInternalDragAndDrop don't mutate state mid-layout
+    fs::path navigateTo;
+    fs::path dropTarget;
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(50, 50, 50, 255));
+    ImGui::BeginChild("##ResourcesPath", size, false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    float framePaddingY = ImGui::GetStyle().FramePadding.y;
+    float separatorWidth = ImGui::CalcTextSize("/").x;
+    auto segmentWidth = [](const std::string& name) {
+        return ImGui::CalcTextSize(name.c_str()).x;
+    };
+
+    // Fit as many trailing segments as possible; earlier ones collapse into "..."
+    size_t firstVisible = segments.size();
+    float usedWidth = 0.0f;
+    float availableWidth = ImGui::GetContentRegionAvail().x;
+    for (size_t i = segments.size(); i-- > 0;) {
+        float width = separatorWidth + segmentWidth(segments[i].first);
+        float reserved = (i > 0) ? (separatorWidth + segmentWidth("...")) : 0.0f;
+        if (firstVisible < segments.size() && (usedWidth + width + reserved) > availableWidth) {
+            break;
+        }
+        usedWidth += width;
+        firstVisible = i;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    ImGui::SetCursorPosY(framePaddingY);
+
+    if (segments.empty()) {
+        ImGui::TextUnformatted("/");
+    }
+
+    if (firstVisible > 0) {
+        ImGui::TextDisabled("/");
+        ImGui::SameLine();
+        if (ImGui::Button("...##BreadcrumbMore")) {
+            ImGui::OpenPopup("##BreadcrumbMorePopup");
+        }
+        ImGui::SameLine();
+    }
+
+    for (size_t i = firstVisible; i < segments.size(); i++) {
+        ImGui::TextDisabled("/");
+        ImGui::SameLine();
+        ImGui::PushID(static_cast<int>(i));
+        bool isCurrent = (segments[i].second == currentPath);
+        if (ImGui::Button(segments[i].first.c_str()) && !isCurrent) {
+            navigateTo = segments[i].second;
+        }
+        if (!isCurrent && ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("resource_files")) {
+                dropTarget = segments[i].second;
+            }
+            ImGui::EndDragDropTarget();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", segments[i].second.string().c_str());
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+
+    if (ImGui::BeginPopup("##BreadcrumbMorePopup")) {
+        for (size_t i = 0; i < firstVisible; i++) {
+            if (ImGui::MenuItem(segments[i].first.c_str())) {
+                navigateTo = segments[i].second;
+            }
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+
+    if (!navigateTo.empty()) {
+        scanDirectory(navigateTo);
+        selectedFiles.clear();
+    }
+    if (!dropTarget.empty()) {
+        handleInternalDragAndDrop(dropTarget);
     }
 }
 

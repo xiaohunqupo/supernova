@@ -162,6 +162,7 @@ namespace doriax::editor {
         ImU32 fileSeparatorColor(const FileEntry& fe) const;
 
         void renderHeader();
+        void renderPathBreadcrumb(const ImVec2& size);
         void renderFileListing(bool showDirectories);
         void renderDirectoryTree(const fs::path& path);
 
