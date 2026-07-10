@@ -235,7 +235,15 @@ std::unique_ptr<Provider> createProvider(ProviderId provider) {
 Json buildChatCompletionsPayload(const ProviderRequest& request) {
     Json root;
     root["model"] = request.settings.model;
-    root["max_tokens"] = request.settings.maxOutputTokens;
+    if (request.settings.provider == ProviderId::OpenAI) {
+        // OpenAI deprecated max_tokens; GPT-5+ and o-series reject it outright,
+        // while max_completion_tokens works on every current OpenAI chat model.
+        // Compatible endpoints (Ollama, LM Studio, vLLM) and DeepSeek still
+        // expect max_tokens.
+        root["max_completion_tokens"] = request.settings.maxOutputTokens;
+    } else {
+        root["max_tokens"] = request.settings.maxOutputTokens;
+    }
 
     Json messages = Json::array();
     messages.push_back({{"role", "system"}, {"content", request.systemPrompt}});
