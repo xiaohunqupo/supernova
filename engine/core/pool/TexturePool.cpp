@@ -7,6 +7,8 @@
 #include "Engine.h"
 #include "Log.h"
 
+#include <vector>
+
 using namespace doriax;
 
 textures_t& TexturePool::getMap(){
@@ -151,17 +153,12 @@ void TexturePool::clear(){
 }
 
 void TexturePool::clearUnused(){
-	auto& map = getMap();
-	auto& invalidated = getInvalidated();
-	for (auto it = map.begin(); it != map.end();){
-		if (!it->second || it->second.use_count() <= 1){
-			if (it->second){
-				it->second->destroyTexture();
-			}
-			invalidated.erase(it->first);
-			it = map.erase(it);
-		}else{
-			++it;
-		}
+	std::vector<std::string> ids;
+	ids.reserve(getMap().size());
+	for (const auto& [id, _] : getMap()) {
+		ids.push_back(id);
+	}
+	for (const auto& id : ids) {
+		remove(id);
 	}
 }

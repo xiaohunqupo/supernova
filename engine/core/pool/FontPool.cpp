@@ -7,6 +7,8 @@
 #include "Engine.h"
 #include "Log.h"
 
+#include <vector>
+
 using namespace doriax;
 
 fonts_t& FontPool::getMap(){
@@ -55,12 +57,12 @@ void FontPool::clear(){
 }
 
 void FontPool::clearUnused(){
-	auto& map = getMap();
-	for (auto it = map.begin(); it != map.end();){
-		if (!it->second || it->second.use_count() <= 1){
-			it = map.erase(it);
-		}else{
-			++it;
-		}
+	std::vector<std::string> ids;
+	ids.reserve(getMap().size());
+	for (const auto& [id, _] : getMap()) {
+		ids.push_back(id);
+	}
+	for (const auto& id : ids) {
+		remove(id);
 	}
 }

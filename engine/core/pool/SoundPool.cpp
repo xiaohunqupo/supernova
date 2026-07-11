@@ -14,6 +14,7 @@
 #include "soloud_wav.h"
 
 #include <filesystem>
+#include <vector>
 
 using namespace doriax;
 
@@ -209,10 +210,10 @@ void SoundPool::remove(const std::string& id){
 
     auto it = getMap().find(id);
     if (it != getMap().end()){
-        if (it->second.use_count() <= 1){
+        if (!it->second || it->second.use_count() <= 1){
             getMap().erase(it);
         }
-    }else{
+    }else if (!removedPending){
         if (Engine::isViewLoaded()){
             Log::debug("Trying to destroy a non existent sound: %s", id.c_str());
         }
@@ -233,21 +234,26 @@ void SoundPool::clear(){
 }
 
 void SoundPool::clearUnused(){
+    // Cancel in-flight loads (same policy as remove), then drop unreferenced entries.
+    std::vector<std::string> cancelled;
     {
         std::lock_guard<std::mutex> lock(cacheMutex);
-        for (auto& [id, future] : pendingBuilds) {
-            if (future.valid()) {
-                future.wait();
-            }
+        cancelled.reserve(pendingBuilds.size());
+        for (const auto& [id, _] : pendingBuilds) {
+            cancelled.push_back(id);
         }
         pendingBuilds.clear();
     }
-    auto& map = getMap();
-    for (auto it = map.begin(); it != map.end();){
-        if (!it->second || it->second.use_count() <= 1){
-            it = map.erase(it);
-        }else{
-            ++it;
-        }
+    for (const auto& id : cancelled) {
+        ResourceProgress::failBuild(std::hash<std::string>{}(id));
+    }
+
+    std::vector<std::string> ids;
+    ids.reserve(getMap().size());
+    for (const auto& [id, _] : getMap()) {
+        ids.push_back(id);
+    }
+    for (const auto& id : ids) {
+        remove(id);
     }
 }

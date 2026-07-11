@@ -10,6 +10,7 @@
 #include "thread/ThreadPoolManager.h"
 
 #include <filesystem>
+#include <vector>
 
 using namespace doriax;
 
@@ -380,13 +381,26 @@ void TextureDataPool::requestShutdown() {
 }
 
 void TextureDataPool::remove(const std::string& id){
+    bool removedPending = false;
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        auto pendingIt = pendingBuilds.find(id);
+        if (pendingIt != pendingBuilds.end()) {
+            pendingBuilds.erase(pendingIt);
+            removedPending = true;
+        }
+    }
+    if (removedPending) {
+        ResourceProgress::failBuild(std::hash<std::string>{}(id));
+    }
+
     auto& map = getMap();
     auto it = map.find(id);
     if (it != map.end()){
         if (!it->second || it->second.use_count() <= 1){
             map.erase(it);
         }
-	}else{
+	}else if (!removedPending){
 		if (Engine::isViewLoaded()){
 			Log::debug("Trying to destroy a non existent texture data: %s", id.c_str());
 		}
@@ -408,21 +422,26 @@ void TextureDataPool::clear(){
 }
 
 void TextureDataPool::clearUnused(){
+    // Cancel in-flight loads (same policy as remove), then drop unreferenced entries.
+    std::vector<std::string> cancelled;
     {
 		std::lock_guard<std::mutex> lock(cacheMutex);
-		for (auto& [id, future] : pendingBuilds) {
-			if (future.valid()) {
-				future.wait(); // Wait for completion before clearing
-			}
+		cancelled.reserve(pendingBuilds.size());
+		for (const auto& [id, _] : pendingBuilds) {
+			cancelled.push_back(id);
 		}
 		pendingBuilds.clear();
 	}
-	auto& map = getMap();
-	for (auto it = map.begin(); it != map.end();){
-		if (!it->second || it->second.use_count() <= 1){
-			it = map.erase(it);
-		}else{
-			++it;
-		}
+	for (const auto& id : cancelled) {
+		ResourceProgress::failBuild(std::hash<std::string>{}(id));
+	}
+
+	std::vector<std::string> ids;
+	ids.reserve(getMap().size());
+	for (const auto& [id, _] : getMap()) {
+		ids.push_back(id);
+	}
+	for (const auto& id : ids) {
+		remove(id);
 	}
 }

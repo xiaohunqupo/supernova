@@ -535,12 +535,15 @@ bool ShaderPool::isShaderBuildFailed(ShaderType shaderType, uint32_t properties,
 void ShaderPool::remove(ShaderType shaderType, uint32_t properties, uint16_t customId){
     ShaderKey shaderKey = getShaderKey(shaderType, properties, customId);
     failedShaders().erase(shaderKey);
-    if (getMap().count(shaderKey)){
-        auto& shared = getMap()[shaderKey];
-        if (shared.use_count() <= 1){
-            shared->destroyShader();
+    auto& map = getMap();
+    auto it = map.find(shaderKey);
+    if (it != map.end()){
+        if (!it->second || it->second.use_count() <= 1){
+            if (it->second){
+                it->second->destroyShader();
+            }
             //Log::debug("Remove shader %s", shaderStr.c_str());
-            getMap().erase(shaderKey);
+            map.erase(it);
         }
     }else{
         if (Engine::isViewLoaded()){
@@ -714,16 +717,13 @@ void ShaderPool::clear(){
 }
 
 void ShaderPool::clearUnused(){
-    auto& map = getMap();
-    for (auto it = map.begin(); it != map.end();){
-        if (!it->second || it->second.use_count() <= 1){
-            if (it->second){
-                it->second->destroyShader();
-            }
-            it = map.erase(it);
-        }else{
-            ++it;
-        }
+    std::vector<ShaderKey> keys;
+    keys.reserve(getMap().size());
+    for (const auto& entry : getMap()) {
+        keys.push_back(entry.first);
+    }
+    for (ShaderKey key : keys) {
+        remove(getShaderTypeFromKey(key), getPropertiesFromKey(key), getCustomIdFromKey(key));
     }
     // Per-project bookkeeping: always reset so the next project does not inherit
     // missing/failed entries or custom-shader name registrations.

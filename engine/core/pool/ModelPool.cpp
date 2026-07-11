@@ -7,6 +7,8 @@
 
 #include "tiny_gltf.h"
 
+#include <vector>
+
 using namespace doriax;
 
 models_t& ModelPool::getMap(){
@@ -93,20 +95,21 @@ void ModelPool::clear(){
 }
 
 void ModelPool::clearUnused(){
-    auto& map = getMap();
-    for (auto it = map.begin(); it != map.end();){
-        if (!it->second || it->second.use_count() <= 1){
-            it = map.erase(it);
-        }else{
-            ++it;
-        }
+    std::vector<std::string> gltfIds;
+    gltfIds.reserve(getMap().size());
+    for (const auto& [id, _] : getMap()) {
+        gltfIds.push_back(id);
     }
-    auto& objMap = getObjMap();
-    for (auto it = objMap.begin(); it != objMap.end();){
-        if (!it->second || it->second.use_count() <= 1){
-            it = objMap.erase(it);
-        }else{
-            ++it;
-        }
+    for (const auto& id : gltfIds) {
+        removeGLTF(id);
+    }
+
+    std::vector<std::string> objIds;
+    objIds.reserve(getObjMap().size());
+    for (const auto& [id, _] : getObjMap()) {
+        objIds.push_back(id);
+    }
+    for (const auto& id : objIds) {
+        removeObj(id);
     }
 }
