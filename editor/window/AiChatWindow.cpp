@@ -250,25 +250,25 @@ std::string formatMentionInsert(std::string body) {
     return out;
 }
 
-// Mentions are "@token" or @"quoted token" runs at a word boundary in the raw prompt.
-std::vector<std::pair<int, int>> findPromptMentionSpans(const std::string& raw) {
+// Mentions are "@token" or @"quoted token" runs at a word boundary.
+std::vector<std::pair<int, int>> findMentionSpans(const std::string& text) {
     std::vector<std::pair<int, int>> spans;
-    const int n = static_cast<int>(raw.size());
+    const int n = static_cast<int>(text.size());
     for (int i = 0; i < n; ++i) {
-        if (raw[static_cast<size_t>(i)] != '@') {
+        if (text[static_cast<size_t>(i)] != '@') {
             continue;
         }
         const bool boundary = i == 0 ||
-            std::isspace(static_cast<unsigned char>(raw[static_cast<size_t>(i - 1)]));
+            std::isspace(static_cast<unsigned char>(text[static_cast<size_t>(i - 1)]));
         if (!boundary) {
             continue;
         }
 
         int end = i + 1;
-        if (end < n && raw[static_cast<size_t>(end)] == '"') {
+        if (end < n && text[static_cast<size_t>(end)] == '"') {
             ++end;
             while (end < n) {
-                const char c = raw[static_cast<size_t>(end)];
+                const char c = text[static_cast<size_t>(end)];
                 if (c == '\\' && end + 1 < n) {
                     end += 2;
                     continue;
@@ -283,7 +283,7 @@ std::vector<std::pair<int, int>> findPromptMentionSpans(const std::string& raw) 
         }
 
         while (end < n && isMentionTokenChar(
-                   static_cast<unsigned char>(raw[static_cast<size_t>(end)]))) {
+                   static_cast<unsigned char>(text[static_cast<size_t>(end)]))) {
             ++end;
         }
         if (end > i + 1) {
@@ -293,13 +293,22 @@ std::vector<std::pair<int, int>> findPromptMentionSpans(const std::string& raw) 
     return spans;
 }
 
-bool rawPosInMentionSpan(int rawPos, const std::vector<std::pair<int, int>>& spans) {
+bool positionInMentionSpan(int position, const std::vector<std::pair<int, int>>& spans) {
     for (const auto& span : spans) {
-        if (rawPos >= span.first && rawPos < span.second) {
+        if (position >= span.first && position < span.second) {
             return true;
         }
     }
     return false;
+}
+
+SelectableTextView::Paragraph mentionColoredParagraph(std::string text, ImU32 textColor,
+                                                       ImU32 mentionColor) {
+    SelectableTextView::Paragraph paragraph{std::move(text), textColor};
+    for (const auto& [begin, end] : findMentionSpans(paragraph.text)) {
+        paragraph.colorSpans.push_back({begin, end, mentionColor});
+    }
+    return paragraph;
 }
 
 std::string stripPromptSoftWraps(const char* text, int len,
@@ -1056,6 +1065,7 @@ void AiChatWindow::drawTranscript(float height) {
     const ImU32 okCol = ImGui::GetColorU32(kSuccessColor);
     const ImU32 errCol = ImGui::GetColorU32(kErrorColor);
     const ImU32 codeCol = ImGui::GetColorU32(kCodeColor);
+    const ImU32 mentionCol = ImGui::GetColorU32(ImGuiCol_TextLink);
     ImFont* codeFont = App::getCodeFont();
 
     std::vector<SelectableTextView::Paragraph> paragraphs;
@@ -1084,7 +1094,8 @@ void AiChatWindow::drawTranscript(float height) {
                 }
                 spacer();
                 paragraphs.push_back({"You", userCol});
-                paragraphs.push_back({message.content, textCol});
+                paragraphs.push_back(mentionColoredParagraph(message.content, textCol,
+                                                              mentionCol));
                 break;
             case ai::ChatRole::Assistant:
                 if (!message.content.empty()) {
@@ -1314,7 +1325,7 @@ void AiChatWindow::drawPromptMentionOverlay(ImVec2 inputMin, ImVec2 inputMax, Im
         return;
     }
 
-    const std::vector<std::pair<int, int>> spans = findPromptMentionSpans(
+    const std::vector<std::pair<int, int>> spans = findMentionSpans(
         stripPromptSoftWraps(text, textLen, inputSoftWraps));
 
     const ImGuiStyle& style = ImGui::GetStyle();
@@ -1351,10 +1362,10 @@ void AiChatWindow::drawPromptMentionOverlay(ImVec2 inputMin, ImVec2 inputMax, Im
         }
 
         const int runStart = i;
-        const bool isMention = rawPosInMentionSpan(
+        const bool isMention = positionInMentionSpan(
             promptDisplayPosToRawPos(runStart, inputSoftWraps), spans);
         while (i < textLen && text[i] != '\n') {
-            if (rawPosInMentionSpan(promptDisplayPosToRawPos(i, inputSoftWraps), spans) !=
+            if (positionInMentionSpan(promptDisplayPosToRawPos(i, inputSoftWraps), spans) !=
                 isMention) {
                 break;
             }
