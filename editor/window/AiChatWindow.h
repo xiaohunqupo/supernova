@@ -100,10 +100,15 @@ private:
     void drawApprovalPopup();
     void drawMentionPopup();
     void drawPromptMentionOverlay(ImVec2 inputMin, ImVec2 inputMax, ImGuiID inputId);
+    void handlePromptDrop(float maxLineWidth);
     void closeMentionPopup();
     void refreshMentionItems();
     void collectMentionCandidates(std::vector<MentionItem>& out) const;
     bool applySelectedMention();
+    bool insertDroppedMentions(const std::vector<std::string>& mentionBodies,
+                               float maxLineWidth);
+    bool replacePromptRange(int rawStart, int rawEnd, const std::string& replacement,
+                            float maxLineWidth);
     bool handleMentionKeys();
     void updateMentionFromInput(int displayCursor, float inputMinX, float inputMinY,
                                 float inputMaxY, float framePaddingX, float maxLineWidth);

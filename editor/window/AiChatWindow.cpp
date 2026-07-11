@@ -7,6 +7,7 @@
 #include "ai/EditorActionRegistry.h"
 #include "ai/SecretStore.h"
 #include "external/IconsFontAwesome6.h"
+#include "util/EntityPayload.h"
 #include "util/Util.h"
 #include "window/CodeEditor.h"
 #include "window/Widgets.h"
@@ -248,6 +249,27 @@ std::string formatMentionInsert(std::string body) {
     }
     out.push_back('"');
     return out;
+}
+
+std::vector<std::string> parseNullSeparatedPayload(const ImGuiPayload& payload) {
+    std::vector<std::string> values;
+    if (!payload.Data || payload.DataSize <= 0) {
+        return values;
+    }
+    const char* current = static_cast<const char*>(payload.Data);
+    const char* end = current + payload.DataSize;
+    while (current < end) {
+        const void* terminator = std::memchr(current, '\0', static_cast<size_t>(end - current));
+        if (!terminator) {
+            break;
+        }
+        const char* valueEnd = static_cast<const char*>(terminator);
+        if (valueEnd != current) {
+            values.emplace_back(current, valueEnd);
+        }
+        current = valueEnd + 1;
+    }
+    return values;
 }
 
 // Mentions are "@token" or @"quoted token" runs at a word boundary.
@@ -1226,6 +1248,8 @@ void AiChatWindow::drawComposer(float inputHeight) {
     ImVec2 inputMin = ImGui::GetItemRectMin();
     ImVec2 inputMax = ImGui::GetItemRectMax();
 
+    handlePromptDrop(wrapContext.maxLineWidth);
+
     // Restore caret after an @ insertion using the raw offset so soft-wrap
     // reflows during refocus don't leave the caret mid-glyph.
     if (pendingMentionRawCursor >= 0) {
@@ -1233,8 +1257,11 @@ void AiChatWindow::drawComposer(float inputHeight) {
             refocusInput = true;
         }
         if (ImGuiInputTextState* state = ImGui::GetInputTextState(inputId)) {
+            const int displayLength = state->WantReloadUserBuf
+                ? static_cast<int>(inputDisplayText.size())
+                : state->TextLen;
             const int cursor = promptRawCursorToDisplay(
-                pendingMentionRawCursor, state->TextLen, inputSoftWraps);
+                pendingMentionRawCursor, displayLength, inputSoftWraps);
             if (state->WantReloadUserBuf) {
                 state->ReloadSelectionStart = cursor;
                 state->ReloadSelectionEnd = cursor;
@@ -1689,19 +1716,36 @@ bool AiChatWindow::applySelectedMention() {
         insert.push_back(' ');
     }
 
-    const int rawCursor = atPos + static_cast<int>(insert.size());
-    raw.replace(static_cast<size_t>(atPos), static_cast<size_t>(endPos - atPos), insert);
-    if (raw.size() >= inputBuffer.size()) {
-        raw.resize(inputBuffer.size() - 1);
-    }
-
     const float maxLineWidth = mention.maxLineWidth > 0.0f
         ? mention.maxLineWidth
         : ImGui::GetFontSize() * 8.0f;
+    const bool inserted = replacePromptRange(atPos, endPos, insert, maxLineWidth);
+    closeMentionPopup();
+    return inserted;
+}
+
+bool AiChatWindow::replacePromptRange(int rawStart, int rawEnd,
+                                      const std::string& replacement,
+                                      float maxLineWidth) {
+    std::string raw = stripPromptSoftWraps(
+        inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())), inputSoftWraps);
+    if (rawStart < 0 || rawEnd < rawStart || rawEnd > static_cast<int>(raw.size())) {
+        return false;
+    }
+
+    const size_t replacedSize = static_cast<size_t>(rawEnd - rawStart);
+    if (raw.size() - replacedSize + replacement.size() >= inputBuffer.size()) {
+        return false;
+    }
+
+    raw.replace(static_cast<size_t>(rawStart), replacedSize, replacement);
+    const int rawCursor = rawStart + static_cast<int>(replacement.size());
+
     PromptWrapResult wrapped = rewrapPromptText(raw, maxLineWidth, inputBuffer.size() - 1);
     if (wrapped.displayText.size() >= inputBuffer.size()) {
-        wrapped.displayText.resize(inputBuffer.size() - 1);
+        return false;
     }
+
     std::memcpy(inputBuffer.data(), wrapped.displayText.data(), wrapped.displayText.size());
     inputBuffer[wrapped.displayText.size()] = '\0';
     inputSoftWraps = std::move(wrapped.softWrapDisplayOffsets);
@@ -1712,7 +1756,7 @@ bool AiChatWindow::applySelectedMention() {
         0, static_cast<int>(inputDisplayText.size()));
 
     // InputText keeps a private copy while active; reload it and park the caret
-    // after the inserted mention via the raw offset (stable across soft-wrap).
+    // after the inserted text via the raw offset (stable across soft-wrap).
     pendingMentionRawCursor = rawCursor;
     mentionDisplayCursor = displayCursor;
     refocusInput = true;
@@ -1723,9 +1767,121 @@ bool AiChatWindow::applySelectedMention() {
             state->ReloadSelectionEnd = displayCursor;
         }
     }
-
-    closeMentionPopup();
     return true;
+}
+
+bool AiChatWindow::insertDroppedMentions(const std::vector<std::string>& mentionBodies,
+                                         float maxLineWidth) {
+    if (mentionBodies.empty()) {
+        return false;
+    }
+
+    std::string raw = stripPromptSoftWraps(
+        inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())), inputSoftWraps);
+    const int rawCursor = std::clamp(
+        pendingMentionRawCursor >= 0
+            ? pendingMentionRawCursor
+            : promptDisplayPosToRawPos(mentionDisplayCursor, inputSoftWraps),
+        0, static_cast<int>(raw.size()));
+
+    std::string insert;
+    for (const std::string& body : mentionBodies) {
+        if (body.empty()) {
+            continue;
+        }
+        if (!insert.empty()) {
+            insert.push_back(' ');
+        }
+        insert += formatMentionInsert(body);
+    }
+    if (insert.empty()) {
+        return false;
+    }
+
+    if (rawCursor > 0 &&
+        !std::isspace(static_cast<unsigned char>(raw[static_cast<size_t>(rawCursor - 1)]))) {
+        insert.insert(insert.begin(), ' ');
+    }
+    if (rawCursor >= static_cast<int>(raw.size()) ||
+        !std::isspace(static_cast<unsigned char>(raw[static_cast<size_t>(rawCursor)]))) {
+        insert.push_back(' ');
+    }
+
+    const bool inserted = replacePromptRange(rawCursor, rawCursor, insert, maxLineWidth);
+    if (inserted) {
+        closeMentionPopup();
+    }
+    return inserted;
+}
+
+void AiChatWindow::handlePromptDrop(float maxLineWidth) {
+    if (!project || !ImGui::BeginDragDropTarget()) {
+        return;
+    }
+
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("resource_files")) {
+        if (payload->IsDelivery()) {
+            std::vector<std::string> mentions;
+            const fs::path projectPath = project->getProjectPath();
+            if (!projectPath.empty()) {
+                for (const std::string& droppedPath : parseNullSeparatedPayload(*payload)) {
+                    std::error_code ec;
+                    const fs::path path(droppedPath);
+                    if (!fs::is_regular_file(path, ec) || ec) {
+                        continue;
+                    }
+
+                    ec.clear();
+                    fs::path relative = fs::relative(path, projectPath, ec);
+                    if (ec || relative.empty() ||
+                        (relative.begin() != relative.end() && *relative.begin() == "..")) {
+                        continue;
+                    }
+                    mentions.push_back(relative.generic_string());
+                }
+            }
+            insertDroppedMentions(mentions, maxLineWidth);
+        }
+    }
+
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("entity")) {
+        if (payload->IsDelivery() && payload->DataSize >= sizeof(EntityPayload)) {
+            EntityPayload entityPayload{};
+            std::memcpy(&entityPayload, payload->Data, sizeof(entityPayload));
+            SceneProject* sceneProject = entityPayload.entitySceneId != 0
+                ? project->getScene(entityPayload.entitySceneId)
+                : project->getSelectedScene();
+            if (sceneProject && sceneProject->scene && entityPayload.entity != NULL_ENTITY &&
+                sceneProject->scene->isEntityCreated(entityPayload.entity)) {
+                std::vector<Entity> entities{entityPayload.entity};
+                const SceneProject* selectedScene = project->getSelectedScene();
+                if (selectedScene && selectedScene->id == sceneProject->id) {
+                    std::vector<Entity> selected =
+                        project->getSelectedEntities(sceneProject->id);
+                    if (std::find(selected.begin(), selected.end(), entityPayload.entity) !=
+                        selected.end()) {
+                        entities = Project::getTopLevelEntities(sceneProject->scene, selected);
+                    }
+                }
+
+                std::vector<std::string> mentions;
+                mentions.reserve(entities.size());
+                for (Entity entity : entities) {
+                    if (!sceneProject->scene->isEntityCreated(entity)) {
+                        continue;
+                    }
+                    std::string name = sceneProject->scene->getEntityName(entity);
+                    if (name.empty()) {
+                        name = "Entity " + std::to_string(static_cast<unsigned>(entity));
+                    }
+                    mentions.push_back(std::move(name));
+                }
+                insertDroppedMentions(mentions, maxLineWidth);
+            }
+        }
+    }
+
+    ImGui::EndDragDropTarget();
 }
 
 bool AiChatWindow::handleMentionHistoryKey(ImGuiKey key) {
