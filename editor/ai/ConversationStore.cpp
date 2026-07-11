@@ -23,6 +23,16 @@ Json messageToJson(const ChatMessage& message) {
     out["role"] = toString(message.role);
     out["content"] = message.content;
     if (!message.model.empty()) out["model"] = message.model;
+    if (!message.attachments.empty()) {
+        out["attachments"] = Json::array();
+        for (const ChatAttachment& attachment : message.attachments) {
+            out["attachments"].push_back({
+                {"name", attachment.name},
+                {"mime_type", attachment.mimeType},
+                {"data", attachment.data}
+            });
+        }
+    }
     if (!message.toolCallId.empty()) out["tool_call_id"] = message.toolCallId;
     if (!message.toolName.empty()) out["tool_name"] = message.toolName;
     if (!message.toolDescription.empty()) out["tool_description"] = message.toolDescription;
@@ -49,6 +59,26 @@ ChatMessage messageFromJson(const Json& node) {
     message.role = chatRoleFromString(node.value("role", "user"));
     message.content = node.value("content", "");
     message.model = node.value("model", "");
+    if (node.contains("attachments") && node["attachments"].is_array()) {
+        for (const Json& attachmentNode : node["attachments"]) {
+            if (!attachmentNode.is_object()) continue;
+            ChatAttachment attachment;
+            attachment.name = attachmentNode.value("name", "");
+            attachment.mimeType = attachmentNode.value("mime_type", "");
+            attachment.data = attachmentNode.value("data", "");
+            if (attachment.mimeType.empty()) {
+                attachment.mimeType = "text/plain";
+            }
+            // Trust nothing from disk: the mime type flows verbatim into
+            // provider payloads, where an unknown value would 400 every
+            // replayed turn of the conversation.
+            const bool supported = attachment.mimeType == "text/plain" ||
+                                   isSupportedImageMime(attachment.mimeType);
+            if (supported && !attachment.name.empty() && !attachment.data.empty()) {
+                message.attachments.push_back(std::move(attachment));
+            }
+        }
+    }
     message.toolCallId = node.value("tool_call_id", "");
     message.toolName = node.value("tool_name", "");
     message.toolDescription = node.value("tool_description", "");
@@ -103,10 +133,11 @@ void ConversationStore::save(const std::string& id, const std::string& title,
     fs::create_directories(dir, ec);
     if (ec) return;
 
+    const int64_t updatedAt = nowSeconds();
     Json root;
     root["id"] = id;
     root["title"] = title;
-    root["updated_at"] = nowSeconds();
+    root["updated_at"] = updatedAt;
     root["messages"] = Json::array();
     for (const ChatMessage& message : messages) {
         root["messages"].push_back(messageToJson(message));
@@ -130,6 +161,17 @@ void ConversationStore::save(const std::string& id, const std::string& title,
     fs::rename(tmpPath, finalPath, ec);
     if (ec) {
         fs::remove(tmpPath, ec);
+        return;
+    }
+
+    // Tiny metadata sidecar so list() never has to parse the conversation
+    // body, which embeds whole attachments and can be many MB.
+    Json meta;
+    meta["title"] = title;
+    meta["updated_at"] = updatedAt;
+    std::ofstream metaOut(dir / (id + ".meta"), std::ios::trunc);
+    if (metaOut) {
+        metaOut << meta.dump();
     }
 }
 
@@ -164,15 +206,32 @@ std::vector<ConversationMeta> ConversationStore::list() const {
         if (!it->is_regular_file(ec) || it->path().extension() != ".json") {
             continue;
         }
-        std::ifstream in(it->path());
-        if (!in) continue;
-        Json root = Json::parse(in, nullptr, false);
-        if (!root.is_object()) continue;
 
         ConversationMeta meta;
         // The filename is what load() opens, so it is the id's ground truth
         // even if the embedded "id" field disagrees (copied/renamed files).
         meta.id = it->path().stem().string();
+
+        // Prefer the metadata sidecar: the conversation body embeds whole
+        // attachments, so parsing it here would load every blob just to read
+        // two fields. Legacy files without a sidecar fall back to the full
+        // parse (the next save writes the sidecar).
+        fs::path metaFile = it->path();
+        metaFile.replace_extension(".meta");
+        Json root;
+        {
+            std::ifstream metaIn(metaFile);
+            if (metaIn) {
+                root = Json::parse(metaIn, nullptr, false);
+            }
+        }
+        if (!root.is_object()) {
+            std::ifstream in(it->path());
+            if (!in) continue;
+            root = Json::parse(in, nullptr, false);
+            if (!root.is_object()) continue;
+        }
+
         meta.title = root.value("title", std::string("Conversation"));
         meta.updatedAt = root.value("updated_at", static_cast<int64_t>(0));
         result.push_back(std::move(meta));
@@ -189,6 +248,7 @@ void ConversationStore::remove(const std::string& id) {
     if (id.empty()) return;
     std::error_code ec;
     fs::remove(conversationsDir() / (id + ".json"), ec);
+    fs::remove(conversationsDir() / (id + ".meta"), ec);
 }
 
 } // namespace doriax::editor::ai

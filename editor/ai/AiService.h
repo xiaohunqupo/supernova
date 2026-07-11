@@ -19,7 +19,10 @@ public:
     void setSettings(const Settings& settings);
     Settings getSettings() const;
 
-    bool sendUserMessage(const std::string& text);
+    // Attachments are consumed only when the message is accepted (returns
+    // true); on a refusal (busy, empty input) the caller's vector is intact.
+    bool sendUserMessage(const std::string& text,
+                         std::vector<ChatAttachment>&& attachments = {});
     void cancel();
     bool isBusy() const;
 
@@ -29,6 +32,10 @@ public:
     void update();
 
     std::vector<ChatMessage> getMessages() const;
+    // Bumped on every message-history mutation. Callers that need the messages
+    // each frame cache the getMessages() snapshot and only re-copy when this
+    // changes (messages can carry multi-MB attachments).
+    uint64_t getRevision() const;
     std::vector<ActionProposal> getProposals() const;
     void clearConversation();
 
@@ -47,6 +54,7 @@ private:
     std::vector<ChatMessage> messages;
     std::vector<ActionProposal> proposals;
     std::thread worker;
+    std::atomic<uint64_t> revision{1};
     std::atomic<bool> busy{false};
     std::atomic<bool> cancelRequested{false};
     uint64_t nextProposalId = 1;

@@ -209,8 +209,11 @@ Settings AiService::getSettings() const {
     return settings;
 }
 
-bool AiService::sendUserMessage(const std::string& text) {
-    if (text.empty() || busy.load()) {
+bool AiService::sendUserMessage(const std::string& text,
+                                std::vector<ChatAttachment>&& attachments) {
+    // No move has happened yet: refusing here leaves the caller's vector
+    // intact, so pending attachments survive a rejected send.
+    if ((text.empty() && attachments.empty()) || busy.load()) {
         return false;
     }
 
@@ -235,7 +238,9 @@ bool AiService::sendUserMessage(const std::string& text) {
         userMessage.role = ChatRole::User;
         userMessage.content = text;
         userMessage.model = settings.model;
+        userMessage.attachments = std::move(attachments);
         messages.push_back(std::move(userMessage));
+        ++revision;
         toolRounds = 0;
         turnActive = true;
         turnFailed = false;
@@ -292,6 +297,10 @@ std::vector<ChatMessage> AiService::getMessages() const {
     return messages;
 }
 
+uint64_t AiService::getRevision() const {
+    return revision.load();
+}
+
 std::vector<ActionProposal> AiService::getProposals() const {
     std::lock_guard<std::mutex> lock(mutex);
     return proposals;
@@ -303,6 +312,7 @@ void AiService::clearConversation() {
     }
     std::lock_guard<std::mutex> lock(mutex);
     messages.clear();
+    ++revision;
     proposals.clear();
     toolRounds = 0;
     turnActive = false;
@@ -315,6 +325,7 @@ void AiService::loadConversation(std::vector<ChatMessage> newMessages) {
     }
     std::lock_guard<std::mutex> lock(mutex);
     messages = std::move(newMessages);
+    ++revision;
     proposals.clear();
     toolRounds = 0;
     turnActive = false;
@@ -365,6 +376,7 @@ ActionResult AiService::executeProposal(uint64_t proposalId, EditorActionExecuto
             toolMessage.content += "\n" + result.data.dump(2);
         }
         messages.push_back(toolMessage);
+        ++revision;
     }
 
     if (!result.success) {
@@ -479,6 +491,7 @@ void AiService::repairUnansweredToolCallsLocked() {
         i = j - 1;
     }
     messages = std::move(repaired);
+    ++revision;
 }
 
 // Resolve the call with a dismissal result rather than dropping it, so the
@@ -497,6 +510,7 @@ void AiService::dismissProposalLocked(ActionProposal& proposal, const std::strin
     toolMessage.toolSuccess = false;
     toolMessage.content = note;
     messages.push_back(toolMessage);
+    ++revision;
 }
 
 std::string AiService::buildSystemPrompt() const {
@@ -661,6 +675,7 @@ void AiService::runProviderRequest(ProviderRequest request) {
             assistant.toolCalls = parsed.toolCalls;
             assistant.thinkingBlocks = parsed.thinkingBlocks;
             messages.push_back(assistant);
+            ++revision;
             for (const ToolCall& call : parsed.toolCalls) {
                 addToolCallProposalLocked(call);
             }
@@ -672,6 +687,7 @@ void AiService::runProviderRequest(ProviderRequest request) {
 
 void AiService::appendAssistantMessageLocked(const std::string& text) {
     messages.push_back({ChatRole::Assistant, text});
+    ++revision;
 }
 
 void AiService::addToolCallProposalLocked(const ToolCall& call) {
@@ -698,6 +714,7 @@ void AiService::addToolCallProposalLocked(const ToolCall& call) {
         toolMessage.toolSuccess = false;
         toolMessage.content = "Error: " + validation.error;
         messages.push_back(toolMessage);
+        ++revision;
     }
     proposals.push_back(proposal);
 }

@@ -56,6 +56,32 @@ struct ToolCall {
     std::string thoughtSignature;
 };
 
+struct ChatAttachment {
+    std::string name;
+    std::string mimeType;
+    // Images are stored as base64; text attachments are stored as UTF-8.
+    std::string data;
+
+    // Derived from the mime type so persisted data can't disagree with it.
+    bool isImage() const { return mimeType.rfind("image/", 0) == 0; }
+};
+
+// The only attachment mime types the editor produces and providers accept.
+// Enforced at the composer AND when loading persisted conversations, so no
+// other value ever reaches a provider payload.
+inline bool isSupportedImageMime(const std::string& mimeType) {
+    return mimeType == "image/png" || mimeType == "image/jpeg" ||
+           mimeType == "image/gif" || mimeType == "image/webp";
+}
+
+// Single source of truth for which providers can receive image content parts;
+// the UI send-gate and the payload builders must agree. OpenAICompatible is
+// assumed vision-capable because the model behind a custom endpoint is
+// unknowable here; a text-only model answers with the provider's own error.
+inline bool providerSupportsImages(ProviderId provider) {
+    return provider != ProviderId::DeepSeek;
+}
+
 struct ChatMessage {
     ChatRole role = ChatRole::User;
     std::string content;
@@ -63,6 +89,10 @@ struct ChatMessage {
     // Model id active when a user message was sent; the transcript uses it to
     // show a divider when the model changes mid-conversation.
     std::string model;
+
+    // Inline user-provided files. Kept in history so multimodal context remains
+    // available during tool continuations and after reloading a conversation.
+    std::vector<ChatAttachment> attachments;
 
     // Set on assistant messages that requested one or more tool calls. Kept in the
     // history so follow-up requests can present a well-formed tool round-trip.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -252,18 +253,35 @@ namespace doriax::editor{
             return sourceExtensions.find(ext) != sourceExtensions.end();
         }
 
+        // String-list drag payloads ("external_files", "resource_files") are
+        // strings packed back-to-back, each terminated by '\0'. Encoder and
+        // decoder live together so every producer/consumer shares one format.
+        inline static std::vector<char> encodeStringsPayload(const std::vector<std::string>& strings){
+            std::vector<char> payload;
+            for (const std::string& value : strings) {
+                payload.insert(payload.end(), value.begin(), value.end());
+                payload.push_back('\0');
+            }
+            return payload;
+        }
+
         inline static std::vector<std::string> getStringsFromPayload(const ImGuiPayload* payload){
-            const char* data = static_cast<const char*>(payload->Data);
-            size_t dataSize = payload->DataSize;
-
             std::vector<std::string> receivedStrings;
-            size_t offset = 0;
+            if (!payload || !payload->Data || payload->DataSize <= 0) {
+                return receivedStrings;
+            }
 
-            while (offset < dataSize) {
-                // Read null-terminated strings from the payload
-                const char* str = &data[offset];
-                receivedStrings.push_back(std::string(str));
-                offset += strlen(str) + 1; // Move past the string and null terminator
+            const char* current = static_cast<const char*>(payload->Data);
+            const char* end = current + payload->DataSize;
+            while (current < end) {
+                // Bounded scan: never run past DataSize even if the final
+                // string is missing its terminator.
+                const void* terminator = std::memchr(current, '\0', static_cast<size_t>(end - current));
+                const char* valueEnd = terminator ? static_cast<const char*>(terminator) : end;
+                if (valueEnd != current) {
+                    receivedStrings.emplace_back(current, valueEnd);
+                }
+                current = valueEnd + 1;
             }
 
             return receivedStrings;

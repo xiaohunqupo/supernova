@@ -2,6 +2,7 @@
 
 #include "HttpClient.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 
@@ -33,6 +34,76 @@ std::string argumentsToString(const Json& args) {
     if (args.is_string()) return args.get<std::string>();
     if (args.is_null()) return "{}";
     return args.dump();
+}
+
+std::string attachmentText(const ChatAttachment& attachment) {
+    // Name and body are user-controlled; keep them from breaking out of the
+    // wrapper. Quotes/angle brackets and control chars are stripped from the
+    // name, and a literal closing tag inside the body is defused so file
+    // content can't be read as prompt structure.
+    std::string name = attachment.name;
+    name.erase(std::remove_if(name.begin(), name.end(), [](unsigned char c) {
+        return c == '"' || c == '<' || c == '>' || c < 0x20;
+    }), name.end());
+    std::string body = attachment.data;
+    size_t pos = 0;
+    while ((pos = body.find("</attachment>", pos)) != std::string::npos) {
+        body.insert(pos + 1, "\\");
+        pos += 2;
+    }
+    return "<attachment name=\"" + name + "\">\n" + body + "\n</attachment>";
+}
+
+Json chatCompletionsUserContent(const ChatMessage& message, bool supportsImages) {
+    if (message.attachments.empty()) {
+        return message.content;
+    }
+
+    if (!supportsImages) {
+        std::string content = message.content;
+        for (const ChatAttachment& attachment : message.attachments) {
+            if (!content.empty()) content += "\n\n";
+            content += attachment.isImage()
+                ? "[Image attachment unavailable to this provider: " + attachment.name + "]"
+                : attachmentText(attachment);
+        }
+        return content;
+    }
+
+    Json content = Json::array();
+    if (!message.content.empty()) {
+        content.push_back({{"type", "text"}, {"text", message.content}});
+    }
+    for (const ChatAttachment& attachment : message.attachments) {
+        if (attachment.isImage()) {
+            content.push_back({
+                {"type", "image_url"},
+                {"image_url", {
+                    {"url", "data:" + attachment.mimeType + ";base64," + attachment.data},
+                    {"detail", "auto"}
+                }}
+            });
+        } else {
+            content.push_back({{"type", "text"}, {"text", attachmentText(attachment)}});
+        }
+    }
+    return content;
+}
+
+void appendGeminiUserParts(Json& parts, const ChatMessage& message) {
+    if (!message.content.empty()) {
+        parts.push_back({{"text", message.content}});
+    }
+    for (const ChatAttachment& attachment : message.attachments) {
+        if (attachment.isImage()) {
+            parts.push_back({{"inlineData", {
+                {"mimeType", attachment.mimeType},
+                {"data", attachment.data}
+            }}});
+        } else {
+            parts.push_back({{"text", attachmentText(attachment)}});
+        }
+    }
 }
 
 Json parseArgumentObject(const Json& args) {
@@ -253,7 +324,11 @@ Json buildChatCompletionsPayload(const ProviderRequest& request) {
             case ChatRole::System:
                 break;
             case ChatRole::User:
-                messages.push_back({{"role", "user"}, {"content", message.content}});
+                messages.push_back({
+                    {"role", "user"},
+                    {"content", chatCompletionsUserContent(
+                        message, providerSupportsImages(request.settings.provider))}
+                });
                 break;
             case ChatRole::Assistant: {
                 Json item;
@@ -371,10 +446,31 @@ Json buildAnthropicPayload(const ProviderRequest& request) {
         }
 
         if (message.role == ChatRole::User) {
-            messages.push_back({
-                {"role", "user"},
-                {"content", Json::array({{{"type", "text"}, {"text", message.content}}})}
-            });
+            Json content = Json::array();
+            for (const ChatAttachment& attachment : message.attachments) {
+                if (attachment.isImage()) {
+                    content.push_back({
+                        {"type", "image"},
+                        {"source", {
+                            {"type", "base64"},
+                            {"media_type", attachment.mimeType},
+                            {"data", attachment.data}
+                        }}
+                    });
+                } else {
+                    content.push_back({{"type", "text"},
+                                       {"text", attachmentText(attachment)}});
+                }
+            }
+            if (!message.content.empty()) {
+                content.push_back({{"type", "text"}, {"text", message.content}});
+            }
+            // Anthropic rejects an empty content array; a user turn can end up
+            // empty when a loaded conversation dropped its only attachment.
+            if (content.empty()) {
+                content.push_back({{"type", "text"}, {"text", "(empty message)"}});
+            }
+            messages.push_back({{"role", "user"}, {"content", content}});
         } else if (message.role == ChatRole::Assistant) {
             Json content = Json::array();
             // Thinking blocks must precede text/tool_use and be echoed verbatim
@@ -525,7 +621,7 @@ Json buildGeminiPayload(const ProviderRequest& request) {
                 ++i;
             }
             while (i < request.messages.size() && request.messages[i].role == ChatRole::User) {
-                parts.push_back({{"text", request.messages[i].content}});
+                appendGeminiUserParts(parts, request.messages[i]);
                 ++i;
             }
             contents.push_back({{"role", "user"}, {"parts", parts}});
@@ -533,10 +629,14 @@ Json buildGeminiPayload(const ProviderRequest& request) {
         }
 
         if (message.role == ChatRole::User) {
-            contents.push_back({
-                {"role", "user"},
-                {"parts", Json::array({{{"text", message.content}}})}
-            });
+            Json parts = Json::array();
+            appendGeminiUserParts(parts, message);
+            // Gemini rejects an empty parts array; a user turn can end up empty
+            // when a loaded conversation dropped its only attachment.
+            if (parts.empty()) {
+                parts.push_back({{"text", "(empty message)"}});
+            }
+            contents.push_back({{"role", "user"}, {"parts", parts}});
         } else if (message.role == ChatRole::Assistant) {
             Json parts = Json::array();
             if (!message.content.empty()) {

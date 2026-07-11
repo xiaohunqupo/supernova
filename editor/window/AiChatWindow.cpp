@@ -3,11 +3,14 @@
 #include "App.h"
 #include "AppSettings.h"
 #include "Backend.h"
+#include "Base64.h"
 #include "ai/EditorActionExecutor.h"
 #include "ai/EditorActionRegistry.h"
 #include "ai/SecretStore.h"
 #include "external/IconsFontAwesome6.h"
 #include "util/EntityPayload.h"
+#include "util/Clipboard.h"
+#include "util/FileDialogs.h"
 #include "util/Util.h"
 #include "window/CodeEditor.h"
 #include "window/Widgets.h"
@@ -21,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -35,6 +39,11 @@ const ImVec4 kAssistantColor(0.72f, 0.86f, 0.68f, 1.0f);
 const ImVec4 kSuccessColor(0.55f, 0.85f, 0.55f, 1.0f);
 const ImVec4 kErrorColor(0.95f, 0.55f, 0.55f, 1.0f);
 const ImVec4 kCodeColor(0.82f, 0.85f, 0.72f, 1.0f);
+constexpr size_t kMaxAttachmentBytes = 10 * 1024 * 1024;
+constexpr size_t kMaxTextAttachmentBytes = 1024 * 1024;
+// Base64 expands images by roughly one third; 12 MB raw keeps the complete
+// JSON request below providers' common 20 MB inline-data limit with headroom.
+constexpr size_t kMaxAttachmentTotalBytes = 12 * 1024 * 1024;
 
 // ImGui does not soft-wrap editable multiline inputs. The composer inserts
 // generated line breaks for display, tracks them separately from user-entered
@@ -251,25 +260,86 @@ std::string formatMentionInsert(std::string body) {
     return out;
 }
 
-std::vector<std::string> parseNullSeparatedPayload(const ImGuiPayload& payload) {
-    std::vector<std::string> values;
-    if (!payload.Data || payload.DataSize <= 0) {
-        return values;
+std::string lowercaseExtension(const fs::path& path) {
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return extension;
+}
+
+std::string imageMimeType(const fs::path& path) {
+    const std::string extension = lowercaseExtension(path);
+    if (extension == ".png") return "image/png";
+    if (extension == ".jpg" || extension == ".jpeg") return "image/jpeg";
+    if (extension == ".gif") return "image/gif";
+    if (extension == ".webp") return "image/webp";
+    return {};
+}
+
+// Inverse of imageMimeType, for naming clipboard image attachments.
+std::string extensionForImageMime(const std::string& mimeType) {
+    if (mimeType == "image/jpeg") return ".jpg";
+    if (mimeType == "image/gif") return ".gif";
+    if (mimeType == "image/webp") return ".webp";
+    return ".png";
+}
+
+bool matchesImageType(const std::vector<unsigned char>& data, const std::string& mimeType) {
+    if (mimeType == "image/png") {
+        static const unsigned char signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
+        return data.size() >= sizeof(signature) &&
+               std::equal(signature, signature + sizeof(signature), data.begin());
     }
-    const char* current = static_cast<const char*>(payload.Data);
-    const char* end = current + payload.DataSize;
-    while (current < end) {
-        const void* terminator = std::memchr(current, '\0', static_cast<size_t>(end - current));
-        if (!terminator) {
-            break;
-        }
-        const char* valueEnd = static_cast<const char*>(terminator);
-        if (valueEnd != current) {
-            values.emplace_back(current, valueEnd);
-        }
-        current = valueEnd + 1;
+    if (mimeType == "image/jpeg") {
+        return data.size() >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff;
     }
-    return values;
+    if (mimeType == "image/gif") {
+        return data.size() >= 6 &&
+               (std::equal(data.begin(), data.begin() + 6, "GIF87a") ||
+                std::equal(data.begin(), data.begin() + 6, "GIF89a"));
+    }
+    if (mimeType == "image/webp") {
+        return data.size() >= 12 &&
+               std::equal(data.begin(), data.begin() + 4, "RIFF") &&
+               std::equal(data.begin() + 8, data.begin() + 12, "WEBP");
+    }
+    return false;
+}
+
+bool validUtf8Text(const std::vector<unsigned char>& data) {
+    size_t i = 0;
+    while (i < data.size()) {
+        const unsigned char c = data[i];
+        if (c == 0) return false;
+        size_t continuationCount = 0;
+        if (c <= 0x7f) {
+            ++i;
+            continue;
+        } else if (c >= 0xc2 && c <= 0xdf) {
+            continuationCount = 1;
+        } else if (c >= 0xe0 && c <= 0xef) {
+            continuationCount = 2;
+        } else if (c >= 0xf0 && c <= 0xf4) {
+            continuationCount = 3;
+        } else {
+            return false;
+        }
+        if (i + continuationCount >= data.size()) return false;
+        for (size_t j = 1; j <= continuationCount; ++j) {
+            if ((data[i + j] & 0xc0) != 0x80) return false;
+        }
+        if (continuationCount == 2 &&
+            ((c == 0xe0 && data[i + 1] < 0xa0) || (c == 0xed && data[i + 1] >= 0xa0))) {
+            return false;
+        }
+        if (continuationCount == 3 &&
+            ((c == 0xf0 && data[i + 1] < 0x90) || (c == 0xf4 && data[i + 1] >= 0x90))) {
+            return false;
+        }
+        i += continuationCount + 1;
+    }
+    return true;
 }
 
 // Mentions are "@token" or @"quoted token" runs at a word boundary.
@@ -646,6 +716,9 @@ std::string conversationTitleFromMessages(const std::vector<ai::ChatMessage>& me
             continue;
         }
         std::string title = compactTitleText(message.content);
+        if (title.empty() && !message.attachments.empty()) {
+            title = message.attachments.front().name;
+        }
         if (title.empty()) {
             continue;
         }
@@ -816,6 +889,15 @@ void AiChatWindow::prefetchModels() {
     }
 }
 
+const std::vector<ai::ChatMessage>& AiChatWindow::cachedMessages() {
+    const uint64_t revision = service.getRevision();
+    if (revision != messagesCacheRevision) {
+        messagesCache = service.getMessages();
+        messagesCacheRevision = revision;
+    }
+    return messagesCache;
+}
+
 void AiChatWindow::update() {
     if (!syncedInitialSettings) {
         service.setSettings(AppSettings::getAiSettings());
@@ -875,7 +957,11 @@ void AiChatWindow::show() {
     const ImGuiStyle& style = ImGui::GetStyle();
     float inputHeight = ImGui::GetTextLineHeight() * 3.0f + style.FramePadding.y * 2.0f;
     float controlsHeight = ImGui::GetFrameHeight();
-    float composerHeight = inputHeight + controlsHeight + style.ItemSpacing.y + 2.0f;
+    float attachmentsHeight = pendingAttachments.empty()
+        ? 0.0f
+        : ImGui::GetFrameHeight() + style.ScrollbarSize + style.ItemSpacing.y;
+    float composerHeight = inputHeight + controlsHeight + attachmentsHeight +
+                           style.ItemSpacing.y + 2.0f;
 
     std::vector<ai::ActionProposal> proposals = service.getProposals();
     int pending = 0;
@@ -930,7 +1016,7 @@ bool AiChatWindow::isFocused() const {
 }
 
 void AiChatWindow::drawHeader() {
-    std::vector<ai::ChatMessage> messages = service.getMessages();
+    const std::vector<ai::ChatMessage>& messages = cachedMessages();
     const ImGuiStyle& style = ImGui::GetStyle();
 
     float height = ImGui::GetFrameHeight();
@@ -1061,7 +1147,7 @@ void AiChatWindow::drawHistoryPopup() {
 }
 
 void AiChatWindow::drawTranscript(float height) {
-    std::vector<ai::ChatMessage> messages = service.getMessages();
+    const std::vector<ai::ChatMessage>& messages = cachedMessages();
     bool busy = service.isBusy();
 
     if (messages.empty() && !busy) {
@@ -1116,8 +1202,18 @@ void AiChatWindow::drawTranscript(float height) {
                 }
                 spacer();
                 paragraphs.push_back({"You", userCol});
-                paragraphs.push_back(mentionColoredParagraph(message.content, textCol,
-                                                              mentionCol));
+                if (!message.content.empty()) {
+                    paragraphs.push_back(mentionColoredParagraph(message.content, textCol,
+                                                                  mentionCol));
+                }
+                for (const ai::ChatAttachment& attachment : message.attachments) {
+                    paragraphs.push_back({
+                        std::string(attachment.isImage() ? ICON_FA_FILE_IMAGE
+                                                         : ICON_FA_FILE_LINES) +
+                            "  " + attachment.name,
+                        dimCol
+                    });
+                }
                 break;
             case ai::ChatRole::Assistant:
                 if (!message.content.empty()) {
@@ -1187,12 +1283,61 @@ void AiChatWindow::drawProposals(const std::vector<ai::ActionProposal>& proposal
     ImGui::EndChild();
 }
 
+void AiChatWindow::drawPendingAttachments() {
+    if (pendingAttachments.empty()) {
+        return;
+    }
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::BeginChild("##AiAttachments",
+                      ImVec2(0.0f, ImGui::GetFrameHeight() + style.ScrollbarSize), false,
+                      ImGuiWindowFlags_HorizontalScrollbar |
+                      ImGuiWindowFlags_NoScrollWithMouse);
+
+    int removeIndex = -1;
+    for (int i = 0; i < static_cast<int>(pendingAttachments.size()); ++i) {
+        if (i > 0) ImGui::SameLine();
+        const ai::ChatAttachment& attachment = pendingAttachments[static_cast<size_t>(i)];
+        const std::string label = std::string(attachment.isImage() ? ICON_FA_FILE_IMAGE
+                                                                   : ICON_FA_FILE_LINES) +
+                                  "  " + attachment.name + "  " ICON_FA_XMARK;
+        const ImVec2 textSize = ImGui::CalcTextSize(label.data(), label.data() + label.size());
+        const ImVec2 size(textSize.x + style.FramePadding.x * 2.0f,
+                          ImGui::GetFrameHeight());
+        ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImGui::PushID(i);
+        if (ImGui::InvisibleButton("##Attachment", size)) {
+            removeIndex = i;
+        }
+        const ImU32 background = ImGui::GetColorU32(
+            ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+        ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                                                  background, style.FrameRounding);
+        ImGui::GetWindowDrawList()->AddText(
+            ImVec2(pos.x + style.FramePadding.x,
+                   pos.y + (size.y - textSize.y) * 0.5f),
+            ImGui::GetColorU32(ImGuiCol_Text), label.data(), label.data() + label.size());
+        ImGui::SetItemTooltip("Remove %s", attachment.name.c_str());
+        ImGui::PopID();
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    if (removeIndex >= 0) {
+        pendingAttachments.erase(pendingAttachments.begin() + removeIndex);
+    }
+}
+
 void AiChatWindow::drawComposer(float inputHeight) {
     ImGui::Separator();
 
+    drawPendingAttachments();
+
     const ImGuiStyle& style = ImGui::GetStyle();
     float buttonWidth = ImGui::GetFrameHeight();
-    float inputWidth = ImGui::GetContentRegionAvail().x - buttonWidth - style.ItemSpacing.x;
+    float inputWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x -
+        buttonWidth * 2.0f - style.ItemSpacing.x * 2.0f);
 
     bool submitted = false;
     if (refocusInput) {
@@ -1205,6 +1350,7 @@ void AiChatWindow::drawComposer(float inputHeight) {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     const ImGuiID inputId = window->GetID("##AiInput");
     mentionInputId = inputId;
+    const bool attachmentPaste = handleAttachmentPaste(inputId);
 
     if (mention.open && !mention.items.empty()) {
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
@@ -1234,7 +1380,8 @@ void AiChatWindow::drawComposer(float inputHeight) {
                                   ImGuiInputTextFlags_CtrlEnterForNewLine |
                                   ImGuiInputTextFlags_NoHorizontalScroll |
                                   ImGuiInputTextFlags_CallbackEdit |
-                                  ImGuiInputTextFlags_CallbackAlways,
+                                  ImGuiInputTextFlags_CallbackAlways |
+                                  (attachmentPaste ? ImGuiInputTextFlags_ReadOnly : 0),
                                   promptWrapCallback, &wrapContext)) {
         // Enter submits only when the mention popup is closed; otherwise it
         // would steal the key from applySelectedMention.
@@ -1305,6 +1452,13 @@ void AiChatWindow::drawComposer(float inputHeight) {
     }
 
     ImGui::SameLine();
+    if (Widgets::iconButton("##AiAttach", ICON_FA_PAPERCLIP,
+                            ImVec2(buttonWidth, inputHeight))) {
+        attachExternalFiles(FileDialogs::openFileDialogMultiple());
+    }
+    ImGui::SetItemTooltip("Attach external files (or paste copied files with Ctrl+V)");
+
+    ImGui::SameLine();
     if (service.isBusy()) {
         if (Widgets::iconButton("##AiStop", ICON_FA_STOP, ImVec2(buttonWidth, inputHeight))) {
             service.cancel();
@@ -1314,15 +1468,15 @@ void AiChatWindow::drawComposer(float inputHeight) {
         std::string promptText = stripPromptSoftWraps(
             inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())),
             inputSoftWraps);
-        bool hasText = !promptText.empty();
+        bool hasContent = !promptText.empty() || !pendingAttachments.empty();
         std::string disabledReason;
-        bool canSend = hasText && canSendMessage(&disabledReason);
+        bool canSend = hasContent && canSendMessage(&disabledReason);
         ImGui::BeginDisabled(!canSend);
         if (Widgets::iconButton("##AiSend", ICON_FA_PAPER_PLANE, ImVec2(buttonWidth, inputHeight))) {
             submitted = true;
         }
         ImGui::EndDisabled();
-        if (hasText && !disabledReason.empty()) {
+        if (hasContent && !disabledReason.empty()) {
             ImGui::SetItemTooltip("%s", disabledReason.c_str());
         } else {
             ImGui::SetItemTooltip("Send  (Enter - Ctrl+Enter for newline)");
@@ -1814,6 +1968,201 @@ bool AiChatWindow::insertDroppedMentions(const std::vector<std::string>& mention
     return inserted;
 }
 
+bool AiChatWindow::attachmentAlreadyPending(const std::string& name,
+                                            const std::string& data) const {
+    for (const ai::ChatAttachment& attachment : pendingAttachments) {
+        if (attachment.name == name && attachment.data == data) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Checks the per-message budget in raw (pre-base64) bytes; images are stored
+// as base64, so their raw size is recovered from the encoded length. Exact
+// for the padded output Base64::encode produces.
+bool AiChatWindow::attachmentBudgetAllows(size_t newRawBytes) const {
+    auto rawBytesFromBase64 = [](const std::string& base64) {
+        size_t padding = 0;
+        if (!base64.empty() && base64.back() == '=') ++padding;
+        if (base64.size() >= 2 && base64[base64.size() - 2] == '=') ++padding;
+        return base64.size() / 4 * 3 - padding;
+    };
+    size_t totalBytes = newRawBytes;
+    for (const ai::ChatAttachment& attachment : pendingAttachments) {
+        totalBytes += attachment.isImage() ? rawBytesFromBase64(attachment.data)
+                                           : attachment.data.size();
+    }
+    if (totalBytes > kMaxAttachmentTotalBytes) {
+        Backend::getApp().registerAlert("Too many attachments",
+            "Attachments in one message are limited to 12 MB total.");
+        return false;
+    }
+    return true;
+}
+
+bool AiChatWindow::attachImageBytes(std::string name, std::string mimeType,
+                                    std::vector<unsigned char> data) {
+    if (name.empty() || data.empty() || !ai::isSupportedImageMime(mimeType)) {
+        return false;
+    }
+    if (data.size() > kMaxAttachmentBytes) {
+        Backend::getApp().registerAlert("Attachment too large",
+            "Each attachment must be 10 MB or smaller.");
+        return false;
+    }
+    if (!matchesImageType(data, mimeType)) {
+        Backend::getApp().registerAlert("Invalid image",
+            "The clipboard or file data is not a valid supported image.");
+        return false;
+    }
+
+    std::string base64Data = Base64::encode(data.data(), data.size());
+    if (attachmentAlreadyPending(name, base64Data)) {
+        return true;
+    }
+    if (!attachmentBudgetAllows(data.size())) {
+        return false;
+    }
+    pendingAttachments.push_back(
+        {std::move(name), std::move(mimeType), std::move(base64Data)});
+    return true;
+}
+
+bool AiChatWindow::attachImageBase64(std::string name, std::string mimeType,
+                                     const std::string& base64Data) {
+    if (base64Data.empty()) {
+        return false;
+    }
+    // Reject before decoding: a valid encode of kMaxAttachmentBytes is at
+    // most 4/3 of the raw size plus padding.
+    if (base64Data.size() > (kMaxAttachmentBytes * 4 / 3 + 8)) {
+        Backend::getApp().registerAlert("Attachment too large",
+            "Each attachment must be 10 MB or smaller.");
+        return false;
+    }
+    return attachImageBytes(std::move(name), std::move(mimeType),
+                            Base64::decode(base64Data));
+}
+
+bool AiChatWindow::attachExternalFile(const fs::path& path) {
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec) || ec) {
+        return false;
+    }
+    const uintmax_t fileSize = fs::file_size(path, ec);
+    if (ec || fileSize == 0) {
+        Backend::getApp().registerAlert("Empty attachment",
+            "Empty files cannot be attached.");
+        return false;
+    }
+    if (fileSize > kMaxAttachmentBytes) {
+        Backend::getApp().registerAlert("Attachment too large",
+            "Each attachment must be 10 MB or smaller.");
+        return false;
+    }
+
+    std::ifstream file(path, std::ios::binary);
+    if (!file) return false;
+    std::vector<unsigned char> data(static_cast<size_t>(fileSize));
+    file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    if (!file) return false;
+
+    const std::string name = path.filename().u8string();
+    const std::vector<unsigned char> nameBytes(name.begin(), name.end());
+    if (!validUtf8Text(nameBytes)) {
+        Backend::getApp().registerAlert("Unsupported attachment",
+            "Attachment filenames must be valid UTF-8.");
+        return false;
+    }
+    const std::string mimeType = imageMimeType(path);
+    if (!mimeType.empty()) {
+        return attachImageBytes(name, mimeType, std::move(data));
+    }
+    if (data.size() > kMaxTextAttachmentBytes) {
+        Backend::getApp().registerAlert("Attachment too large",
+            "Text attachments must be 1 MB or smaller.");
+        return false;
+    }
+    if (!validUtf8Text(data)) {
+        Backend::getApp().registerAlert("Unsupported attachment",
+            "Only UTF-8 text files and PNG, JPEG, GIF, or WebP images can be attached.");
+        return false;
+    }
+
+    std::string text(data.begin(), data.end());
+    if (attachmentAlreadyPending(name, text)) {
+        return true;
+    }
+    if (!attachmentBudgetAllows(text.size())) {
+        return false;
+    }
+    pendingAttachments.push_back({name, "text/plain", std::move(text)});
+    return true;
+}
+
+void AiChatWindow::attachExternalFiles(const std::vector<std::string>& paths) {
+    for (const std::string& path : paths) {
+        attachExternalFile(fs::u8path(path));
+    }
+}
+
+bool AiChatWindow::handleAttachmentPaste(ImGuiID inputId) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool pasteChordDown = ImGui::GetActiveID() == inputId &&
+                                (io.KeyCtrl || io.KeySuper) &&
+                                ImGui::IsKeyDown(ImGuiKey_V);
+    if (!pasteChordDown) {
+        attachmentPasteHeld = false;
+        return false;
+    }
+    // Key-repeat frames: InputText's own paste shortcut repeats, so while a
+    // Ctrl+V that started as an attachment paste stays held, keep suppressing
+    // the text paste — otherwise repeats would spill the raw path text into
+    // the prompt right after the file was attached.
+    if (!ImGui::IsKeyPressed(ImGuiKey_V, false)) {
+        return attachmentPasteHeld;
+    }
+    attachmentPasteHeld = false;
+
+    // One native probe answers files-or-image; the text heuristic only fills
+    // in for platforms without a native file-list clipboard.
+    ClipboardContent clipboardContent = readClipboardContent();
+    std::vector<std::string> paths = std::move(clipboardContent.filePaths);
+    if (paths.empty()) {
+        paths = clipboardTextToFilePaths(ImGui::GetClipboardText());
+    }
+    if (!paths.empty()) {
+        attachExternalFiles(paths);
+        attachmentPasteHeld = true;
+        return true;
+    }
+
+    if (!clipboardContent.image.data.empty()) {
+        attachImageBytes(
+            "clipboard-image" + extensionForImageMime(clipboardContent.image.mimeType),
+            clipboardContent.image.mimeType, std::move(clipboardContent.image.data));
+        // Recognized image content is never pasted as text, even when the
+        // attach itself was rejected (an alert already explained why).
+        attachmentPasteHeld = true;
+        return true;
+    }
+
+    const char* clipboard = ImGui::GetClipboardText();
+    if (!clipboard) return false;
+    const std::string dataUrl(clipboard);
+    if (dataUrl.rfind("data:image/", 0) != 0) return false;
+    const size_t separator = dataUrl.find(";base64,");
+    if (separator == std::string::npos) return false;
+
+    const std::string mimeType = dataUrl.substr(5, separator - 5);
+    attachImageBase64("clipboard-image" + extensionForImageMime(mimeType), mimeType,
+                      dataUrl.substr(separator + 8));
+    // Same rule as above: never dump a megabyte data: URL into the prompt.
+    attachmentPasteHeld = true;
+    return true;
+}
+
 void AiChatWindow::handlePromptDrop(float maxLineWidth) {
     if (!project || !ImGui::BeginDragDropTarget()) {
         return;
@@ -1824,7 +2173,7 @@ void AiChatWindow::handlePromptDrop(float maxLineWidth) {
             std::vector<std::string> mentions;
             const fs::path projectPath = project->getProjectPath();
             if (!projectPath.empty()) {
-                for (const std::string& droppedPath : parseNullSeparatedPayload(*payload)) {
+                for (const std::string& droppedPath : Util::getStringsFromPayload(payload)) {
                     std::error_code ec;
                     const fs::path path(droppedPath);
                     if (!fs::is_regular_file(path, ec) || ec) {
@@ -1841,6 +2190,12 @@ void AiChatWindow::handlePromptDrop(float maxLineWidth) {
                 }
             }
             insertDroppedMentions(mentions, maxLineWidth);
+        }
+    }
+
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("external_files")) {
+        if (payload->IsDelivery()) {
+            attachExternalFiles(Util::getStringsFromPayload(payload));
         }
     }
 
@@ -2226,6 +2581,12 @@ bool AiChatWindow::canSendMessage(std::string* reason) const {
         if (reason) *reason = "Select a model before sending.";
         return false;
     }
+    if (!ai::providerSupportsImages(settings.provider) &&
+        std::any_of(pendingAttachments.begin(), pendingAttachments.end(),
+                    [](const ai::ChatAttachment& attachment) { return attachment.isImage(); })) {
+        if (reason) *reason = "Select a vision-capable provider to send images.";
+        return false;
+    }
     return true;
 }
 
@@ -2233,13 +2594,18 @@ void AiChatWindow::submitMessage() {
     std::string promptText = stripPromptSoftWraps(
         inputBuffer.data(), static_cast<int>(std::strlen(inputBuffer.data())),
         inputSoftWraps);
-    if (service.isBusy() || promptText.empty() || !canSendMessage()) {
+    if (service.isBusy() || (promptText.empty() && pendingAttachments.empty()) ||
+        !canSendMessage()) {
         return;
     }
-    if (service.sendUserMessage(promptText)) {
+    // Moved, not copied: attachments can be many MB. sendUserMessage only
+    // consumes them when it accepts the message, so a refused send (e.g. a
+    // busy race) leaves the pending list intact.
+    if (service.sendUserMessage(promptText, std::move(pendingAttachments))) {
         inputBuffer.fill('\0');
         inputSoftWraps.clear();
         inputDisplayText.clear();
+        pendingAttachments.clear();
         closeMentionPopup();
         scrollToBottom = true;
         refocusInput = true;
@@ -2272,7 +2638,7 @@ void AiChatWindow::autoRunProposals() {
 }
 
 void AiChatWindow::updateMessageNotification() {
-    std::vector<ai::ChatMessage> messages = service.getMessages();
+    const std::vector<ai::ChatMessage>& messages = cachedMessages();
     if (messages.size() < lastObservedMessageCount) {
         lastObservedMessageCount = messages.size();
         return;
@@ -2305,6 +2671,7 @@ void AiChatWindow::startNewChat() {
     inputBuffer.fill('\0');
     inputSoftWraps.clear();
     inputDisplayText.clear();
+    pendingAttachments.clear();
     scrollToBottom = false;
     // Mark the current path as handled so a fresh temp project at a reused path
     // does not auto-restore the previous chat on the next frame.
@@ -2330,6 +2697,7 @@ void AiChatWindow::loadLatestConversationForCurrentProject() {
         inputBuffer.fill('\0');
         inputSoftWraps.clear();
         inputDisplayText.clear();
+        pendingAttachments.clear();
     }
 
     if (projectPath.empty() || autoLoadedLatestConversation) {
@@ -2349,7 +2717,7 @@ void AiChatWindow::persistConversation() {
     if (!project || project->getProjectPath().empty()) {
         return;
     }
-    std::vector<ai::ChatMessage> messages = service.getMessages();
+    const std::vector<ai::ChatMessage>& messages = cachedMessages();
     if (messages.size() == lastSavedMessageCount) {
         return; // nothing new since the last save
     }
@@ -2374,12 +2742,13 @@ void AiChatWindow::loadConversation(const std::string& id) {
     }
     service.loadConversation(std::move(messages));
     currentConversationId = id;
-    lastSavedMessageCount = service.getMessages().size();
+    lastSavedMessageCount = cachedMessages().size();
     lastObservedMessageCount = lastSavedMessageCount;
     hasNotification = false;
     inputBuffer.fill('\0');
     inputSoftWraps.clear();
     inputDisplayText.clear();
+    pendingAttachments.clear();
     scrollToBottom = true;
 }
 

@@ -48,6 +48,10 @@ if(NOT WIN32)
     find_package(CURL REQUIRED)
 endif()
 
+if(UNIX AND NOT APPLE)
+    find_package(X11 QUIET)
+endif()
+
 set(BACKEND_SOURCES)
 set(BACKEND_LIBS)
 
@@ -219,6 +223,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/util/ShaderHeaderBuilder.cpp
     ${EDITOR_DIR}/util/GraphicUtils.cpp
     ${EDITOR_DIR}/util/CameraTextureLink.cpp
+    ${EDITOR_DIR}/util/Clipboard.cpp
     ${EDITOR_DIR}/util/EntityBundle.cpp
     ${EDITOR_DIR}/util/ProjectUtils.cpp
     ${EDITOR_DIR}/util/ScriptParser.cpp
@@ -302,6 +307,12 @@ set(DORIAX_EDITOR_SOURCES
     ${BACKEND_SOURCES}
 )
 
+if(APPLE)
+    # NSPasteboard image/file-URL reading for the AI chat attachment paste.
+    enable_language(OBJCXX)
+    list(APPEND DORIAX_EDITOR_SOURCES ${EDITOR_DIR}/util/ClipboardMac.mm)
+endif()
+
 function(configure_doriax_editor_target target_name)
     add_dependencies(${target_name} generate_shaders generate_api_suggestions)
 
@@ -328,9 +339,18 @@ function(configure_doriax_editor_target target_name)
     )
 
     if(WIN32)
-        target_link_libraries(${target_name} PRIVATE winhttp)
+        target_link_libraries(${target_name} PRIVATE winhttp shell32)
     else()
         target_link_libraries(${target_name} PRIVATE CURL::libcurl)
+    endif()
+
+    if(X11_FOUND)
+        target_compile_definitions(${target_name} PRIVATE DORIAX_HAS_X11_CLIPBOARD)
+        target_link_libraries(${target_name} PRIVATE X11::X11)
+    endif()
+
+    if(APPLE)
+        target_link_libraries(${target_name} PRIVATE "-framework AppKit")
     endif()
 
     set_target_properties(

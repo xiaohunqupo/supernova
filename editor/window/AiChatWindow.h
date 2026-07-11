@@ -76,6 +76,15 @@ private:
     std::array<char, 256> customModelBuffer{};
     std::vector<int> inputSoftWraps;
     std::string inputDisplayText;
+    std::vector<ai::ChatAttachment> pendingAttachments;
+    // Snapshot of the service history, re-copied only when the service
+    // revision changes: messages can carry multi-MB attachments, so copying
+    // them every frame is too expensive.
+    std::vector<ai::ChatMessage> messagesCache;
+    uint64_t messagesCacheRevision = 0;
+    // True while a Ctrl+V consumed as an attachment paste is still held, so
+    // key-repeat frames keep suppressing the InputText's own text paste.
+    bool attachmentPasteHeld = false;
     std::string currentConversationId;
     // Snapshot of saved conversations, refreshed when the history popup opens
     // (and after a delete) so list() doesn't re-parse every file per frame.
@@ -91,6 +100,7 @@ private:
     void drawTranscript(float height);
     void drawProposals(const std::vector<ai::ActionProposal>& proposals, float height);
     void drawComposer(float inputHeight);
+    void drawPendingAttachments();
     void drawComposerControls();
     void drawEditableSettingLabel(const std::string& value, float width,
                                   const char* editId, const char* popupId,
@@ -101,6 +111,16 @@ private:
     void drawMentionPopup();
     void drawPromptMentionOverlay(ImVec2 inputMin, ImVec2 inputMax, ImGuiID inputId);
     void handlePromptDrop(float maxLineWidth);
+    bool handleAttachmentPaste(ImGuiID inputId);
+    void attachExternalFiles(const std::vector<std::string>& paths);
+    bool attachExternalFile(const std::filesystem::path& path);
+    bool attachImageBytes(std::string name, std::string mimeType,
+                          std::vector<unsigned char> data);
+    bool attachImageBase64(std::string name, std::string mimeType,
+                           const std::string& base64Data);
+    bool attachmentAlreadyPending(const std::string& name, const std::string& data) const;
+    bool attachmentBudgetAllows(size_t newRawBytes) const;
+    const std::vector<ai::ChatMessage>& cachedMessages();
     void closeMentionPopup();
     void refreshMentionItems();
     void collectMentionCandidates(std::vector<MentionItem>& out) const;

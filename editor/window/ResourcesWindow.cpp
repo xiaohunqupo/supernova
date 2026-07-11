@@ -2530,7 +2530,7 @@ void editor::ResourcesWindow::show() {
     if (ImGui::BeginDragDropTarget()) {
         isDragDropTarget = true;
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("external_files")) {
-            std::vector<std::string> droppedPaths = *(std::vector<std::string>*)payload->Data;
+            std::vector<std::string> droppedPaths = Util::getStringsFromPayload(payload);
             project->getProjectCommandHistory()->addCommand(new CopyFileCmd(project, droppedPaths, currentPath.string(), true));
             scanDirectory(currentPath);
         }

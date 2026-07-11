@@ -11,6 +11,7 @@
 #include "command/type/RemoveChildSceneCmd.h"
 
 #include "util/ProjectUtils.h"
+#include "util/Util.h"
 
 #include "Out.h"
 #include "AppSettings.h"
@@ -1098,7 +1099,8 @@ void editor::App::show(){
     if (isDroppedExternalPaths) {
         isDroppedExternalPaths = false;
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceExtern)) {
-            ImGui::SetDragDropPayload("external_files", &droppedExternalPaths, sizeof(std::vector<std::string>));
+            std::vector<char> payload = Util::encodeStringsPayload(droppedExternalPaths);
+            ImGui::SetDragDropPayload("external_files", payload.data(), payload.size());
             ImGui::EndDragDropSource();
         }
     }
