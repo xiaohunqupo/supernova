@@ -155,7 +155,7 @@ int editor::Backend::init(int argc, char* argv[]) {
     }
 
     SDL_GL_MakeCurrent(window, glContext);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
+    SDL_GL_SetSwapInterval(1); // Enable vsync (turned off again for Wayland; see main loop)
 
     // Setup Dear ImGui context - MUST BE DONE BEFORE app.setup()
     IMGUI_CHECKVERSION();
@@ -174,10 +174,30 @@ int editor::Backend::init(int argc, char* argv[]) {
     app.engineViewLoaded();
 
     // Main loop
+    //
+    // On Wayland a vsync'd SwapWindow waits on wl_surface.frame callbacks, and
+    // the compositor stops sending those once the surface is hidden (minimized,
+    // fully occluded, or the screen blanks). One blocked swap freezes this whole
+    // loop — including the AI agent pump — until the window is visible again.
+    // Wayland sessions are always composited (no tearing), so run permanently
+    // with vsync off and pace frames against the monitor refresh instead.
+    const bool isWayland = isRunningOnWayland();
+    if (isWayland) {
+        SDL_GL_SetSwapInterval(0);
+    }
+    double framePeriod = 1.0 / 60.0;
+    SDL_DisplayMode displayMode;
+    if (SDL_GetCurrentDisplayMode(0, &displayMode) == 0 && displayMode.refresh_rate > 0) {
+        framePeriod = 1.0 / displayMode.refresh_rate;
+    }
+    const double perfFrequency = static_cast<double>(SDL_GetPerformanceFrequency());
+
     bool done = false;
-    int currentSwapInterval = 1;
+    int currentSwapInterval = isWayland ? 0 : 1;
     bool prevFocused = true;
     while (!done) {
+        const Uint64 frameStart = SDL_GetPerformanceCounter();
+
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -207,18 +227,20 @@ int editor::Backend::init(int argc, char* argv[]) {
             continue;
         }
 
-        // Skip presenting while minimized: SwapWindow can block on Wayland and
-        // stall clipboard + AI. Keep polling/updating so both keep working.
+        // Skip presenting while minimized: SwapWindow of a hidden window can
+        // block and stall clipboard + AI. Keep polling/updating so both keep
+        // working.
         const Uint32 windowFlags = SDL_GetWindowFlags(window);
         const bool minimized = (windowFlags & SDL_WINDOW_MINIMIZED) != 0;
 
-        // With vsync on, SwapWindow can block waiting for a frame callback the
-        // compositor won't send while the window is unfocused/occluded, which
-        // stalls the event loop that serves clipboard paste requests. Keep vsync
-        // while focused and drop it when unfocused so swap never blocks; a short
-        // delay below then paces the idle loop.
+        // On X11, with vsync on, SwapWindow can block waiting for a frame
+        // callback the compositor won't send while the window is
+        // unfocused/occluded, which stalls the event loop that serves clipboard
+        // paste requests. Keep vsync while focused and drop it when unfocused so
+        // swap never blocks; the delay below then paces the idle loop. On
+        // Wayland vsync is permanently off (see above).
         const bool focused = (windowFlags & SDL_WINDOW_INPUT_FOCUS) != 0;
-        if (focused != prevFocused) {
+        if (!isWayland && focused != prevFocused) {
             const int desiredInterval = focused ? 1 : 0;
             if (desiredInterval != currentSwapInterval) {
                 SDL_GL_SetSwapInterval(desiredInterval);
@@ -254,25 +276,34 @@ int editor::Backend::init(int argc, char* argv[]) {
         if (!minimized) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             render.endRenderPass();
+        }
 
-            // Multi-viewport: render torn-off windows in their own GL contexts, then
-            // restore the main context so sokol's next-frame pass runs on the right one.
-            if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-                SDL_Window*   backup_window  = SDL_GL_GetCurrentWindow();
-                SDL_GLContext backup_context = SDL_GL_GetCurrentContext();
-                ImGui::UpdatePlatformWindows();
-                ImGui::RenderPlatformWindowsDefault();
-                SDL_GL_MakeCurrent(backup_window, backup_context);
-            }
+        // Multi-viewport: platform window maintenance must run every frame
+        // (ImGui asserts otherwise), and torn-off panels can still be visible
+        // while the main window is minimized. Render them in their own GL
+        // contexts (they swap with vsync off and minimized ones are skipped),
+        // then restore the main context so sokol's next-frame pass runs on the
+        // right one.
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            SDL_Window*   backup_window  = SDL_GL_GetCurrentWindow();
+            SDL_GLContext backup_context = SDL_GL_GetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            SDL_GL_MakeCurrent(backup_window, backup_context);
+        }
 
+        if (!minimized) {
             SDL_GL_SwapWindow(window);
+        }
 
-            // When unfocused vsync is off, so pace the loop to avoid a busy spin.
-            if (!focused) {
-                SDL_Delay(16);
+        // Pace the loop whenever no vsync'd swap did it: always on Wayland, and
+        // elsewhere when unfocused (vsync off) or minimized (no swap at all).
+        if (isWayland || !focused || minimized) {
+            const double frameSeconds = (SDL_GetPerformanceCounter() - frameStart) / perfFrequency;
+            const int sleepMs = static_cast<int>((framePeriod - frameSeconds) * 1000.0);
+            if (sleepMs > 0) {
+                SDL_Delay(sleepMs);
             }
-        } else {
-            SDL_Delay(16);
         }
     }
 

@@ -124,7 +124,7 @@ int editor::Backend::init(int argc, char* argv[]) {
 
     // Make the window's context current
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Enable vsync
+    glfwSwapInterval(1); // Enable vsync (turned off again for Wayland; see main loop)
 
     // Setup Dear ImGui context - MUST BE DONE BEFORE app.setup()
     IMGUI_CHECKVERSION();
@@ -160,23 +160,48 @@ int editor::Backend::init(int argc, char* argv[]) {
     });
 
     // Main loop
-    int currentSwapInterval = 1;
+    //
+    // On Wayland a vsync'd SwapBuffers waits on wl_surface.frame callbacks, and
+    // the compositor stops sending those once the surface is hidden (minimized,
+    // fully occluded, or the screen blanks). One blocked swap freezes this whole
+    // loop — including the AI agent pump — until the window is visible again,
+    // and Wayland gives no iconified signal to dodge it (GLFW_ICONIFIED never
+    // becomes true there). Wayland sessions are always composited (no tearing),
+    // so run permanently with vsync off and pace frames against the monitor
+    // refresh instead.
+    const bool isWayland = glfwGetPlatform() == GLFW_PLATFORM_WAYLAND;
+    if (isWayland) {
+        glfwSwapInterval(0);
+    }
+    double framePeriod = 1.0 / 60.0;
+    if (GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor()) {
+        const GLFWvidmode* videoMode = glfwGetVideoMode(primaryMonitor);
+        if (videoMode && videoMode->refreshRate > 0) {
+            framePeriod = 1.0 / videoMode->refreshRate;
+        }
+    }
+
+    int currentSwapInterval = isWayland ? 0 : 1;
     bool prevFocused = true;
     while (!glfwWindowShouldClose(window)) {
+        const double frameStart = glfwGetTime();
+
         // Poll and handle events
         glfwPollEvents();
 
-        // Skip presenting while iconified: SwapBuffers can block on Wayland and
-        // stall clipboard + AI. Keep polling/updating so both keep working.
+        // Skip presenting while iconified (X11 only — Wayland never reports it):
+        // SwapBuffers of a hidden window can block and stall clipboard + AI.
+        // Keep polling/updating so both keep working.
         const bool iconified = glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0;
 
-        // With vsync on, SwapBuffers can block waiting for a frame callback the
-        // compositor won't send while the window is unfocused/occluded, which
-        // stalls the event loop that serves clipboard paste requests. Keep vsync
-        // while focused (smooth, uncapped to refresh) and drop it when unfocused
-        // so swap never blocks; a short sleep below then paces the idle loop.
+        // On X11, with vsync on, SwapBuffers can block waiting for a frame
+        // callback the compositor won't send while the window is
+        // unfocused/occluded, which stalls the event loop that serves clipboard
+        // paste requests. Keep vsync while focused (smooth, capped to refresh)
+        // and drop it when unfocused so swap never blocks; the sleep below then
+        // paces the idle loop. On Wayland vsync is permanently off (see above).
         const bool focused = glfwGetWindowAttrib(window, GLFW_FOCUSED) != 0;
-        if (focused != prevFocused) {
+        if (!isWayland && focused != prevFocused) {
             const int desiredInterval = focused ? 1 : 0;
             if (desiredInterval != currentSwapInterval) {
                 glfwSwapInterval(desiredInterval);
@@ -213,24 +238,32 @@ int editor::Backend::init(int argc, char* argv[]) {
         if (!iconified) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             render.endRenderPass();
+        }
 
-            // Multi-viewport: render torn-off windows in their own GL contexts, then
-            // restore the main context so sokol's next-frame pass runs on the right one.
-            if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-                GLFWwindow* backup_current_context = glfwGetCurrentContext();
-                ImGui::UpdatePlatformWindows();
-                ImGui::RenderPlatformWindowsDefault();
-                glfwMakeContextCurrent(backup_current_context);
-            }
+        // Multi-viewport: platform window maintenance must run every frame
+        // (ImGui asserts otherwise), and torn-off panels can still be visible
+        // while the main window is iconified. Render them in their own GL
+        // contexts (they swap with vsync off and minimized ones are skipped),
+        // then restore the main context so sokol's next-frame pass runs on the
+        // right one.
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
 
+        if (!iconified) {
             glfwSwapBuffers(window);
+        }
 
-            // When unfocused vsync is off, so pace the loop to avoid a busy spin.
-            if (!focused) {
-                ImGui_ImplGlfw_Sleep(16);
+        // Pace the loop whenever no vsync'd swap did it: always on Wayland, and
+        // on X11 when unfocused (vsync off) or iconified (no swap at all).
+        if (isWayland || !focused || iconified) {
+            const int sleepMs = static_cast<int>((framePeriod - (glfwGetTime() - frameStart)) * 1000.0);
+            if (sleepMs > 0) {
+                ImGui_ImplGlfw_Sleep(sleepMs);
             }
-        } else {
-            ImGui_ImplGlfw_Sleep(16);
         }
     }
 
