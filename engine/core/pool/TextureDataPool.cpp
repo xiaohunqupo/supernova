@@ -386,12 +386,14 @@ void TextureDataPool::remove(const std::string& id){
         std::lock_guard<std::mutex> lock(cacheMutex);
         auto pendingIt = pendingBuilds.find(id);
         if (pendingIt != pendingBuilds.end()) {
+            // Erasing a packaged_task future does not cancel its work. Wait so
+            // the old load cannot overlap a replacement request with this id.
+            if (pendingIt->second.valid()) {
+                pendingIt->second.wait();
+            }
             pendingBuilds.erase(pendingIt);
             removedPending = true;
         }
-    }
-    if (removedPending) {
-        ResourceProgress::failBuild(std::hash<std::string>{}(id));
     }
 
     auto& map = getMap();
@@ -422,18 +424,17 @@ void TextureDataPool::clear(){
 }
 
 void TextureDataPool::clearUnused(){
-    // Cancel in-flight loads (same policy as remove), then drop unreferenced entries.
-    std::vector<std::string> cancelled;
+    // Quiesce in-flight loads before sweeping the cache. The decode workers do
+    // not acquire cacheMutex, while holding it prevents a replacement load from
+    // being registered under the same id during the wait.
     {
 		std::lock_guard<std::mutex> lock(cacheMutex);
-		cancelled.reserve(pendingBuilds.size());
-		for (const auto& [id, _] : pendingBuilds) {
-			cancelled.push_back(id);
+		for (auto& [id, future] : pendingBuilds) {
+			if (future.valid()) {
+				future.wait();
+			}
 		}
 		pendingBuilds.clear();
-	}
-	for (const auto& id : cancelled) {
-		ResourceProgress::failBuild(std::hash<std::string>{}(id));
 	}
 
 	std::vector<std::string> ids;

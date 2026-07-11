@@ -6,6 +6,7 @@
 
 #include <future>
 #include <thread>
+#include <utility>
 
 #ifndef USE_GL_READPIXELS
 #define USE_GL_READPIXELS 0
@@ -74,7 +75,7 @@ Vector2 editor::GraphicUtils::getUILayoutCenter(Scene* scene, Entity entity, con
     return center;
 }
 
-void editor::GraphicUtils::saveFramebufferImage(Framebuffer* framebuffer, fs::path path, bool flipY, std::function<void()> onComplete) {
+bool editor::GraphicUtils::saveFramebufferImage(Framebuffer* framebuffer, fs::path path, bool flipY, std::function<void()> onComplete) {
     uint8_t* pixels = nullptr;
     bool needDelete = false;
 
@@ -96,7 +97,7 @@ void editor::GraphicUtils::saveFramebufferImage(Framebuffer* framebuffer, fs::pa
                     if (!glGenFramebuffersPtr || !glBindFramebufferPtr || !glFramebufferTexture2DPtr || !glDeleteFramebuffersPtr) {
                         delete[] pixels;
                         Out::error("Engine failure: Failed to load GL framebuffer functions");
-                        return;
+                        return false;
                     }
                 }
             #endif
@@ -142,8 +143,11 @@ void editor::GraphicUtils::saveFramebufferImage(Framebuffer* framebuffer, fs::pa
         [cmdBuf commit];
         [cmdBuf waitUntilCompleted];
 
-        pixels = (uint8_t*)[buffer contents];
-        needDelete = false; // Don't delete!
+        // The Metal buffer is released when this function returns, while PNG
+        // encoding happens on a detached thread. Give that thread owned bytes.
+        pixels = new uint8_t[dataSize];
+        memcpy(pixels, [buffer contents], dataSize);
+        needDelete = true;
     #endif
 
     #if defined(SOKOL_D3D11)
@@ -196,18 +200,35 @@ void editor::GraphicUtils::saveFramebufferImage(Framebuffer* framebuffer, fs::pa
         device->Release();
     #endif
 
-    std::thread([pixels, needDelete, width, height, path, flipY, onComplete]() {
-        stbi_flip_vertically_on_write(flipY ? 1 : 0);
-        stbi_write_png(path.string().c_str(), width, height, 4, pixels, width * 4);
-        stbi_flip_vertically_on_write(0);
+    try {
+        std::thread([pixels, needDelete, width, height, path, flipY, onComplete]() {
+            // Do not use stb's process-global flip flag from concurrent writers.
+            // The readback buffer is owned here, so flip its rows directly.
+            if (flipY && pixels) {
+                const size_t rowBytes = static_cast<size_t>(width) * 4;
+                for (unsigned int y = 0; y < height / 2; ++y) {
+                    uint8_t* top = pixels + static_cast<size_t>(y) * rowBytes;
+                    uint8_t* bottom = pixels + static_cast<size_t>(height - 1 - y) * rowBytes;
+                    for (size_t x = 0; x < rowBytes; ++x) {
+                        std::swap(top[x], bottom[x]);
+                    }
+                }
+            }
+            stbi_write_png(path.string().c_str(), width, height, 4, pixels, width * 4);
 
+            if (needDelete && pixels) {
+                delete[] pixels;
+            }
+
+            if (onComplete) {
+                onComplete();
+            }
+        }).detach();
+    } catch (...) {
         if (needDelete && pixels) {
             delete[] pixels;
         }
-
-        // Call the callback when the save operation is complete
-        if (onComplete) {
-            onComplete();
-        }
-    }).detach();
+        return false;
+    }
+    return true;
 }

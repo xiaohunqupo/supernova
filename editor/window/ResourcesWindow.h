@@ -16,6 +16,7 @@
 #include <atomic>
 #include <unordered_map>
 #include <condition_variable>
+#include <cstdint>
 
 #include "imgui.h"
 
@@ -50,6 +51,7 @@ namespace doriax::editor {
     struct ThumbnailRequest {
         fs::path path;
         FileType type = FileType::NONE;
+        uint64_t generation = 0;
     };
 
     struct ThumbnailTexture {
@@ -146,6 +148,10 @@ namespace doriax::editor {
         std::queue<ThumbnailRequest> thumbnailQueue;
         std::atomic<bool> stopThumbnailThread;
         std::condition_variable thumbnailCondition;
+        bool thumbnailWorkerBusy = false; // guarded by thumbnailMutex
+        bool thumbnailWorkSuspended = false; // guarded by thumbnailMutex
+        uint64_t thumbnailGeneration = 0; // guarded by thumbnailMutex
+        size_t activeThumbnailSaves = 0; // guarded by thumbnailMutex
 
         // Queue for completed thumbnails
         std::mutex completedThumbnailMutex;
@@ -153,11 +159,13 @@ namespace doriax::editor {
 
         // Add these to the private section of the ResourcesWindow class
         fs::path pendingMaterialPath;
-        bool hasPendingMaterialRender = false;
+        bool hasPendingMaterialRender = false; // guarded by thumbnailMutex
+        uint64_t pendingMaterialGeneration = 0; // guarded by thumbnailMutex
         std::mutex materialRenderMutex;
 
         fs::path pendingModelPath;
-        bool hasPendingModelRender = false;
+        bool hasPendingModelRender = false; // guarded by thumbnailMutex
+        uint64_t pendingModelGeneration = 0; // guarded by thumbnailMutex
         std::mutex modelRenderMutex;
 
         ImU32 fileSeparatorColor(const FileEntry& fe) const;
@@ -202,6 +210,8 @@ namespace doriax::editor {
         bool isFocused() const;
 
         void notifyProjectPathChange();
+        void cancelThumbnailWork();
+        void resumeThumbnailWork();
 
         void handleExternalDragEnter();
         void handleExternalDragLeave();

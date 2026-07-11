@@ -2710,6 +2710,9 @@ bool editor::Project::createTempProject(std::string projectName, bool deleteIfEx
 
     } catch (const std::exception& e) {
         printf("Error: %s\n", e.what());
+        // prepareForProjectSwitch() suspends background resource work.
+        // Always release that suspension even when project creation fails.
+        editor::getEditorHost().updateResourcesPath();
         return false;
     }
 
@@ -2900,10 +2903,12 @@ bool editor::Project::loadProject(const std::filesystem::path path, bool updateL
     } catch (const YAML::Exception& e) {
         Out::error("Failed to load project YAML: \"%s\"", e.what());
         editor::getEditorHost().registerAlert("Error", "Failed to load project file!");
+        editor::getEditorHost().updateResourcesPath();
         return false;
     } catch (const std::exception& e) {
         Out::error("Failed to load project: \"%s\"", e.what());
         editor::getEditorHost().registerAlert("Error", "Failed to load project!");
+        editor::getEditorHost().updateResourcesPath();
         return false;
     }
 }

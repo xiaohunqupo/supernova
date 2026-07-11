@@ -165,7 +165,9 @@ void Engine::executeSceneOnce(Scene* scene) {
         includeScene(scenes.size()-1, scene);
     }
 
-    oneTimeScenes.insert(scene);
+    if (scene) {
+        oneTimeScenes.insert(scene);
+    }
 
     if (Engine::isAsyncThread())
         drawSemaphore.release();
@@ -186,6 +188,10 @@ void Engine::removeScene(Scene* scene){
         if (mainScene == scene){
             mainScene = NULL;
         }
+
+        // A scene removed explicitly must not remain in the one-shot registry.
+        // Callers may destroy it immediately after this function returns.
+        oneTimeScenes.erase(scene);
     }
 
     if (Engine::isAsyncThread())

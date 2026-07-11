@@ -680,6 +680,9 @@ void MeshSystem::cancelAsyncModelLoads(){
         for (auto it = pendingModelLoads.begin(); it != pendingModelLoads.end();) {
             if (it->first.rfind(scenePrefix, 0) == 0) {
                 buildIds.push_back(std::hash<std::string>{}(it->first));
+                if (it->second.valid()) {
+                    it->second.wait();
+                }
                 it = pendingModelLoads.erase(it);
             } else {
                 ++it;
@@ -697,8 +700,11 @@ void MeshSystem::cancelAllAsyncModelLoads(){
         std::lock_guard<std::mutex> lock(getAsyncModelMutex());
         auto& pendingModelLoads = getPendingModelLoads();
         buildIds.reserve(pendingModelLoads.size());
-        for (const auto& [key, future] : pendingModelLoads) {
+        for (auto& [key, future] : pendingModelLoads) {
             buildIds.push_back(std::hash<std::string>{}(key));
+            if (future.valid()) {
+                future.wait();
+            }
         }
         pendingModelLoads.clear();
     }
@@ -723,7 +729,14 @@ void MeshSystem::cancelAsyncModelLoad(Entity entity, const std::string& filename
     {
         std::lock_guard<std::mutex> lock(getAsyncModelMutex());
         auto& pendingModelLoads = getPendingModelLoads();
-        erased = pendingModelLoads.erase(key) > 0;
+        auto it = pendingModelLoads.find(key);
+        if (it != pendingModelLoads.end()) {
+            if (it->second.valid()) {
+                it->second.wait();
+            }
+            pendingModelLoads.erase(it);
+            erased = true;
+        }
     }
     if (erased){
         ResourceProgress::failBuild(buildId);

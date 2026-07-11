@@ -199,13 +199,15 @@ void SoundPool::remove(const std::string& id){
         std::lock_guard<std::mutex> lock(cacheMutex);
         auto pendingIt = pendingBuilds.find(id);
         if (pendingIt != pendingBuilds.end()) {
+            // ThreadPoolManager uses packaged_task; destroying its future does
+            // not cancel the queued task. Wait so it cannot outlive removal or
+            // update a later build that reuses the same resource id.
+            if (pendingIt->second.valid()) {
+                pendingIt->second.wait();
+            }
             pendingBuilds.erase(pendingIt);
             removedPending = true;
         }
-    }
-
-    if (removedPending) {
-        ResourceProgress::failBuild(std::hash<std::string>{}(id));
     }
 
     auto it = getMap().find(id);
@@ -234,18 +236,17 @@ void SoundPool::clear(){
 }
 
 void SoundPool::clearUnused(){
-    // Cancel in-flight loads (same policy as remove), then drop unreferenced entries.
-    std::vector<std::string> cancelled;
+    // Quiesce in-flight loads before sweeping the cache. The worker functions do
+    // not acquire cacheMutex, while holding it prevents a replacement load from
+    // being registered under the same id during the wait.
     {
         std::lock_guard<std::mutex> lock(cacheMutex);
-        cancelled.reserve(pendingBuilds.size());
-        for (const auto& [id, _] : pendingBuilds) {
-            cancelled.push_back(id);
+        for (auto& [id, future] : pendingBuilds) {
+            if (future.valid()) {
+                future.wait();
+            }
         }
         pendingBuilds.clear();
-    }
-    for (const auto& id : cancelled) {
-        ResourceProgress::failBuild(std::hash<std::string>{}(id));
     }
 
     std::vector<std::string> ids;

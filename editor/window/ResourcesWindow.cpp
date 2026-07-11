@@ -167,6 +167,7 @@ editor::ResourcesWindow::ResourcesWindow(Project* project, CodeEditor* codeEdito
 }
 
 editor::ResourcesWindow::~ResourcesWindow() {
+    cancelThumbnailWork();
     stopThumbnailThread = true;
     thumbnailCondition.notify_one(); // Wake the worker thread to check stop condition
     if (thumbnailThread.joinable()) {
@@ -197,17 +198,68 @@ bool editor::ResourcesWindow::isOpen() const{
 }
 
 void editor::ResourcesWindow::notifyProjectPathChange(){
+    // This is also used by project moves, which may not go through the normal
+    // project-open path. Quiesce the old path before scanning the new one.
+    cancelThumbnailWork();
+
     // Clear thumbnail textures when changing projects
     clearThumbnailTextures();
 
-    // Clear the thumbnail queue
+    resumeThumbnailWork();
+    scanDirectory(project->getProjectPath());
+}
+
+void editor::ResourcesWindow::cancelThumbnailWork(){
     {
-        std::lock_guard<std::mutex> lock(thumbnailMutex);
-        pendingThumbnailRequests.clear();
+        std::unique_lock<std::mutex> lock(thumbnailMutex);
+        thumbnailWorkSuspended = true;
         std::queue<ThumbnailRequest> empty;
         std::swap(thumbnailQueue, empty);
+        pendingThumbnailRequests.clear();
+
+        // The worker publishes pending preview state before clearing busy, so
+        // after this wait all of its state can be invalidated atomically.
+        thumbnailCondition.wait(lock, [this]() {
+            return !thumbnailWorkerBusy && activeThumbnailSaves == 0;
+        });
+
+        ++thumbnailGeneration;
+        hasPendingMaterialRender = false;
+        pendingMaterialPath.clear();
+        pendingMaterialGeneration = 0;
+        hasPendingModelRender = false;
+        pendingModelPath.clear();
+        pendingModelGeneration = 0;
     }
-    scanDirectory(project->getProjectPath());
+
+    // removeScene() also removes one-shot bookkeeping, so the preview objects
+    // can now release old-project resources without leaving dangling Scene*s.
+    Engine::removeScene(materialRender.getScene());
+    {
+        std::lock_guard<std::mutex> lock(materialRenderMutex);
+        materialRender.applyMaterial(Material());
+    }
+
+    Scene* modelScene = modelRender.getScene();
+    if (modelScene) {
+        Engine::removeScene(modelScene);
+    }
+    {
+        std::lock_guard<std::mutex> lock(modelRenderMutex);
+        modelRender.clearScene();
+    }
+
+    std::lock_guard<std::mutex> completedLock(completedThumbnailMutex);
+    std::queue<ThumbnailRequest> empty;
+    std::swap(completedThumbnailQueue, empty);
+}
+
+void editor::ResourcesWindow::resumeThumbnailWork(){
+    {
+        std::lock_guard<std::mutex> lock(thumbnailMutex);
+        thumbnailWorkSuspended = false;
+    }
+    thumbnailCondition.notify_all();
 }
 
 void editor::ResourcesWindow::handleExternalDragEnter() {
@@ -258,80 +310,176 @@ void editor::ResourcesWindow::requestThumbnailGeneration(const fs::path& filePat
 }
 
 void editor::ResourcesWindow::processMaterialThumbnails() {
-    // Check if we have a pending material render that needs post-processing
-    if (hasPendingMaterialRender && !Engine::isSceneRunning(materialRender.getScene())) {
+    ThumbnailRequest pending;
+    {
+        std::lock_guard<std::mutex> lock(thumbnailMutex);
+        if (!hasPendingMaterialRender) {
+            return;
+        }
+        pending = {pendingMaterialPath, FileType::MATERIAL, pendingMaterialGeneration};
+    }
+
+    if (!Engine::isSceneRunning(materialRender.getScene())) {
         std::lock_guard<std::mutex> lock(materialRenderMutex);
 
-        fs::path thumbnailPath = project->getThumbnailPath(pendingMaterialPath);
+        fs::path thumbnailPath = project->getThumbnailPath(pending.path);
         fs::create_directories(thumbnailPath.parent_path());
 
-        // Store captured variables for the callback
-        fs::path capturedPath = pendingMaterialPath;
-        FileType capturedType = FileType::MATERIAL;
+        Framebuffer* framebuffer = materialRender.getFramebuffer();
+        if (!framebuffer) {
+            Log::warn("Thumbnail render produced no framebuffer for material: %s", pending.path.string().c_str());
+            {
+                std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+                if (pending.generation == thumbnailGeneration) {
+                    pendingThumbnailRequests.erase(thumbnailRequestKey(pending.path));
+                    hasPendingMaterialRender = false;
+                    pendingMaterialPath.clear();
+                    pendingMaterialGeneration = 0;
+                }
+            }
+            thumbnailCondition.notify_one();
+            return;
+        }
 
-        // Use the callback to notify when the image save is complete
-        GraphicUtils::saveFramebufferImage(materialRender.getFramebuffer(), thumbnailPath, false, 
-            [this, capturedPath, capturedType]() {
-                // This code runs after the image has been saved
+        {
+            std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+            ++activeThumbnailSaves;
+        }
+        const bool saveStarted = GraphicUtils::saveFramebufferImage(framebuffer, thumbnailPath, false,
+            [this, pending]() {
+                bool publish = false;
                 {
                     std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
-                    pendingThumbnailRequests.erase(thumbnailRequestKey(capturedPath));
+                    if (pending.generation == thumbnailGeneration) {
+                        pendingThumbnailRequests.erase(thumbnailRequestKey(pending.path));
+                        publish = true;
+                    }
                 }
-                std::lock_guard<std::mutex> completedLock(completedThumbnailMutex);
-                completedThumbnailQueue.push({capturedPath, capturedType});
+                if (publish) {
+                    std::lock_guard<std::mutex> completedLock(completedThumbnailMutex);
+                    completedThumbnailQueue.push(pending);
+                }
+                {
+                    std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+                    --activeThumbnailSaves;
+                    // Once the count hits zero cancelThumbnailWork() may return and
+                    // the object may be destroyed, so notify while still holding the
+                    // lock and touch no members after this block.
+                    thumbnailCondition.notify_all();
+                }
             });
+        if (!saveStarted) {
+            std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+            --activeThumbnailSaves;
+            pendingThumbnailRequests.erase(thumbnailRequestKey(pending.path));
+            thumbnailCondition.notify_all();
+        }
 
-        // Mark as processed
-        hasPendingMaterialRender = false;
+        {
+            std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+            if (pending.generation == thumbnailGeneration &&
+                pendingMaterialGeneration == pending.generation) {
+                hasPendingMaterialRender = false;
+                pendingMaterialPath.clear();
+                pendingMaterialGeneration = 0;
+            }
+        }
 
-        // Notify the thumbnail thread that we've processed the material
         thumbnailCondition.notify_one();
     }
 }
 
 void editor::ResourcesWindow::processModelThumbnails() {
-    if (hasPendingModelRender && !Engine::isSceneRunning(modelRender.getScene())) {
+    ThumbnailRequest pending;
+    {
+        std::lock_guard<std::mutex> lock(thumbnailMutex);
+        if (!hasPendingModelRender) {
+            return;
+        }
+        pending = {pendingModelPath, FileType::MODEL, pendingModelGeneration};
+    }
+
+    if (!Engine::isSceneRunning(modelRender.getScene())) {
         std::lock_guard<std::mutex> lock(modelRenderMutex);
 
-        fs::path thumbnailPath = project->getThumbnailPath(pendingModelPath);
+        fs::path thumbnailPath = project->getThumbnailPath(pending.path);
         fs::create_directories(thumbnailPath.parent_path());
 
         Framebuffer* framebuffer = modelRender.getFramebuffer();
         if (!framebuffer) {
-            Log::warn("Thumbnail render produced no framebuffer for model: %s", pendingModelPath.string().c_str());
+            Log::warn("Thumbnail render produced no framebuffer for model: %s", pending.path.string().c_str());
+            // Release the scene while hasPendingModelRender still parks the worker;
+            // clearing the flags first would let a wakeup start a new load into the
+            // scene being torn down here.
+            Engine::removeScene(modelRender.getScene());
+            modelRender.clearScene();
             {
                 std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
-                pendingThumbnailRequests.erase(thumbnailRequestKey(pendingModelPath));
+                if (pending.generation == thumbnailGeneration) {
+                    pendingThumbnailRequests.erase(thumbnailRequestKey(pending.path));
+                    hasPendingModelRender = false;
+                    pendingModelPath.clear();
+                    pendingModelGeneration = 0;
+                }
             }
-            hasPendingModelRender = false;
             thumbnailCondition.notify_one();
             return;
         }
 
-        fs::path capturedPath = pendingModelPath;
-        FileType capturedType = FileType::MODEL;
-
-        GraphicUtils::saveFramebufferImage(framebuffer, thumbnailPath, false,
-            [this, capturedPath, capturedType, thumbnailPath]() {
+        {
+            std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+            ++activeThumbnailSaves;
+        }
+        const bool saveStarted = GraphicUtils::saveFramebufferImage(framebuffer, thumbnailPath, false,
+            [this, pending, thumbnailPath]() {
                 std::error_code ec;
                 if (!fs::exists(thumbnailPath, ec) || ec) {
                     Log::warn("Failed to save model thumbnail '%s': %s",
                               thumbnailPath.string().c_str(), ec ? ec.message().c_str() : "output file is missing");
                 }
+                bool publish = false;
                 {
                     std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
-                    pendingThumbnailRequests.erase(thumbnailRequestKey(capturedPath));
+                    if (pending.generation == thumbnailGeneration) {
+                        pendingThumbnailRequests.erase(thumbnailRequestKey(pending.path));
+                        publish = true;
+                    }
                 }
-                std::lock_guard<std::mutex> completedLock(completedThumbnailMutex);
-                completedThumbnailQueue.push({capturedPath, capturedType});
+                if (publish) {
+                    std::lock_guard<std::mutex> completedLock(completedThumbnailMutex);
+                    completedThumbnailQueue.push(pending);
+                }
+                {
+                    std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+                    --activeThumbnailSaves;
+                    // Once the count hits zero cancelThumbnailWork() may return and
+                    // the object may be destroyed, so notify while still holding the
+                    // lock and touch no members after this block.
+                    thumbnailCondition.notify_all();
+                }
             });
+        if (!saveStarted) {
+            std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+            --activeThumbnailSaves;
+            pendingThumbnailRequests.erase(thumbnailRequestKey(pending.path));
+            thumbnailCondition.notify_all();
+        }
 
         // Pixel readback above is synchronous; the detached PNG writer owns its
         // copy. Release this large preview scene now so its GPU buffers don't
         // overlap with the model being loaded into the user's scene.
+        Engine::removeScene(modelRender.getScene());
         modelRender.clearScene();
 
-        hasPendingModelRender = false;
+        {
+            std::lock_guard<std::mutex> thumbnailLock(thumbnailMutex);
+            if (pending.generation == thumbnailGeneration &&
+                pendingModelGeneration == pending.generation) {
+                hasPendingModelRender = false;
+                pendingModelPath.clear();
+                pendingModelGeneration = 0;
+            }
+        }
 
         thumbnailCondition.notify_one();
     }
@@ -1733,7 +1881,7 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
 
     fs::path thumbnailPath = project->getThumbnailPath(normalizedPath);
 
-    ThumbnailRequest thumbFile = {normalizedPath, type};
+    ThumbnailRequest thumbFile = {normalizedPath, type, 0};
     ec.clear();
     if (!forceRegenerate && fs::exists(thumbnailPath, ec) && !ec) {
         std::error_code imageTimeEc;
@@ -1741,7 +1889,15 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
         auto imageTime = fs::last_write_time(normalizedPath, imageTimeEc);
         auto thumbTime = fs::last_write_time(thumbnailPath, thumbTimeEc);
         if (!imageTimeEc && !thumbTimeEc && thumbTime >= imageTime) {
-            // Thumbnail is up-to-date, queue it for loading
+            {
+                std::lock_guard<std::mutex> lock(thumbnailMutex);
+                if (thumbnailWorkSuspended) {
+                    return;
+                }
+                thumbFile.generation = thumbnailGeneration;
+            }
+            // Thumbnail is up-to-date, queue it for loading. Consumers verify
+            // the generation in case a project switch races this push.
             std::lock_guard<std::mutex> lock(completedThumbnailMutex);
             completedThumbnailQueue.push(thumbFile);
             return;
@@ -1749,9 +1905,13 @@ void editor::ResourcesWindow::queueThumbnailGeneration(const fs::path& filePath,
     }
     {
         std::lock_guard<std::mutex> lock(thumbnailMutex);
+        if (thumbnailWorkSuspended) {
+            return;
+        }
         if (!pendingThumbnailRequests.insert(requestKey).second) {
             return;
         }
+        thumbFile.generation = thumbnailGeneration;
         thumbnailQueue.push(thumbFile);
     }
     thumbnailCondition.notify_one();
@@ -1766,9 +1926,28 @@ void editor::ResourcesWindow::thumbnailWorker() {
         while (!stopThumbnailThread && !Engine::isViewLoaded() && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
+        bool runWarmup = false;
         if (!stopThumbnailThread && Engine::isViewLoaded()) {
-            Engine::AsyncThreadScope asyncThreadScope;
-            Engine::executeSceneOnce(materialRender.getScene());
+            std::lock_guard<std::mutex> lock(thumbnailMutex);
+            if (!thumbnailWorkSuspended) {
+                thumbnailWorkerBusy = true;
+                runWarmup = true;
+            }
+        }
+        if (runWarmup) {
+            try {
+                Engine::AsyncThreadScope asyncThreadScope;
+                Engine::executeSceneOnce(materialRender.getScene());
+            } catch (const std::exception& e) {
+                Log::error("Failed to warm thumbnail preview: %s", e.what());
+            } catch (...) {
+                Log::error("Failed to warm thumbnail preview: unknown error");
+            }
+            {
+                std::lock_guard<std::mutex> lock(thumbnailMutex);
+                thumbnailWorkerBusy = false;
+            }
+            thumbnailCondition.notify_all();
         }
     }
 
@@ -1778,7 +1957,8 @@ void editor::ResourcesWindow::thumbnailWorker() {
             std::unique_lock<std::mutex> lock(thumbnailMutex);
             // Wait until there is work or the thread is stopped
             thumbnailCondition.wait(lock, [this]() {
-                return (!thumbnailQueue.empty() && !hasPendingMaterialRender && !hasPendingModelRender) || stopThumbnailThread;
+                return (!thumbnailWorkSuspended && !thumbnailQueue.empty() &&
+                        !hasPendingMaterialRender && !hasPendingModelRender) || stopThumbnailThread;
             });
 
             // If we're stopping, exit
@@ -1789,8 +1969,10 @@ void editor::ResourcesWindow::thumbnailWorker() {
             // Get the next file path
             thumbFile = thumbnailQueue.front();
             thumbnailQueue.pop();
+            thumbnailWorkerBusy = true;
         }
 
+        try {
         // Generate thumbnail
         if (thumbFile.type == FileType::IMAGE) {
             fs::path thumbnailPath = project->getThumbnailPath(thumbFile.path);
@@ -1822,13 +2004,19 @@ void editor::ResourcesWindow::thumbnailWorker() {
 
                     // Set the pending flag before executing the scene
                     {
-                        std::lock_guard<std::mutex> lock(materialRenderMutex);
-                        pendingMaterialPath = thumbFile.path;
-                        hasPendingMaterialRender = true;
+                        std::lock_guard<std::mutex> lock(thumbnailMutex);
+                        if (!thumbnailWorkSuspended && thumbFile.generation == thumbnailGeneration) {
+                            pendingMaterialPath = thumbFile.path;
+                            pendingMaterialGeneration = thumbFile.generation;
+                            hasPendingMaterialRender = true;
+                        }
                     }
 
                     // The processMaterialThumbnails method will handle the rest
                     // and set hasPendingMaterialRender to false when done
+                } else {
+                    std::lock_guard<std::mutex> lock(thumbnailMutex);
+                    pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
                 }
             } catch (const std::exception& e) {
                 // Log the error and continue with other thumbnails
@@ -1836,8 +2024,12 @@ void editor::ResourcesWindow::thumbnailWorker() {
 
                 // Make sure we reset the pending flag if there was an error
                 {
-                    std::lock_guard<std::mutex> lock(materialRenderMutex);
-                    hasPendingMaterialRender = false;
+                    std::lock_guard<std::mutex> lock(thumbnailMutex);
+                    if (pendingMaterialGeneration == thumbFile.generation) {
+                        hasPendingMaterialRender = false;
+                        pendingMaterialPath.clear();
+                        pendingMaterialGeneration = 0;
+                    }
                 }
                 std::lock_guard<std::mutex> lock(thumbnailMutex);
                 pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
@@ -1864,9 +2056,12 @@ void editor::ResourcesWindow::thumbnailWorker() {
                     }
 
                     {
-                        std::lock_guard<std::mutex> lock(modelRenderMutex);
-                        pendingModelPath = thumbFile.path;
-                        hasPendingModelRender = true;
+                        std::lock_guard<std::mutex> lock(thumbnailMutex);
+                        if (!thumbnailWorkSuspended && thumbFile.generation == thumbnailGeneration) {
+                            pendingModelPath = thumbFile.path;
+                            pendingModelGeneration = thumbFile.generation;
+                            hasPendingModelRender = true;
+                        }
                     }
                 } else {
                     Log::error("Failed to load model for thumbnail: %s", thumbFile.path.string().c_str());
@@ -1874,16 +2069,42 @@ void editor::ResourcesWindow::thumbnailWorker() {
                     pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
                 }
             } catch (const std::exception& e) {
+                MeshSystem::setImageDecodeMaxDimension(0);
                 std::cerr << "Error generating thumbnail for model: " << thumbFile.path.string() << " - " << e.what() << std::endl;
 
                 {
-                    std::lock_guard<std::mutex> lock(modelRenderMutex);
-                    hasPendingModelRender = false;
+                    std::lock_guard<std::mutex> lock(thumbnailMutex);
+                    if (pendingModelGeneration == thumbFile.generation) {
+                        hasPendingModelRender = false;
+                        pendingModelPath.clear();
+                        pendingModelGeneration = 0;
+                    }
                 }
                 std::lock_guard<std::mutex> lock(thumbnailMutex);
                 pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
             }
         }
+        } catch (const std::exception& e) {
+            MeshSystem::setImageDecodeMaxDimension(0);
+            Log::error("Unhandled thumbnail error for '%s': %s", thumbFile.path.string().c_str(), e.what());
+            std::lock_guard<std::mutex> lock(thumbnailMutex);
+            if (thumbFile.generation == thumbnailGeneration) {
+                pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
+            }
+        } catch (...) {
+            MeshSystem::setImageDecodeMaxDimension(0);
+            Log::error("Unhandled thumbnail error for '%s'", thumbFile.path.string().c_str());
+            std::lock_guard<std::mutex> lock(thumbnailMutex);
+            if (thumbFile.generation == thumbnailGeneration) {
+                pendingThumbnailRequests.erase(thumbnailRequestKey(thumbFile.path));
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(thumbnailMutex);
+            thumbnailWorkerBusy = false;
+        }
+        thumbnailCondition.notify_all();
     }
 }
 
@@ -2148,6 +2369,12 @@ void editor::ResourcesWindow::show() {
             }
             thumbFile = completedThumbnailQueue.front();
             completedThumbnailQueue.pop();
+        }
+        {
+            std::lock_guard<std::mutex> lock(thumbnailMutex);
+            if (thumbFile.generation != thumbnailGeneration || thumbnailWorkSuspended) {
+                continue;
+            }
         }
         // Find and mark the corresponding file entry; the texture itself is
         // created on demand when the item becomes visible

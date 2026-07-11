@@ -1429,6 +1429,9 @@ void editor::App::clearSceneWindowState(uint32_t sceneId) {
 }
 
 void editor::App::prepareForProjectSwitch() {
+    resourcesWindow->cancelThumbnailWork();
+    // Thumbnail cancellation prevents new preview loads from being queued;
+    // now quiesce any remaining scene/model jobs before pool cleanup.
     MeshSystem::cancelAllAsyncModelLoads();
     codeEditor->closeAll();
     outputWindow->clear();
@@ -1617,6 +1620,10 @@ void editor::App::updateResourcesPath(){
             resourcesWindow->refreshCurrentDirectory();
         }
     }
+
+    // Initial project loading happens before the Resources window is initialized,
+    // but prepareForProjectSwitch() still suspends its worker.
+    resourcesWindow->resumeThumbnailWork();
 
     lastResourcesProjectPath = currentProjectPath;
     resourcesWindow->cleanupThumbnails();
