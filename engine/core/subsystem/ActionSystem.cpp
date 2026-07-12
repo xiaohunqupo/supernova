@@ -1497,6 +1497,34 @@ float ActionSystem::getFrameDuration(const ActionFrame& frame) {
     return getDuration(frame.action, 0);
 }
 
+bool ActionSystem::isAnimationReachable(Entity from, Entity target) {
+    std::unordered_set<Entity> visited;
+    return isAnimationReachable(from, target, visited);
+}
+
+bool ActionSystem::isAnimationReachable(Entity from, Entity target, std::unordered_set<Entity>& visited) {
+    if (from == NULL_ENTITY) {
+        return false;
+    }
+    if (from == target) {
+        return true;
+    }
+    if (!visited.insert(from).second) {
+        return false; // already walked (protects against pre-existing cycles)
+    }
+
+    AnimationComponent* anim = scene->findComponent<AnimationComponent>(from);
+    if (!anim) {
+        return false;
+    }
+    for (const ActionFrame& frame : anim->actions) {
+        if (isAnimationReachable(frame.action, target, visited)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 float ActionSystem::getDuration(Entity entity, int depth) {
     // Animations can nest other animations as frames; cap recursion so a cycle
     // of auto-duration frames cannot hang the engine.

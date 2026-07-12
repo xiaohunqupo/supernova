@@ -3997,11 +3997,11 @@ ActionResult EditorActionExecutor::addAnimationAction(const Json& arguments) {
         frame.action = resolveEntity(sceneProject, tmp);
     }
 
-    if (frame.action == entity) {
-        return failResult("An animation cannot contain itself as an action.");
+    ActionSystem* actionSystem = sceneProject->scene->getSystem<ActionSystem>().get();
+    if (frame.action != NULL_ENTITY && actionSystem->isAnimationReachable(frame.action, entity)) {
+        return failResult("This action would create an animation cycle (the animation would contain itself directly or through nested animations).");
     }
 
-    ActionSystem* actionSystem = sceneProject->scene->getSystem<ActionSystem>().get();
     std::vector<ActionFrame> actions = anim->actions;
     for (const auto& existing : actions) {
         if (existing.track != frame.track) continue;

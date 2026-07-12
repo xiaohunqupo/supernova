@@ -5,6 +5,7 @@
 #include "Animation.h"
 
 #include "component/AnimationComponent.h"
+#include "subsystem/ActionSystem.h"
 
 #include <algorithm>
 
@@ -177,8 +178,8 @@ void Animation::setDuration(const float &duration){
 }
 
 void Animation::addActionFrame(float startTime, float duration, Entity action, Entity target){
-    if (action == entity){
-        Log::error("Cannot add animation entity %u as its own action frame", entity);
+    if (scene->getSystem<ActionSystem>()->isAnimationReachable(action, entity)){
+        Log::error("Cannot add entity %u as action of animation %u: it would create an animation cycle", action, entity);
         return;
     }
 

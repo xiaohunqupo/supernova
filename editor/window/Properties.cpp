@@ -11523,6 +11523,23 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
     endTable();
 
     if (!anim.actions.empty()) {
+        // Entities that cannot be assigned as actions: the edited animations themselves
+        // and any animation whose action tree already reaches one (would create a cycle)
+        std::vector<Entity> cycleExclusions;
+        {
+            ActionSystem* actionSystem = sceneProject->scene->getSystem<ActionSystem>().get();
+            auto animArray = sceneProject->scene->getComponentArray<AnimationComponent>();
+            for (int a = 0; a < (int)animArray->size(); a++){
+                Entity candidate = animArray->getEntity(a);
+                for (Entity edited : entities){
+                    if (actionSystem->isAnimationReachable(candidate, edited)){
+                        cycleExclusions.push_back(candidate);
+                        break;
+                    }
+                }
+            }
+        }
+
         beginTable(cpType, getLabelSize("Start Time"), "animation_actions_table");
         for (size_t i = 0; i < anim.actions.size(); i++) {
             ImGui::PushID((int)i);
@@ -11638,7 +11655,7 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
             }
             RowSettings settingsAction;
             settingsAction.entityFilter.set(sceneProject->scene->getComponentId<ActionComponent>());
-            settingsAction.excludeEntities = entities; // an animation cannot contain itself
+            settingsAction.excludeEntities = cycleExclusions;
             propertyRow(RowPropertyType::LocalEntity, cpType, prefix + ".action", "Action", sceneProject, entities, settingsAction);
 
             if (i < anim.actions.size() - 1) {

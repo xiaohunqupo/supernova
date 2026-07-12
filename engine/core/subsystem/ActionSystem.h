@@ -8,6 +8,7 @@
 #include "SubSystem.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "component/Transform.h"
 #include "component/SpriteComponent.h"
@@ -152,6 +153,7 @@ namespace doriax{
 		void processRunningAction(double dt, Entity entity, ActionComponent& action);
 
 		float getDuration(Entity entity, int depth);
+		bool isAnimationReachable(Entity from, Entity target, std::unordered_set<Entity>& visited);
 
 	public:
 		ActionSystem(Scene* scene);
@@ -167,6 +169,9 @@ namespace doriax{
 
 		float getDuration(Entity entity);
 		float getFrameDuration(const ActionFrame& frame);
+		// True if target is reachable from `from` through action frames (from == target counts),
+		// i.e. adding `from` as an action of target's animation would create a cycle.
+		bool isAnimationReachable(Entity from, Entity target);
 
 		void load() override;
 		void resetRunningActions();
