@@ -11546,10 +11546,91 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
 
             std::string prefix = "actions[" + std::to_string(i) + "]";
             propertyRow(RowPropertyType::UInt, cpType, prefix + ".track", "Track", sceneProject, entities);
-            propertyRow(RowPropertyType::Float, cpType, prefix + ".startTime", "Start Time", sceneProject, entities);
-            RowSettings settingsDuration;
-            settingsDuration.help = "0 = auto (use the action's own duration)";
-            propertyRow(RowPropertyType::Float, cpType, prefix + ".duration", "Duration", sceneProject, entities, settingsDuration);
+            RowSettings settingsStartTime;
+            settingsStartTime.stepSize = 0.01f;
+            propertyRow(RowPropertyType::Float, cpType, prefix + ".startTime", "Start Time", sceneProject, entities, settingsStartTime);
+
+            // Duration row: "Duration | [auto checkbox] [drag or resolved label]".
+            // Checked = auto (duration 0): the frame follows the action's own duration.
+            ActionSystem* actionSystem = sceneProject->scene->getSystem<ActionSystem>().get();
+            std::string durationId = prefix + ".duration";
+            bool isAuto = (anim.actions[i].duration <= 0);
+
+            float* durValue = nullptr;
+            std::map<Entity, float> eDurValue;
+            bool durDif = false;
+            float* durDef = nullptr;
+            for (Entity& entity : entities){
+                PropertyData prop = Catalog::getProperty(sceneProject->scene, entity, cpType, durationId);
+                durDef = static_cast<float*>(prop.def);
+                eDurValue[entity] = *static_cast<float*>(prop.ref);
+                if (durValue && *durValue != eDurValue[entity])
+                    durDif = true;
+                durValue = &eDurValue[entity];
+            }
+            float newDurValue = *durValue;
+            bool durDefChanged = durDef ? (newDurValue != *durDef) : false;
+
+            if (propertyHeader("Duration", -1, durDefChanged, false)){
+                for (Entity& entity : entities){
+                    cmd = new PropertyCmd<float>(project, sceneProject->id, entity, cpType, durationId, *durDef,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+                    finishProperty = true;
+                }
+            }
+
+            bool autoChecked = isAuto;
+            if (ImGui::Checkbox("##auto_duration", &autoChecked)) {
+                MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+                for (Entity entity : entities) {
+                    if (AnimationComponent* animComp = sceneProject->scene->findComponent<AnimationComponent>(entity)) {
+                        if (i < animComp->actions.size()) {
+                            float newDuration = 0.0f;
+                            if (!autoChecked) {
+                                // Freeze the currently resolved duration as the explicit value
+                                newDuration = actionSystem->getFrameDuration(animComp->actions[i]);
+                                if (newDuration <= 0) newDuration = 1.0f;
+                            }
+                            multiCmd->addPropertyCmd<float>(project, sceneProject->id, entity, cpType, durationId, newDuration,
+                                [sceneProject]() { sceneProject->isModified = true; });
+                        }
+                    }
+                }
+                multiCmd->setNoMerge();
+                CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Auto: follow the action's own duration");
+            }
+            ImGui::SameLine();
+
+            if (isAuto) {
+                float resolved = actionSystem->getFrameDuration(anim.actions[i]);
+                ImGui::TextDisabled("%.2fs (auto)", resolved);
+            } else {
+                ImGui::SetNextItemWidth(-1);
+                if (durDif)
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+                if (ImGui::DragFloat("##input_duration", &newDurValue, 0.01f, 0.0f, 0.0f, "%.2f")){
+                    for (Entity& entity : entities){
+                        cmd = new PropertyCmd<float>(project, sceneProject->id, entity, cpType, durationId, newDurValue,
+                            [sceneProject]() { sceneProject->isModified = true; });
+                        CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
+                    }
+                }
+                if (durDif)
+                    ImGui::PopStyleColor();
+            }
+
+            // Close command merging like propertyRow does
+            if (ImGui::IsItemDeactivatedAfterEdit() || finishProperty) {
+                if (cmd){
+                    cmd->setNoMerge();
+                    cmd = nullptr;
+                }
+                finishProperty = false;
+            }
             RowSettings settingsAction;
             settingsAction.entityFilter.set(sceneProject->scene->getComponentId<ActionComponent>());
             propertyRow(RowPropertyType::LocalEntity, cpType, prefix + ".action", "Action", sceneProject, entities, settingsAction);
