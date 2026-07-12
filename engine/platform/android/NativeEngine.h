@@ -100,9 +100,6 @@ private:
     bool initGLObjects();
     void killGLObjects();
 
-    int getDoriaxKey(int32_t key);
-    int getDoriaxModifiers(int32_t mods);
-    int getDoriaxGamepadButton(int32_t key);
     int getGamepadSlot(int32_t deviceId);
     void handleGamepadMotion(GameActivityMotionEvent* motionEvent);
     bool handleEglError(EGLint error);
