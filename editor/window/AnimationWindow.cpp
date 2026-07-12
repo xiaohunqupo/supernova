@@ -324,6 +324,53 @@ float editor::AnimationWindow::getAnimationDuration(const AnimationComponent& an
     return duration;
 }
 
+void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, SceneProject* sceneProject) const {
+    bool hasOverlap = false;
+    for (size_t i = 0; i < anim.actions.size() && !hasOverlap; i++) {
+        for (size_t j = i + 1; j < anim.actions.size() && !hasOverlap; j++) {
+            if (anim.actions[i].track == anim.actions[j].track) {
+                float iEnd = anim.actions[i].startTime + anim.actions[i].duration;
+                float jEnd = anim.actions[j].startTime + anim.actions[j].duration;
+                if (anim.actions[i].startTime < jEnd && anim.actions[j].startTime < iEnd) {
+                    hasOverlap = true;
+                }
+            }
+        }
+    }
+    if (hasOverlap) {
+        // Build sorted indices by (track, startTime, index)
+        std::vector<size_t> sorted(anim.actions.size());
+        std::iota(sorted.begin(), sorted.end(), 0);
+        std::sort(sorted.begin(), sorted.end(), [&](size_t a, size_t b) {
+            if (anim.actions[a].track != anim.actions[b].track)
+                return anim.actions[a].track < anim.actions[b].track;
+            if (anim.actions[a].startTime != anim.actions[b].startTime)
+                return anim.actions[a].startTime < anim.actions[b].startTime;
+            return a < b;
+        });
+
+        // Greedy lane packing
+        std::vector<float> laneEnds;
+        for (size_t idx : sorted) {
+            ActionFrame& frame = anim.actions[idx];
+            int lane = -1;
+            for (int l = 0; l < (int)laneEnds.size(); l++) {
+                if (frame.startTime >= laneEnds[l]) {
+                    lane = l;
+                    laneEnds[l] = frame.startTime + frame.duration;
+                    break;
+                }
+            }
+            if (lane == -1) {
+                lane = (int)laneEnds.size();
+                laneEnds.push_back(frame.startTime + frame.duration);
+            }
+            frame.track = (uint32_t)lane;
+        }
+        sceneProject->isModified = true;
+    }
+}
+
 void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProject, float time, Entity clipEntity) {
     if (clipEntity == NULL_ENTITY) {
         clipEntity = timelineClip(scene);
@@ -1495,52 +1542,7 @@ void editor::AnimationWindow::show() {
     AnimationComponent* animComp = &scene->getComponent<AnimationComponent>(selectedEntity);
 
     // Auto-assign tracks when overlapping frames are detected on the same track
-    {
-        bool hasOverlap = false;
-        for (size_t i = 0; i < animComp->actions.size() && !hasOverlap; i++) {
-            for (size_t j = i + 1; j < animComp->actions.size() && !hasOverlap; j++) {
-                if (animComp->actions[i].track == animComp->actions[j].track) {
-                    float iEnd = animComp->actions[i].startTime + animComp->actions[i].duration;
-                    float jEnd = animComp->actions[j].startTime + animComp->actions[j].duration;
-                    if (animComp->actions[i].startTime < jEnd && animComp->actions[j].startTime < iEnd) {
-                        hasOverlap = true;
-                    }
-                }
-            }
-        }
-        if (hasOverlap) {
-            // Build sorted indices by (track, startTime, index)
-            std::vector<size_t> sorted(animComp->actions.size());
-            std::iota(sorted.begin(), sorted.end(), 0);
-            std::sort(sorted.begin(), sorted.end(), [&](size_t a, size_t b) {
-                if (animComp->actions[a].track != animComp->actions[b].track)
-                    return animComp->actions[a].track < animComp->actions[b].track;
-                if (animComp->actions[a].startTime != animComp->actions[b].startTime)
-                    return animComp->actions[a].startTime < animComp->actions[b].startTime;
-                return a < b;
-            });
-
-            // Greedy lane packing
-            std::vector<float> laneEnds;
-            for (size_t idx : sorted) {
-                ActionFrame& frame = animComp->actions[idx];
-                int lane = -1;
-                for (int l = 0; l < (int)laneEnds.size(); l++) {
-                    if (frame.startTime >= laneEnds[l]) {
-                        lane = l;
-                        laneEnds[l] = frame.startTime + frame.duration;
-                        break;
-                    }
-                }
-                if (lane == -1) {
-                    lane = (int)laneEnds.size();
-                    laneEnds.push_back(frame.startTime + frame.duration);
-                }
-                frame.track = (uint32_t)lane;
-            }
-            sceneProject->isModified = true;
-        }
-    }
+    autoAssignTracks(*animComp, sceneProject);
 
     bool sceneIsStopped = (sceneProject->playState == ScenePlayState::STOPPED);
     if (isPreviewing && !sceneIsStopped) {
@@ -1617,6 +1619,9 @@ void editor::AnimationWindow::show() {
     AnimationComponent* displayAnim = animComp;
     if (displayEntity != selectedEntity) {
         displayAnim = &scene->getComponent<AnimationComponent>(displayEntity);
+        // The blend target may never have been selected here, so its frames (all
+        // track 0 when created via the engine API) can still be stacked on one lane.
+        autoAssignTracks(*displayAnim, sceneProject);
         ImGui::TextDisabled(ICON_FA_RIGHT_LEFT " Timeline: %s (transition preview)",
                             getAnimationEntityLabel(displayEntity, scene).c_str());
     }
