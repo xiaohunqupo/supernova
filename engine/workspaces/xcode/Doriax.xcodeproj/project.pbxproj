@@ -430,6 +430,8 @@
 		713D82E4259D32FE00567F9F /* DoriaxApple.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7162FE302597C7990075B97D /* DoriaxApple.mm */; };
 		71C0DE00000000000000AA11 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA01 /* DoriaxGameController.mm */; };
 		71C0DE00000000000000AA12 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA01 /* DoriaxGameController.mm */; };
+		71C0DE00000000000000AA13 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA03 /* GameController.framework */; };
+		71C0DE00000000000000AA14 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA03 /* GameController.framework */; };
 		713D82EB259D333100567F9F /* Buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7E25962A0E0075B97D /* Buffer.cpp */; };
 		713D8304259D34F900567F9F /* Ray.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC5025962A0E0075B97D /* Ray.cpp */; };
 		713D8316259D3E7A00567F9F /* libdoriax-macos.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 7162FD0325963A310075B97D /* libdoriax-macos.a */; };
@@ -2448,6 +2450,7 @@
 				711607162A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework in Frameworks */,
 				711607172A0D86500052A9C3 /* UserMessagingPlatform.xcframework in Frameworks */,
 				7116070B2A0D84660052A9C3 /* GoogleMobileAds.xcframework in Frameworks */,
+				71C0DE00000000000000AA13 /* GameController.framework in Frameworks */,
 				713D82D7259D324700567F9F /* libdoriax-ios.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2456,6 +2459,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				71C0DE00000000000000AA14 /* GameController.framework in Frameworks */,
 				713D8316259D3E7A00567F9F /* libdoriax-macos.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
