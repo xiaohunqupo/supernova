@@ -34,6 +34,10 @@
 		1789660C2F1D764600E89E52 /* ShaderDataSerializer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1789660B2F1D764600E89E52 /* ShaderDataSerializer.cpp */; };
 		1789660D2F1D764600E89E52 /* ShaderDataSerializer.h in Headers */ = {isa = PBXBuildFile; fileRef = 1789660A2F1D764600E89E52 /* ShaderDataSerializer.h */; };
 		1789660E2F1D764600E89E52 /* ShaderDataSerializer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1789660B2F1D764600E89E52 /* ShaderDataSerializer.cpp */; };
+		17995BF73003C3A800411B78 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 17995BF63003C3A800411B78 /* DoriaxGameController.mm */; };
+		17995BF83003C3A800411B78 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 17995BF63003C3A800411B78 /* DoriaxGameController.mm */; };
+		17995BFA3003C40000411B78 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17995BF93003C40000411B78 /* GameController.framework */; };
+		17995BFD3003C4F600411B78 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17995BF93003C40000411B78 /* GameController.framework */; };
 		17A4DD6D2F5E4F8800C1BFC6 /* HybridArray.h in Headers */ = {isa = PBXBuildFile; fileRef = 17A4DD6C2F5E4F8800C1BFC6 /* HybridArray.h */; };
 		17C554F82FB903B0008804C2 /* ModelPool.h in Headers */ = {isa = PBXBuildFile; fileRef = 17C554F62FB903B0008804C2 /* ModelPool.h */; };
 		17C554F92FB903B0008804C2 /* ModelPool.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17C554F72FB903B0008804C2 /* ModelPool.cpp */; };
@@ -428,10 +432,6 @@
 		713D82CE259D31DF00567F9F /* libsokol-ios.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 713D82C5259D316E00567F9F /* libsokol-ios.a */; };
 		713D82D7259D324700567F9F /* libdoriax-ios.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 713D823E259CC4FF00567F9F /* libdoriax-ios.a */; };
 		713D82E4259D32FE00567F9F /* DoriaxApple.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7162FE302597C7990075B97D /* DoriaxApple.mm */; };
-		71C0DE00000000000000AA11 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA01 /* DoriaxGameController.mm */; };
-		71C0DE00000000000000AA12 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA01 /* DoriaxGameController.mm */; };
-		71C0DE00000000000000AA13 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA03 /* GameController.framework */; };
-		71C0DE00000000000000AA14 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71C0DE00000000000000AA03 /* GameController.framework */; };
 		713D82EB259D333100567F9F /* Buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7E25962A0E0075B97D /* Buffer.cpp */; };
 		713D8304259D34F900567F9F /* Ray.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC5025962A0E0075B97D /* Ray.cpp */; };
 		713D8316259D3E7A00567F9F /* libdoriax-macos.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 7162FD0325963A310075B97D /* libdoriax-macos.a */; };
@@ -1325,6 +1325,9 @@
 		1787AD922F6C333300DB1D75 /* SceneManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SceneManager.cpp; sourceTree = "<group>"; };
 		1789660A2F1D764600E89E52 /* ShaderDataSerializer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderDataSerializer.h; sourceTree = "<group>"; };
 		1789660B2F1D764600E89E52 /* ShaderDataSerializer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ShaderDataSerializer.cpp; sourceTree = "<group>"; };
+		17995BF53003C3A800411B78 /* DoriaxGameController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DoriaxGameController.h; sourceTree = "<group>"; };
+		17995BF63003C3A800411B78 /* DoriaxGameController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DoriaxGameController.mm; sourceTree = "<group>"; };
+		17995BF93003C40000411B78 /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk/System/Library/Frameworks/GameController.framework; sourceTree = DEVELOPER_DIR; };
 		17A4DD6C2F5E4F8800C1BFC6 /* HybridArray.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HybridArray.h; sourceTree = "<group>"; };
 		17BFFB722FF201F9008F5B7C /* nanosvg.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = nanosvg.h; sourceTree = "<group>"; };
 		17BFFB732FF201F9008F5B7C /* nanosvgrast.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = nanosvgrast.h; sourceTree = "<group>"; };
@@ -1977,9 +1980,6 @@
 		7162FDD925963F300075B97D /* libsokol-macos.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libsokol-macos.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7162FE2F2597C7990075B97D /* DoriaxApple.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DoriaxApple.h; sourceTree = "<group>"; };
 		7162FE302597C7990075B97D /* DoriaxApple.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; path = DoriaxApple.mm; sourceTree = "<group>"; };
-		71C0DE00000000000000AA01 /* DoriaxGameController.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; path = DoriaxGameController.mm; sourceTree = "<group>"; };
-		71C0DE00000000000000AA02 /* DoriaxGameController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DoriaxGameController.h; sourceTree = "<group>"; };
-		71C0DE00000000000000AA03 /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
 		7162FEAB25993F810075B97D /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		71651FE82AA804B4008D9BF5 /* Contact2D.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Contact2D.h; sourceTree = "<group>"; };
 		71651FE92AA804B4008D9BF5 /* Manifold2D.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Manifold2D.h; sourceTree = "<group>"; };
@@ -2450,8 +2450,8 @@
 				711607162A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework in Frameworks */,
 				711607172A0D86500052A9C3 /* UserMessagingPlatform.xcframework in Frameworks */,
 				7116070B2A0D84660052A9C3 /* GoogleMobileAds.xcframework in Frameworks */,
-				71C0DE00000000000000AA13 /* GameController.framework in Frameworks */,
 				713D82D7259D324700567F9F /* libdoriax-ios.a in Frameworks */,
+				17995BFA3003C40000411B78 /* GameController.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2459,7 +2459,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				71C0DE00000000000000AA14 /* GameController.framework in Frameworks */,
+				17995BFD3003C4F600411B78 /* GameController.framework in Frameworks */,
 				713D8316259D3E7A00567F9F /* libdoriax-macos.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -3702,16 +3702,16 @@
 		7162FE06259644C40075B97D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				717AD972290B67B8007D7DB5 /* AudioToolbox.framework */,
+				717AD970290B67A5007D7DB5 /* AVFoundation.framework */,
 				7116070D2A0D86500052A9C3 /* FBLPromises.xcframework */,
+				17995BF93003C40000411B78 /* GameController.framework */,
 				7116070C2A0D864F0052A9C3 /* GoogleAppMeasurement.xcframework */,
 				711607102A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework */,
+				7116070A2A0D84660052A9C3 /* GoogleMobileAds.xcframework */,
 				7116070E2A0D86500052A9C3 /* GoogleUtilities.xcframework */,
 				7116070F2A0D86500052A9C3 /* nanopb.xcframework */,
 				711607112A0D86500052A9C3 /* UserMessagingPlatform.xcframework */,
-				7116070A2A0D84660052A9C3 /* GoogleMobileAds.xcframework */,
-				717AD972290B67B8007D7DB5 /* AudioToolbox.framework */,
-				717AD970290B67A5007D7DB5 /* AVFoundation.framework */,
-				71C0DE00000000000000AA03 /* GameController.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -3728,14 +3728,14 @@
 		7162FE2E2597C7990075B97D /* apple */ = {
 			isa = PBXGroup;
 			children = (
+				7162FE2F2597C7990075B97D /* DoriaxApple.h */,
+				7162FE302597C7990075B97D /* DoriaxApple.mm */,
+				17995BF53003C3A800411B78 /* DoriaxGameController.h */,
+				17995BF63003C3A800411B78 /* DoriaxGameController.mm */,
 				713D8332259D407A00567F9F /* ios */,
 				713D831D259D3F8F00567F9F /* macos */,
 				7158F43D259C2C82006E55D3 /* Renderer.h */,
 				7158F43E259C2C82006E55D3 /* Renderer.mm */,
-				7162FE302597C7990075B97D /* DoriaxApple.mm */,
-				7162FE2F2597C7990075B97D /* DoriaxApple.h */,
-				71C0DE00000000000000AA01 /* DoriaxGameController.mm */,
-				71C0DE00000000000000AA02 /* DoriaxGameController.h */,
 			);
 			path = apple;
 			sourceTree = "<group>";
@@ -5730,10 +5730,10 @@
 				713D8341259D408300567F9F /* ViewController.m in Sources */,
 				713D835B259D408C00567F9F /* AppDelegate.m in Sources */,
 				713D82E4259D32FE00567F9F /* DoriaxApple.mm in Sources */,
-				71C0DE00000000000000AA11 /* DoriaxGameController.mm in Sources */,
 				711607082A0D1F0C0052A9C3 /* AdMobAdapter.m in Sources */,
 				7158F43F259C2C82006E55D3 /* Renderer.mm in Sources */,
 				7162FEAC25993F810075B97D /* main.cpp in Sources */,
+				17995BF73003C3A800411B78 /* DoriaxGameController.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5745,8 +5745,8 @@
 				710AD78625B7A1F600A7B12F /* EngineView.mm in Sources */,
 				713D8323259D3F8F00567F9F /* ViewController.m in Sources */,
 				713D8325259D3F8F00567F9F /* AppDelegate.m in Sources */,
+				17995BF83003C3A800411B78 /* DoriaxGameController.mm in Sources */,
 				7162FE712597C99C0075B97D /* DoriaxApple.mm in Sources */,
-				71C0DE00000000000000AA12 /* DoriaxGameController.mm in Sources */,
 				7162FEAD25993F810075B97D /* main.cpp in Sources */,
 				7158F440259C2C82006E55D3 /* Renderer.mm in Sources */,
 			);
