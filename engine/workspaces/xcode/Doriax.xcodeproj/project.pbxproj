@@ -1977,6 +1977,7 @@
 		7162FE302597C7990075B97D /* DoriaxApple.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; path = DoriaxApple.mm; sourceTree = "<group>"; };
 		71C0DE00000000000000AA01 /* DoriaxGameController.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; path = DoriaxGameController.mm; sourceTree = "<group>"; };
 		71C0DE00000000000000AA02 /* DoriaxGameController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DoriaxGameController.h; sourceTree = "<group>"; };
+		71C0DE00000000000000AA03 /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
 		7162FEAB25993F810075B97D /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		71651FE82AA804B4008D9BF5 /* Contact2D.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Contact2D.h; sourceTree = "<group>"; };
 		71651FE92AA804B4008D9BF5 /* Manifold2D.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Manifold2D.h; sourceTree = "<group>"; };
@@ -3706,6 +3707,7 @@
 				7116070A2A0D84660052A9C3 /* GoogleMobileAds.xcframework */,
 				717AD972290B67B8007D7DB5 /* AudioToolbox.framework */,
 				717AD970290B67A5007D7DB5 /* AVFoundation.framework */,
+				71C0DE00000000000000AA03 /* GameController.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

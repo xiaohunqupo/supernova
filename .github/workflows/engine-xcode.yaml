@@ -34,4 +34,11 @@ jobs:
       - name: Build with Xcode
         run: |
           cd engine/workspaces/xcode/
-          xcodebuild build -sdk ${{ matrix.config.sdk }} -project Doriax.xcodeproj -configuration Debug -scheme "${{ matrix.config.scheme }}"
+          # TODO: remove -jobs 1 once macos-latest / Xcode 26.x stops flaking
+          # with "CFLocale.h: Invalid argument" under parallel compiles.
+          xcodebuild build \
+            -sdk ${{ matrix.config.sdk }} \
+            -project Doriax.xcodeproj \
+            -configuration Debug \
+            -scheme "${{ matrix.config.scheme }}" \
+            -jobs 1
