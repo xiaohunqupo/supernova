@@ -8,8 +8,8 @@
 #include "ai/EditorActionRegistry.h"
 #include "ai/SecretStore.h"
 #include "external/IconsFontAwesome6.h"
-#include "util/EntityPayload.h"
 #include "util/Clipboard.h"
+#include "util/EntityPayload.h"
 #include "util/FileDialogs.h"
 #include "util/Util.h"
 #include "window/CodeEditor.h"
@@ -19,8 +19,10 @@
 #include "imgui_internal.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -44,6 +46,30 @@ constexpr size_t kMaxTextAttachmentBytes = 1024 * 1024;
 // Base64 expands images by roughly one third; 12 MB raw keeps the complete
 // JSON request below providers' common 20 MB inline-data limit with headroom.
 constexpr size_t kMaxAttachmentTotalBytes = 12 * 1024 * 1024;
+constexpr float kAttachmentFontScale = 0.78f;
+
+std::string attachmentChipLabel(const ai::ChatAttachment& attachment) {
+    return std::string(attachment.isImage() ? ICON_FA_FILE_IMAGE : ICON_FA_FILE_LINES) +
+           "  " + attachment.name + "  " ICON_FA_XMARK;
+}
+
+float attachmentChipHeight() {
+    return std::floor(ImGui::GetFontSize() * kAttachmentFontScale) + 4.0f;
+}
+
+float attachmentRowHeight(const std::vector<ai::ChatAttachment>& attachments,
+                          float availableWidth) {
+    const float fontSize = std::floor(ImGui::GetFontSize() * kAttachmentFontScale);
+    float contentWidth = 0.0f;
+    for (const ai::ChatAttachment& attachment : attachments) {
+        const std::string label = attachmentChipLabel(attachment);
+        contentWidth += ImGui::GetFont()->CalcTextSizeA(
+            fontSize, FLT_MAX, 0.0f, label.data(), label.data() + label.size()).x + 10.0f;
+        contentWidth += ImGui::GetStyle().ItemSpacing.x;
+    }
+    return attachmentChipHeight() +
+           (contentWidth > availableWidth ? ImGui::GetStyle().ScrollbarSize : 0.0f);
+}
 
 // ImGui does not soft-wrap editable multiline inputs. The composer inserts
 // generated line breaks for display, tracks them separately from user-entered
@@ -959,7 +985,8 @@ void AiChatWindow::show() {
     float controlsHeight = ImGui::GetFrameHeight();
     float attachmentsHeight = pendingAttachments.empty()
         ? 0.0f
-        : ImGui::GetFrameHeight() + style.ScrollbarSize + style.ItemSpacing.y;
+        : attachmentRowHeight(pendingAttachments, ImGui::GetContentRegionAvail().x) +
+          style.ItemSpacing.y;
     float composerHeight = inputHeight + controlsHeight + attachmentsHeight +
                            style.ItemSpacing.y + 2.0f;
 
@@ -1289,22 +1316,25 @@ void AiChatWindow::drawPendingAttachments() {
     }
 
     const ImGuiStyle& style = ImGui::GetStyle();
+    const float rowHeight = attachmentRowHeight(
+        pendingAttachments, ImGui::GetContentRegionAvail().x);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::BeginChild("##AiAttachments",
-                      ImVec2(0.0f, ImGui::GetFrameHeight() + style.ScrollbarSize), false,
+    ImGui::BeginChild("##AiAttachments", ImVec2(0.0f, rowHeight), false,
                       ImGuiWindowFlags_HorizontalScrollbar |
                       ImGuiWindowFlags_NoScrollWithMouse);
+    ImFont* attachmentFont = ImGui::GetFont();
+    const float attachmentFontSize =
+        std::floor(ImGui::GetFontSize() * kAttachmentFontScale);
+    const float chipHeight = attachmentChipHeight();
+    ImGui::PushFont(attachmentFont, attachmentFontSize);
 
     int removeIndex = -1;
     for (int i = 0; i < static_cast<int>(pendingAttachments.size()); ++i) {
         if (i > 0) ImGui::SameLine();
         const ai::ChatAttachment& attachment = pendingAttachments[static_cast<size_t>(i)];
-        const std::string label = std::string(attachment.isImage() ? ICON_FA_FILE_IMAGE
-                                                                   : ICON_FA_FILE_LINES) +
-                                  "  " + attachment.name + "  " ICON_FA_XMARK;
+        const std::string label = attachmentChipLabel(attachment);
         const ImVec2 textSize = ImGui::CalcTextSize(label.data(), label.data() + label.size());
-        const ImVec2 size(textSize.x + style.FramePadding.x * 2.0f,
-                          ImGui::GetFrameHeight());
+        const ImVec2 size(textSize.x + 10.0f, chipHeight);
         ImVec2 pos = ImGui::GetCursorScreenPos();
         ImGui::PushID(i);
         if (ImGui::InvisibleButton("##Attachment", size)) {
@@ -1322,6 +1352,7 @@ void AiChatWindow::drawPendingAttachments() {
         ImGui::PopID();
     }
 
+    ImGui::PopFont();
     ImGui::EndChild();
     ImGui::PopStyleVar();
     if (removeIndex >= 0) {
@@ -1337,7 +1368,7 @@ void AiChatWindow::drawComposer(float inputHeight) {
     const ImGuiStyle& style = ImGui::GetStyle();
     float buttonWidth = ImGui::GetFrameHeight();
     float inputWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x -
-        buttonWidth * 2.0f - style.ItemSpacing.x * 2.0f);
+        buttonWidth * 2.0f - style.ItemSpacing.x);
 
     bool submitted = false;
     if (refocusInput) {
@@ -1372,8 +1403,11 @@ void AiChatWindow::drawComposer(float inputHeight) {
         &pendingMentionRawCursor,
         this
     };
-    // Hide native InputText glyphs so we can redraw with mention coloring.
+    // Hide native InputText glyphs so we can redraw with mention coloring. The
+    // prompt already communicates focus through its caret, so omit ImGui's
+    // navigation rectangle around the otherwise flush composer controls.
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_NavCursor, ImVec4(0, 0, 0, 0));
     if (ImGui::InputTextMultiline("##AiInput", inputBuffer.data(), inputBuffer.size(),
                                   ImVec2(inputWidth, inputHeight),
                                   ImGuiInputTextFlags_EnterReturnsTrue |
@@ -1389,7 +1423,7 @@ void AiChatWindow::drawComposer(float inputHeight) {
             submitted = true;
         }
     }
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(2);
     bool inputActive = ImGui::IsItemActive();
     bool inputFocused = ImGui::IsItemFocused();
     ImVec2 inputMin = ImGui::GetItemRectMin();
@@ -1451,11 +1485,15 @@ void AiChatWindow::drawComposer(float inputHeight) {
         submitted = false;
     }
 
-    ImGui::SameLine();
+    ImGui::SameLine(0.0f, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[ImGuiCol_FrameBg]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, style.Colors[ImGuiCol_FrameBgHovered]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, style.Colors[ImGuiCol_FrameBgActive]);
     if (Widgets::iconButton("##AiAttach", ICON_FA_PAPERCLIP,
                             ImVec2(buttonWidth, inputHeight))) {
         attachExternalFiles(FileDialogs::openFileDialogMultiple());
     }
+    ImGui::PopStyleColor(3);
     ImGui::SetItemTooltip("Attach external files (or paste copied files with Ctrl+V)");
 
     ImGui::SameLine();
