@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(doriax-editor)
 
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 set(DORIAX_SHARED ON)
 set(GRAPHIC_BACKEND "glcore")
 
@@ -309,7 +313,6 @@ set(DORIAX_EDITOR_SOURCES
 
 if(APPLE)
     # NSPasteboard image/file-URL reading for the AI chat attachment paste.
-    enable_language(OBJCXX)
     list(APPEND DORIAX_EDITOR_SOURCES ${EDITOR_DIR}/util/ClipboardMac.mm)
 endif()
 
