@@ -263,6 +263,11 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticProperty("onKeyDown", [] () { return &Engine::onKeyDown; }, [] (lua_State* L) { Engine::onKeyDown = L; })
         .addStaticProperty("onKeyUp", [] () { return &Engine::onKeyUp; }, [] (lua_State* L) { Engine::onKeyUp = L; })
         .addStaticProperty("onCharInput", [] () { return &Engine::onCharInput; }, [] (lua_State* L) { Engine::onCharInput = L; })
+        .addStaticProperty("onGamepadConnect", [] () { return &Engine::onGamepadConnect; }, [] (lua_State* L) { Engine::onGamepadConnect = L; })
+        .addStaticProperty("onGamepadDisconnect", [] () { return &Engine::onGamepadDisconnect; }, [] (lua_State* L) { Engine::onGamepadDisconnect = L; })
+        .addStaticProperty("onGamepadButtonDown", [] () { return &Engine::onGamepadButtonDown; }, [] (lua_State* L) { Engine::onGamepadButtonDown = L; })
+        .addStaticProperty("onGamepadButtonUp", [] () { return &Engine::onGamepadButtonUp; }, [] (lua_State* L) { Engine::onGamepadButtonUp = L; })
+        .addStaticProperty("onGamepadAxisMove", [] () { return &Engine::onGamepadAxisMove; }, [] (lua_State* L) { Engine::onGamepadAxisMove = L; })
 
         .endClass();
 
@@ -324,10 +329,24 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(int)>>("FunctionSubscribe_V_I")
+        .addFunction("__call", &FunctionSubscribe<void(int)>::call)
+        .addFunction("call", &FunctionSubscribe<void(int)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(int)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(int)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
         .beginClass<FunctionSubscribe<void(int,int)>>("FunctionSubscribe_V_II")
         .addFunction("__call", &FunctionSubscribe<void(int,int)>::call)
         .addFunction("call", &FunctionSubscribe<void(int,int)>::call)
         .addFunction("add", (bool (FunctionSubscribe<void(int,int)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(int,int)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(int,int,float)>>("FunctionSubscribe_V_IIF")
+        .addFunction("__call", &FunctionSubscribe<void(int,int,float)>::call)
+        .addFunction("call", &FunctionSubscribe<void(int,int,float)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(int,int,float)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(int,int,float)>::add)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
@@ -791,6 +810,35 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticProperty("MOUSE_BUTTON_RIGHT", [] () -> int { return D_MOUSE_BUTTON_RIGHT; })
         .addStaticProperty("MOUSE_BUTTON_MIDDLE", [] () -> int { return D_MOUSE_BUTTON_MIDDLE; })
 
+        .addStaticProperty("GAMEPAD_BUTTON_A", [] () -> int { return D_GAMEPAD_BUTTON_A; })
+        .addStaticProperty("GAMEPAD_BUTTON_B", [] () -> int { return D_GAMEPAD_BUTTON_B; })
+        .addStaticProperty("GAMEPAD_BUTTON_X", [] () -> int { return D_GAMEPAD_BUTTON_X; })
+        .addStaticProperty("GAMEPAD_BUTTON_Y", [] () -> int { return D_GAMEPAD_BUTTON_Y; })
+        .addStaticProperty("GAMEPAD_BUTTON_LEFT_BUMPER", [] () -> int { return D_GAMEPAD_BUTTON_LEFT_BUMPER; })
+        .addStaticProperty("GAMEPAD_BUTTON_RIGHT_BUMPER", [] () -> int { return D_GAMEPAD_BUTTON_RIGHT_BUMPER; })
+        .addStaticProperty("GAMEPAD_BUTTON_BACK", [] () -> int { return D_GAMEPAD_BUTTON_BACK; })
+        .addStaticProperty("GAMEPAD_BUTTON_START", [] () -> int { return D_GAMEPAD_BUTTON_START; })
+        .addStaticProperty("GAMEPAD_BUTTON_GUIDE", [] () -> int { return D_GAMEPAD_BUTTON_GUIDE; })
+        .addStaticProperty("GAMEPAD_BUTTON_LEFT_THUMB", [] () -> int { return D_GAMEPAD_BUTTON_LEFT_THUMB; })
+        .addStaticProperty("GAMEPAD_BUTTON_RIGHT_THUMB", [] () -> int { return D_GAMEPAD_BUTTON_RIGHT_THUMB; })
+        .addStaticProperty("GAMEPAD_BUTTON_DPAD_UP", [] () -> int { return D_GAMEPAD_BUTTON_DPAD_UP; })
+        .addStaticProperty("GAMEPAD_BUTTON_DPAD_RIGHT", [] () -> int { return D_GAMEPAD_BUTTON_DPAD_RIGHT; })
+        .addStaticProperty("GAMEPAD_BUTTON_DPAD_DOWN", [] () -> int { return D_GAMEPAD_BUTTON_DPAD_DOWN; })
+        .addStaticProperty("GAMEPAD_BUTTON_DPAD_LEFT", [] () -> int { return D_GAMEPAD_BUTTON_DPAD_LEFT; })
+        .addStaticProperty("GAMEPAD_BUTTON_LAST", [] () -> int { return D_GAMEPAD_BUTTON_LAST; })
+        .addStaticProperty("GAMEPAD_BUTTON_CROSS", [] () -> int { return D_GAMEPAD_BUTTON_CROSS; })
+        .addStaticProperty("GAMEPAD_BUTTON_CIRCLE", [] () -> int { return D_GAMEPAD_BUTTON_CIRCLE; })
+        .addStaticProperty("GAMEPAD_BUTTON_SQUARE", [] () -> int { return D_GAMEPAD_BUTTON_SQUARE; })
+        .addStaticProperty("GAMEPAD_BUTTON_TRIANGLE", [] () -> int { return D_GAMEPAD_BUTTON_TRIANGLE; })
+
+        .addStaticProperty("GAMEPAD_AXIS_LEFT_X", [] () -> int { return D_GAMEPAD_AXIS_LEFT_X; })
+        .addStaticProperty("GAMEPAD_AXIS_LEFT_Y", [] () -> int { return D_GAMEPAD_AXIS_LEFT_Y; })
+        .addStaticProperty("GAMEPAD_AXIS_RIGHT_X", [] () -> int { return D_GAMEPAD_AXIS_RIGHT_X; })
+        .addStaticProperty("GAMEPAD_AXIS_RIGHT_Y", [] () -> int { return D_GAMEPAD_AXIS_RIGHT_Y; })
+        .addStaticProperty("GAMEPAD_AXIS_LEFT_TRIGGER", [] () -> int { return D_GAMEPAD_AXIS_LEFT_TRIGGER; })
+        .addStaticProperty("GAMEPAD_AXIS_RIGHT_TRIGGER", [] () -> int { return D_GAMEPAD_AXIS_RIGHT_TRIGGER; })
+        .addStaticProperty("GAMEPAD_AXIS_LAST", [] () -> int { return D_GAMEPAD_AXIS_LAST; })
+
         .addStaticFunction("isKeyPressed", &Input::isKeyPressed)
         .addStaticFunction("isMousePressed", &Input::isMousePressed)
         .addStaticFunction("isTouch", &Input::isTouch)
@@ -800,6 +848,12 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticFunction("getTouchPosition", &Input::getTouchPosition)
         .addStaticFunction("getTouches", &Input::getTouches)
         .addStaticFunction("numTouches", &Input::numTouches)
+        .addStaticFunction("isGamepadConnected", &Input::isGamepadConnected)
+        .addStaticFunction("getGamepadName", &Input::getGamepadName)
+        .addStaticFunction("isGamepadButtonPressed", &Input::isGamepadButtonPressed)
+        .addStaticFunction("getGamepadAxis", &Input::getGamepadAxis)
+        .addStaticFunction("numGamepads", &Input::numGamepads)
+        .addStaticFunction("getGamepadId", &Input::getGamepadId)
         .addStaticFunction("getModifiers", &Input::getModifiers)
         .addStaticFunction("findTouchIndex", &Input::findTouchIndex)
         .endClass();

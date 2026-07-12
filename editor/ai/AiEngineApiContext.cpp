@@ -106,7 +106,8 @@ const std::vector<doriax::editor::EngineAPISymbol>& getScriptMacroSymbols() {
          "REGISTER_ENGINE_EVENT(onUpdate); in the constructor subscribes to a global Engine event; the class "
          "must declare a method named exactly like the event, e.g. void onUpdate(). Engine events: onUpdate, "
          "onFixedUpdate, onDraw, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onTouchStart, onTouchMove, "
-         "onTouchEnd. Available via \"Engine.h\".",
+         "onTouchEnd, onGamepadConnect, onGamepadDisconnect, onGamepadButtonDown, onGamepadButtonUp, onGamepadAxisMove. "
+         "Available via \"Engine.h\".",
          ""},
         {"UNREGISTER_ENGINE_EVENT", "Macro",
          "UNREGISTER_ENGINE_EVENT(onUpdate); in the destructor; pair one with every REGISTER_ENGINE_EVENT.",
@@ -160,7 +161,8 @@ const std::vector<doriax::editor::EngineAPISymbol>& getLuaGlobalSymbols() {
          "Lua global script helper. In :init() call RegisterEngineEvent(self, \"onUpdate\") to subscribe to a "
          "global Engine event, and define a matching function Name:onUpdate(...) end. Engine events: onUpdate, "
          "onFixedUpdate, onDraw, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onTouchStart, onTouchMove, "
-         "onTouchEnd. No manual unregister is needed; the engine cleans up when the script is destroyed.",
+         "onTouchEnd, onGamepadConnect, onGamepadDisconnect, onGamepadButtonDown, onGamepadButtonUp, onGamepadAxisMove. "
+         "No manual unregister is needed; the engine cleans up when the script is destroyed.",
          ""},
         {"RegisterEvent", "LuaGlobal",
          "Lua global script helper. RegisterEvent(self, eventObject, \"methodName\") subscribes self:methodName to any "

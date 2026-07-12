@@ -11,6 +11,7 @@
 
 #include "Engine.h"
 #include "DoriaxApple.h"
+#import "DoriaxGameController.h"
 
 @implementation Renderer
 {
@@ -44,7 +45,9 @@ static CGSize _screenSize;
 - (nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)view withArgs:(NSArray*)args;
 {
     doriax::Engine::systemInit((int)[args count], [self getArray:args], new DoriaxApple());
-    
+
+    [DoriaxGameController start];
+
     self = [super init];
     if(self)
     {

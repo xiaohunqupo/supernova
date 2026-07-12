@@ -11,6 +11,9 @@
 #include "nfd_glfw3.h"
 
 #include <array>
+#include <math.h>
+
+#include "Engine.h"
 
 static GLFWwindow* window = nullptr;
 static GLFWcursor* invisibleCursor = nullptr;
@@ -58,6 +61,60 @@ static void applyGameCursorVisibility(bool force = false) {
         hideEditorCursor();
     } else {
         showEditorCursor();
+    }
+}
+
+// Forward gamepad state to the engine so play-mode scripts get gamepad input.
+// Always forwarded (unlike keyboard, gamepads don't conflict with ImGui);
+// outside play mode nothing is subscribed and Engine::pauseGameEvents covers pause.
+static void pollGamepads() {
+    struct GamepadState {
+        bool connected = false;
+        unsigned char buttons[GLFW_GAMEPAD_BUTTON_LAST + 1] = {0};
+        float axes[GLFW_GAMEPAD_AXIS_LAST + 1] = {0.0f};
+    };
+    static GamepadState gamepads[GLFW_JOYSTICK_LAST + 1];
+
+    for (int jid = 0; jid <= GLFW_JOYSTICK_LAST; jid++) {
+        GamepadState& state = gamepads[jid];
+
+        GLFWgamepadstate glfwState;
+        bool connected = glfwJoystickPresent(jid) && glfwGetGamepadState(jid, &glfwState);
+
+        if (connected && !state.connected) {
+            state = GamepadState();
+            state.connected = true;
+            // triggers rest at -1; seed so a resting trigger doesn't emit a
+            // spurious axis move from 0 to -1 on connect
+            state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] = -1.0f;
+            state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] = -1.0f;
+            const char* name = glfwGetGamepadName(jid);
+            Engine::systemGamepadConnect(jid, name ? name : "Gamepad");
+        } else if (!connected && state.connected) {
+            state = GamepadState();
+            Engine::systemGamepadDisconnect(jid);
+        }
+
+        if (!connected)
+            continue;
+
+        for (int button = 0; button <= GLFW_GAMEPAD_BUTTON_LAST; button++) {
+            if (glfwState.buttons[button] != state.buttons[button]) {
+                state.buttons[button] = glfwState.buttons[button];
+                if (glfwState.buttons[button] == GLFW_PRESS) {
+                    Engine::systemGamepadButtonDown(jid, button);
+                } else {
+                    Engine::systemGamepadButtonUp(jid, button);
+                }
+            }
+        }
+
+        for (int axis = 0; axis <= GLFW_GAMEPAD_AXIS_LAST; axis++) {
+            if (fabsf(glfwState.axes[axis] - state.axes[axis]) > 0.001f) {
+                state.axes[axis] = glfwState.axes[axis];
+                Engine::systemGamepadAxisMove(jid, axis, glfwState.axes[axis]);
+            }
+        }
     }
 }
 
@@ -188,6 +245,7 @@ int editor::Backend::init(int argc, char* argv[]) {
 
         // Poll and handle events
         glfwPollEvents();
+        pollGamepads();
 
         // Skip presenting while iconified (X11 only — Wayland never reports it):
         // SwapBuffers of a hidden window can block and stall clipboard + AI.

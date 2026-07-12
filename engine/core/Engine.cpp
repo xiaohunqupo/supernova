@@ -107,6 +107,11 @@ FunctionSubscribe<void()> Engine::onMouseLeave;
 FunctionSubscribe<void(int,bool,int)> Engine::onKeyDown;
 FunctionSubscribe<void(int,bool,int)> Engine::onKeyUp;
 FunctionSubscribe<void(wchar_t)> Engine::onCharInput;
+FunctionSubscribe<void(int)> Engine::onGamepadConnect;
+FunctionSubscribe<void(int)> Engine::onGamepadDisconnect;
+FunctionSubscribe<void(int,int)> Engine::onGamepadButtonDown;
+FunctionSubscribe<void(int,int)> Engine::onGamepadButtonUp;
+FunctionSubscribe<void(int,int,float)> Engine::onGamepadAxisMove;
 
 FunctionSubscribe<void()>& Engine::getOnInit() {
     // This static variable is guaranteed to be created the first time this function is called
@@ -268,6 +273,9 @@ void Engine::pauseGameEvents(bool pause) {
     onKeyDown.setEnabled(!pause);
     onKeyUp.setEnabled(!pause);
     onCharInput.setEnabled(!pause);
+    onGamepadButtonDown.setEnabled(!pause);
+    onGamepadButtonUp.setEnabled(!pause);
+    onGamepadAxisMove.setEnabled(!pause);
 }
 
 void Engine::includeScene(size_t index, Scene* scene){
@@ -637,6 +645,12 @@ void Engine::removeSubscriptionsByTag(const std::string& substring) {
     onKeyUp.removeByTagSubstring(substring);
     onCharInput.removeByTagSubstring(substring);
 
+    onGamepadConnect.removeByTagSubstring(substring);
+    onGamepadDisconnect.removeByTagSubstring(substring);
+    onGamepadButtonDown.removeByTagSubstring(substring);
+    onGamepadButtonUp.removeByTagSubstring(substring);
+    onGamepadAxisMove.removeByTagSubstring(substring);
+
     onViewLoaded.removeByTagSubstring(substring);
     onViewChanged.removeByTagSubstring(substring);
     onViewDestroyed.removeByTagSubstring(substring);
@@ -667,6 +681,12 @@ void Engine::clearAllSubscriptions(bool includeLifecycle) {
     onKeyDown.clear();
     onKeyUp.clear();
     onCharInput.clear();
+
+    onGamepadConnect.clear();
+    onGamepadDisconnect.clear();
+    onGamepadButtonDown.clear();
+    onGamepadButtonUp.clear();
+    onGamepadAxisMove.clear();
 
     if (includeLifecycle) {
         onViewLoaded.clear();
@@ -1202,4 +1222,39 @@ void Engine::systemCharInput(wchar_t codepoint){
         if (scenes[i]->canReceiveUIEvents())
             scenes[i]->getSystem<UISystem>()->eventOnCharInput(codepoint);
     }
+}
+
+void Engine::systemGamepadConnect(int gamepad, const std::string& name){
+    //-----------------
+    Input::addGamepad(gamepad, name);
+    Engine::onGamepadConnect.call(gamepad);
+    //-----------------
+}
+
+void Engine::systemGamepadDisconnect(int gamepad){
+    //-----------------
+    Input::removeGamepad(gamepad);
+    Engine::onGamepadDisconnect.call(gamepad);
+    //-----------------
+}
+
+void Engine::systemGamepadButtonDown(int gamepad, int button){
+    //-----------------
+    Input::addGamepadButtonPressed(gamepad, button);
+    Engine::onGamepadButtonDown.call(gamepad, button);
+    //-----------------
+}
+
+void Engine::systemGamepadButtonUp(int gamepad, int button){
+    //-----------------
+    Input::releaseGamepadButtonPressed(gamepad, button);
+    Engine::onGamepadButtonUp.call(gamepad, button);
+    //-----------------
+}
+
+void Engine::systemGamepadAxisMove(int gamepad, int axis, float value){
+    //-----------------
+    Input::setGamepadAxisValue(gamepad, axis, value);
+    Engine::onGamepadAxisMove.call(gamepad, axis, value);
+    //-----------------
 }

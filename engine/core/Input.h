@@ -153,8 +153,41 @@
 #define D_MOUSE_BUTTON_RIGHT    D_MOUSE_BUTTON_2
 #define D_MOUSE_BUTTON_MIDDLE   D_MOUSE_BUTTON_3
 
+//Based on GLFW gamepad buttons (standard Xbox-like layout)
+#define D_GAMEPAD_BUTTON_A               0
+#define D_GAMEPAD_BUTTON_B               1
+#define D_GAMEPAD_BUTTON_X               2
+#define D_GAMEPAD_BUTTON_Y               3
+#define D_GAMEPAD_BUTTON_LEFT_BUMPER     4
+#define D_GAMEPAD_BUTTON_RIGHT_BUMPER    5
+#define D_GAMEPAD_BUTTON_BACK            6
+#define D_GAMEPAD_BUTTON_START           7
+#define D_GAMEPAD_BUTTON_GUIDE           8
+#define D_GAMEPAD_BUTTON_LEFT_THUMB      9
+#define D_GAMEPAD_BUTTON_RIGHT_THUMB     10
+#define D_GAMEPAD_BUTTON_DPAD_UP         11
+#define D_GAMEPAD_BUTTON_DPAD_RIGHT      12
+#define D_GAMEPAD_BUTTON_DPAD_DOWN       13
+#define D_GAMEPAD_BUTTON_DPAD_LEFT       14
+#define D_GAMEPAD_BUTTON_LAST            D_GAMEPAD_BUTTON_DPAD_LEFT
+
+#define D_GAMEPAD_BUTTON_CROSS           D_GAMEPAD_BUTTON_A
+#define D_GAMEPAD_BUTTON_CIRCLE          D_GAMEPAD_BUTTON_B
+#define D_GAMEPAD_BUTTON_SQUARE          D_GAMEPAD_BUTTON_X
+#define D_GAMEPAD_BUTTON_TRIANGLE        D_GAMEPAD_BUTTON_Y
+
+//Gamepad axes: sticks and triggers in [-1, 1] (triggers rest at -1)
+#define D_GAMEPAD_AXIS_LEFT_X            0
+#define D_GAMEPAD_AXIS_LEFT_Y            1
+#define D_GAMEPAD_AXIS_RIGHT_X           2
+#define D_GAMEPAD_AXIS_RIGHT_Y           3
+#define D_GAMEPAD_AXIS_LEFT_TRIGGER     4
+#define D_GAMEPAD_AXIS_RIGHT_TRIGGER    5
+#define D_GAMEPAD_AXIS_LAST              D_GAMEPAD_AXIS_RIGHT_TRIGGER
+
 #include <map>
 #include <vector>
+#include <string>
 #include "math/Vector2.h"
 
 namespace doriax {
@@ -163,56 +196,83 @@ namespace doriax {
         int pointer;
         Vector2 position;
     } Touch;
-    
+
+    typedef struct Gamepad{
+        int id;
+        std::string name;
+        std::map<int,bool> buttonPressed;
+        std::map<int,float> axisValue;
+    } Gamepad;
+
     class DORIAX_API Input {
-        
+
         friend class Engine;
-        
+
     private:
-        
+
         static std::map<int,bool> keyPressed;
         static std::map<int,bool> mousePressed;
         static Vector2 mousePosition;
         static Vector2 mouseScroll;
         static std::vector<Touch> touches;
+        static std::vector<Gamepad> gamepads;
         static bool mousedEntered;
         static int modifiers;
-        
+
         static void addKeyPressed(int key);
         static void releaseKeyPressed(int key);
-        
+
         static void addMousePressed(int button);
         static void releaseMousePressed(int button);
         static void setMousePosition(float x, float y);
         static void setMouseScroll(float xoffset, float yoffset);
-        
+
         static void addTouch(int pointer, float x, float y);
         static void setTouchPosition(int pointer, float x, float y);
         static void removeTouch(int pointer);
         static void clearTouches();
 
+        static void addGamepad(int id, const std::string& name);
+        static void removeGamepad(int id);
+        static void clearGamepads();
+        static void addGamepadButtonPressed(int id, int button);
+        static void releaseGamepadButtonPressed(int id, int button);
+        static void setGamepadAxisValue(int id, int axis, float value);
+
         static void addMouseEntered();
         static void releaseMouseEntered();
-        
+
         static void setModifiers(int mods);
-        
+
     public:
-        
+
         static bool isKeyPressed(int key);
         static bool isMousePressed(int button);
         static bool isTouch();
         static bool isMouseEntered();
-        
+
         static Vector2 getMousePosition();
         static Vector2 getMouseScroll();
         static Vector2 getTouchPosition(int pointer);
 
         static std::vector<Touch> getTouches();
         static size_t numTouches();
-        
+
+        static bool isGamepadConnected(int id);
+        static std::string getGamepadName(int id);
+        static bool isGamepadButtonPressed(int id, int button);
+        static float getGamepadAxis(int id, int axis);
+
+        static std::vector<Gamepad> getGamepads();
+        static size_t numGamepads();
+        // Gamepad ids are sparse (they can have gaps after a disconnect), so
+        // iterate connected pads by dense index: getGamepadId(0..numGamepads()-1).
+        static int getGamepadId(size_t index);
+
         static int getModifiers();
-        
+
         static size_t findTouchIndex(int pointer);
+        static size_t findGamepadIndex(int id);
     };
 }
 

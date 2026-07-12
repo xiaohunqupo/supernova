@@ -12,6 +12,7 @@
 #include <codecvt>
 #include <locale>
 #include <assert.h>
+#include <math.h>
 
 #include "DoriaxAndroid.h"
 #include "Engine.h"
@@ -22,6 +23,12 @@
 
 static bool all_motion_filter(const GameActivityMotionEvent* event) {
   // Process all motion events
+  return true;
+}
+
+static bool all_key_filter(const GameActivityKeyEvent* event) {
+  // Process all key events (the default filter drops gamepad buttons
+  // whose source lacks the keyboard class)
   return true;
 }
 
@@ -84,6 +91,7 @@ NativeEngine::NativeEngine(struct android_app *app) {
     mExternalDataPath = mApp->activity->externalDataPath;
 
     app->motionEventFilter = all_motion_filter;
+    app->keyEventFilter = all_key_filter;
 
     // Flags to control how the IME behaves.
     // https://developer.android.com/reference/android/text/InputType
@@ -689,6 +697,120 @@ int NativeEngine::getDoriaxModifiers(int32_t mods){
     return modifiers;
 }
 
+int NativeEngine::getDoriaxGamepadButton(int32_t key){
+    if (key == AKEYCODE_BUTTON_A)
+        return D_GAMEPAD_BUTTON_A;
+    if (key == AKEYCODE_BUTTON_B)
+        return D_GAMEPAD_BUTTON_B;
+    if (key == AKEYCODE_BUTTON_X)
+        return D_GAMEPAD_BUTTON_X;
+    if (key == AKEYCODE_BUTTON_Y)
+        return D_GAMEPAD_BUTTON_Y;
+    if (key == AKEYCODE_BUTTON_L1)
+        return D_GAMEPAD_BUTTON_LEFT_BUMPER;
+    if (key == AKEYCODE_BUTTON_R1)
+        return D_GAMEPAD_BUTTON_RIGHT_BUMPER;
+    if (key == AKEYCODE_BUTTON_SELECT)
+        return D_GAMEPAD_BUTTON_BACK;
+    if (key == AKEYCODE_BUTTON_START)
+        return D_GAMEPAD_BUTTON_START;
+    if (key == AKEYCODE_BUTTON_MODE)
+        return D_GAMEPAD_BUTTON_GUIDE;
+    if (key == AKEYCODE_BUTTON_THUMBL)
+        return D_GAMEPAD_BUTTON_LEFT_THUMB;
+    if (key == AKEYCODE_BUTTON_THUMBR)
+        return D_GAMEPAD_BUTTON_RIGHT_THUMB;
+    if (key == AKEYCODE_DPAD_UP)
+        return D_GAMEPAD_BUTTON_DPAD_UP;
+    if (key == AKEYCODE_DPAD_RIGHT)
+        return D_GAMEPAD_BUTTON_DPAD_RIGHT;
+    if (key == AKEYCODE_DPAD_DOWN)
+        return D_GAMEPAD_BUTTON_DPAD_DOWN;
+    if (key == AKEYCODE_DPAD_LEFT)
+        return D_GAMEPAD_BUTTON_DPAD_LEFT;
+
+    return -1;
+}
+
+// Gamepads are registered lazily on their first event; Android has no NDK-side
+// disconnect notification, so slots stay allocated until the app restarts.
+int NativeEngine::getGamepadSlot(int32_t deviceId){
+    for (int i = 0; i < MAX_GAMEPADS; i++){
+        if (mGamepads[i].deviceId == deviceId)
+            return i;
+    }
+    for (int i = 0; i < MAX_GAMEPADS; i++){
+        if (mGamepads[i].deviceId == -1){
+            mGamepads[i] = GamepadDevice();
+            mGamepads[i].deviceId = deviceId;
+            // triggers rest at -1; seed so the first stick-only motion event
+            // doesn't emit spurious trigger axis moves from 0 to -1
+            mGamepads[i].axes[D_GAMEPAD_AXIS_LEFT_TRIGGER] = -1.0f;
+            mGamepads[i].axes[D_GAMEPAD_AXIS_RIGHT_TRIGGER] = -1.0f;
+            doriax::Engine::systemGamepadConnect(i, "Gamepad");
+            return i;
+        }
+    }
+    return -1;
+}
+
+void NativeEngine::handleGamepadMotion(GameActivityMotionEvent* motionEvent){
+    if (motionEvent->pointerCount < 1)
+        return;
+
+    int slot = getGamepadSlot(motionEvent->deviceId);
+    if (slot < 0)
+        return;
+
+    GamepadDevice& pad = mGamepads[slot];
+    GameActivityPointerAxes* pointer = &motionEvent->pointers[0];
+
+    auto forwardAxis = [&](int axis, float value){
+        if (fabsf(value - pad.axes[axis]) > 0.001f){
+            pad.axes[axis] = value;
+            doriax::Engine::systemGamepadAxisMove(slot, axis, value);
+        }
+    };
+
+    forwardAxis(D_GAMEPAD_AXIS_LEFT_X, GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_X));
+    forwardAxis(D_GAMEPAD_AXIS_LEFT_Y, GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_Y));
+    forwardAxis(D_GAMEPAD_AXIS_RIGHT_X, GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_Z));
+    forwardAxis(D_GAMEPAD_AXIS_RIGHT_Y, GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_RZ));
+
+    // triggers report 0..1 (some devices use BRAKE/GAS instead); convert to
+    // the [-1, 1] engine convention where -1 is released
+    float ltrigger = GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_LTRIGGER);
+    if (ltrigger == 0.0f)
+        ltrigger = GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_BRAKE);
+    forwardAxis(D_GAMEPAD_AXIS_LEFT_TRIGGER, ltrigger * 2.0f - 1.0f);
+
+    float rtrigger = GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_RTRIGGER);
+    if (rtrigger == 0.0f)
+        rtrigger = GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_GAS);
+    forwardAxis(D_GAMEPAD_AXIS_RIGHT_TRIGGER, rtrigger * 2.0f - 1.0f);
+
+    // dpad arrives as hat axes; convert to button events
+    int hatX = (int)lroundf(GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_HAT_X));
+    int hatY = (int)lroundf(GameActivityPointerAxes_getAxisValue(pointer, AMOTION_EVENT_AXIS_HAT_Y));
+
+    auto forwardHat = [&](int& prev, int current, int negButton, int posButton){
+        if (current == prev)
+            return;
+        if (prev < 0)
+            doriax::Engine::systemGamepadButtonUp(slot, negButton);
+        if (prev > 0)
+            doriax::Engine::systemGamepadButtonUp(slot, posButton);
+        if (current < 0)
+            doriax::Engine::systemGamepadButtonDown(slot, negButton);
+        if (current > 0)
+            doriax::Engine::systemGamepadButtonDown(slot, posButton);
+        prev = current;
+    };
+
+    forwardHat(pad.hatX, hatX, D_GAMEPAD_BUTTON_DPAD_LEFT, D_GAMEPAD_BUTTON_DPAD_RIGHT);
+    forwardHat(pad.hatY, hatY, D_GAMEPAD_BUTTON_DPAD_UP, D_GAMEPAD_BUTTON_DPAD_DOWN);
+}
+
 void NativeEngine::handleGameActivityInput(){
     android_input_buffer* inputBuffer = android_app_swap_input_buffers(mApp);
 
@@ -697,6 +819,21 @@ void NativeEngine::handleGameActivityInput(){
     if (inputBuffer->keyEventsCount != 0) {
         for (uint64_t i = 0; i < inputBuffer->keyEventsCount; ++i) {
             GameActivityKeyEvent* keyEvent = &inputBuffer->keyEvents[i];
+
+            if ((keyEvent->source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD) {
+                int gamepadButton = getDoriaxGamepadButton(keyEvent->keyCode);
+                if (gamepadButton >= 0) {
+                    int slot = getGamepadSlot(keyEvent->deviceId);
+                    if (slot >= 0) {
+                        if (keyEvent->action == AKEY_EVENT_ACTION_DOWN && keyEvent->repeatCount == 0) {
+                            doriax::Engine::systemGamepadButtonDown(slot, gamepadButton);
+                        } else if (keyEvent->action == AKEY_EVENT_ACTION_UP) {
+                            doriax::Engine::systemGamepadButtonUp(slot, gamepadButton);
+                        }
+                    }
+                    continue;
+                }
+            }
 
             // metaState works with capslock, numlock and others
             int keyCode = getDoriaxKey(keyEvent->keyCode);
@@ -727,6 +864,11 @@ void NativeEngine::handleGameActivityInput(){
     if (inputBuffer->motionEventsCount != 0) {
         for (uint64_t i = 0; i < inputBuffer->motionEventsCount; ++i) {
             GameActivityMotionEvent* motionEvent = &inputBuffer->motionEvents[i];
+
+            if ((motionEvent->source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK) {
+                handleGamepadMotion(motionEvent);
+                continue;
+            }
 
             if (motionEvent->pointerCount > 0) {
                 int action = motionEvent->action;

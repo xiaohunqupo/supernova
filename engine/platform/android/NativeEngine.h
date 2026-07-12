@@ -50,9 +50,20 @@ struct JniData{
 
 class NativeEngine {
 private:
+    static const int MAX_GAMEPADS = 8;
+
+    struct GamepadDevice {
+        int32_t deviceId = -1;
+        float axes[6] = {0.0f};
+        int hatX = 0;
+        int hatY = 0;
+    };
+
     struct android_app *mApp;
     bool mHasFocus, mIsVisible, mHasWindow;
     bool mHasGLObjects;
+
+    GamepadDevice mGamepads[MAX_GAMEPADS];
 
     EGLDisplay mEglDisplay;
     EGLSurface mEglSurface;
@@ -91,6 +102,9 @@ private:
 
     int getDoriaxKey(int32_t key);
     int getDoriaxModifiers(int32_t mods);
+    int getDoriaxGamepadButton(int32_t key);
+    int getGamepadSlot(int32_t deviceId);
+    void handleGamepadMotion(GameActivityMotionEvent* motionEvent);
     bool handleEglError(EGLint error);
 
     bool prepareToRender();

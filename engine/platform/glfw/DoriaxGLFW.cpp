@@ -4,6 +4,8 @@
 
 #include "DoriaxGLFW.h"
 
+#include <math.h>
+
 #include "Engine.h"
 
 int DoriaxGLFW::windowPosX;
@@ -22,9 +24,55 @@ int DoriaxGLFW::sampleCount;
 GLFWwindow* DoriaxGLFW::window;
 GLFWmonitor* DoriaxGLFW::monitor;
 
+DoriaxGLFW::GamepadState DoriaxGLFW::gamepads[GLFW_JOYSTICK_LAST + 1];
+
 
 DoriaxGLFW::DoriaxGLFW(){
 
+}
+
+void DoriaxGLFW::pollGamepads(){
+    for (int jid = 0; jid <= GLFW_JOYSTICK_LAST; jid++){
+        GamepadState& state = gamepads[jid];
+
+        GLFWgamepadstate glfwState;
+        bool connected = glfwJoystickPresent(jid) && glfwGetGamepadState(jid, &glfwState);
+
+        if (connected && !state.connected){
+            state = GamepadState();
+            state.connected = true;
+            // triggers rest at -1; seed so a resting trigger doesn't emit a
+            // spurious axis move from 0 to -1 on connect
+            state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] = -1.0f;
+            state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] = -1.0f;
+            const char* name = glfwGetGamepadName(jid);
+            doriax::Engine::systemGamepadConnect(jid, name ? name : "Gamepad");
+        }else if (!connected && state.connected){
+            state = GamepadState();
+            doriax::Engine::systemGamepadDisconnect(jid);
+        }
+
+        if (!connected)
+            continue;
+
+        for (int button = 0; button <= GLFW_GAMEPAD_BUTTON_LAST; button++){
+            if (glfwState.buttons[button] != state.buttons[button]){
+                state.buttons[button] = glfwState.buttons[button];
+                if (glfwState.buttons[button] == GLFW_PRESS){
+                    doriax::Engine::systemGamepadButtonDown(jid, button);
+                }else{
+                    doriax::Engine::systemGamepadButtonUp(jid, button);
+                }
+            }
+        }
+
+        for (int axis = 0; axis <= GLFW_GAMEPAD_AXIS_LAST; axis++){
+            if (fabsf(glfwState.axes[axis] - state.axes[axis]) > 0.001f){
+                state.axes[axis] = glfwState.axes[axis];
+                doriax::Engine::systemGamepadAxisMove(jid, axis, glfwState.axes[axis]);
+            }
+        }
+    }
 }
 
 int DoriaxGLFW::init(int argc, char **argv){
@@ -120,6 +168,7 @@ int DoriaxGLFW::init(int argc, char **argv){
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+        pollGamepads();
     }
 
     doriax::Engine::systemViewDestroyed();

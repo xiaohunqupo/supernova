@@ -333,10 +333,17 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
                 ${PLATFORM_ROOT}/Renderer.mm
                 ${PLATFORM_ROOT}/DoriaxApple.h
                 ${PLATFORM_ROOT}/DoriaxApple.mm
+                ${PLATFORM_ROOT}/DoriaxGameController.h
+                ${PLATFORM_ROOT}/DoriaxGameController.mm
             )
 
             list(APPEND PLATFORM_RESOURCES
                 ${PLATFORM_ROOT}/macos/Main.storyboard
+            )
+
+            # GameController framework for gamepad input (DoriaxGameController.mm)
+            list(APPEND PLATFORM_LIBS
+                "-framework GameController"
             )
 
             list(APPEND PLATFORM_PROPERTIES
@@ -406,6 +413,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             ${PLATFORM_ROOT}/Renderer.mm
             ${PLATFORM_ROOT}/DoriaxApple.h
             ${PLATFORM_ROOT}/DoriaxApple.mm
+            ${PLATFORM_ROOT}/DoriaxGameController.h
+            ${PLATFORM_ROOT}/DoriaxGameController.mm
         )
 
         list(APPEND PLATFORM_RESOURCES
@@ -415,6 +424,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
         list(APPEND PLATFORM_LIBS
             -ObjC
+
+            # GameController framework for gamepad input (DoriaxGameController.mm)
+            "-framework GameController"
 
             # To run on iOS simulator
             ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/FBLPromises.xcframework/ios-arm64_x86_64-simulator/FBLPromises.framework

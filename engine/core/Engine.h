@@ -388,6 +388,12 @@ namespace doriax {
 
         static void systemCharInput(wchar_t codepoint);
 
+        static void systemGamepadConnect(int gamepad, const std::string& name);
+        static void systemGamepadDisconnect(int gamepad);
+        static void systemGamepadButtonDown(int gamepad, int button);
+        static void systemGamepadButtonUp(int gamepad, int button);
+        static void systemGamepadAxisMove(int gamepad, int axis, float value);
+
         //-----Doriax user events-----
         // Safe accessor for the Init event
         static FunctionSubscribe<void()>& getOnInit();
@@ -416,6 +422,11 @@ namespace doriax {
         static FunctionSubscribe<void(int,bool,int)> onKeyDown;
         static FunctionSubscribe<void(int,bool,int)> onKeyUp;
         static FunctionSubscribe<void(wchar_t)> onCharInput;
+        static FunctionSubscribe<void(int)> onGamepadConnect;
+        static FunctionSubscribe<void(int)> onGamepadDisconnect;
+        static FunctionSubscribe<void(int,int)> onGamepadButtonDown;
+        static FunctionSubscribe<void(int,int)> onGamepadButtonUp;
+        static FunctionSubscribe<void(int,int,float)> onGamepadAxisMove;
 
     };
     

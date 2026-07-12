@@ -5,9 +5,18 @@
 
 #include "System.h"
 
+#define DORIAX_WEB_MAX_GAMEPADS 16
+
 class DoriaxWeb: public doriax::System{
 
 private:
+
+    typedef struct GamepadState{
+        bool connected = false;
+        bool buttons[64] = {false};
+        float axes[64] = {0.0f};
+        float triggers[2] = {0.0f};
+    } GamepadState;
 
     static std::string canvas;
 
@@ -21,6 +30,8 @@ private:
     static double mousePosY;
 
     static int sampleCount;
+
+    static GamepadState gamepads[DORIAX_WEB_MAX_GAMEPADS];
 
     static EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *userData);
     static EM_BOOL mouse_callback(int eventType, const EmscriptenMouseEvent *e, void *userData);
@@ -38,6 +49,9 @@ private:
     static int doriax_mouse_button(int button);
     static int doriax_legacy_input(int code);
     static int doriax_input(const char code[32]);
+    static int doriax_gamepad_button(int button);
+
+    static void pollGamepads();
 
 public:
 

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <emscripten/emscripten.h>
 
@@ -30,6 +31,8 @@ double DoriaxWeb::mousePosX;
 double DoriaxWeb::mousePosY;
 
 int DoriaxWeb::sampleCount = 0;
+
+DoriaxWeb::GamepadState DoriaxWeb::gamepads[DORIAX_WEB_MAX_GAMEPADS];
 
 extern "C" {
     EMSCRIPTEN_KEEPALIVE 
@@ -269,7 +272,82 @@ bool DoriaxWeb::syncFileSystem(){
     return true;
 }
 
+void DoriaxWeb::pollGamepads(){
+    if (emscripten_sample_gamepad_data() != EMSCRIPTEN_RESULT_SUCCESS)
+        return;
+
+    int numGamepads = emscripten_get_num_gamepads();
+    if (numGamepads > DORIAX_WEB_MAX_GAMEPADS)
+        numGamepads = DORIAX_WEB_MAX_GAMEPADS;
+
+    for (int i = 0; i < numGamepads; i++){
+        GamepadState& state = gamepads[i];
+
+        EmscriptenGamepadEvent ge;
+        bool connected = (emscripten_get_gamepad_status(i, &ge) == EMSCRIPTEN_RESULT_SUCCESS) && ge.connected;
+
+        if (connected && !state.connected){
+            state = GamepadState();
+            state.connected = true;
+            // triggers rest at -1; seed so a resting trigger doesn't emit a
+            // spurious axis move from 0 to -1 on connect
+            state.triggers[0] = -1.0f;
+            state.triggers[1] = -1.0f;
+            doriax::Engine::systemGamepadConnect(i, ge.id);
+        }else if (!connected && state.connected){
+            state = GamepadState();
+            doriax::Engine::systemGamepadDisconnect(i);
+        }
+
+        if (!connected)
+            continue;
+
+        bool standard = (strcmp(ge.mapping, "standard") == 0);
+
+        int numButtons = (ge.numButtons < 64)? ge.numButtons : 64;
+        for (int b = 0; b < numButtons; b++){
+            // standard mapping: triggers are analog buttons 6 and 7; report them
+            // as axes in [-1, 1] to match the GLFW gamepad convention
+            if (standard && (b == 6 || b == 7)){
+                int trigger = (b == 6)? 0 : 1;
+                int axis = (b == 6)? D_GAMEPAD_AXIS_LEFT_TRIGGER : D_GAMEPAD_AXIS_RIGHT_TRIGGER;
+                float value = (float)ge.analogButton[b] * 2.0f - 1.0f;
+                if (fabsf(value - state.triggers[trigger]) > 0.001f){
+                    state.triggers[trigger] = value;
+                    doriax::Engine::systemGamepadAxisMove(i, axis, value);
+                }
+                continue;
+            }
+
+            bool pressed = ge.digitalButton[b];
+            if (pressed != state.buttons[b]){
+                state.buttons[b] = pressed;
+                int button = (standard)? doriax_gamepad_button(b) : b;
+                if (button >= 0){
+                    if (pressed){
+                        doriax::Engine::systemGamepadButtonDown(i, button);
+                    }else{
+                        doriax::Engine::systemGamepadButtonUp(i, button);
+                    }
+                }
+            }
+        }
+
+        // standard mapping axes match D_GAMEPAD_AXIS_LEFT_X..RIGHT_Y order
+        int numAxes = (ge.numAxes < 64)? ge.numAxes : 64;
+        for (int a = 0; a < numAxes; a++){
+            float value = (float)ge.axis[a];
+            if (fabsf(value - state.axes[a]) > 0.001f){
+                state.axes[a] = value;
+                doriax::Engine::systemGamepadAxisMove(i, a, value);
+            }
+        }
+    }
+}
+
 EM_BOOL DoriaxWeb::renderLoop(double time, void* userdata){
+    pollGamepads();
+
     doriax::Engine::systemDraw();
 
     if (syncWaitTime > 0) {
@@ -511,6 +589,27 @@ int DoriaxWeb::doriax_mouse_button(int button){
     if (button == 5) return D_MOUSE_BUTTON_6;
     if (button == 6) return D_MOUSE_BUTTON_7;
     if (button == 7) return D_MOUSE_BUTTON_8;
+
+    return -1;
+}
+
+//W3C standard gamepad mapping (buttons 6 and 7 are handled as trigger axes)
+int DoriaxWeb::doriax_gamepad_button(int button){
+    if (button == 0) return D_GAMEPAD_BUTTON_A;
+    if (button == 1) return D_GAMEPAD_BUTTON_B;
+    if (button == 2) return D_GAMEPAD_BUTTON_X;
+    if (button == 3) return D_GAMEPAD_BUTTON_Y;
+    if (button == 4) return D_GAMEPAD_BUTTON_LEFT_BUMPER;
+    if (button == 5) return D_GAMEPAD_BUTTON_RIGHT_BUMPER;
+    if (button == 8) return D_GAMEPAD_BUTTON_BACK;
+    if (button == 9) return D_GAMEPAD_BUTTON_START;
+    if (button == 10) return D_GAMEPAD_BUTTON_LEFT_THUMB;
+    if (button == 11) return D_GAMEPAD_BUTTON_RIGHT_THUMB;
+    if (button == 12) return D_GAMEPAD_BUTTON_DPAD_UP;
+    if (button == 13) return D_GAMEPAD_BUTTON_DPAD_DOWN;
+    if (button == 14) return D_GAMEPAD_BUTTON_DPAD_LEFT;
+    if (button == 15) return D_GAMEPAD_BUTTON_DPAD_RIGHT;
+    if (button == 16) return D_GAMEPAD_BUTTON_GUIDE;
 
     return -1;
 }
