@@ -11485,17 +11485,20 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
         for (Entity entity : entities) {
             if (AnimationComponent* animComp = sceneProject->scene->findComponent<AnimationComponent>(entity)) {
                 std::vector<ActionFrame> newActions = animComp->actions;
-                ActionFrame newFrame = {0.0f, 1.0f, NULL_ENTITY, 0};
+                // Duration 0 = auto: once an action is assigned, the frame follows
+                // the action's own duration.
+                ActionFrame newFrame = {0.0f, 0.0f, NULL_ENTITY, 0};
 
+                ActionSystem* actionSystem = sceneProject->scene->getSystem<ActionSystem>().get();
                 bool overlap;
                 do {
                     overlap = false;
                     for (const auto& a : newActions) {
                         if (a.track == newFrame.track) {
                             float startA = a.startTime;
-                            float endA = a.startTime + a.duration;
+                            float endA = startA + std::max(actionSystem->getFrameDuration(a), 0.01f);
                             float startB = newFrame.startTime;
-                            float endB = newFrame.startTime + newFrame.duration;
+                            float endB = startB + std::max(actionSystem->getFrameDuration(newFrame), 0.01f);
                             if (std::max(startA, startB) < std::min(endA, endB)) {
                                 overlap = true;
                                 newFrame.track++;
@@ -11544,7 +11547,9 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
             std::string prefix = "actions[" + std::to_string(i) + "]";
             propertyRow(RowPropertyType::UInt, cpType, prefix + ".track", "Track", sceneProject, entities);
             propertyRow(RowPropertyType::Float, cpType, prefix + ".startTime", "Start Time", sceneProject, entities);
-            propertyRow(RowPropertyType::Float, cpType, prefix + ".duration", "Duration", sceneProject, entities);
+            RowSettings settingsDuration;
+            settingsDuration.help = "0 = auto (use the action's own duration)";
+            propertyRow(RowPropertyType::Float, cpType, prefix + ".duration", "Duration", sceneProject, entities, settingsDuration);
             RowSettings settingsAction;
             settingsAction.entityFilter.set(sceneProject->scene->getComponentId<ActionComponent>());
             propertyRow(RowPropertyType::LocalEntity, cpType, prefix + ".action", "Action", sceneProject, entities, settingsAction);

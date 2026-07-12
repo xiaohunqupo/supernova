@@ -204,9 +204,8 @@ size_t Animation::getActionFrameSize() const{
 }
 
 void Animation::addActionFrame(float startTime, Entity timedaction, Entity target){
-    TimedActionComponent& timedactioncomp = scene->getComponent<TimedActionComponent>(timedaction);
-
-    addActionFrame(startTime, startTime + timedactioncomp.duration, timedaction, target);
+    // Duration <= 0 means auto: resolved from the action's own duration
+    addActionFrame(startTime, 0, timedaction, target);
 }
 
 void Animation::addActionFrame(float startTime, float duration, Entity action){

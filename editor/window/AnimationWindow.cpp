@@ -311,26 +311,31 @@ void editor::AnimationWindow::applyPreviewModelBindPose(Scene* scene) const {
     }
 }
 
-float editor::AnimationWindow::getAnimationDuration(const AnimationComponent& anim) const {
+float editor::AnimationWindow::effectiveFrameDuration(const ActionFrame& frame, Scene* scene) const {
+    return scene->getSystem<ActionSystem>()->getFrameDuration(frame);
+}
+
+float editor::AnimationWindow::getAnimationDuration(const AnimationComponent& anim, Scene* scene) const {
     if (anim.duration > 0) {
         return anim.duration;
     }
 
     float duration = 0.0f;
     for (const ActionFrame& frame : anim.actions) {
-        duration = std::max(duration, frame.startTime + frame.duration);
+        duration = std::max(duration, frame.startTime + effectiveFrameDuration(frame, scene));
     }
 
     return duration;
 }
 
 void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, SceneProject* sceneProject) const {
+    Scene* scene = sceneProject->scene;
     bool hasOverlap = false;
     for (size_t i = 0; i < anim.actions.size() && !hasOverlap; i++) {
         for (size_t j = i + 1; j < anim.actions.size() && !hasOverlap; j++) {
             if (anim.actions[i].track == anim.actions[j].track) {
-                float iEnd = anim.actions[i].startTime + anim.actions[i].duration;
-                float jEnd = anim.actions[j].startTime + anim.actions[j].duration;
+                float iEnd = anim.actions[i].startTime + effectiveFrameDuration(anim.actions[i], scene);
+                float jEnd = anim.actions[j].startTime + effectiveFrameDuration(anim.actions[j], scene);
                 if (anim.actions[i].startTime < jEnd && anim.actions[j].startTime < iEnd) {
                     hasOverlap = true;
                 }
@@ -353,17 +358,18 @@ void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, ScenePr
         std::vector<float> laneEnds;
         for (size_t idx : sorted) {
             ActionFrame& frame = anim.actions[idx];
+            float frameEnd = frame.startTime + effectiveFrameDuration(frame, scene);
             int lane = -1;
             for (int l = 0; l < (int)laneEnds.size(); l++) {
                 if (frame.startTime >= laneEnds[l]) {
                     lane = l;
-                    laneEnds[l] = frame.startTime + frame.duration;
+                    laneEnds[l] = frameEnd;
                     break;
                 }
             }
             if (lane == -1) {
                 lane = (int)laneEnds.size();
-                laneEnds.push_back(frame.startTime + frame.duration);
+                laneEnds.push_back(frameEnd);
             }
             frame.track = (uint32_t)lane;
         }
@@ -400,7 +406,7 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     previewPrimary = clipEntity;
 
     AnimationComponent& anim = scene->getComponent<AnimationComponent>(clipEntity);
-    currentTime = std::max(0.0f, std::min(time, getAnimationDuration(anim)));
+    currentTime = std::max(0.0f, std::min(time, getAnimationDuration(anim, scene)));
 
     restorePreviewState(scene);
     applyPreviewModelBindPose(scene);
@@ -703,18 +709,23 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
                 actionEntity = cmd->getEntity();
             }
 
-            ActionFrame newFrame = {0.0f, 1.0f, actionEntity, targetTrack};
+            // Duration 0 = auto: the frame follows the action's own duration.
+            // Empty frames have no action to resolve, so give a visible default.
+            float newDuration = (actionEntity != NULL_ENTITY) ? 0.0f : 1.0f;
+            ActionFrame newFrame = {0.0f, newDuration, actionEntity, targetTrack};
 
-            // Find non-overlapping track
+            // Find non-overlapping track (zero-length frames floored so they still
+            // spread onto free tracks)
+            float newFrameDur = std::max(effectiveFrameDuration(newFrame, scene), 0.01f);
             bool overlap;
             do {
                 overlap = false;
                 for (const auto& a : anim.actions) {
                     if (a.track == newFrame.track) {
                         float startA = a.startTime;
-                        float endA = a.startTime + a.duration;
+                        float endA = a.startTime + std::max(effectiveFrameDuration(a, scene), 0.01f);
                         float startB = newFrame.startTime;
-                        float endB = newFrame.startTime + newFrame.duration;
+                        float endB = newFrame.startTime + newFrameDur;
                         if (std::max(startA, startB) < std::min(endA, endB)) {
                             overlap = true;
                             newFrame.track++;
@@ -782,7 +793,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     Entity toolbarClip = timelineClip(scene);
     AnimationComponent& toolbarClipAnim = (toolbarClip != selectedEntity)
         ? scene->getComponent<AnimationComponent>(toolbarClip) : anim;
-    float maxTime = getAnimationDuration(toolbarClipAnim);
+    float maxTime = getAnimationDuration(toolbarClipAnim, scene);
     if (ImGui::DragFloat("##anim_time", &currentTime, 0.01f, 0.0f, maxTime, "%.2fs")) {
         if (sceneIsStopped && canPreview) {
             seekPreview(scene, sceneProject, currentTime);
@@ -880,10 +891,12 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     if (selectedFrameIndex >= 0 && selectedFrameIndex < (int)anim.actions.size()) {
         ActionFrame& frame = anim.actions[selectedFrameIndex];
         std::string actionLabel = getActionLabel(frame.action, scene);
+        float frameDur = effectiveFrameDuration(frame, scene);
+        const char* autoTag = (frame.duration > 0) ? "" : " (auto)";
 
         char infoBuf[256];
-        snprintf(infoBuf, sizeof(infoBuf), "Frame %d | Track %u | Start %.2fs | Duration %.2fs | %s",
-                 selectedFrameIndex, frame.track, frame.startTime, frame.duration, actionLabel.c_str());
+        snprintf(infoBuf, sizeof(infoBuf), "Frame %d | Track %u | Start %.2fs | Duration %.2fs%s | %s",
+                 selectedFrameIndex, frame.track, frame.startTime, frameDur, autoTag, actionLabel.c_str());
 
         float infoWidth = ImGui::CalcTextSize(infoBuf).x;
         float cursorX = ImGui::GetCursorPosX();
@@ -906,8 +919,8 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
 
         ImGui::TextDisabled("%s", infoBuf);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Frame %d\nTrack: %u\nStart: %.2fs\nDuration: %.2fs\nAction: %s",
-                              selectedFrameIndex, frame.track, frame.startTime, frame.duration, actionLabel.c_str());
+            ImGui::SetTooltip("Frame %d\nTrack: %u\nStart: %.2fs\nDuration: %.2fs%s\nAction: %s",
+                              selectedFrameIndex, frame.track, frame.startTime, frameDur, autoTag, actionLabel.c_str());
         }
     }
 }
@@ -1043,10 +1056,17 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
     for (size_t i = 0; i < anim.actions.size(); i++) {
         ActionFrame& frame = anim.actions[i];
         float trackY = canvasPos.y + rulerHeight + frame.track * (trackHeight + trackPadding);
+        float frameDur = effectiveFrameDuration(frame, scene);
 
         // Action frame block
         float blockStart = timeToX(frame.startTime, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
-        float blockEnd = timeToX(frame.startTime + frame.duration, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
+        float blockEnd = timeToX(frame.startTime + frameDur, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
+
+        // Keep zero-length frames (auto duration not yet resolvable) visible and clickable
+        float minBlockWidth = 10.0f;
+        if (blockEnd - blockStart < minBlockWidth) {
+            blockEnd = blockStart + minBlockWidth;
+        }
 
         // Clamp to visible area
         float visStart = std::max(blockStart, canvasPos.x + labelWidth);
@@ -1168,7 +1188,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
 
         ActionFrame& frame = anim.actions[draggingFrameIndex];
         float snappedStart = std::max(0.0f, snapTime(newStart));
-        float frameDur = frame.duration;
+        float frameDur = effectiveFrameDuration(frame, scene);
 
         // Find valid position on a track closest to desiredStart without overlap
         auto findValidPosition = [&](float desiredStart, int track) -> float {
@@ -1178,7 +1198,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                 if ((int)i == draggingFrameIndex) continue;
                 const auto& a = anim.actions[i];
                 if ((int)a.track == track) {
-                    occupied.push_back({a.startTime, a.startTime + a.duration});
+                    occupied.push_back({a.startTime, a.startTime + effectiveFrameDuration(a, scene)});
                 }
             }
 
@@ -1227,17 +1247,23 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
         ActionFrame& frame = anim.actions[resizingFrameIndex];
         float minDuration = 0.01f;
 
+        // Resizing an auto (<= 0) duration converts it to an explicit one; the drag
+        // math starts from the resolved length. resizeStartDuration stays raw so the
+        // undo command records the original auto value.
+        float baseDuration = (resizeStartDuration > 0) ? resizeStartDuration
+            : scene->getSystem<ActionSystem>()->getDuration(frame.action);
+
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
         // Find nearest neighbors on the same track to prevent overlap
         float neighborLeftEnd = 0.0f;   // max end time of actions to our left
         float neighborRightStart = 1e9f; // min start time of actions to our right
-        float origEnd = resizeStartTime + resizeStartDuration;
+        float origEnd = resizeStartTime + baseDuration;
         for (size_t i = 0; i < anim.actions.size(); i++) {
             if ((int)i == resizingFrameIndex) continue;
             const auto& a = anim.actions[i];
             if (a.track != frame.track) continue;
-            float aEnd = a.startTime + a.duration;
+            float aEnd = a.startTime + effectiveFrameDuration(a, scene);
             if (aEnd <= resizeStartTime + 0.001f) {
                 neighborLeftEnd = std::max(neighborLeftEnd, aEnd);
             }
@@ -1248,13 +1274,13 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
 
         if (resizeSide == 1) {
             // Right edge: only change duration, clamp to neighbor on right
-            float newDuration = snapTime(resizeStartDuration + timeDelta);
+            float newDuration = snapTime(baseDuration + timeDelta);
             float maxDuration = neighborRightStart - frame.startTime;
             frame.duration = std::clamp(newDuration, minDuration, maxDuration);
         } else {
             // Left edge: move start and adjust duration (right end stays fixed)
             float newStart = snapTime(resizeStartTime + timeDelta);
-            float endTime = resizeStartTime + resizeStartDuration;
+            float endTime = resizeStartTime + baseDuration;
             newStart = std::clamp(newStart, neighborLeftEnd, endTime - minDuration);
             frame.startTime = newStart;
             frame.duration = endTime - newStart;
@@ -1668,7 +1694,7 @@ void editor::AnimationWindow::show() {
         if (sceneIsStopped && canPreviewEntity(displayEntity, scene)) {
             seekPreview(scene, sceneProject, currentTime, displayEntity);
         } else {
-            currentTime = std::max(0.0f, std::min(currentTime, getAnimationDuration(*displayAnim)));
+            currentTime = std::max(0.0f, std::min(currentTime, getAnimationDuration(*displayAnim, scene)));
         }
     }
 

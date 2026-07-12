@@ -151,6 +151,8 @@ namespace doriax{
 
 		void processRunningAction(double dt, Entity entity, ActionComponent& action);
 
+		float getDuration(Entity entity, int depth);
+
 	public:
 		ActionSystem(Scene* scene);
 
@@ -164,7 +166,8 @@ namespace doriax{
 		void updateActionPreview(double dt, Entity entity);
 
 		float getDuration(Entity entity);
-	
+		float getFrameDuration(const ActionFrame& frame);
+
 		void load() override;
 		void resetRunningActions();
 		void draw() override;

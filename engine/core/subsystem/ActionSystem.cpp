@@ -470,7 +470,7 @@ void ActionSystem::animationUpdate(double dt, Entity entity, ActionComponent& ac
                 iaction.timecount = timeDiff * iaction.speed;
                 iaction.weight = animcomp.weight;
 
-                if (timeDiff > (animcomp.actions[i].duration / iaction.speed)) {
+                if (timeDiff > (getFrameDuration(animcomp.actions[i]) / iaction.speed)) {
                     totalActionsPassed++;
                 }
             }
@@ -1487,6 +1487,23 @@ void ActionSystem::flushPoseBlend(){
 }
 
 float ActionSystem::getDuration(Entity entity) {
+    return getDuration(entity, 0);
+}
+
+float ActionSystem::getFrameDuration(const ActionFrame& frame) {
+    if (frame.duration > 0) {
+        return frame.duration;
+    }
+    return getDuration(frame.action, 0);
+}
+
+float ActionSystem::getDuration(Entity entity, int depth) {
+    // Animations can nest other animations as frames; cap recursion so a cycle
+    // of auto-duration frames cannot hang the engine.
+    if (entity == NULL_ENTITY || depth > 8) {
+        return 0;
+    }
+
     float duration = 0;
     if (TimedActionComponent* timed = scene->findComponent<TimedActionComponent>(entity)) {
         duration = timed->duration;
@@ -1495,7 +1512,8 @@ float ActionSystem::getDuration(Entity entity) {
             duration = anim->duration;
         } else {
             for (const ActionFrame& frame : anim->actions) {
-                duration = std::max(duration, frame.startTime + frame.duration);
+                float frameDuration = (frame.duration > 0) ? frame.duration : getDuration(frame.action, depth + 1);
+                duration = std::max(duration, frame.startTime + frameDuration);
             }
         }
     } else if (KeyframeTracksComponent* kf = scene->findComponent<KeyframeTracksComponent>(entity)) {

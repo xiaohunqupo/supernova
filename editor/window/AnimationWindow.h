@@ -91,7 +91,9 @@ namespace doriax::editor{
         PreviewEntityState buildPreviewEntityState(Scene* scene, Entity entity) const;
         void restorePreviewState(Scene* scene) const;
         void applyPreviewModelBindPose(Scene* scene) const;
-        float getAnimationDuration(const AnimationComponent& anim) const;
+        float getAnimationDuration(const AnimationComponent& anim, Scene* scene) const;
+        // Frame duration <= 0 means auto: resolved from the action's own duration.
+        float effectiveFrameDuration(const ActionFrame& frame, Scene* scene) const;
         // Re-lane frames when overlaps are found on one track (engine-created frames
         // all default to track 0). Marks the scene modified if anything moved.
         void autoAssignTracks(AnimationComponent& anim, SceneProject* sceneProject) const;

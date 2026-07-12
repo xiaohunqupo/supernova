@@ -11,7 +11,7 @@ namespace doriax{
 
     struct ActionFrame{
         float startTime = 0;
-        float duration = 0;
+        float duration = 0; // <= 0 means auto: resolved from the action's own duration
         Entity action = NULL_ENTITY;
         uint32_t track = 0; // Used for editor timeline organization
     };

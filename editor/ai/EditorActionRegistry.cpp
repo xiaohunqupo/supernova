@@ -982,7 +982,7 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"entity_id", integerSchema("Animation entity id")},
                 {"entity_name", stringSchema("Animation entity name, used only when entity_id is omitted")},
                 {"start_time", numberSchema("Action start time")},
-                {"duration", numberSchema("Action duration")},
+                {"duration", numberSchema("Action duration. 0 or omitted = auto (the action's own duration)")},
                 {"track", integerSchema("Timeline track index")},
                 {"action_entity_id", integerSchema("Action entity id")},
                 {"action_entity_name", stringSchema("Action entity name, used only when action_entity_id is omitted")}

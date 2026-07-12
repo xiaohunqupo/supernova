@@ -56,6 +56,7 @@
 #include "component/AnimationComponent.h"
 #include "component/KeyframeTracksComponent.h"
 #include "component/TilemapComponent.h"
+#include "subsystem/ActionSystem.h"
 #include "subsystem/MeshSystem.h"
 #include "util/ShapeParameters.h"
 #include "texture/Texture.h"
@@ -3986,7 +3987,7 @@ ActionResult EditorActionExecutor::addAnimationAction(const Json& arguments) {
 
     ActionFrame frame;
     frame.startTime = arguments.value("start_time", 0.0f);
-    frame.duration = arguments.value("duration", 1.0f);
+    frame.duration = arguments.value("duration", 0.0f); // 0 = auto (the action's own duration)
     frame.track = static_cast<uint32_t>(std::max(0, arguments.value("track", 0)));
     if (arguments.contains("action_entity_id")) {
         frame.action = static_cast<Entity>(std::max(0, arguments.value("action_entity_id", 0)));
@@ -3996,13 +3997,14 @@ ActionResult EditorActionExecutor::addAnimationAction(const Json& arguments) {
         frame.action = resolveEntity(sceneProject, tmp);
     }
 
+    ActionSystem* actionSystem = sceneProject->scene->getSystem<ActionSystem>().get();
     std::vector<ActionFrame> actions = anim->actions;
     for (const auto& existing : actions) {
         if (existing.track != frame.track) continue;
         const float startA = existing.startTime;
-        const float endA = existing.startTime + existing.duration;
+        const float endA = startA + actionSystem->getFrameDuration(existing);
         const float startB = frame.startTime;
-        const float endB = frame.startTime + frame.duration;
+        const float endB = startB + actionSystem->getFrameDuration(frame);
         if (std::max(startA, startB) < std::min(endA, endB)) {
             return failResult("New action overlaps an existing action on the same track.");
         }
