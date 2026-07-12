@@ -796,6 +796,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         sceneProject->sceneRender->clearOccluderPointSelection();
                         sceneProject->sceneRender->clearLinePointSelection();
                         sceneProject->sceneRender->clearPolygonPointSelection();
+                        sceneProject->sceneRender->clearTrackPointSelection();
                         bool changed = project->selectObjectByRay(sceneId, x, y, io.KeyShift);
                         if (changed) {
                             sceneProject->sceneRender->update(project->getSelectedEntities(sceneId), project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -900,6 +901,34 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                                     sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                                     sceneProject->sceneRender->mouseHoverEvent(x, y);
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // TranslateTracks keyframe point sub-selection within a selected tracks entity
+            // (2D gizmo or 3D translate; same side guards as the line block above)
+            if (gizmoSelected == GizmoSelected::OBJECT2D || gizmoSelected == GizmoSelected::TRANSLATE) {
+                std::vector<Entity> selEntities = project->getSelectedEntities(sceneId);
+                if (selEntities.size() == 1 && !io.KeyShift) {
+                    Entity selEntity = selEntities[0];
+                    if (sceneProject->scene->findComponent<TranslateTracksComponent>(selEntity)) {
+                        Gizmo2DSideSelected gizmo2DSide = sceneProject->sceneRender->getToolsLayer()->getGizmo2DSideSelected();
+                        bool blockPointHit;
+                        if (gizmoSelected == GizmoSelected::OBJECT2D) {
+                            blockPointHit = !(gizmo2DSide == Gizmo2DSideSelected::NONE || gizmo2DSide == Gizmo2DSideSelected::CENTER);
+                        } else {
+                            blockPointHit = sceneProject->sceneRender->isAnyGizmoSideSelected();
+                        }
+                        if (!blockPointHit) {
+                            int pointHit = sceneProject->sceneRender->hitTestTrackPoint(selEntity, x, y);
+                            if (pointHit >= 0) {
+                                sceneProject->sceneRender->selectTrackPoint(selEntity, pointHit);
+                                subSelectionClickConsumesRelease[sceneId] = true;
+                                // Re-update so the gizmo jumps to the point
+                                sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
+                                sceneProject->sceneRender->mouseHoverEvent(x, y);
                             }
                         }
                     }
@@ -1052,6 +1081,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 Entity prevLinePointEntity = sceneProject->sceneRender->getSelectedLinePointEntity();
                 int prevPolygonPointIndex = sceneProject->sceneRender->getSelectedPolygonPointIndex();
                 Entity prevPolygonPointEntity = sceneProject->sceneRender->getSelectedPolygonPointEntity();
+                int prevTrackPointIndex = sceneProject->sceneRender->getSelectedTrackPointIndex();
+                Entity prevTrackPointEntity = sceneProject->sceneRender->getSelectedTrackPointEntity();
 
                 project->selectObjectByRay(sceneId, x, y, io.KeyShift);
 
@@ -1074,6 +1105,9 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 }
                 if (prevPolygonPointIndex >= 0 && !(soleHost && selAfter[0] == prevPolygonPointEntity)){
                     sceneProject->sceneRender->clearPolygonPointSelection();
+                }
+                if (prevTrackPointIndex >= 0 && !(soleHost && selAfter[0] == prevTrackPointEntity)){
+                    sceneProject->sceneRender->clearTrackPointSelection();
                 }
             }
             subSelectionClickConsumesRelease[sceneId] = false;
@@ -1100,6 +1134,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 sceneProject->sceneRender->clearOccluderPointSelection();
                 sceneProject->sceneRender->clearLinePointSelection();
                 sceneProject->sceneRender->clearPolygonPointSelection();
+                sceneProject->sceneRender->clearTrackPointSelection();
                 project->selectObjectsByRect(sceneId, clickStartPos, clickEndPos);
             }
 

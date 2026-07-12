@@ -502,6 +502,42 @@ bool editor::CreateEntityCmd::execute(){
             scene->getComponent<ActionComponent>(entity).target = parent;
         }
 
+    }else if (type == EntityCreationType::TRANSLATE_TRACKS){
+
+        scene->addComponent<ActionComponent>(entity, {});
+        scene->addComponent<KeyframeTracksComponent>(entity, {});
+        scene->addComponent<TranslateTracksComponent>(entity, {});
+        if (parent != NULL_ENTITY){
+            scene->getComponent<ActionComponent>(entity).target = parent;
+        }
+
+    }else if (type == EntityCreationType::ROTATE_TRACKS){
+
+        scene->addComponent<ActionComponent>(entity, {});
+        scene->addComponent<KeyframeTracksComponent>(entity, {});
+        scene->addComponent<RotateTracksComponent>(entity, {});
+        if (parent != NULL_ENTITY){
+            scene->getComponent<ActionComponent>(entity).target = parent;
+        }
+
+    }else if (type == EntityCreationType::SCALE_TRACKS){
+
+        scene->addComponent<ActionComponent>(entity, {});
+        scene->addComponent<KeyframeTracksComponent>(entity, {});
+        scene->addComponent<ScaleTracksComponent>(entity, {});
+        if (parent != NULL_ENTITY){
+            scene->getComponent<ActionComponent>(entity).target = parent;
+        }
+
+    }else if (type == EntityCreationType::MORPH_TRACKS){
+
+        scene->addComponent<ActionComponent>(entity, {});
+        scene->addComponent<KeyframeTracksComponent>(entity, {});
+        scene->addComponent<MorphTracksComponent>(entity, {});
+        if (parent != NULL_ENTITY){
+            scene->getComponent<ActionComponent>(entity).target = parent;
+        }
+
     }else if (type == EntityCreationType::CAMERA){
 
         scene->addComponent<Transform>(entity, {});

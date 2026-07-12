@@ -692,6 +692,27 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
             entityName = "AlphaAction";
             selected = true;
         }
+        ImGui::Separator();
+        if (ImGui::MenuItem(ICON_FA_ROUTE "  Translate Tracks")) {
+            selectedType = EntityCreationType::TRANSLATE_TRACKS;
+            entityName = "TranslateTracks";
+            selected = true;
+        }
+        if (ImGui::MenuItem(ICON_FA_ARROWS_SPIN "  Rotate Tracks")) {
+            selectedType = EntityCreationType::ROTATE_TRACKS;
+            entityName = "RotateTracks";
+            selected = true;
+        }
+        if (ImGui::MenuItem(ICON_FA_MAXIMIZE "  Scale Tracks")) {
+            selectedType = EntityCreationType::SCALE_TRACKS;
+            entityName = "ScaleTracks";
+            selected = true;
+        }
+        if (ImGui::MenuItem(ICON_FA_SHAPES "  Morph Tracks")) {
+            selectedType = EntityCreationType::MORPH_TRACKS;
+            entityName = "MorphTracks";
+            selected = true;
+        }
 
         if (selected) {
             // If a frame is selected, add to the same track, otherwise track 0

@@ -553,6 +553,23 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
             CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "AlphaAction", EntityCreationType::ALPHA_ACTION, parent, addToBundle));
             openParent = parent;
         }
+        ImGui::Separator();
+        if (ImGui::MenuItem(ICON_FA_ROUTE"  Translate Tracks")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "TranslateTracks", EntityCreationType::TRANSLATE_TRACKS, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_ARROWS_SPIN"  Rotate Tracks")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "RotateTracks", EntityCreationType::ROTATE_TRACKS, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_MAXIMIZE"  Scale Tracks")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "ScaleTracks", EntityCreationType::SCALE_TRACKS, parent, addToBundle));
+            openParent = parent;
+        }
+        if (ImGui::MenuItem(ICON_FA_SHAPES"  Morph Tracks")){
+            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "MorphTracks", EntityCreationType::MORPH_TRACKS, parent, addToBundle));
+            openParent = parent;
+        }
         ImGui::EndMenu();
     }
 

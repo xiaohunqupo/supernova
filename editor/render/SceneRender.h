@@ -108,9 +108,16 @@ namespace doriax::editor{
         int selectedPolygonPointIndex = -1;
         bool selectedPolygonPointIsMesh = false;
 
+        // TranslateTracks keyframe point sub-selection (the tracks entity has no
+        // Transform; its values[] live in the action target's parent space)
+        Entity selectedTrackPointEntity = 0;  // NULL_ENTITY
+        int selectedTrackPointIndex = -1;
+
         // world position of vertex pointIndex of the selected entity's Polygon/MeshPolygon
         // points (nullptr list / bad index -> false)
         bool getPolygonPointWorld(Entity entity, bool isMesh, int pointIndex, Vector3& worldPoint);
+
+        bool getTrackPointWorld(Entity entity, int pointIndex, Vector3& worldPoint);
 
         AABB getAABB(Entity entity, bool local);
         AABB getFamilyAABB(Entity entity, float offset);
@@ -251,6 +258,17 @@ namespace doriax::editor{
         void clearPolygonPointSelection();
         int hitTestPolygonPoint(Entity entity, bool isMesh, float x, float y);
         OBB getPolygonPointOBB(Entity entity, bool isMesh, int pointIndex);
+
+        // TranslateTracks keyframe point sub-selection
+        int getSelectedTrackPointIndex() const { return selectedTrackPointIndex; }
+        Entity getSelectedTrackPointEntity() const { return selectedTrackPointEntity; }
+        void selectTrackPoint(Entity entity, int pointIndex);
+        void clearTrackPointSelection();
+        int hitTestTrackPoint(Entity entity, float x, float y);
+        OBB getTrackPointOBB(Entity entity, int pointIndex);
+        // matrix mapping TranslateTracks values[] to world space: the action
+        // target's parent modelMatrix (identity when there is no target/parent)
+        Matrix4 getTrackPointsWorldMatrix(Entity entity);
     };
 
 }

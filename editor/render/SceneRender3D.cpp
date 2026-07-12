@@ -318,6 +318,11 @@ editor::SceneRender3D::~SceneRender3D(){
         delete pair.second;
     }
     polygonPointLines.clear();
+
+    for (auto& pair : trackLines) {
+        delete pair.second;
+    }
+    trackLines.clear();
 }
 
 void editor::SceneRender3D::createLines(){
@@ -505,6 +510,58 @@ void editor::SceneRender3D::createOrUpdatePolygonPointLines(Entity entity, const
         handlesObj->addLine(worldPoint - Vector3(halfSize, 0, 0), worldPoint + Vector3(halfSize, 0, 0), color);
         handlesObj->addLine(worldPoint - Vector3(0, halfSize, 0), worldPoint + Vector3(0, halfSize, 0), color);
         handlesObj->addLine(worldPoint - Vector3(0, 0, halfSize), worldPoint + Vector3(0, 0, halfSize), color);
+    }
+}
+
+bool editor::SceneRender3D::instanciateTrackLines(Entity entity){
+    if (trackLines.find(entity) == trackLines.end()) {
+        // tools-layer scene so the path stays visible on top of scene geometry
+        // (waypoints usually sit exactly on floors/meshes), like bone lines
+        ScopedDefaultEntityPool sys(*toolslayer.getScene(), EntityPool::System);
+        trackLines[entity] = new Lines(toolslayer.getScene());
+
+        return true;
+    }
+
+    return false;
+}
+
+// path of a selected TranslateTracks entity: a polyline through its keyframe
+// values (in the action target's parent space) with small 3-axis cross handles;
+// the sub-selected point is drawn bigger and in the selection color
+void editor::SceneRender3D::createOrUpdateTrackLines(Entity entity, const TranslateTracksComponent& tracks, bool visible){
+    Lines* trackObj = trackLines[entity];
+
+    trackObj->clearLines();
+    trackObj->setVisible(visible);
+
+    if (!visible){
+        return;
+    }
+
+    const Vector4 pathColor(0.4f, 0.75f, 1.0f, 1.0f);
+    const Vector4 handleColor(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 selectedHandleColor(1.0f, 0.6f, 0.0f, 1.0f);
+    bool hasPointSelection = (getSelectedTrackPointEntity() == entity);
+
+    Matrix4 worldMatrix = getTrackPointsWorldMatrix(entity);
+
+    Vector3 prevWorldPoint;
+    for (size_t i = 0; i < tracks.values.size(); i++){
+        Vector3 worldPoint = worldMatrix * tracks.values[i];
+
+        if (i > 0){
+            trackObj->addLine(prevWorldPoint, worldPoint, pathColor);
+        }
+        prevWorldPoint = worldPoint;
+
+        bool pointSelected = hasPointSelection && ((int)i == getSelectedTrackPointIndex());
+        const Vector4& color = pointSelected ? selectedHandleColor : handleColor;
+        float halfSize = getPointHandleHalfSize(worldPoint) * (pointSelected ? 0.75f : 0.5f);
+
+        trackObj->addLine(worldPoint - Vector3(halfSize, 0, 0), worldPoint + Vector3(halfSize, 0, 0), color);
+        trackObj->addLine(worldPoint - Vector3(0, halfSize, 0), worldPoint + Vector3(0, halfSize, 0), color);
+        trackObj->addLine(worldPoint - Vector3(0, 0, halfSize), worldPoint + Vector3(0, 0, halfSize), color);
     }
 }
 
@@ -1636,6 +1693,9 @@ void editor::SceneRender3D::hideAllGizmos(){
     for (auto& pair : polygonPointLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : trackLines) {
+        pair.second->setVisible(false);
+    }
 }
 
 void editor::SceneRender3D::activate(){
@@ -1733,6 +1793,7 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentBoneModels;
     std::set<Entity> currentLinePoints;
     std::set<Entity> currentPolygonPoints;
+    std::set<Entity> currentTrackLines;
 
     for (Entity& entity: entities){
         Signature signature = scene->getSignature(entity);
@@ -1831,6 +1892,17 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             bool highlighted = isDescendantSelected(entity);
 
             createOrUpdatePolygonPointLines(entity, transform, polygon.points, true, highlighted);
+        }
+
+        if (signature.test(scene->getComponentId<TranslateTracksComponent>())) {
+            TranslateTracksComponent& tracks = scene->getComponent<TranslateTracksComponent>(entity);
+
+            currentTrackLines.insert(entity);
+            instanciateTrackLines(entity);
+            // the tracks entity has no Transform, so gate on direct selection
+            bool isSelected = selectedEntities.find(entity) != selectedEntities.end();
+
+            createOrUpdateTrackLines(entity, tracks, isSelected);
         }
 
         if (signature.test(scene->getComponentId<Joint3DComponent>())) {
@@ -1944,6 +2016,16 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             itPolygonPoints = polygonPointLines.erase(itPolygonPoints);
         } else {
             ++itPolygonPoints;
+        }
+    }
+
+    auto itTrackLines = trackLines.begin();
+    while (itTrackLines != trackLines.end()) {
+        if (currentTrackLines.find(itTrackLines->first) == currentTrackLines.end()) {
+            delete itTrackLines->second;
+            itTrackLines = trackLines.erase(itTrackLines);
+        } else {
+            ++itTrackLines;
         }
     }
 }

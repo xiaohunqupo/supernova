@@ -630,11 +630,14 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
 
             showCross = signature.test(scene->getComponentId<PointsComponent>()) || signature.test(scene->getComponentId<LinesComponent>());
 
-            // a selected occluder / polygon point is a size-less target: show the move cross
+            // a selected occluder / polygon / track point is a size-less target: show the move cross
             if (selectedOccluderPointIndex >= 0 && selEntities[0] == selectedOccluderPointEntity){
                 showCross = true;
             }
             if (selectedPolygonPointIndex >= 0 && selEntities[0] == selectedPolygonPointEntity){
+                showCross = true;
+            }
+            if (selectedTrackPointIndex >= 0 && selEntities[0] == selectedTrackPointEntity){
                 showCross = true;
             }
 
@@ -739,6 +742,32 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             updateSelLines(selBB);
         }
     }
+
+    // Gizmo for a selected TranslateTracks keyframe point. The tracks entity has
+    // no Transform (numTEntities is 0 for it), so this runs as its own branch.
+    if (selectedTrackPointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedTrackPointEntity
+        && (toolslayer.getGizmoSelected() == GizmoSelected::TRANSLATE || toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D)){
+        OBB pointOBB = getTrackPointOBB(selectedTrackPointEntity, selectedTrackPointIndex);
+        if (!pointOBB.isNull()){
+            Vector3 pointCenter = pointOBB.getCenter();
+
+            float trackScale = gizmoScale * zoom;
+            if (cameracomp.type == CameraType::CAMERA_PERSPECTIVE){
+                float dist = (pointCenter - camera->getWorldPosition()).length();
+                trackScale = std::tan(cameracomp.yfov) * dist * (gizmoScale / (float)framebuffer.getHeight());
+                if (!std::isfinite(trackScale) || trackScale <= 0.0f){
+                    trackScale = 1.0f;
+                }
+            }
+
+            toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, trackScale, pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+            selectionVisibility = true;
+        }else{
+            // point removed or values changed: drop the stale sub-selection
+            clearTrackPointSelection();
+        }
+    }
+
     toolslayer.updateCamera(cameracomp, cameratransform);
 
     // Determine selLines visibility: hide for single entity with OBJECT2D gizmo or empty selBB
@@ -903,6 +932,15 @@ void editor::SceneRender::mouseClickEvent(float x, float y, std::vector<Entity> 
             }
         }
 
+        // Override gizmo start position to the selected track keyframe point
+        if (selectedTrackPointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedTrackPointEntity){
+            OBB pointOBB = getTrackPointOBB(selectedTrackPointEntity, selectedTrackPointIndex);
+            if (!pointOBB.isNull()){
+                gizmoStartPosition = pointOBB.getCenter();
+                cursorStartOffset = gizmoStartPosition - rretrun.point;
+            }
+        }
+
         // Store instance start state for instance sub-selection drag
         if (selectedInstanceIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedInstanceEntity){
             InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(selectedInstanceEntity);
@@ -1015,7 +1053,86 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
     Vector3 gizmoPosition = toolslayer.getGizmoPosition();
     Matrix4 gizmoRMatrix = toolslayer.getGizmoRotation().getRotationMatrix();
 
+    // TranslateTracks keyframe point drag: the tracks entity has no Transform,
+    // so it is handled outside the per-entity transform loop below.
+    if (selectedTrackPointIndex >= 0 && selEntities.size() == 1 && selEntities[0] == selectedTrackPointEntity){
+        Entity trackEntity = selectedTrackPointEntity;
+        TranslateTracksComponent* tracks = scene->findComponent<TranslateTracksComponent>(trackEntity);
+        RayReturn rretrun = mouseRay.intersects(cursorPlane);
+        SceneProject* sceneProject = project->getScene(sceneId);
+
+        if (tracks && rretrun && selectedTrackPointIndex < (int)tracks->values.size()){
+            std::string pointProp = "values[" + std::to_string(selectedTrackPointIndex) + "]";
+
+            if (toolslayer.getGizmoSelected() == GizmoSelected::TRANSLATE
+                && toolslayer.getGizmoSideSelected() != GizmoSideSelected::NONE){
+                toolslayer.mouseDrag(rretrun.point);
+
+                Vector3 deltaPos = gizmoRMatrix.inverse() * ((rretrun.point + cursorStartOffset) - gizmoStartPosition);
+
+                if (displaySettings.snapToGrid){
+                    float spacing = displaySettings.gridSpacing3D;
+                    if (spacing > 0.0f){
+                        deltaPos.x = std::round(deltaPos.x / spacing) * spacing;
+                        deltaPos.y = std::round(deltaPos.y / spacing) * spacing;
+                        deltaPos.z = std::round(deltaPos.z / spacing) * spacing;
+                    }
+                }
+
+                Vector3 newPos = gizmoStartPosition;
+                if (toolslayer.getGizmoSideSelected() == GizmoSideSelected::XYZ){
+                    newPos = gizmoStartPosition + (gizmoRMatrix * deltaPos);
+                }else if (toolslayer.getGizmoSideSelected() == GizmoSideSelected::X){
+                    newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(deltaPos.x, 0, 0));
+                }else if (toolslayer.getGizmoSideSelected() == GizmoSideSelected::Y){
+                    newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, deltaPos.y, 0));
+                }else if (toolslayer.getGizmoSideSelected() == GizmoSideSelected::Z){
+                    newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, 0, deltaPos.z));
+                }else if (toolslayer.getGizmoSideSelected() == GizmoSideSelected::XY){
+                    newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(deltaPos.x, deltaPos.y, 0));
+                }else if (toolslayer.getGizmoSideSelected() == GizmoSideSelected::XZ){
+                    newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(deltaPos.x, 0, deltaPos.z));
+                }else if (toolslayer.getGizmoSideSelected() == GizmoSideSelected::YZ){
+                    newPos = gizmoStartPosition + (gizmoRMatrix * Vector3(0, deltaPos.y, deltaPos.z));
+                }
+
+                Vector3 newLocalPos = getTrackPointsWorldMatrix(trackEntity).inverse() * newPos;
+                lastCommand = new PropertyCmd<Vector3>(project, sceneProject->id, trackEntity,
+                    ComponentType::TranslateTracksComponent, pointProp, newLocalPos);
+                CommandHandle::get(sceneId)->addCommand(lastCommand);
+
+            }else if (toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D
+                && toolslayer.getGizmo2DSideSelected() == Gizmo2DSideSelected::CENTER){
+                toolslayer.mouseDrag(rretrun.point);
+
+                // new world position of the point, following the cursor
+                Vector3 newWorldPos = rretrun.point + cursorStartOffset;
+
+                if (displaySettings.snapToGrid){
+                    float spacing = displaySettings.gridSpacing2D;
+                    if (spacing > 0.0f){
+                        newWorldPos.x = std::round(newWorldPos.x / spacing) * spacing;
+                        newWorldPos.y = std::round(newWorldPos.y / spacing) * spacing;
+                    }
+                }
+
+                // the cursor plane is at the gizmo's Z: keep the point's own local Z
+                Vector3 oldLocal = tracks->values[selectedTrackPointIndex];
+                Vector3 newLocalPos = getTrackPointsWorldMatrix(trackEntity).inverse() * newWorldPos;
+                newLocalPos.z = oldLocal.z;
+
+                lastCommand = new PropertyCmd<Vector3>(project, sceneProject->id, trackEntity,
+                    ComponentType::TranslateTracksComponent, pointProp, newLocalPos);
+                CommandHandle::get(sceneId)->addCommand(lastCommand);
+            }
+        }
+    }
+
     for (Entity& entity: selEntities){
+        if (selectedTrackPointIndex >= 0 && entity == selectedTrackPointEntity){
+            // the drag targets the track keyframe point (handled above), not the entity
+            continue;
+        }
         Transform* transform = scene->findComponent<Transform>(entity);
         if (transform){
             RayReturn rretrun = mouseRay.intersects(cursorPlane);
@@ -1935,6 +2052,75 @@ int editor::SceneRender::hitTestPolygonPoint(Entity entity, bool isMesh, float x
 OBB editor::SceneRender::getPolygonPointOBB(Entity entity, bool isMesh, int pointIndex){
     Vector3 worldPoint;
     if (!getPolygonPointWorld(entity, isMesh, pointIndex, worldPoint)) return OBB();
+
+    float halfSize = getPointHandleHalfSize(worldPoint);
+    AABB aabb(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));
+    return aabb.getOBB();
+}
+
+void editor::SceneRender::selectTrackPoint(Entity entity, int pointIndex){
+    selectedTrackPointEntity = entity;
+    selectedTrackPointIndex = pointIndex;
+}
+
+void editor::SceneRender::clearTrackPointSelection(){
+    selectedTrackPointEntity = 0;
+    selectedTrackPointIndex = -1;
+}
+
+Matrix4 editor::SceneRender::getTrackPointsWorldMatrix(Entity entity){
+    // values[] drive the action target's Transform::position, which is local to
+    // the target's parent: that parent's model matrix maps them to world space
+    if (ActionComponent* action = scene->findComponent<ActionComponent>(entity)){
+        if (action->target != NULL_ENTITY && scene->isEntityCreated(action->target)){
+            if (Transform* targetTransform = scene->findComponent<Transform>(action->target)){
+                if (targetTransform->parent != NULL_ENTITY){
+                    if (Transform* parentTransform = scene->findComponent<Transform>(targetTransform->parent)){
+                        return parentTransform->modelMatrix;
+                    }
+                }
+            }
+        }
+    }
+    return Matrix4();
+}
+
+bool editor::SceneRender::getTrackPointWorld(Entity entity, int pointIndex, Vector3& worldPoint){
+    TranslateTracksComponent* tracks = scene->findComponent<TranslateTracksComponent>(entity);
+    if (!tracks) return false;
+    if (pointIndex < 0 || pointIndex >= (int)tracks->values.size()) return false;
+
+    worldPoint = getTrackPointsWorldMatrix(entity) * tracks->values[pointIndex];
+    return true;
+}
+
+int editor::SceneRender::hitTestTrackPoint(Entity entity, float x, float y){
+    TranslateTracksComponent* tracks = scene->findComponent<TranslateTracksComponent>(entity);
+    if (!tracks) return -1;
+
+    Ray ray = camera->screenToRay(x, y);
+    Matrix4 worldMatrix = getTrackPointsWorldMatrix(entity);
+
+    int bestIndex = -1;
+    float bestDistance = FLT_MAX;
+    for (size_t i = 0; i < tracks->values.size(); i++){
+        Vector3 worldPoint = worldMatrix * tracks->values[i];
+        float halfSize = getPointHandleHalfSize(worldPoint);
+        AABB handleAABB(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));
+
+        RayReturn rr = ray.intersects(handleAABB);
+        if (rr && rr.distance < bestDistance){
+            bestDistance = rr.distance;
+            bestIndex = (int)i;
+        }
+    }
+
+    return bestIndex;
+}
+
+OBB editor::SceneRender::getTrackPointOBB(Entity entity, int pointIndex){
+    Vector3 worldPoint;
+    if (!getTrackPointWorld(entity, pointIndex, worldPoint)) return OBB();
 
     float halfSize = getPointHandleHalfSize(worldPoint);
     AABB aabb(worldPoint - Vector3(halfSize), worldPoint + Vector3(halfSize));

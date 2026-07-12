@@ -85,6 +85,11 @@ editor::SceneRender2D::~SceneRender2D(){
     }
     polygonPointLines.clear();
 
+    for (auto& pair : trackLines) {
+        delete pair.second;
+    }
+    trackLines.clear();
+
     for (auto& pair : cameraObjects) {
         delete pair.second.icon;
         delete pair.second.lines;
@@ -294,6 +299,53 @@ void editor::SceneRender2D::createOrUpdateLinePointLines(Entity entity, const Tr
                            (pointSelected ? 6.0f : 4.0f) * zoom,
                            pointSelected ? selectedHandleColor : handleColor);
         }
+    }
+}
+
+bool editor::SceneRender2D::instanciateTrackLines(Entity entity){
+    if (trackLines.find(entity) == trackLines.end()){
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        trackLines[entity] = new Lines(scene);
+
+        return true;
+    }
+
+    return false;
+}
+
+// path of a selected TranslateTracks entity: a polyline through its keyframe
+// values (in the action target's parent space) with square point handles; the
+// sub-selected point is drawn bigger and in the selection color
+void editor::SceneRender2D::createOrUpdateTrackLines(Entity entity, const TranslateTracksComponent& tracks, bool visible){
+    Lines* trackObj = trackLines[entity];
+
+    trackObj->clearLines();
+    trackObj->setVisible(visible);
+
+    if (!visible){
+        return;
+    }
+
+    const Vector4 pathColor(0.4f, 0.75f, 1.0f, 1.0f);
+    const Vector4 handleColor(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 selectedHandleColor(1.0f, 0.6f, 0.0f, 1.0f);
+    bool hasPointSelection = (getSelectedTrackPointEntity() == entity);
+
+    Matrix4 worldMatrix = getTrackPointsWorldMatrix(entity);
+
+    Vector3 prevWorldPoint;
+    for (size_t i = 0; i < tracks.values.size(); i++){
+        Vector3 worldPoint = worldMatrix * tracks.values[i];
+
+        if (i > 0){
+            trackObj->addLine(prevWorldPoint, worldPoint, pathColor);
+        }
+        prevWorldPoint = worldPoint;
+
+        bool pointSelected = hasPointSelection && ((int)i == getSelectedTrackPointIndex());
+        addPointHandle(trackObj, worldPoint,
+                       (pointSelected ? 6.0f : 4.0f) * zoom,
+                       pointSelected ? selectedHandleColor : handleColor);
     }
 }
 
@@ -769,6 +821,9 @@ void editor::SceneRender2D::hideAllGizmos(){
     for (auto& pair : polygonPointLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : trackLines) {
+        pair.second->setVisible(false);
+    }
     for (auto& pair : cameraObjects) {
         pair.second.icon->setVisible(false);
         pair.second.lines->setVisible(false);
@@ -868,6 +923,7 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentOccluders2D;
     std::set<Entity> currentLinePoints;
     std::set<Entity> currentPolygonPoints;
+    std::set<Entity> currentTrackLines;
     std::set<Entity> currentCameras;
     std::set<Entity> currentSounds;
     for (Entity& entity: entities){
@@ -1009,6 +1065,17 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             bool highlighted = isDescendantSelected(entity);
 
             createOrUpdatePolygonPointLines(entity, transform, polygon.points, true, highlighted);
+        }
+
+        if (signature.test(scene->getComponentId<TranslateTracksComponent>())){
+            TranslateTracksComponent& tracks = scene->getComponent<TranslateTracksComponent>(entity);
+
+            currentTrackLines.insert(entity);
+            instanciateTrackLines(entity);
+            // the tracks entity has no Transform, so gate on direct selection
+            bool isSelected = selectedEntities.find(entity) != selectedEntities.end();
+
+            createOrUpdateTrackLines(entity, tracks, isSelected);
         }
 
         if (signature.test(scene->getComponentId<Joint2DComponent>())){
@@ -1215,6 +1282,16 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
             itPolygonPoints = polygonPointLines.erase(itPolygonPoints);
         } else {
             ++itPolygonPoints;
+        }
+    }
+
+    auto itTrackLines = trackLines.begin();
+    while (itTrackLines != trackLines.end()) {
+        if (currentTrackLines.find(itTrackLines->first) == currentTrackLines.end()) {
+            delete itTrackLines->second;
+            itTrackLines = trackLines.erase(itTrackLines);
+        } else {
+            ++itTrackLines;
         }
     }
 
