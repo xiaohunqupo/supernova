@@ -29,6 +29,7 @@
 #include "subsystem/ActionSystem.h"
 #include "subsystem/MeshSystem.h"
 #include "action/Animation.h"
+#include "util/EntityPayload.h"
 #include "util/ProjectUtils.h"
 
 #include <algorithm>
@@ -1387,6 +1388,79 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
 
         isDraggingFrame = false;
         draggingFrameIndex = -1;
+    }
+
+    // Accept action entities dragged from the Structure window onto the tracks area
+    if (allowSelection && allowEditing) {
+        ImRect dropRect(ImVec2(canvasPos.x + labelWidth, canvasPos.y + rulerHeight),
+                        ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y));
+        if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("##anim_tracks_drop"))) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("entity", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
+                const EntityPayload* entityPayload = static_cast<const EntityPayload*>(payload->Data);
+                Entity dropped = entityPayload->entity;
+
+                const char* invalidReason = nullptr;
+                if (entityPayload->entitySceneId != 0 && entityPayload->entitySceneId != sceneProject->id) {
+                    invalidReason = "Entity belongs to another scene";
+                } else if (dropped == NULL_ENTITY || !scene->isEntityCreated(dropped)) {
+                    invalidReason = "Invalid entity";
+                } else if (!scene->findComponent<ActionComponent>(dropped)) {
+                    invalidReason = "Entity has no Action component";
+                } else if (scene->getSystem<ActionSystem>()->isAnimationReachable(dropped, selectedEntity)) {
+                    invalidReason = "Would create an animation cycle";
+                }
+
+                if (invalidReason) {
+                    ImGui::SetTooltip("%s", invalidReason);
+                } else {
+                    ImVec2 dropMousePos = ImGui::GetIO().MousePos;
+                    float dropTime = std::max(0.0f, snapTime(xToTime(dropMousePos.x, timeStart, ImVec2(canvasPos.x + labelWidth, 0))));
+                    int dropTrack = std::max(0, (int)std::floor((dropMousePos.y - canvasPos.y - rulerHeight) / (trackHeight + trackPadding)));
+
+                    ImGui::SetTooltip(ICON_FA_PLUS " %s | Track %d | %.2fs",
+                                      getActionLabel(dropped, scene).c_str(), dropTrack, dropTime);
+
+                    // Ghost block previewing where the frame would land
+                    float ghostDur = scene->getSystem<ActionSystem>()->getDuration(dropped);
+                    float ghostStart = timeToX(dropTime, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
+                    float ghostEnd = timeToX(dropTime + ghostDur, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
+                    float ghostMinWidth = 10.0f;
+                    if (ghostEnd - ghostStart < ghostMinWidth) {
+                        ghostEnd = ghostStart + ghostMinWidth;
+                    }
+                    float ghostY = canvasPos.y + rulerHeight + dropTrack * (trackHeight + trackPadding);
+                    float ghostVisStart = std::max(ghostStart, canvasPos.x + labelWidth);
+                    float ghostVisEnd = std::min(ghostEnd, canvasPos.x + canvasSize.x);
+                    if (ghostVisEnd > ghostVisStart) {
+                        ImU32 ghostColor = getFrameColor(dropped);
+                        ImU32 ghostFill = (ghostColor & ~IM_COL32_A_MASK) | ((ImU32)110 << IM_COL32_A_SHIFT);
+                        drawList->AddRectFilled(ImVec2(ghostVisStart, ghostY + 2), ImVec2(ghostVisEnd, ghostY + trackHeight - 2),
+                                                ghostFill, 3.0f);
+                        drawList->AddRect(ImVec2(ghostVisStart, ghostY + 2), ImVec2(ghostVisEnd, ghostY + trackHeight - 2),
+                                          IM_COL32(255, 255, 255, 180), 3.0f, 0, 1.5f);
+
+                        std::string ghostLabel = getActionLabel(dropped, scene);
+                        if (ImGui::CalcTextSize(ghostLabel.c_str()).x <= ghostVisEnd - ghostVisStart - 8) {
+                            drawList->AddText(ImVec2(ghostVisStart + 4, ghostY + 4),
+                                              IM_COL32(255, 255, 255, 200), ghostLabel.c_str());
+                        }
+                    }
+
+                    if (payload->IsDelivery()) {
+                        // Duration 0 = auto: the frame follows the action's own duration.
+                        // Overlaps on the target track are re-laned by autoAssignTracks.
+                        std::vector<ActionFrame> newActions = anim.actions;
+                        newActions.push_back({dropTime, 0.0f, dropped, (uint32_t)dropTrack});
+                        auto* cmd = new PropertyCmd<std::vector<ActionFrame>>(
+                            project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent, "actions", newActions,
+                            [sceneProject]() { sceneProject->isModified = true; });
+                        CommandHandle::get(sceneProject->id)->addCommandNoMerge(cmd);
+                        selectedFrameIndex = (int)anim.actions.size() - 1;
+                    }
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
     }
 
     return mouseOverFrame;
