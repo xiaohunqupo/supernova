@@ -1018,6 +1018,23 @@ const std::vector<ToolDefinition>& cachedTools() {
             false
         },
         {
+            "set_keyframe_easing",
+            "Set per-segment easing on a KeyframeTracksComponent. Segment i eases the interpolation from key i to key i+1; unset segments are LINEAR.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Entity id with KeyframeTracksComponent")},
+                {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
+                {"segment", integerSchema("Segment index (key i to key i+1), used with ease")},
+                {"ease", stringSchema("Ease name (e.g. LINEAR, QUAD_IN_OUT, BOUNCE_OUT, ELASTIC_OUT)")},
+                {"easings", {
+                    {"type", "array"},
+                    {"description", "Complete replacement easing list, one ease name per segment"},
+                    {"items", {{"type", "string"}}}
+                }}
+            }),
+            false
+        },
+        {
             "undo_editor",
             "Undo the last editor command in scene or project scope.",
             objectSchema({
@@ -1428,6 +1445,12 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         if (arguments.value("append", false) && arguments.contains("time") && arguments["time"].is_number()) return ok();
         return fail("set_keyframe_times requires times array or append=true with time.");
     }
+    if (name == "set_keyframe_easing") {
+        if (!hasEntitySelector(arguments)) return fail("set_keyframe_easing requires entity_id or entity_name.");
+        if (arguments.contains("easings") && arguments["easings"].is_array()) return ok();
+        if (arguments.contains("segment") && arguments.contains("ease")) return ok();
+        return fail("set_keyframe_easing requires easings array or segment + ease.");
+    }
     if (name == "undo_editor" || name == "redo_editor") {
         return ok();
     }
@@ -1707,6 +1730,9 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "set_keyframe_times") {
         return "Set keyframe times";
+    }
+    if (name == "set_keyframe_easing") {
+        return "Set keyframe easing";
     }
     if (name == "undo_editor") {
         return "Undo " + arguments.value("scope", "scene") + " command";

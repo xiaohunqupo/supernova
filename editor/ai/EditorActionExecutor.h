@@ -108,6 +108,7 @@ private:
     ActionResult addAnimationAction(const Json& arguments);
     ActionResult removeAnimationAction(const Json& arguments);
     ActionResult setKeyframeTimes(const Json& arguments);
+    ActionResult setKeyframeEasing(const Json& arguments);
     ActionResult undoEditor(const Json& arguments);
     ActionResult redoEditor(const Json& arguments);
 };

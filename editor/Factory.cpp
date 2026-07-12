@@ -1874,6 +1874,16 @@ std::string editor::Factory::createKeyframeTracksComponent(int indentSpaces, Ent
         }
         code << "};\n";
     }
+    bool anyEasing = std::any_of(kf.easings.begin(), kf.easings.end(),
+                                 [](EaseType e){ return e != EaseType::LINEAR; });
+    if (anyEasing) {
+        code << ind << "kfcomp.easings = {";
+        for (size_t i = 0; i < kf.easings.size(); i++) {
+            if (i > 0) code << ", ";
+            code << formatEaseType(kf.easings[i]);
+        }
+        code << "};\n";
+    }
     addComponentCode(code, ind, sceneName, entityName, entity, "KeyframeTracksComponent", "kfcomp", assignExisting);
     return code.str();
 }

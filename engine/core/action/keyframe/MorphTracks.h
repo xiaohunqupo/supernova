@@ -6,6 +6,7 @@
 #define MORPHTRACKS_H
 
 #include "action/Action.h"
+#include "action/Ease.h"
 
 namespace doriax{
     class DORIAX_API MorphTracks: public Action{
@@ -17,6 +18,8 @@ namespace doriax{
 
         void setTimes(std::vector<float> times);
         void setValues(std::vector<std::vector<float>> values);
+        void setEasings(std::vector<EaseType> easings);
+        void setEasing(unsigned int segment, EaseType ease);
     };
 }
 

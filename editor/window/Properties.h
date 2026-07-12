@@ -21,6 +21,7 @@ namespace doriax::editor{
 
     class SceneWindow;
     class ForkShaderCmd;
+    class MultiPropertyCmd;
 
     enum class RowPropertyType{
         Label,
@@ -350,8 +351,11 @@ namespace doriax::editor{
         void drawBundleComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawBoneComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawKeyframeTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
+        // onRemoveValue lets the caller add companion property commands (same undo
+        // step) when entry `removedIndex` is deleted, e.g. keyframe easings
         template<typename Component, typename ValueType>
-        void drawTrackValues(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities, RowPropertyType rowType, const ValueType& defaultNewValue, const char* idPrefix, std::vector<ValueType> Component::*memberPtr, const char* propertyName);
+        void drawTrackValues(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities, RowPropertyType rowType, const ValueType& defaultNewValue, const char* idPrefix, std::vector<ValueType> Component::*memberPtr, const char* propertyName,
+                             const std::function<void(MultiPropertyCmd*, Entity, Component*, size_t)>& onRemoveValue = nullptr);
         void drawTranslateTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawRotateTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawScaleTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

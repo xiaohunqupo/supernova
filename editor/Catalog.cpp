@@ -1676,6 +1676,23 @@ namespace {
             return {PropertyType::Float, UpdateFlags_None, (void*)&defValue, (void*)&trackComp->times[index]};
         }
 
+        if (propertyName == "easings") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.easings, (void*)&trackComp->easings};
+        }
+
+        if (propertyName.compare(0, 8, "easings[") == 0) {
+            size_t pos = 8;
+            size_t index = 0;
+            if (!parseIndex(propertyName, pos, index) || pos >= propertyName.size() || propertyName[pos] != ']') {
+                return PropertyData();
+            }
+            if (pos + 1 != propertyName.size() || index >= trackComp->easings.size()) {
+                return PropertyData();
+            }
+            static EaseType defValue = EaseType::LINEAR;
+            return {PropertyType::Enum, UpdateFlags_None, (void*)&defValue, (void*)&trackComp->easings[index]};
+        }
+
         return PropertyData();
     }
 
@@ -1858,6 +1875,14 @@ namespace {
         for (size_t i = 0; i < (compRef ? comp->times.size() : 1); i++) {
             std::string idx = compRef ? std::to_string(i) : "";
             ps["times[" + idx + "]"] = {PropertyType::Float, UpdateFlags_None, (void*)&defValue, compRef ? (void*)&comp->times[i] : nullptr};
+        }
+
+        ps["easings"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.easings, compRef ? (void*)&comp->easings : nullptr};
+
+        static EaseType defEase = EaseType::LINEAR;
+        for (size_t i = 0; i < (compRef ? comp->easings.size() : 1); i++) {
+            std::string idx = compRef ? std::to_string(i) : "";
+            ps["easings[" + idx + "]"] = {PropertyType::Enum, UpdateFlags_None, (void*)&defEase, compRef ? (void*)&comp->easings[i] : nullptr};
         }
     }
 

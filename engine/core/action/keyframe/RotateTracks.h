@@ -6,6 +6,7 @@
 #define ROTATETRACKS_H
 
 #include "action/Action.h"
+#include "action/Ease.h"
 
 namespace doriax{
     class DORIAX_API RotateTracks: public Action{
@@ -17,6 +18,8 @@ namespace doriax{
 
         void setTimes(std::vector<float> times);
         void setValues(std::vector<Quaternion> values);
+        void setEasings(std::vector<EaseType> easings);
+        void setEasing(unsigned int segment, EaseType ease);
     };
 }
 

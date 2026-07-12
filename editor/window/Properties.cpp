@@ -11699,11 +11699,104 @@ void editor::Properties::drawKeyframeTracksComponent(ComponentType cpType, Scene
     propertyRow(RowPropertyType::Float, cpType, "interpolation", "Interpolation", sceneProject, entities);
     endTable();
 
-    drawTrackValues<KeyframeTracksComponent, float>(cpType, sceneProject, entities, RowPropertyType::Float, 0.0f, "keyframe", &KeyframeTracksComponent::times, "times");
+    // Keep easings aligned when a key is removed: removing key k removes one
+    // segment (a middle removal merges its neighbors, keeping the leading ease)
+    auto reconcileEasings = [this, sceneProject, cpType](MultiPropertyCmd* multiCmd, Entity entity, KeyframeTracksComponent* trackComp, size_t removedIndex){
+        size_t oldSegments = trackComp->times.size() > 1 ? trackComp->times.size() - 1 : 0;
+        if (oldSegments == 0 || trackComp->easings.empty()){
+            return;
+        }
+
+        std::vector<EaseType> newEasings = trackComp->easings;
+        size_t segRemove = std::min(removedIndex, oldSegments - 1);
+        if (segRemove < newEasings.size()){
+            newEasings.erase(newEasings.begin() + (long int)segRemove);
+        }
+        size_t newSegments = oldSegments - 1;
+        if (newEasings.size() > newSegments){
+            newEasings.resize(newSegments);
+        }
+        // all-linear lists collapse to empty (keeps files compact)
+        if (std::all_of(newEasings.begin(), newEasings.end(), [](EaseType e){ return e == EaseType::LINEAR; })){
+            newEasings.clear();
+        }
+
+        if (newEasings != trackComp->easings){
+            multiCmd->addPropertyCmd<std::vector<EaseType>>(project, sceneProject->id, entity, cpType, "easings", newEasings);
+        }
+    };
+
+    drawTrackValues<KeyframeTracksComponent, float>(cpType, sceneProject, entities, RowPropertyType::Float, 0.0f, "keyframe", &KeyframeTracksComponent::times, "times", reconcileEasings);
+
+    // Per-segment easing: segment i shapes the interpolation from key i to key i+1.
+    // Missing entries mean linear (GLTF-imported clips keep an empty list).
+    size_t numSegments = comp.times.size() > 1 ? comp.times.size() - 1 : 0;
+    if (numSegments > 0){
+        ImGui::SeparatorText("Easing");
+        beginTable(cpType, getLabelSize("Ease 00 - 00"), "keyframe_easings_table");
+
+        // CUSTOM is combo-less here: per-segment easings store only the EaseType
+        std::vector<const char*> easeNames;
+        std::vector<EaseType> easeValues;
+        for (const auto& entry : entriesEaseType) {
+            if (entry.value == (int)EaseType::CUSTOM) continue;
+            easeNames.push_back(entry.name);
+            easeValues.push_back((EaseType)entry.value);
+        }
+
+        for (size_t i = 0; i < numSegments; i++){
+            ImGui::PushID((int)i);
+
+            EaseType current = (i < comp.easings.size()) ? comp.easings[i] : EaseType::LINEAR;
+
+            auto applyEasing = [&](EaseType newType){
+                MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+                for (Entity entity : entities){
+                    if (KeyframeTracksComponent* trackComp = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity)){
+                        size_t segments = trackComp->times.size() > 1 ? trackComp->times.size() - 1 : 0;
+                        if (i >= segments) continue;
+                        std::vector<EaseType> newEasings = trackComp->easings;
+                        newEasings.resize(segments, EaseType::LINEAR);
+                        newEasings[i] = newType;
+                        // all-linear lists collapse to empty (keeps files compact)
+                        if (std::all_of(newEasings.begin(), newEasings.end(), [](EaseType e){ return e == EaseType::LINEAR; })){
+                            newEasings.clear();
+                        }
+                        multiCmd->addPropertyCmd<std::vector<EaseType>>(project, sceneProject->id, entity, cpType, "easings", newEasings);
+                    }
+                }
+                multiCmd->setNoMerge();
+                CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+            };
+
+            std::string label = "Ease " + std::to_string(i) + " - " + std::to_string(i + 1);
+            bool defChanged = (current != EaseType::LINEAR);
+            if (propertyHeader(label, -1, defChanged, false)){
+                applyEasing(EaseType::LINEAR);
+            }
+
+            int itemCurrent = 0;
+            for (size_t n = 0; n < easeValues.size(); n++){
+                if (easeValues[n] == current){
+                    itemCurrent = (int)n;
+                    break;
+                }
+            }
+
+            if (ImGui::Combo("##keyframe_ease", &itemCurrent, easeNames.data(), (int)easeNames.size())){
+                applyEasing(easeValues[itemCurrent]);
+            }
+
+            ImGui::PopID();
+        }
+
+        endTable();
+    }
 }
 
 template<typename Component, typename ValueType>
-void editor::Properties::drawTrackValues(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities, RowPropertyType rowType, const ValueType& defaultNewValue, const char* idPrefix, std::vector<ValueType> Component::*memberPtr, const char* propertyName){
+void editor::Properties::drawTrackValues(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities, RowPropertyType rowType, const ValueType& defaultNewValue, const char* idPrefix, std::vector<ValueType> Component::*memberPtr, const char* propertyName,
+                                         const std::function<void(MultiPropertyCmd*, Entity, Component*, size_t)>& onRemoveValue){
     Component& comp = sceneProject->scene->getComponent<Component>(entities[0]);
 
     float firstColSize = getLabelSize("Value 000");
@@ -11776,6 +11869,9 @@ void editor::Properties::drawTrackValues(ComponentType cpType, SceneProject* sce
                         std::vector<ValueType> newValues = trackComp->*memberPtr;
                         newValues.erase(newValues.begin() + (long int)i);
                         multiCmd->addPropertyCmd<std::vector<ValueType>>(project, sceneProject->id, entity, cpType, propertyName, newValues);
+                        if (onRemoveValue){
+                            onRemoveValue(multiCmd, entity, trackComp, i);
+                        }
                     }
                 }
             }

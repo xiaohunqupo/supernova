@@ -1351,6 +1351,15 @@ void ActionSystem::keyframeUpdate(double dt, ActionComponent& action, KeyframeTr
     if (keyframe.interpolation > 1){
         keyframe.interpolation = 1;
     }
+
+    // Per-segment easing: easings[i] shapes the segment from key i to key i+1.
+    // Empty easings (e.g. GLTF-imported clips) keep pure linear interpolation.
+    if (keyframe.index > 0){
+        size_t segment = (size_t)keyframe.index - 1;
+        if (segment < keyframe.easings.size() && keyframe.easings[segment] != EaseType::LINEAR){
+            keyframe.interpolation = Ease::getFunction(keyframe.easings[segment])(keyframe.interpolation);
+        }
+    }
 }
 
 void ActionSystem::translateTracksUpdate(KeyframeTracksComponent& keyframe, TranslateTracksComponent& translatetracks, Entity target, float weight){

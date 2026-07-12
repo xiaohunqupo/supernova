@@ -22,8 +22,6 @@ namespace doriax::editor {
         static std::string primitiveTypeToString(PrimitiveType type);
         static PrimitiveType stringToPrimitiveType(const std::string& str);
 
-        static std::string easeTypeToString(EaseType type);
-        static EaseType stringToEaseType(const std::string& str);
         static YAML::Node encodeEase(const Ease& ease);
         static Ease decodeEase(const YAML::Node& node, const Ease* oldEase = nullptr);
 
@@ -172,6 +170,8 @@ namespace doriax::editor {
 
         // Public because the enum names are also the wire format of AI editor actions
         // (EditorActionExecutor validates values by round-tripping through these).
+        static std::string easeTypeToString(EaseType type);
+        static EaseType stringToEaseType(const std::string& str);
         static std::string textureFilterToString(TextureFilter filter);
         static TextureFilter stringToTextureFilter(const std::string& str);
 

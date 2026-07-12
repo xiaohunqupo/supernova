@@ -9,6 +9,7 @@
 #include "util/ProjectUtils.h"
 #include "render/SceneRender2D.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -5799,6 +5800,17 @@ YAML::Node editor::Stream::encodeKeyframeTracksComponent(const KeyframeTracksCom
     }
     node["times"] = timesNode;
 
+    // All-linear tracks (e.g. GLTF-imported clips) stay compact
+    bool anyEasing = std::any_of(tracks.easings.begin(), tracks.easings.end(),
+                                 [](EaseType e){ return e != EaseType::LINEAR; });
+    if (anyEasing) {
+        YAML::Node easingsNode;
+        for (EaseType e : tracks.easings) {
+            easingsNode.push_back(easeTypeToString(e));
+        }
+        node["easings"] = easingsNode;
+    }
+
     return node;
 }
 
@@ -5816,6 +5828,13 @@ KeyframeTracksComponent editor::Stream::decodeKeyframeTracksComponent(const YAML
         tracks.times.clear();
         for (const YAML::Node& t : node["times"]) {
             tracks.times.push_back(t.as<float>());
+        }
+    }
+
+    tracks.easings.clear();
+    if (node["easings"]) {
+        for (const YAML::Node& e : node["easings"]) {
+            tracks.easings.push_back(stringToEaseType(e.as<std::string>()));
         }
     }
 

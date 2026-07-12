@@ -6,11 +6,16 @@
 #define KEYFRAMETRACKS_COMPONENT_H
 
 #include "Engine.h"
+#include "action/Ease.h"
 
 namespace doriax{
 
     struct DORIAX_API KeyframeTracksComponent{
         std::vector<float> times;
+        // Per-segment easing: easings[i] shapes the interpolation from key i to
+        // key i+1. Empty or shorter than the segment count means linear there
+        // (GLTF-imported clips leave this empty).
+        std::vector<EaseType> easings;
         int index = 0;
         float interpolation = 0;
     };

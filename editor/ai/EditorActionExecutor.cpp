@@ -1401,6 +1401,7 @@ ActionResult EditorActionExecutor::execute(const std::string& name,
     if (name == "add_animation_action") return addAnimationAction(arguments);
     if (name == "remove_animation_action") return removeAnimationAction(arguments);
     if (name == "set_keyframe_times") return setKeyframeTimes(arguments);
+    if (name == "set_keyframe_easing") return setKeyframeEasing(arguments);
     if (name == "undo_editor") return undoEditor(arguments);
     if (name == "redo_editor") return redoEditor(arguments);
 
@@ -4067,10 +4068,105 @@ ActionResult EditorActionExecutor::setKeyframeTimes(const Json& arguments) {
         return failResult("Provide times array or append=true with time.");
     }
 
-    CommandHandle::get(sceneId)->addCommandNoMerge(new PropertyCmd<std::vector<float>>(
-        project, sceneId, entity, ComponentType::KeyframeTracksComponent, "times", times));
+    MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+    multiCmd->addPropertyCmd<std::vector<float>>(
+        project, sceneId, entity, ComponentType::KeyframeTracksComponent, "times", times);
+
+    // Keep per-segment easings aligned with the new key count (trim extras;
+    // missing entries mean linear; all-linear lists collapse to empty)
+    size_t newSegments = times.size() > 1 ? times.size() - 1 : 0;
+    std::vector<EaseType> newEasings = keyframes->easings;
+    if (newEasings.size() > newSegments) {
+        newEasings.resize(newSegments);
+    }
+    if (std::all_of(newEasings.begin(), newEasings.end(), [](EaseType e){ return e == EaseType::LINEAR; })) {
+        newEasings.clear();
+    }
+    if (newEasings != keyframes->easings) {
+        multiCmd->addPropertyCmd<std::vector<EaseType>>(
+            project, sceneId, entity, ComponentType::KeyframeTracksComponent, "easings", newEasings);
+    }
+
+    multiCmd->setNoMerge();
+    CommandHandle::get(sceneId)->addCommand(multiCmd);
     return okResult("Set keyframe times through the command history.",
                     Json{{"scene_id", sceneId}, {"entity_id", entity}, {"count", times.size()}});
+}
+
+// Strict ease-name parse: Stream::stringToEaseType maps unknown names to LINEAR,
+// so accept LINEAR results only when the input really spells "linear".
+static bool parseEaseName(const std::string& name, EaseType& out) {
+    out = Stream::stringToEaseType(name);
+    if (out != EaseType::LINEAR) return true;
+
+    std::string normalized;
+    normalized.reserve(name.size());
+    for (char ch : name) {
+        normalized.push_back(ch == '-' ? '_' : static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+    }
+    return normalized == "LINEAR";
+}
+
+ActionResult EditorActionExecutor::setKeyframeEasing(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    KeyframeTracksComponent* keyframes = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity);
+    if (!keyframes) return failResult("Entity has no KeyframeTracks component.");
+
+    size_t segments = keyframes->times.size() > 1 ? keyframes->times.size() - 1 : 0;
+    if (segments == 0) return failResult("Track needs at least two keyframe times before easing can be set.");
+
+    std::vector<EaseType> newEasings = keyframes->easings;
+    newEasings.resize(segments, EaseType::LINEAR);
+
+    if (arguments.contains("easings") && arguments["easings"].is_array()) {
+        size_t i = 0;
+        for (const Json& value : arguments["easings"]) {
+            if (i >= segments) break;
+            if (!value.is_string()) return failResult("easings must contain ease names (e.g. LINEAR, QUAD_IN_OUT).");
+            EaseType parsed;
+            if (!parseEaseName(value.get<std::string>(), parsed)) {
+                return failResult("Unknown ease name: " + value.get<std::string>() + " (use names like LINEAR, QUAD_IN_OUT, BOUNCE_OUT).");
+            }
+            newEasings[i++] = parsed;
+        }
+    } else if (arguments.contains("segment") && arguments.contains("ease")) {
+        int segment = arguments.value("segment", -1);
+        if (segment < 0 || (size_t)segment >= segments) {
+            return failResult("segment out of range: track has " + std::to_string(segments) + " segments (key i to key i+1).");
+        }
+        if (!arguments["ease"].is_string()) return failResult("ease must be a name (e.g. LINEAR, QUAD_IN_OUT, BOUNCE_OUT).");
+        EaseType parsed;
+        if (!parseEaseName(arguments["ease"].get<std::string>(), parsed)) {
+            return failResult("Unknown ease name: " + arguments["ease"].get<std::string>() + " (use names like LINEAR, QUAD_IN_OUT, BOUNCE_OUT).");
+        }
+        newEasings[segment] = parsed;
+    } else {
+        return failResult("Provide easings array or segment + ease.");
+    }
+
+    // CUSTOM has no per-segment function storage; treat it as linear
+    for (EaseType& e : newEasings) {
+        if (e == EaseType::CUSTOM) e = EaseType::LINEAR;
+    }
+
+    // all-linear lists collapse to empty (keeps files compact)
+    if (std::all_of(newEasings.begin(), newEasings.end(), [](EaseType e){ return e == EaseType::LINEAR; })) {
+        newEasings.clear();
+    }
+
+    CommandHandle::get(sceneId)->addCommandNoMerge(new PropertyCmd<std::vector<EaseType>>(
+        project, sceneId, entity, ComponentType::KeyframeTracksComponent, "easings", newEasings));
+
+    Json easingsJson = Json::array();
+    for (EaseType e : newEasings) easingsJson.push_back(Stream::easeTypeToString(e));
+    return okResult("Set keyframe easing through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"segments", segments}, {"easings", easingsJson}});
 }
 
 ActionResult EditorActionExecutor::undoEditor(const Json& arguments) {

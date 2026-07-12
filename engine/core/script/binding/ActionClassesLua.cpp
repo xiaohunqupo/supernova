@@ -322,6 +322,8 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addConstructor <void(Scene*), void(Scene*, std::vector<float>, std::vector<std::vector<float>>)> ()
         .addFunction("setTimes", &MorphTracks::setTimes)
         .addFunction("setValues", &MorphTracks::setValues)
+        .addFunction("setEasings", &MorphTracks::setEasings)
+        .addFunction("setEasing", &MorphTracks::setEasing)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
@@ -329,6 +331,8 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addConstructor <void(Scene*), void(Scene*, std::vector<float>, std::vector<Quaternion>)> ()
         .addFunction("setTimes", &RotateTracks::setTimes)
         .addFunction("setValues", &RotateTracks::setValues)
+        .addFunction("setEasings", &RotateTracks::setEasings)
+        .addFunction("setEasing", &RotateTracks::setEasing)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
@@ -336,6 +340,8 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addConstructor <void(Scene*), void(Scene*, std::vector<float>, std::vector<Vector3>)> ()
         .addFunction("setTimes", &ScaleTracks::setTimes)
         .addFunction("setValues", &ScaleTracks::setValues)
+        .addFunction("setEasings", &ScaleTracks::setEasings)
+        .addFunction("setEasing", &ScaleTracks::setEasing)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
@@ -343,6 +349,8 @@ void LuaBinding::registerActionClasses(lua_State *L){
         .addConstructor <void(Scene*), void(Scene*, std::vector<float>, std::vector<Vector3>)> ()
         .addFunction("setTimes", &TranslateTracks::setTimes)
         .addFunction("setValues", &TranslateTracks::setValues)
+        .addFunction("setEasings", &TranslateTracks::setEasings)
+        .addFunction("setEasing", &TranslateTracks::setEasing)
         .endClass();
 
 #endif //DISABLE_LUA_BINDINGS
