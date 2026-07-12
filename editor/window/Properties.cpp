@@ -1800,7 +1800,8 @@ bool editor::Properties::drawSummaryAddButton(const std::string& label, float tr
 editor::Properties::EntityPickerResult editor::Properties::drawEntityPickerPopup(
         const std::string& popupId, const Signature& filter,
         SceneProject* owningScene, bool includeChildScenes,
-        Entity currentValue, uint32_t currentValueSceneId) {
+        Entity currentValue, uint32_t currentValueSceneId,
+        const std::vector<Entity>& excludeEntities) {
 
     EntityPickerResult result;
     if (!ImGui::BeginPopup(popupId.c_str())) return result;
@@ -1851,6 +1852,8 @@ editor::Properties::EntityPickerResult editor::Properties::drawEntityPickerPopup
             for (Entity e : sp->entities) {
                 if (!sp->scene->isEntityCreated(e)) continue;
                 if (filter.any() && (sp->scene->getSignature(e) & filter) != filter) continue;
+                if (storedSceneId == 0 &&
+                    std::find(excludeEntities.begin(), excludeEntities.end(), e) != excludeEntities.end()) continue;
 
                 std::string ename = sp->scene->getEntityName(e);
                 if (ename.empty()) ename = "Entity " + std::to_string(e);
@@ -4233,7 +4236,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         }
 
         // Entity picker popup
-        auto pickerResult = drawEntityPickerPopup(pickerPopupId, settings.entityFilter, sceneProject, false, newValue, 0);
+        auto pickerResult = drawEntityPickerPopup(pickerPopupId, settings.entityFilter, sceneProject, false, newValue, 0, settings.excludeEntities);
         if (pickerResult.chosen) {
             for (Entity& entity : entities) {
                 cmd = new PropertyCmd<unsigned int>(project, sceneProject->id, entity, cpType, id, pickerResult.entity, settings.onValueChanged);
@@ -4246,10 +4249,11 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("entity", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
                 const EntityPayload* entityPayload = static_cast<const EntityPayload*>(payload->Data);
                 Entity droppedEntity = entityPayload->entity;
-                bool valid = sceneProject->scene->isEntityCreated(droppedEntity);
+                bool excluded = std::find(settings.excludeEntities.begin(), settings.excludeEntities.end(), droppedEntity) != settings.excludeEntities.end();
+                bool valid = sceneProject->scene->isEntityCreated(droppedEntity) && !excluded;
 
                 if (!valid && ImGui::IsItemHovered()){
-                    ImGui::SetTooltip("Invalid entity");
+                    ImGui::SetTooltip(excluded ? "Cannot reference this entity here" : "Invalid entity");
                 }
 
                 if (payload->IsDelivery() && valid) {
@@ -4268,7 +4272,8 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
                     YAML::Node bundleNode = YAML::Load(yamlString);
                     if (bundleNode["members"] && bundleNode["members"].IsSequence() && bundleNode["members"].size() > 0) {
                         droppedEntity = bundleNode["members"][0]["entity"].as<Entity>();
-                        valid = sceneProject->scene->isEntityCreated(droppedEntity);
+                        valid = sceneProject->scene->isEntityCreated(droppedEntity) &&
+                            std::find(settings.excludeEntities.begin(), settings.excludeEntities.end(), droppedEntity) == settings.excludeEntities.end();
                     }
                 } catch (...) {}
 
@@ -11633,6 +11638,7 @@ void editor::Properties::drawAnimationComponent(ComponentType cpType, SceneProje
             }
             RowSettings settingsAction;
             settingsAction.entityFilter.set(sceneProject->scene->getComponentId<ActionComponent>());
+            settingsAction.excludeEntities = entities; // an animation cannot contain itself
             propertyRow(RowPropertyType::LocalEntity, cpType, prefix + ".action", "Action", sceneProject, entities, settingsAction);
 
             if (i < anim.actions.size() - 1) {

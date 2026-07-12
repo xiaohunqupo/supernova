@@ -72,6 +72,9 @@ namespace doriax::editor{
         std::function<void()> onValueChanged = nullptr;
         // Optional filter for LocalEntity picker: only show entities matching all bits
         Signature entityFilter;
+        // Entities hidden from the LocalEntity picker and rejected on drag-drop
+        // (e.g. to prevent self-references)
+        std::vector<Entity> excludeEntities;
     };
 
     class Properties{
@@ -260,7 +263,7 @@ namespace doriax::editor{
             uint32_t sceneId = 0;
         };
 
-        EntityPickerResult drawEntityPickerPopup(const std::string& popupId, const Signature& filter, SceneProject* owningScene, bool includeChildScenes, Entity currentValue, uint32_t currentValueSceneId = 0);
+        EntityPickerResult drawEntityPickerPopup(const std::string& popupId, const Signature& filter, SceneProject* owningScene, bool includeChildScenes, Entity currentValue, uint32_t currentValueSceneId = 0, const std::vector<Entity>& excludeEntities = {});
         void syncSubSelection(SceneProject* sceneProject, Entity entity, int tileIndex, int instanceIndex);
 
         void beginTable(ComponentType cpType, float firstColSize, std::string nameAddon = "");

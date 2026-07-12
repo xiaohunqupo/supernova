@@ -3997,6 +3997,10 @@ ActionResult EditorActionExecutor::addAnimationAction(const Json& arguments) {
         frame.action = resolveEntity(sceneProject, tmp);
     }
 
+    if (frame.action == entity) {
+        return failResult("An animation cannot contain itself as an action.");
+    }
+
     ActionSystem* actionSystem = sceneProject->scene->getSystem<ActionSystem>().get();
     std::vector<ActionFrame> actions = anim->actions;
     for (const auto& existing : actions) {

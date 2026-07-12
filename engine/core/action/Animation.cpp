@@ -177,6 +177,11 @@ void Animation::setDuration(const float &duration){
 }
 
 void Animation::addActionFrame(float startTime, float duration, Entity action, Entity target){
+    if (action == entity){
+        Log::error("Cannot add animation entity %u as its own action frame", entity);
+        return;
+    }
+
     AnimationComponent& animation = getComponent<AnimationComponent>();
     ActionComponent& actioncomp = getComponent<ActionComponent>();
 
