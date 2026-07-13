@@ -11,6 +11,12 @@ namespace doriax{
 
     struct DORIAX_API RotateTracksComponent{
         std::vector<Quaternion> values;
+        // Per-key Hermite tangents (GLTF CUBICSPLINE); empty on linear tracks.
+        // Cubic interpolation runs only while both stay sized to values — any
+        // code editing values must keep them mirrored (the runtime falls back
+        // to linear on mismatch).
+        std::vector<Quaternion> inTangents;
+        std::vector<Quaternion> outTangents;
     };
 
 }

@@ -44,6 +44,7 @@ namespace doriax {
         BOUNCE_IN,
         BOUNCE_OUT,
         BOUNCE_IN_OUT,
+        STEP,
         CUSTOM
     };
 
@@ -160,6 +161,12 @@ namespace doriax {
 
         static inline float linear(float time){
             return time;
+        }
+
+        // Hold the start value for the whole segment (GLTF STEP interpolation);
+        // returning 1 at time >= 1 keeps the clamp to the final keyframe value
+        static inline float stepped(float time){
+            return (time >= 1) ? 1.0f : 0.0f;
         }
 
         static inline float easeInQuad(float time){
@@ -441,6 +448,8 @@ namespace doriax {
                 return Ease::easeOutBounce;
             }else if(functionType == EaseType::BOUNCE_IN_OUT){
                 return Ease::easeInOutBounce;
+            }else if(functionType == EaseType::STEP){
+                return Ease::stepped;
             }
 
             return Ease::linear;

@@ -33,6 +33,7 @@ void LuaBinding::registerActionClasses(lua_State *L){
     luabridge::getGlobalNamespace(L)
         .beginNamespace("EaseType")
         .addVariable("LINEAR", EaseType::LINEAR)
+        .addVariable("STEP", EaseType::STEP)
         .addVariable("QUAD_IN", EaseType::QUAD_IN)
         .addVariable("QUAD_OUT", EaseType::QUAD_OUT)
         .addVariable("QUAD_IN_OUT", EaseType::QUAD_IN_OUT)

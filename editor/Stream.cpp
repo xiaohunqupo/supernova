@@ -237,6 +237,7 @@ std::string editor::Stream::easeTypeToString(EaseType type) {
         case EaseType::BOUNCE_IN: return "BOUNCE_IN";
         case EaseType::BOUNCE_OUT: return "BOUNCE_OUT";
         case EaseType::BOUNCE_IN_OUT: return "BOUNCE_IN_OUT";
+        case EaseType::STEP: return "STEP";
         case EaseType::CUSTOM: return "CUSTOM";
         default: return "LINEAR";
     }
@@ -284,6 +285,7 @@ EaseType editor::Stream::stringToEaseType(const std::string& str) {
     if (normalized == "BOUNCE_IN") return EaseType::BOUNCE_IN;
     if (normalized == "BOUNCE_OUT") return EaseType::BOUNCE_OUT;
     if (normalized == "BOUNCE_IN_OUT") return EaseType::BOUNCE_IN_OUT;
+    if (normalized == "STEP") return EaseType::STEP;
     if (normalized == "CUSTOM") return EaseType::CUSTOM;
     return EaseType::LINEAR;
 }
@@ -5841,16 +5843,72 @@ KeyframeTracksComponent editor::Stream::decodeKeyframeTracksComponent(const YAML
     return tracks;
 }
 
-YAML::Node editor::Stream::encodeTranslateTracksComponent(const TranslateTracksComponent& tracks) {
+// Value/tangent list plumbing shared by the keyframe track components below
+template<typename T, typename EncodeFn>
+static YAML::Node encodeList(const std::vector<T>& values, EncodeFn encodeValue) {
     YAML::Node node;
-
-    YAML::Node valuesNode;
-    for (const auto& v : tracks.values) {
-        valuesNode.push_back(encodeVector3(v));
+    for (const auto& v : values) {
+        node.push_back(encodeValue(v));
     }
-    node["values"] = valuesNode;
-
     return node;
+}
+
+template<typename T, typename DecodeFn>
+static void decodeListInto(const YAML::Node& node, std::vector<T>& values, DecodeFn decodeValue) {
+    values.clear();
+    for (const YAML::Node& v : node) {
+        values.push_back(decodeValue(v));
+    }
+}
+
+static YAML::Node encodeFloatList(const std::vector<float>& values) {
+    YAML::Node node;
+    for (float f : values) {
+        node.push_back(f);
+    }
+    return node;
+}
+
+static std::vector<float> decodeFloatList(const YAML::Node& node) {
+    std::vector<float> values;
+    for (const YAML::Node& f : node) {
+        values.push_back(f.as<float>());
+    }
+    return values;
+}
+
+// Encodes values plus the optional Hermite tangents (GLTF CUBICSPLINE clips);
+// decode clears tangents that are absent from the file
+template<typename Tracks, typename EncodeFn>
+static YAML::Node encodeTrackLists(const Tracks& tracks, EncodeFn encodeValue) {
+    YAML::Node node;
+    node["values"] = encodeList(tracks.values, encodeValue);
+    if (!tracks.inTangents.empty()) {
+        node["inTangents"] = encodeList(tracks.inTangents, encodeValue);
+    }
+    if (!tracks.outTangents.empty()) {
+        node["outTangents"] = encodeList(tracks.outTangents, encodeValue);
+    }
+    return node;
+}
+
+template<typename Tracks, typename DecodeFn>
+static void decodeTrackLists(const YAML::Node& node, Tracks& tracks, DecodeFn decodeValue) {
+    if (node["values"]) {
+        decodeListInto(node["values"], tracks.values, decodeValue);
+    }
+    tracks.inTangents.clear();
+    if (node["inTangents"]) {
+        decodeListInto(node["inTangents"], tracks.inTangents, decodeValue);
+    }
+    tracks.outTangents.clear();
+    if (node["outTangents"]) {
+        decodeListInto(node["outTangents"], tracks.outTangents, decodeValue);
+    }
+}
+
+YAML::Node editor::Stream::encodeTranslateTracksComponent(const TranslateTracksComponent& tracks) {
+    return encodeTrackLists(tracks, encodeVector3);
 }
 
 TranslateTracksComponent editor::Stream::decodeTranslateTracksComponent(const YAML::Node& node, const TranslateTracksComponent* oldTracks) {
@@ -5860,26 +5918,13 @@ TranslateTracksComponent editor::Stream::decodeTranslateTracksComponent(const YA
         tracks = *oldTracks;
     }
 
-    if (node["values"]) {
-        tracks.values.clear();
-        for (const YAML::Node& v : node["values"]) {
-            tracks.values.push_back(decodeVector3(v));
-        }
-    }
+    decodeTrackLists(node, tracks, decodeVector3);
 
     return tracks;
 }
 
 YAML::Node editor::Stream::encodeRotateTracksComponent(const RotateTracksComponent& tracks) {
-    YAML::Node node;
-
-    YAML::Node valuesNode;
-    for (const auto& v : tracks.values) {
-        valuesNode.push_back(encodeQuaternion(v));
-    }
-    node["values"] = valuesNode;
-
-    return node;
+    return encodeTrackLists(tracks, encodeQuaternion);
 }
 
 RotateTracksComponent editor::Stream::decodeRotateTracksComponent(const YAML::Node& node, const RotateTracksComponent* oldTracks) {
@@ -5889,26 +5934,13 @@ RotateTracksComponent editor::Stream::decodeRotateTracksComponent(const YAML::No
         tracks = *oldTracks;
     }
 
-    if (node["values"]) {
-        tracks.values.clear();
-        for (const YAML::Node& v : node["values"]) {
-            tracks.values.push_back(decodeQuaternion(v));
-        }
-    }
+    decodeTrackLists(node, tracks, decodeQuaternion);
 
     return tracks;
 }
 
 YAML::Node editor::Stream::encodeScaleTracksComponent(const ScaleTracksComponent& tracks) {
-    YAML::Node node;
-
-    YAML::Node valuesNode;
-    for (const auto& v : tracks.values) {
-        valuesNode.push_back(encodeVector3(v));
-    }
-    node["values"] = valuesNode;
-
-    return node;
+    return encodeTrackLists(tracks, encodeVector3);
 }
 
 ScaleTracksComponent editor::Stream::decodeScaleTracksComponent(const YAML::Node& node, const ScaleTracksComponent* oldTracks) {
@@ -5918,30 +5950,13 @@ ScaleTracksComponent editor::Stream::decodeScaleTracksComponent(const YAML::Node
         tracks = *oldTracks;
     }
 
-    if (node["values"]) {
-        tracks.values.clear();
-        for (const YAML::Node& v : node["values"]) {
-            tracks.values.push_back(decodeVector3(v));
-        }
-    }
+    decodeTrackLists(node, tracks, decodeVector3);
 
     return tracks;
 }
 
 YAML::Node editor::Stream::encodeMorphTracksComponent(const MorphTracksComponent& tracks) {
-    YAML::Node node;
-
-    YAML::Node valuesNode;
-    for (const auto& inner : tracks.values) {
-        YAML::Node innerNode;
-        for (float f : inner) {
-            innerNode.push_back(f);
-        }
-        valuesNode.push_back(innerNode);
-    }
-    node["values"] = valuesNode;
-
-    return node;
+    return encodeTrackLists(tracks, encodeFloatList);
 }
 
 MorphTracksComponent editor::Stream::decodeMorphTracksComponent(const YAML::Node& node, const MorphTracksComponent* oldTracks) {
@@ -5951,16 +5966,7 @@ MorphTracksComponent editor::Stream::decodeMorphTracksComponent(const YAML::Node
         tracks = *oldTracks;
     }
 
-    if (node["values"]) {
-        tracks.values.clear();
-        for (const YAML::Node& innerNode : node["values"]) {
-            std::vector<float> inner;
-            for (const YAML::Node& f : innerNode) {
-                inner.push_back(f.as<float>());
-            }
-            tracks.values.push_back(inner);
-        }
-    }
+    decodeTrackLists(node, tracks, decodeFloatList);
 
     return tracks;
 }

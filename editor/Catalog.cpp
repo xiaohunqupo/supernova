@@ -1706,6 +1706,14 @@ namespace {
             return {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, (void*)&trackComp->values};
         }
 
+        // Hermite tangents (GLTF CUBICSPLINE), kept mirrored with values by key-edit commands
+        if (propertyName == "inTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, (void*)&trackComp->inTangents};
+        }
+        if (propertyName == "outTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, (void*)&trackComp->outTangents};
+        }
+
         if (propertyName.compare(0, 7, "values[") == 0) {
             size_t pos = 7;
             size_t index = 0;
@@ -1730,6 +1738,14 @@ namespace {
 
         if (propertyName == "values") {
             return {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, (void*)&trackComp->values};
+        }
+
+        // Hermite tangents (GLTF CUBICSPLINE), kept mirrored with values by key-edit commands
+        if (propertyName == "inTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, (void*)&trackComp->inTangents};
+        }
+        if (propertyName == "outTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, (void*)&trackComp->outTangents};
         }
 
         if (propertyName.compare(0, 7, "values[") == 0) {
@@ -1758,6 +1774,14 @@ namespace {
             return {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, (void*)&trackComp->values};
         }
 
+        // Hermite tangents (GLTF CUBICSPLINE), kept mirrored with values by key-edit commands
+        if (propertyName == "inTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, (void*)&trackComp->inTangents};
+        }
+        if (propertyName == "outTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, (void*)&trackComp->outTangents};
+        }
+
         if (propertyName.compare(0, 7, "values[") == 0) {
             size_t pos = 7;
             size_t index = 0;
@@ -1782,6 +1806,14 @@ namespace {
 
         if (propertyName == "values") {
             return {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, (void*)&trackComp->values};
+        }
+
+        // Hermite tangents (GLTF CUBICSPLINE), kept mirrored with values by key-edit commands
+        if (propertyName == "inTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, (void*)&trackComp->inTangents};
+        }
+        if (propertyName == "outTangents") {
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, (void*)&trackComp->outTangents};
         }
 
         if (propertyName.compare(0, 7, "values[") == 0) {
@@ -1891,6 +1923,8 @@ namespace {
         TranslateTracksComponent& def = getDefaultComponent<TranslateTracksComponent>();
 
         ps["values"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, compRef ? (void*)&comp->values : nullptr};
+        ps["inTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, compRef ? (void*)&comp->inTangents : nullptr};
+        ps["outTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, compRef ? (void*)&comp->outTangents : nullptr};
 
         static Vector3 defValue = Vector3::ZERO;
         for (size_t i = 0; i < (compRef ? comp->values.size() : 1); i++) {
@@ -1904,6 +1938,8 @@ namespace {
         RotateTracksComponent& def = getDefaultComponent<RotateTracksComponent>();
 
         ps["values"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, compRef ? (void*)&comp->values : nullptr};
+        ps["inTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, compRef ? (void*)&comp->inTangents : nullptr};
+        ps["outTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, compRef ? (void*)&comp->outTangents : nullptr};
 
         static Quaternion defValue = Quaternion::IDENTITY;
         for (size_t i = 0; i < (compRef ? comp->values.size() : 1); i++) {
@@ -1917,6 +1953,8 @@ namespace {
         ScaleTracksComponent& def = getDefaultComponent<ScaleTracksComponent>();
 
         ps["values"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, compRef ? (void*)&comp->values : nullptr};
+        ps["inTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, compRef ? (void*)&comp->inTangents : nullptr};
+        ps["outTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, compRef ? (void*)&comp->outTangents : nullptr};
 
         static Vector3 defValue = Vector3::ZERO;
         for (size_t i = 0; i < (compRef ? comp->values.size() : 1); i++) {
@@ -1930,6 +1968,8 @@ namespace {
         MorphTracksComponent& def = getDefaultComponent<MorphTracksComponent>();
 
         ps["values"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.values, compRef ? (void*)&comp->values : nullptr};
+        ps["inTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.inTangents, compRef ? (void*)&comp->inTangents : nullptr};
+        ps["outTangents"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.outTangents, compRef ? (void*)&comp->outTangents : nullptr};
 
         static std::vector<float> defValue;
         for (size_t i = 0; i < (compRef ? comp->values.size() : 1); i++) {

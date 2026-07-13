@@ -47,6 +47,14 @@ void TranslateTracks::setValues(std::vector<Vector3> values){
     TranslateTracksComponent& translatetracks = getComponent<TranslateTracksComponent>();
 
     translatetracks.values = values;
+
+    // keep Hermite tangents (GLTF CUBICSPLINE) mirrored with values
+    if (!translatetracks.inTangents.empty()){
+        translatetracks.inTangents.resize(values.size(), Vector3::ZERO);
+    }
+    if (!translatetracks.outTangents.empty()){
+        translatetracks.outTangents.resize(values.size(), Vector3::ZERO);
+    }
 }
 
 void TranslateTracks::setEasings(std::vector<EaseType> easings){

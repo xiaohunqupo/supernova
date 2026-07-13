@@ -47,6 +47,14 @@ void RotateTracks::setValues(std::vector<Quaternion> values){
     RotateTracksComponent& rotatetracks = getComponent<RotateTracksComponent>();
 
     rotatetracks.values = values;
+
+    // keep Hermite tangents (GLTF CUBICSPLINE) mirrored with values
+    if (!rotatetracks.inTangents.empty()){
+        rotatetracks.inTangents.resize(values.size(), Quaternion(0.0f, 0.0f, 0.0f, 0.0f));
+    }
+    if (!rotatetracks.outTangents.empty()){
+        rotatetracks.outTangents.resize(values.size(), Quaternion(0.0f, 0.0f, 0.0f, 0.0f));
+    }
 }
 
 void RotateTracks::setEasings(std::vector<EaseType> easings){

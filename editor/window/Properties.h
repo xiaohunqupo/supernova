@@ -351,11 +351,13 @@ namespace doriax::editor{
         void drawBundleComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawBoneComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawKeyframeTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
-        // onRemoveValue lets the caller add companion property commands (same undo
-        // step) when entry `removedIndex` is deleted, e.g. keyframe easings
+        // onRemoveValue/onAddValue let the caller add companion property commands
+        // (same undo step) when an entry is deleted or appended, e.g. keyframe
+        // easings or cubic-spline tangents
         template<typename Component, typename ValueType>
         void drawTrackValues(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities, RowPropertyType rowType, const ValueType& defaultNewValue, const char* idPrefix, std::vector<ValueType> Component::*memberPtr, const char* propertyName,
-                             const std::function<void(MultiPropertyCmd*, Entity, Component*, size_t)>& onRemoveValue = nullptr);
+                             const std::function<void(MultiPropertyCmd*, Entity, Component*, size_t)>& onRemoveValue = nullptr,
+                             const std::function<void(MultiPropertyCmd*, Entity, Component*)>& onAddValue = nullptr);
         void drawTranslateTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawRotateTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawScaleTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

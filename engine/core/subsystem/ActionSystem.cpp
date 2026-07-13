@@ -7,6 +7,7 @@
 #include "Scene.h"
 #include "util/Color.h"
 #include "util/Angle.h"
+#include "math/Interpolation.h"
 #include "subsystem/MeshSystem.h"
 
 #include <algorithm>
@@ -1353,7 +1354,8 @@ void ActionSystem::keyframeUpdate(double dt, ActionComponent& action, KeyframeTr
     }
 
     // Per-segment easing: easings[i] shapes the segment from key i to key i+1.
-    // Empty easings (e.g. GLTF-imported clips) keep pure linear interpolation.
+    // Empty easings (e.g. GLTF LINEAR clips) keep pure linear interpolation;
+    // GLTF STEP clips use EaseType::STEP here.
     if (keyframe.index > 0){
         size_t segment = (size_t)keyframe.index - 1;
         if (segment < keyframe.easings.size() && keyframe.easings[segment] != EaseType::LINEAR){
@@ -1362,16 +1364,43 @@ void ActionSystem::keyframeUpdate(double dt, ActionComponent& action, KeyframeTr
     }
 }
 
-void ActionSystem::translateTracksUpdate(KeyframeTracksComponent& keyframe, TranslateTracksComponent& translatetracks, Entity target, float weight){
-    if (weight <= 0.0f)
-        return;
+// Tangent presence is what marks a track as GLTF CUBICSPLINE; editor-authored
+// and GLTF LINEAR/STEP tracks keep the tangent vectors empty.
+template<typename T>
+static bool hasCubicSplineTangents(const KeyframeTracksComponent& keyframe, const std::vector<T>& values, const std::vector<T>& inTangents, const std::vector<T>& outTangents){
+    return keyframe.index > 0 && values.size() > 0 &&
+           inTangents.size() == values.size() && outTangents.size() == values.size();
+}
 
-    Vector3 previousTranslation = translatetracks.values[0];
-    if (keyframe.index > 0){
-        previousTranslation = translatetracks.values[keyframe.index-1];
+// keyframe.index comes from the times array, which the editor can edit out of
+// sync with a track's values; a track with fewer values than times must freeze
+// instead of reading out of bounds.
+template<typename TracksComp>
+static bool trackIndexValid(const KeyframeTracksComponent& keyframe, const TracksComp& tracks){
+    return !tracks.values.empty() && (size_t)keyframe.index < tracks.values.size();
+}
+
+// Sample a vector track at the current playhead: cubic Hermite when tangents
+// are present, lerp otherwise.
+template<typename TracksComp>
+static Vector3 sampleVectorTrack(const KeyframeTracksComponent& keyframe, const TracksComp& tracks){
+    Vector3 previous = tracks.values[(keyframe.index > 0) ? keyframe.index - 1 : 0];
+
+    if (hasCubicSplineTangents(keyframe, tracks.values, tracks.inTangents, tracks.outTangents)){
+        float td = keyframe.times[keyframe.index] - keyframe.times[keyframe.index-1];
+        return Interpolation::cubicSpline(keyframe.interpolation, td,
+                previous, tracks.outTangents[keyframe.index-1],
+                tracks.values[keyframe.index], tracks.inTangents[keyframe.index]);
     }
 
-    Vector3 value = previousTranslation + keyframe.interpolation * (translatetracks.values[keyframe.index] - previousTranslation);
+    return previous + keyframe.interpolation * (tracks.values[keyframe.index] - previous);
+}
+
+void ActionSystem::translateTracksUpdate(KeyframeTracksComponent& keyframe, TranslateTracksComponent& translatetracks, Entity target, float weight){
+    if (weight <= 0.0f || !trackIndexValid(keyframe, translatetracks))
+        return;
+
+    Vector3 value = sampleVectorTrack(keyframe, translatetracks);
 
     TransformBlendAccum& accum = transformBlend[target];
     accum.positionSum = accum.positionSum + value * weight;
@@ -1379,15 +1408,10 @@ void ActionSystem::translateTracksUpdate(KeyframeTracksComponent& keyframe, Tran
 }
 
 void ActionSystem::scaleTracksUpdate(KeyframeTracksComponent& keyframe, ScaleTracksComponent& scaletracks, Entity target, float weight){
-    if (weight <= 0.0f)
+    if (weight <= 0.0f || !trackIndexValid(keyframe, scaletracks))
         return;
 
-    Vector3 previousScale = scaletracks.values[0];
-    if (keyframe.index > 0){
-        previousScale = scaletracks.values[keyframe.index-1];
-    }
-
-    Vector3 value = previousScale + keyframe.interpolation * (scaletracks.values[keyframe.index] - previousScale);
+    Vector3 value = sampleVectorTrack(keyframe, scaletracks);
 
     TransformBlendAccum& accum = transformBlend[target];
     accum.scaleSum = accum.scaleSum + value * weight;
@@ -1395,15 +1419,28 @@ void ActionSystem::scaleTracksUpdate(KeyframeTracksComponent& keyframe, ScaleTra
 }
 
 void ActionSystem::rotateTracksUpdate(KeyframeTracksComponent& keyframe, RotateTracksComponent& rotatetracks, Entity target, float weight){
-    if (weight <= 0.0f)
+    if (weight <= 0.0f || !trackIndexValid(keyframe, rotatetracks))
         return;
 
-    Quaternion previousRotation = rotatetracks.values[0];
-    if (keyframe.index > 0){
-        previousRotation = rotatetracks.values[keyframe.index-1];
-    }
+    Quaternion previousRotation = rotatetracks.values[(keyframe.index > 0) ? keyframe.index - 1 : 0];
 
-    Quaternion value = Quaternion::slerp(keyframe.interpolation, previousRotation, rotatetracks.values[keyframe.index]);
+    Quaternion value;
+    if (hasCubicSplineTangents(keyframe, rotatetracks.values, rotatetracks.inTangents, rotatetracks.outTangents)){
+        float td = keyframe.times[keyframe.index] - keyframe.times[keyframe.index-1];
+        value = Interpolation::cubicSpline(keyframe.interpolation, td,
+                previousRotation, rotatetracks.outTangents[keyframe.index-1],
+                rotatetracks.values[keyframe.index], rotatetracks.inTangents[keyframe.index]);
+        // spec: the interpolated quaternion MUST be normalized before applying.
+        // Guard the all-zero result the spec warns exporters about (v_k == -v_k+1):
+        // normalizing it would spread NaN through the pose blend.
+        if (value.norm() > FLT_EPSILON){
+            value.normalize();
+        }else{
+            value = (keyframe.interpolation < 0.5f) ? previousRotation : rotatetracks.values[keyframe.index];
+        }
+    }else{
+        value = Quaternion::slerp(keyframe.interpolation, previousRotation, rotatetracks.values[keyframe.index]);
+    }
 
     TransformBlendAccum& accum = transformBlend[target];
     // Weighted quaternion average (nlerp-style): align each sample to the first
@@ -1419,18 +1456,26 @@ void ActionSystem::rotateTracksUpdate(KeyframeTracksComponent& keyframe, RotateT
 }
 
 void ActionSystem::morphTracksUpdate(KeyframeTracksComponent& keyframe, MorphTracksComponent& morpthtracks, Entity target, float weight){
-    if (weight <= 0.0f)
+    if (weight <= 0.0f || !trackIndexValid(keyframe, morpthtracks))
         return;
 
-    std::vector<float> previousMorph = morpthtracks.values[0];
-    if (keyframe.index > 0){
-        previousMorph = morpthtracks.values[keyframe.index-1];
-    }
+    std::vector<float> previousMorph = morpthtracks.values[(keyframe.index > 0) ? keyframe.index - 1 : 0];
 
     if ((keyframe.index == 0) || (morpthtracks.values[keyframe.index].size() == morpthtracks.values[keyframe.index-1].size())) {
+        bool cubic = hasCubicSplineTangents(keyframe, morpthtracks.values, morpthtracks.inTangents, morpthtracks.outTangents) &&
+                     morpthtracks.outTangents[keyframe.index-1].size() == previousMorph.size() &&
+                     morpthtracks.inTangents[keyframe.index].size() == morpthtracks.values[keyframe.index].size();
+        float td = cubic ? keyframe.times[keyframe.index] - keyframe.times[keyframe.index-1] : 0;
         MorphBlendAccum& accum = morphBlend[target];
         for (int morphIndex = 0; morphIndex < morpthtracks.values[keyframe.index].size() && morphIndex < MAX_MORPHTARGETS; morphIndex++) {
-            float value = previousMorph[morphIndex] + keyframe.interpolation * (morpthtracks.values[keyframe.index][morphIndex] - previousMorph[morphIndex]);
+            float value;
+            if (cubic){
+                value = Interpolation::cubicSpline(keyframe.interpolation, td,
+                        previousMorph[morphIndex], morpthtracks.outTangents[keyframe.index-1][morphIndex],
+                        morpthtracks.values[keyframe.index][morphIndex], morpthtracks.inTangents[keyframe.index][morphIndex]);
+            }else{
+                value = previousMorph[morphIndex] + keyframe.interpolation * (morpthtracks.values[keyframe.index][morphIndex] - previousMorph[morphIndex]);
+            }
             accum.sums[morphIndex] += value * weight;
             accum.weights[morphIndex] += weight;
         }

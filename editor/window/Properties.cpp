@@ -266,6 +266,7 @@ static std::vector<editor::EnumEntry> entriesActionState = {
 
 static std::vector<editor::EnumEntry> entriesEaseType = {
     { (int)EaseType::LINEAR, "Linear" },
+    { (int)EaseType::STEP, "Step" },
     { (int)EaseType::QUAD_IN, "Quad In" },
     { (int)EaseType::QUAD_OUT, "Quad Out" },
     { (int)EaseType::QUAD_IN_OUT, "Quad In Out" },
@@ -11796,7 +11797,8 @@ void editor::Properties::drawKeyframeTracksComponent(ComponentType cpType, Scene
 
 template<typename Component, typename ValueType>
 void editor::Properties::drawTrackValues(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities, RowPropertyType rowType, const ValueType& defaultNewValue, const char* idPrefix, std::vector<ValueType> Component::*memberPtr, const char* propertyName,
-                                         const std::function<void(MultiPropertyCmd*, Entity, Component*, size_t)>& onRemoveValue){
+                                         const std::function<void(MultiPropertyCmd*, Entity, Component*, size_t)>& onRemoveValue,
+                                         const std::function<void(MultiPropertyCmd*, Entity, Component*)>& onAddValue){
     Component& comp = sceneProject->scene->getComponent<Component>(entities[0]);
 
     float firstColSize = getLabelSize("Value 000");
@@ -11824,6 +11826,9 @@ void editor::Properties::drawTrackValues(ComponentType cpType, SceneProject* sce
                 }
                 newValues.push_back(newValue);
                 multiCmd->addPropertyCmd<std::vector<ValueType>>(project, sceneProject->id, entity, cpType, propertyName, newValues);
+                if (onAddValue){
+                    onAddValue(multiCmd, entity, trackComp);
+                }
             }
         }
 
@@ -11901,16 +11906,61 @@ void editor::Properties::drawTrackValues(ComponentType cpType, SceneProject* sce
     endTable();
 }
 
+// Keep Hermite tangents (GLTF CUBICSPLINE) mirrored with values across key
+// add/remove so cubic playback survives editing. A new key gets zero tangents:
+// its two adjacent segments flatten toward it, the rest of the clip keeps its
+// imported shape. If one tangent array is missing or short (corrupt state) it
+// is zero-padded back to a valid pair, matching writeTrackKey's repair policy.
+template<typename Component, typename ValueType>
+static void addTangentAlignCmds(editor::Project* project, uint32_t sceneId, editor::ComponentType cpType,
+                                Entity entity, Component* trackComp, editor::MultiPropertyCmd* multiCmd,
+                                const ValueType& zeroTangent, long removedIndex /* -1 appends */){
+    if (trackComp->inTangents.empty() && trackComp->outTangents.empty()) return;
+
+    auto align = [&](const std::vector<ValueType>& tangents, const char* property){
+        std::vector<ValueType> newTangents = tangents;
+        if (newTangents.size() < trackComp->values.size()){
+            newTangents.resize(trackComp->values.size(), zeroTangent);
+        }
+        if (removedIndex < 0){
+            newTangents.push_back(zeroTangent);
+        }else if ((size_t)removedIndex < newTangents.size()){
+            newTangents.erase(newTangents.begin() + removedIndex);
+        }
+        if (newTangents != tangents){
+            multiCmd->addPropertyCmd<std::vector<ValueType>>(project, sceneId, entity, cpType, property, newTangents);
+        }
+    };
+    align(trackComp->inTangents, "inTangents");
+    align(trackComp->outTangents, "outTangents");
+}
+
+// drawTrackValues companion callbacks that keep a track's tangents aligned on
+// key add/remove
+template<typename Component, typename ValueType>
+static auto tangentCallbacks(editor::Project* project, editor::SceneProject* sceneProject, editor::ComponentType cpType, const ValueType& zeroTangent){
+    auto onRemove = [project, sceneProject, cpType, zeroTangent](editor::MultiPropertyCmd* multiCmd, Entity entity, Component* comp, size_t i){
+        addTangentAlignCmds<Component, ValueType>(project, sceneProject->id, cpType, entity, comp, multiCmd, zeroTangent, (long)i);
+    };
+    auto onAdd = [project, sceneProject, cpType, zeroTangent](editor::MultiPropertyCmd* multiCmd, Entity entity, Component* comp){
+        addTangentAlignCmds<Component, ValueType>(project, sceneProject->id, cpType, entity, comp, multiCmd, zeroTangent, -1);
+    };
+    return std::make_pair(onRemove, onAdd);
+}
+
 void editor::Properties::drawTranslateTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    drawTrackValues<TranslateTracksComponent, Vector3>(cpType, sceneProject, entities, RowPropertyType::Vector3, Vector3::ZERO, "translate", &TranslateTracksComponent::values, "values");
+    auto [onRemove, onAdd] = tangentCallbacks<TranslateTracksComponent>(project, sceneProject, cpType, Vector3::ZERO);
+    drawTrackValues<TranslateTracksComponent, Vector3>(cpType, sceneProject, entities, RowPropertyType::Vector3, Vector3::ZERO, "translate", &TranslateTracksComponent::values, "values", onRemove, onAdd);
 }
 
 void editor::Properties::drawRotateTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    drawTrackValues<RotateTracksComponent, Quaternion>(cpType, sceneProject, entities, RowPropertyType::Quat, Quaternion::IDENTITY, "rotate", &RotateTracksComponent::values, "values");
+    auto [onRemove, onAdd] = tangentCallbacks<RotateTracksComponent>(project, sceneProject, cpType, Quaternion(0.0f, 0.0f, 0.0f, 0.0f));
+    drawTrackValues<RotateTracksComponent, Quaternion>(cpType, sceneProject, entities, RowPropertyType::Quat, Quaternion::IDENTITY, "rotate", &RotateTracksComponent::values, "values", onRemove, onAdd);
 }
 
 void editor::Properties::drawScaleTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    drawTrackValues<ScaleTracksComponent, Vector3>(cpType, sceneProject, entities, RowPropertyType::Vector3, Vector3(1.0f, 1.0f, 1.0f), "scale", &ScaleTracksComponent::values, "values");
+    auto [onRemove, onAdd] = tangentCallbacks<ScaleTracksComponent>(project, sceneProject, cpType, Vector3::ZERO);
+    drawTrackValues<ScaleTracksComponent, Vector3>(cpType, sceneProject, entities, RowPropertyType::Vector3, Vector3(1.0f, 1.0f, 1.0f), "scale", &ScaleTracksComponent::values, "values", onRemove, onAdd);
 }
 
 void editor::Properties::drawMorphTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
@@ -11937,6 +11987,8 @@ void editor::Properties::drawMorphTracksComponent(ComponentType cpType, ScenePro
                 }
                 newValues.push_back(newValue);
                 multiCmd->addPropertyCmd<std::vector<std::vector<float>>>(project, sceneProject->id, entity, cpType, "values", newValues);
+                std::vector<float> zeroTangent(newValue.size(), 0.0f);
+                addTangentAlignCmds<MorphTracksComponent, std::vector<float>>(project, sceneProject->id, cpType, entity, trackComp, multiCmd, zeroTangent, -1);
             }
         }
 
@@ -11977,6 +12029,8 @@ void editor::Properties::drawMorphTracksComponent(ComponentType cpType, ScenePro
                             auto newValues = trackComp->values;
                             newValues.erase(newValues.begin() + (long int)i);
                             multiCmd->addPropertyCmd<std::vector<std::vector<float>>>(project, sceneProject->id, entity, cpType, "values", newValues);
+                            std::vector<float> zeroTangent(trackComp->values.back().size(), 0.0f);
+                            addTangentAlignCmds<MorphTracksComponent, std::vector<float>>(project, sceneProject->id, cpType, entity, trackComp, multiCmd, zeroTangent, (long)i);
                         }
                     }
                 }

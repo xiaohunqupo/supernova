@@ -3491,9 +3491,35 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 //TODO: Implement rotation and weights non float
                 if (accessorOut.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
 
-                    if (accessorIn.count != accessorOut.count) {
-                        Log::error("Incorrect frame size in animation: %s, sampler: %i",
-                                animation.name.c_str(), channel.sampler);
+                    // GLTF sampler interpolation (glTF 2.0): LINEAR (default), STEP or CUBICSPLINE
+                    bool step = (sampler.interpolation.compare("STEP") == 0);
+                    bool cubic = (sampler.interpolation.compare("CUBICSPLINE") == 0);
+                    if (!step && !cubic && !sampler.interpolation.empty() && sampler.interpolation.compare("LINEAR") != 0) {
+                        Log::warn("Animation: %s, channel %zu has unknown interpolation \"%s\", assuming LINEAR",
+                                animation.name.c_str(), j, sampler.interpolation.c_str());
+                    }
+
+                    if (cubic && accessorIn.count < 2) {
+                        // spec: a CUBICSPLINE sampler must have at least 2 keyframes
+                        Log::warn("Cannot load animation: %s, channel %zu: CUBICSPLINE needs at least 2 keyframes",
+                                animation.name.c_str(), j);
+                        continue;
+                    }
+
+                    // CUBICSPLINE stores an (in-tangent, value, out-tangent) triple per
+                    // keyframe, so its output accessor has 3x the input elements; weights
+                    // additionally pack one scalar per morph target into each element.
+                    size_t outPerKey = cubic ? 3 : 1;
+                    if (channel.target_path.compare("weights") == 0) {
+                        if (accessorOut.count % (accessorIn.count * outPerKey) != 0) {
+                            Log::warn("Cannot load animation: %s, channel %zu has %zu output elements, not a multiple of %zu",
+                                    animation.name.c_str(), j, accessorOut.count, accessorIn.count * outPerKey);
+                            continue;
+                        }
+                    } else if (accessorOut.count != accessorIn.count * outPerKey) {
+                        Log::warn("Cannot load animation: %s, channel %zu has %zu output elements, expected %zu",
+                                animation.name.c_str(), j, accessorOut.count, accessorIn.count * outPerKey);
+                        continue;
                     }
 
                     std::vector<unsigned char>& inputData = model.gltfModel->buffers[bufferViewIn.buffer].data;
@@ -3530,16 +3556,29 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     ActionComponent& actiontrack = scene->getComponent<ActionComponent>(track);
                     KeyframeTracksComponent& keyframe = scene->getComponent<KeyframeTracksComponent>(track);
 
+                    if (step && accessorIn.count > 1) {
+                        // GLTF STEP holds each key's value for its whole segment
+                        keyframe.easings.assign(accessorIn.count - 1, EaseType::STEP);
+                    }
+
+                    // CUBICSPLINE element layout per keyframe: in-tangent, value, out-tangent
                     bool foundTrack = false;
                     if (channel.target_path.compare("translation") == 0) {
                         foundTrack = true;
                         scene->addComponent<TranslateTracksComponent>(track);
                         TranslateTracksComponent& translatetracks = scene->getComponent<TranslateTracksComponent>(track);
                         for (int c = 0; c < accessorIn.count; c++) {
-                            Vector3 positionAc(values[3 * c], values[(3 * c) + 1], values[(3 * c) + 2]);
+                            const float* v = cubic ? &values[(9 * c) + 3] : &values[3 * c];
+                            Vector3 positionAc(v[0], v[1], v[2]);
 
                             keyframe.times.push_back(timeValues[c]);
                             translatetracks.values.push_back(positionAc);
+                            if (cubic) {
+                                const float* a = &values[9 * c];
+                                const float* b = &values[(9 * c) + 6];
+                                translatetracks.inTangents.push_back(Vector3(a[0], a[1], a[2]));
+                                translatetracks.outTangents.push_back(Vector3(b[0], b[1], b[2]));
+                            }
                         }
                     }
                     if (channel.target_path.compare("rotation") == 0) {
@@ -3547,10 +3586,17 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                         scene->addComponent<RotateTracksComponent>(track);
                         RotateTracksComponent& rotatetracks = scene->getComponent<RotateTracksComponent>(track);
                         for (int c = 0; c < accessorIn.count; c++) {
-                            Quaternion rotationAc(values[(4 * c) + 3], values[4 * c], values[(4 * c) + 1], values[(4 * c) + 2]);
+                            const float* v = cubic ? &values[(12 * c) + 4] : &values[4 * c];
+                            Quaternion rotationAc(v[3], v[0], v[1], v[2]);
 
                             keyframe.times.push_back(timeValues[c]);
                             rotatetracks.values.push_back(rotationAc);
+                            if (cubic) {
+                                const float* a = &values[12 * c];
+                                const float* b = &values[(12 * c) + 8];
+                                rotatetracks.inTangents.push_back(Quaternion(a[3], a[0], a[1], a[2]));
+                                rotatetracks.outTangents.push_back(Quaternion(b[3], b[0], b[1], b[2]));
+                            }
                         }
                     }
                     if (channel.target_path.compare("scale") == 0) {
@@ -3558,25 +3604,45 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                         scene->addComponent<ScaleTracksComponent>(track);
                         ScaleTracksComponent& scaletracks = scene->getComponent<ScaleTracksComponent>(track);
                         for (int c = 0; c < accessorIn.count; c++) {
-                            Vector3 scaleAc(values[3 * c], values[(3 * c) + 1], values[(3 * c) + 2]);
+                            const float* v = cubic ? &values[(9 * c) + 3] : &values[3 * c];
+                            Vector3 scaleAc(v[0], v[1], v[2]);
 
                             keyframe.times.push_back(timeValues[c]);
                             scaletracks.values.push_back(scaleAc);
+                            if (cubic) {
+                                const float* a = &values[9 * c];
+                                const float* b = &values[(9 * c) + 6];
+                                scaletracks.inTangents.push_back(Vector3(a[0], a[1], a[2]));
+                                scaletracks.outTangents.push_back(Vector3(b[0], b[1], b[2]));
+                            }
                         }
                     }
                     if (channel.target_path.compare("weights") == 0) {
                         foundTrack = true;
                         scene->addComponent<MorphTracksComponent>(track);
                         MorphTracksComponent& morphtracks = scene->getComponent<MorphTracksComponent>(track);
-                        int morphNum = accessorOut.count / accessorIn.count;
+                        int morphNum = accessorOut.count / (accessorIn.count * outPerKey);
                         for (int c = 0; c < accessorIn.count; c++) {
+                            // CUBICSPLINE weights group per keyframe: a1..an, v1..vn, b1..bn
+                            size_t base = (size_t)morphNum * outPerKey * c;
+                            size_t vOff = base + (cubic ? morphNum : 0);
                             std::vector<float> weightsAc;
                             for (int m = 0; m < morphNum; m++) {
-                                weightsAc.push_back(values[(morphNum * c) + m]);
+                                weightsAc.push_back(values[vOff + m]);
                             }
 
                             keyframe.times.push_back(timeValues[c]);
                             morphtracks.values.push_back(weightsAc);
+                            if (cubic) {
+                                std::vector<float> inTg;
+                                std::vector<float> outTg;
+                                for (int m = 0; m < morphNum; m++) {
+                                    inTg.push_back(values[base + m]);
+                                    outTg.push_back(values[base + (2 * morphNum) + m]);
+                                }
+                                morphtracks.inTangents.push_back(inTg);
+                                morphtracks.outTangents.push_back(outTg);
+                            }
                         }
                     }
 

@@ -397,8 +397,8 @@ constexpr float kRecordKeyTimeEpsilon = 0.001f;
 constexpr float kRecordMaxTime = 3600.0f;
 
 // Insert or update a keyframe on a tracks entity. Updates merge into one undo
-// step; inserts keep times sorted and split the segment easing so both halves
-// keep the original curve.
+// step; inserts keep times sorted, split the segment easing so both halves
+// keep the original curve, and keep cubic-spline tangents mirrored with values.
 template<typename TracksComp, typename ValueT>
 void writeTrackKey(editor::Project* project, editor::SceneProject* sceneProject, Scene* scene,
                    Entity trackEntity, editor::ComponentType tracksType, float time, const ValueT& value){
@@ -437,6 +437,24 @@ void writeTrackKey(editor::Project* project, editor::SceneProject* sceneProject,
         editor::ComponentType::KeyframeTracksComponent, "times", newTimes, modifiedCb);
     multiCmd->addPropertyCmd<std::vector<ValueT>>(project, sceneProject->id, trackEntity,
         tracksType, "values", newValues, nullptr);
+
+    // keep Hermite tangents (GLTF CUBICSPLINE) mirrored with values so cubic
+    // playback survives the edit; the new key gets zero tangents (its two
+    // adjacent segments flatten toward it, the rest keeps its imported shape)
+    if (!tracks->inTangents.empty() || !tracks->outTangents.empty()){
+        const ValueT zeroTangent = value * 0.0f;
+        auto insertTangent = [&](const std::vector<ValueT>& tangents, const char* property){
+            std::vector<ValueT> newTangents = tangents;
+            if (newTangents.size() < oldSize){
+                newTangents.resize(oldSize, zeroTangent);
+            }
+            newTangents.insert(newTangents.begin() + (long int)j, zeroTangent);
+            multiCmd->addPropertyCmd<std::vector<ValueT>>(project, sceneProject->id, trackEntity,
+                tracksType, property, newTangents, nullptr);
+        };
+        insertTangent(tracks->inTangents, "inTangents");
+        insertTangent(tracks->outTangents, "outTangents");
+    }
 
     // keep per-segment easings aligned with the new key
     if (!kf->easings.empty()){

@@ -47,6 +47,14 @@ void ScaleTracks::setValues(std::vector<Vector3> values){
     ScaleTracksComponent& scaletracks = getComponent<ScaleTracksComponent>();
 
     scaletracks.values = values;
+
+    // keep Hermite tangents (GLTF CUBICSPLINE) mirrored with values
+    if (!scaletracks.inTangents.empty()){
+        scaletracks.inTangents.resize(values.size(), Vector3::ZERO);
+    }
+    if (!scaletracks.outTangents.empty()){
+        scaletracks.outTangents.resize(values.size(), Vector3::ZERO);
+    }
 }
 
 void ScaleTracks::setEasings(std::vector<EaseType> easings){

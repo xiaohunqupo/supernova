@@ -227,6 +227,7 @@ std::string editor::Factory::formatEaseType(EaseType type) {
         case EaseType::BOUNCE_IN: return "EaseType::BOUNCE_IN";
         case EaseType::BOUNCE_OUT: return "EaseType::BOUNCE_OUT";
         case EaseType::BOUNCE_IN_OUT: return "EaseType::BOUNCE_IN_OUT";
+        case EaseType::STEP: return "EaseType::STEP";
         case EaseType::CUSTOM: return "EaseType::CUSTOM";
         default: return "EaseType::LINEAR";
     }
@@ -1858,6 +1859,28 @@ std::string editor::Factory::createBoneComponent(int indentSpaces, EntityRegistr
     return code.str();
 }
 
+// Emit "<target> = { v0, v1, ... };" for a component list member; empty lists
+// emit nothing (component default). Shared by the keyframe track components.
+template<typename T, typename FormatFn>
+static void emitValueList(std::ostringstream& code, const std::string& ind, const std::string& target, const std::vector<T>& values, FormatFn format){
+    if (values.empty()) return;
+    code << ind << target << " = {";
+    for (size_t i = 0; i < values.size(); i++) {
+        if (i > 0) code << ", ";
+        code << format(values[i]);
+    }
+    code << "};\n";
+}
+
+template<typename FormatFn>
+static void emitFloatLists(std::ostringstream& code, const std::string& ind, const std::string& target, const std::vector<std::vector<float>>& lists, FormatFn format){
+    if (lists.empty()) return;
+    code << ind << target << ".resize(" << lists.size() << ");\n";
+    for (size_t i = 0; i < lists.size(); i++) {
+        emitValueList(code, ind, target + "[" + std::to_string(i) + "]", lists[i], format);
+    }
+}
+
 std::string editor::Factory::createKeyframeTracksComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
     if (!scene->findComponent<KeyframeTracksComponent>(entity)) return "";
     KeyframeTracksComponent& kf = scene->getComponent<KeyframeTracksComponent>(entity);
@@ -1894,14 +1917,10 @@ std::string editor::Factory::createTranslateTracksComponent(int indentSpaces, En
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
     code << ind << "TranslateTracksComponent ttcomp;\n";
-    if (!tt.values.empty()) {
-        code << ind << "ttcomp.values = {";
-        for (size_t i = 0; i < tt.values.size(); i++) {
-            if (i > 0) code << ", ";
-            code << formatVector3(tt.values[i]);
-        }
-        code << "};\n";
-    }
+    emitValueList(code, ind, "ttcomp.values", tt.values, formatVector3);
+    // Hermite tangents only exist on GLTF CUBICSPLINE clips
+    emitValueList(code, ind, "ttcomp.inTangents", tt.inTangents, formatVector3);
+    emitValueList(code, ind, "ttcomp.outTangents", tt.outTangents, formatVector3);
     addComponentCode(code, ind, sceneName, entityName, entity, "TranslateTracksComponent", "ttcomp", assignExisting);
     return code.str();
 }
@@ -1912,14 +1931,10 @@ std::string editor::Factory::createRotateTracksComponent(int indentSpaces, Entit
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
     code << ind << "RotateTracksComponent rtcomp;\n";
-    if (!rt.values.empty()) {
-        code << ind << "rtcomp.values = {";
-        for (size_t i = 0; i < rt.values.size(); i++) {
-            if (i > 0) code << ", ";
-            code << formatQuaternion(rt.values[i]);
-        }
-        code << "};\n";
-    }
+    emitValueList(code, ind, "rtcomp.values", rt.values, formatQuaternion);
+    // Hermite tangents only exist on GLTF CUBICSPLINE clips
+    emitValueList(code, ind, "rtcomp.inTangents", rt.inTangents, formatQuaternion);
+    emitValueList(code, ind, "rtcomp.outTangents", rt.outTangents, formatQuaternion);
     addComponentCode(code, ind, sceneName, entityName, entity, "RotateTracksComponent", "rtcomp", assignExisting);
     return code.str();
 }
@@ -1930,14 +1945,10 @@ std::string editor::Factory::createScaleTracksComponent(int indentSpaces, Entity
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
     code << ind << "ScaleTracksComponent stcomp;\n";
-    if (!st.values.empty()) {
-        code << ind << "stcomp.values = {";
-        for (size_t i = 0; i < st.values.size(); i++) {
-            if (i > 0) code << ", ";
-            code << formatVector3(st.values[i]);
-        }
-        code << "};\n";
-    }
+    emitValueList(code, ind, "stcomp.values", st.values, formatVector3);
+    // Hermite tangents only exist on GLTF CUBICSPLINE clips
+    emitValueList(code, ind, "stcomp.inTangents", st.inTangents, formatVector3);
+    emitValueList(code, ind, "stcomp.outTangents", st.outTangents, formatVector3);
     addComponentCode(code, ind, sceneName, entityName, entity, "ScaleTracksComponent", "stcomp", assignExisting);
     return code.str();
 }
@@ -1948,19 +1959,10 @@ std::string editor::Factory::createMorphTracksComponent(int indentSpaces, Entity
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
     code << ind << "MorphTracksComponent mtcomp;\n";
-    if (!mt.values.empty()) {
-        code << ind << "mtcomp.values.resize(" << mt.values.size() << ");\n";
-        for (size_t i = 0; i < mt.values.size(); i++) {
-            if (!mt.values[i].empty()) {
-                code << ind << "mtcomp.values[" << i << "] = {";
-                for (size_t j = 0; j < mt.values[i].size(); j++) {
-                    if (j > 0) code << ", ";
-                    code << formatFloat(mt.values[i][j]);
-                }
-                code << "};\n";
-            }
-        }
-    }
+    emitFloatLists(code, ind, "mtcomp.values", mt.values, formatFloat);
+    // Hermite tangents only exist on GLTF CUBICSPLINE clips
+    emitFloatLists(code, ind, "mtcomp.inTangents", mt.inTangents, formatFloat);
+    emitFloatLists(code, ind, "mtcomp.outTangents", mt.outTangents, formatFloat);
     addComponentCode(code, ind, sceneName, entityName, entity, "MorphTracksComponent", "mtcomp", assignExisting);
     return code.str();
 }
