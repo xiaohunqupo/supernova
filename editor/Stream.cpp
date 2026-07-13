@@ -1309,6 +1309,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
 
     root["scalingMode"] = scalingModeToString(project->getScalingMode());
     root["textureStrategy"] = textureStrategyToString(project->getTextureStrategy());
+    root["vsync"] = project->isVSyncEnabled();
 
     if (!project->getAssetsDir().empty() && project->getAssetsDir() != ".") {
         root["assetsDir"] = project->getAssetsDir().string();
@@ -1443,6 +1444,10 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
 
     if (node["textureStrategy"]) {
         project->setTextureStrategy(stringToTextureStrategy(node["textureStrategy"].as<std::string>()));
+    }
+
+    if (node["vsync"].IsDefined()) {
+        project->setVSyncEnabled(node["vsync"].as<bool>());
     }
 
     if (node["assetsDir"]) {

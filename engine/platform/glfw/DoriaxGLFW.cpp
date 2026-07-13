@@ -9,6 +9,10 @@
 #include "Engine.h"
 #include "GamepadMappings.h"
 
+#ifndef DORIAX_VSYNC_ENABLED
+#define DORIAX_VSYNC_ENABLED 1
+#endif
+
 int DoriaxGLFW::windowPosX;
 int DoriaxGLFW::windowPosY;
 int DoriaxGLFW::windowWidth;
@@ -101,7 +105,7 @@ int DoriaxGLFW::init(int argc, char **argv){
     window = glfwCreateWindow(windowWidth, windowHeight, "Doriax", 0, 0);
 
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(DORIAX_VSYNC_ENABLED ? 1 : 0);
 
     monitor = glfwGetPrimaryMonitor();
 

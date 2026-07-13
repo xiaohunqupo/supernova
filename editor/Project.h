@@ -143,6 +143,7 @@ namespace doriax::editor{
         unsigned int canvasHeight;
         Scaling scalingMode;
         TextureStrategy textureStrategy;
+        bool vsyncEnabled;
         std::filesystem::path assetsDir;
         std::filesystem::path luaDir;
         std::filesystem::path shadersDir;        // compiled .sdat output dir (engine/build-facing)
@@ -292,6 +293,9 @@ namespace doriax::editor{
 
         void setTextureStrategy(TextureStrategy textureStrategy);
         TextureStrategy getTextureStrategy() const;
+
+        void setVSyncEnabled(bool enabled);
+        bool isVSyncEnabled() const;
 
         void setAssetsDir(const std::filesystem::path& assetsDir);
         std::filesystem::path getAssetsDir() const;
@@ -496,6 +500,7 @@ namespace doriax::editor{
         YAML::Node changeEntitiesNode(Entity& firstEntity, YAML::Node node);
 
         bool isAnyScenePlaying() const;
+        bool isPlaySessionActive() const;
         bool isAnySceneSaving() const;
 
         void start(uint32_t sceneId);

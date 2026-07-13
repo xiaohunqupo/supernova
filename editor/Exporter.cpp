@@ -728,6 +728,16 @@ bool editor::Exporter::copyEngine() {
     }
     cmakeContent.replace(appNamePos, defaultAppName.size(), patchedAppName);
 
+    const std::string projectSettingsMarker = "# @DORIAX_PROJECT_SETTINGS@";
+    const size_t projectSettingsPos = cmakeContent.find(projectSettingsMarker);
+    if (projectSettingsPos != std::string::npos) {
+        const std::string projectSettings = std::string("set(DORIAX_VSYNC_ENABLED ")
+            + (project->isVSyncEnabled() ? "ON" : "OFF") + ")";
+        cmakeContent.replace(projectSettingsPos, projectSettingsMarker.size(), projectSettings);
+    } else {
+        Out::warning("Exported CMakeLists.txt is missing the project settings marker; using platform defaults");
+    }
+
     // Inject per-project HybridArray capacities so the exported build sizes its
     // fixed-capacity arrays to the larger of what the project actually uses and the
     // engine defaults in core/Engine.h (big models grow past the defaults). Missing

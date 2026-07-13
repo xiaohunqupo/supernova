@@ -36,6 +36,19 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_definitions("-DDEFAULT_WINDOW_WIDTH=960")
     add_definitions("-DDEFAULT_WINDOW_HEIGHT=540")
 
+    # Project-wide runtime settings are injected here by the editor Exporter.
+    # Standalone engine builds keep the defaults declared by each platform.
+    # @DORIAX_PROJECT_SETTINGS@
+    if(NOT DEFINED DORIAX_VSYNC_ENABLED)
+        set(DORIAX_VSYNC_ENABLED ON)
+    endif()
+    if(DORIAX_VSYNC_ENABLED)
+        set(DORIAX_VSYNC_ENABLED_VALUE 1)
+    else()
+        set(DORIAX_VSYNC_ENABLED_VALUE 0)
+    endif()
+    add_definitions("-DDORIAX_VSYNC_ENABLED=${DORIAX_VSYNC_ENABLED_VALUE}")
+
     # Per-project HybridArray capacities (SceneMaxValues) are injected here by the
     # editor Exporter, replacing the marker below. When building manually (without
     # the editor), the marker is left untouched and the engine defaults declared in
@@ -97,6 +110,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     endif()
     if((GRAPHIC_BACKEND STREQUAL "vulkan") AND (APP_BACKEND STREQUAL "glfw"))
         message(FATAL_ERROR "GRAPHIC_BACKEND=vulkan requires APP_BACKEND=sokol (the GLFW platform creates a GL context)")
+    endif()
+    if((NOT DORIAX_VSYNC_ENABLED) AND (CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND
+       ((APP_BACKEND STREQUAL "sokol" AND GRAPHIC_BACKEND STREQUAL "metal") OR APP_BACKEND STREQUAL "apple"))
+        message(WARNING "VSync off is not supported by the macOS Metal application backend; this build will remain synchronized")
     endif()
     message(STATUS "Application backend is set to ${APP_BACKEND}")
 

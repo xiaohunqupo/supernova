@@ -188,7 +188,7 @@ int editor::Backend::init(int argc, char* argv[]) {
 
     // Make the window's context current
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Enable vsync (turned off again for Wayland; see main loop)
+    glfwSwapInterval(1); // Initial default; project/Wayland policy is applied below.
 
     // Setup Dear ImGui context - MUST BE DONE BEFORE app.setup()
     IMGUI_CHECKVERSION();
@@ -231,8 +231,8 @@ int editor::Backend::init(int argc, char* argv[]) {
     // loop — including the AI agent pump — until the window is visible again,
     // and Wayland gives no iconified signal to dodge it (GLFW_ICONIFIED never
     // becomes true there). Wayland sessions are always composited (no tearing),
-    // so run permanently with vsync off and pace frames against the monitor
-    // refresh instead.
+    // so use swap interval zero there and manually pace only while the project's
+    // VSync setting is on.
     const bool isWayland = glfwGetPlatform() == GLFW_PLATFORM_WAYLAND;
     if (isWayland) {
         glfwSwapInterval(0);
@@ -245,8 +245,13 @@ int editor::Backend::init(int argc, char* argv[]) {
         }
     }
 
-    int currentSwapInterval = isWayland ? 0 : 1;
-    bool prevFocused = true;
+    Project* activeProject = app.getProject();
+    const bool initialFrameSyncEnabled = !activeProject->isPlaySessionActive() || activeProject->isVSyncEnabled();
+    const int initialSwapInterval = (!isWayland && initialFrameSyncEnabled) ? 1 : 0;
+    if (!isWayland && initialSwapInterval != 1) {
+        glfwSwapInterval(initialSwapInterval);
+    }
+    int currentSwapInterval = initialSwapInterval;
     while (!glfwWindowShouldClose(window)) {
         const double frameStart = glfwGetTime();
 
@@ -262,17 +267,18 @@ int editor::Backend::init(int argc, char* argv[]) {
         // On X11, with vsync on, SwapBuffers can block waiting for a frame
         // callback the compositor won't send while the window is
         // unfocused/occluded, which stalls the event loop that serves clipboard
-        // paste requests. Keep vsync while focused (smooth, capped to refresh)
-        // and drop it when unfocused so swap never blocks; the sleep below then
-        // paces the idle loop. On Wayland vsync is permanently off (see above).
+        // paste requests. Honor the project's VSync setting during Play mode and
+        // keep regular editor use synchronized. Always drop the interval when
+        // unfocused so swap never blocks; the sleep below then paces the idle loop.
+        // On Wayland, project VSync is implemented by manual pacing (see above).
         const bool focused = glfwGetWindowAttrib(window, GLFW_FOCUSED) != 0;
-        if (!isWayland && focused != prevFocused) {
-            const int desiredInterval = focused ? 1 : 0;
+        const bool frameSyncEnabled = !activeProject->isPlaySessionActive() || activeProject->isVSyncEnabled();
+        if (!isWayland) {
+            const int desiredInterval = (focused && frameSyncEnabled) ? 1 : 0;
             if (desiredInterval != currentSwapInterval) {
                 glfwSwapInterval(desiredInterval);
                 currentSwapInterval = desiredInterval;
             }
-            prevFocused = focused;
         }
 
         // Start the Dear ImGui frame
@@ -322,9 +328,10 @@ int editor::Backend::init(int argc, char* argv[]) {
             glfwSwapBuffers(window);
         }
 
-        // Pace the loop whenever no vsync'd swap did it: always on Wayland, and
-        // on X11 when unfocused (vsync off) or iconified (no swap at all).
-        if (isWayland || !focused || iconified) {
+        // Pace the loop whenever project VSync must be emulated on Wayland, or
+        // while unfocused/iconified to avoid wasting resources. A focused,
+        // visible project with VSync off is intentionally left uncapped.
+        if ((isWayland && frameSyncEnabled) || !focused || iconified) {
             const int sleepMs = static_cast<int>((framePeriod - (glfwGetTime() - frameStart)) * 1000.0);
             if (sleepMs > 0) {
                 ImGui_ImplGlfw_Sleep(sleepMs);

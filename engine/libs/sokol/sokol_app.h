@@ -3517,7 +3517,14 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sapp_desc res = *desc;
     res.sample_count = _sapp_def(res.sample_count, 1);
-    res.swap_interval = _sapp_def(res.swap_interval, 1);
+    #if (defined(_SAPP_WIN32) || defined(_SAPP_LINUX)) && defined(DORIAX_VSYNC_ENABLED) && !DORIAX_VSYNC_ENABLED
+        // Doriax desktop projects may explicitly opt out of VSync. sokol_app's
+        // zero-initialized descriptor normally maps 0 to the default interval 1,
+        // so preserve 0 here for desktop D3D11/OpenGL/Vulkan presentation paths.
+        res.swap_interval = 0;
+    #else
+        res.swap_interval = _sapp_def(res.swap_interval, 1);
+    #endif
     if (0 == res.gl.major_version) {
         #if defined(SOKOL_GLCORE)
             res.gl.major_version = 4;
@@ -4775,6 +4782,41 @@ _SOKOL_PRIVATE uint32_t _sapp_vk_swapchain_min_image_count(const VkSurfaceCapabi
     return min_image_count;
 }
 
+_SOKOL_PRIVATE VkPresentModeKHR _sapp_vk_pick_present_mode(void) {
+    if (_sapp.swap_interval > 0) {
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    uint32_t mode_count = 0;
+    VkResult res = vkGetPhysicalDeviceSurfacePresentModesKHR(
+        _sapp.vk.physical_device, _sapp.vk.surface, &mode_count, 0);
+    if ((res != VK_SUCCESS) || (mode_count == 0)) {
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkPresentModeKHR* modes = (VkPresentModeKHR*) _sapp_malloc(
+        sizeof(VkPresentModeKHR) * mode_count);
+    res = vkGetPhysicalDeviceSurfacePresentModesKHR(
+        _sapp.vk.physical_device, _sapp.vk.surface, &mode_count, modes);
+
+    VkPresentModeKHR picked = VK_PRESENT_MODE_FIFO_KHR;
+    if (res == VK_SUCCESS) {
+        // IMMEDIATE is the true VSync-off mode. MAILBOX still avoids blocking
+        // the render loop and is the best fallback when IMMEDIATE is unavailable.
+        for (uint32_t i = 0; i < mode_count; i++) {
+            if (modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+                picked = VK_PRESENT_MODE_IMMEDIATE_KHR;
+                break;
+            }
+            if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+                picked = VK_PRESENT_MODE_MAILBOX_KHR;
+            }
+        }
+    }
+    _sapp_free(modes);
+    return picked;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain_image_view(uint32_t image_index) {
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(image_index < _sapp.vk.num_swapchain_images);
@@ -4862,7 +4904,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
 
     VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
     _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
-    const VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    const VkPresentModeKHR present_mode = _sapp_vk_pick_present_mode();
 
     _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -9532,7 +9574,8 @@ _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #endif
     if (!from_winproc) {
         if (IsIconic(_sapp.win32.hwnd)) {
-            Sleep((DWORD)(16 * _sapp.swap_interval));
+            // Keep a VSync-disabled app from busy-spinning while minimized.
+            Sleep((DWORD)(16 * ((_sapp.swap_interval > 0) ? _sapp.swap_interval : 1)));
         }
     }
 }

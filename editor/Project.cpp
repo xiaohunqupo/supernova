@@ -1310,6 +1310,14 @@ TextureStrategy editor::Project::getTextureStrategy() const{
     return textureStrategy;
 }
 
+void editor::Project::setVSyncEnabled(bool enabled){
+    this->vsyncEnabled = enabled;
+}
+
+bool editor::Project::isVSyncEnabled() const{
+    return vsyncEnabled;
+}
+
 void editor::Project::setAssetsDir(const std::filesystem::path& assetsDir){
     this->assetsDir = assetsDir;
 }
@@ -2375,6 +2383,7 @@ void editor::Project::resetConfigs() {
     canvasHeight = 720;
     scalingMode = Scaling::FITWIDTH;
     textureStrategy = TextureStrategy::RESIZE;
+    vsyncEnabled = true;
     assetsDir = ".";
     luaDir = ".";
     shadersDir = "shaders";
@@ -3167,7 +3176,7 @@ bool editor::Project::writeSceneToPath(uint32_t sceneId, const std::filesystem::
 
     std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
     std::vector<BundleSceneInfo> bundleBuildInfos = collectAllBundles();
-    generator.configure(scenesToConfig, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight);
+    generator.configure(scenesToConfig, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight, vsyncEnabled);
 
     Out::info("Scene saved to: \"%s\"", fullPath.string().c_str());
 
@@ -5652,11 +5661,8 @@ void editor::Project::collectStartActiveScenes(uint32_t sceneId, std::vector<uin
 }
 
 bool editor::Project::isAnyScenePlaying() const{
-    {
-        std::scoped_lock lock(playSessionMutex);
-        if (activePlaySession) {
-            return true;
-        }
+    if (isPlaySessionActive()) {
+        return true;
     }
 
     for (const auto& sceneProject : scenes) {
@@ -5665,6 +5671,11 @@ bool editor::Project::isAnyScenePlaying() const{
         }
     }
     return false;
+}
+
+bool editor::Project::isPlaySessionActive() const{
+    std::scoped_lock lock(playSessionMutex);
+    return activePlaySession != nullptr;
 }
 
 bool editor::Project::isAnySceneSaving() const{
@@ -5822,7 +5833,7 @@ void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session
 
         std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
         std::vector<BundleSceneInfo> bundleBuildInfos = collectAllBundles();
-        generator.configure(scenesToGenerate, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight);
+        generator.configure(scenesToGenerate, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight, vsyncEnabled);
 
         const bool hasCppScripts = !mergedCppScripts.empty();
 

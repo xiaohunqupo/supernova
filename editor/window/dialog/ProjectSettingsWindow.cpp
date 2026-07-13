@@ -164,6 +164,7 @@ void ProjectSettingsWindow::open(Project* project) {
     m_canvasHeight = project->getCanvasHeight();
     m_scalingModeIndex = findScalingIndex(project->getScalingMode());
     m_textureStrategyIndex = findTextureStrategyIndex(project->getTextureStrategy());
+    m_vsyncEnabled = project->isVSyncEnabled();
     m_assetsDir = project->getAssetsDir();
     m_luaDir = project->getLuaDir();
     m_shadersDir = project->getShadersDir();
@@ -292,6 +293,14 @@ void ProjectSettingsWindow::drawSettings() {
             ImGui::EndCombo();
         }
     }
+
+    // VSync row
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("VSync");
+    ImGui::SetItemTooltip("Synchronize Play mode and supported desktop builds to the display refresh rate. macOS Metal exports remain synchronized.");
+    ImGui::TableNextColumn();
+    ImGui::Checkbox("##VSync", &m_vsyncEnabled);
 
     // Start scene row
     ImGui::TableNextRow();
@@ -493,6 +502,7 @@ void ProjectSettingsWindow::drawSettings() {
         m_project->setCanvasSize(m_canvasWidth, m_canvasHeight);
         m_project->setScalingMode(scalingModeValues[m_scalingModeIndex]);
         m_project->setTextureStrategy(textureStrategyValues[m_textureStrategyIndex]);
+        m_project->setVSyncEnabled(m_vsyncEnabled);
         m_project->setAssetsDir(m_assetsDir);
         m_project->setLuaDir(m_luaDir);
         m_project->setShadersDir(m_shadersDir);

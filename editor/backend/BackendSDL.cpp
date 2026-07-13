@@ -155,7 +155,7 @@ int editor::Backend::init(int argc, char* argv[]) {
     }
 
     SDL_GL_MakeCurrent(window, glContext);
-    SDL_GL_SetSwapInterval(1); // Enable vsync (turned off again for Wayland; see main loop)
+    SDL_GL_SetSwapInterval(1); // Initial default; project/Wayland policy is applied below.
 
     // Setup Dear ImGui context - MUST BE DONE BEFORE app.setup()
     IMGUI_CHECKVERSION();
@@ -179,8 +179,8 @@ int editor::Backend::init(int argc, char* argv[]) {
     // the compositor stops sending those once the surface is hidden (minimized,
     // fully occluded, or the screen blanks). One blocked swap freezes this whole
     // loop — including the AI agent pump — until the window is visible again.
-    // Wayland sessions are always composited (no tearing), so run permanently
-    // with vsync off and pace frames against the monitor refresh instead.
+    // Wayland sessions are always composited (no tearing), so use swap interval
+    // zero there and manually pace only while the project's VSync setting is on.
     const bool isWayland = isRunningOnWayland();
     if (isWayland) {
         SDL_GL_SetSwapInterval(0);
@@ -192,9 +192,15 @@ int editor::Backend::init(int argc, char* argv[]) {
     }
     const double perfFrequency = static_cast<double>(SDL_GetPerformanceFrequency());
 
+    Project* activeProject = app.getProject();
+    const bool initialFrameSyncEnabled = !activeProject->isPlaySessionActive() || activeProject->isVSyncEnabled();
+    const int initialSwapInterval = (!isWayland && initialFrameSyncEnabled) ? 1 : 0;
+    if (!isWayland && initialSwapInterval != 1) {
+        SDL_GL_SetSwapInterval(initialSwapInterval);
+    }
+
     bool done = false;
-    int currentSwapInterval = isWayland ? 0 : 1;
-    bool prevFocused = true;
+    int currentSwapInterval = initialSwapInterval;
     while (!done) {
         const Uint64 frameStart = SDL_GetPerformanceCounter();
 
@@ -236,17 +242,18 @@ int editor::Backend::init(int argc, char* argv[]) {
         // On X11, with vsync on, SwapWindow can block waiting for a frame
         // callback the compositor won't send while the window is
         // unfocused/occluded, which stalls the event loop that serves clipboard
-        // paste requests. Keep vsync while focused and drop it when unfocused so
-        // swap never blocks; the delay below then paces the idle loop. On
-        // Wayland vsync is permanently off (see above).
+        // paste requests. Honor the project's VSync setting during Play mode and
+        // keep regular editor use synchronized. Always drop the interval when
+        // unfocused so SwapWindow never blocks; the delay below then paces the idle
+        // loop. On Wayland, project VSync is implemented by manual pacing.
         const bool focused = (windowFlags & SDL_WINDOW_INPUT_FOCUS) != 0;
-        if (!isWayland && focused != prevFocused) {
-            const int desiredInterval = focused ? 1 : 0;
+        const bool frameSyncEnabled = !activeProject->isPlaySessionActive() || activeProject->isVSyncEnabled();
+        if (!isWayland) {
+            const int desiredInterval = (focused && frameSyncEnabled) ? 1 : 0;
             if (desiredInterval != currentSwapInterval) {
                 SDL_GL_SetSwapInterval(desiredInterval);
                 currentSwapInterval = desiredInterval;
             }
-            prevFocused = focused;
         }
 
         // Start the Dear ImGui frame
@@ -296,9 +303,10 @@ int editor::Backend::init(int argc, char* argv[]) {
             SDL_GL_SwapWindow(window);
         }
 
-        // Pace the loop whenever no vsync'd swap did it: always on Wayland, and
-        // elsewhere when unfocused (vsync off) or minimized (no swap at all).
-        if (isWayland || !focused || minimized) {
+        // Pace the loop whenever project VSync must be emulated on Wayland, or
+        // while unfocused/minimized to avoid wasting resources. A focused,
+        // visible project with VSync off is intentionally left uncapped.
+        if ((isWayland && frameSyncEnabled) || !focused || minimized) {
             const double frameSeconds = (SDL_GetPerformanceCounter() - frameStart) / perfFrequency;
             const int sleepMs = static_cast<int>((framePeriod - frameSeconds) * 1000.0);
             if (sleepMs > 0) {
