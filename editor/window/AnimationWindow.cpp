@@ -1068,7 +1068,10 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
 
     // Record (auto-key)
     ImGui::BeginDisabled(!sceneIsStopped);
-    if (isRecording){
+    // The click below toggles isRecording, so pop must match what was pushed
+    // this frame, not the post-click state.
+    bool recordStylePushed = isRecording;
+    if (recordStylePushed){
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.15f, 0.15f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.10f, 0.10f, 1.0f));
@@ -1085,7 +1088,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
             isRecording = true;
         }
     }
-    if (isRecording){
+    if (recordStylePushed){
         ImGui::PopStyleColor(3);
     }
     ImGui::EndDisabled();
