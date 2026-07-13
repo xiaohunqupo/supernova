@@ -14,6 +14,7 @@
 #include <math.h>
 
 #include "Engine.h"
+#include "GamepadMappings.h"
 
 static GLFWwindow* window = nullptr;
 static GLFWcursor* invisibleCursor = nullptr;
@@ -137,6 +138,12 @@ int editor::Backend::init(int argc, char* argv[]) {
     // Initialize GLFW
     if (!glfwInit())
         return -1;
+
+    // GLFW's built-in gamepad database misses controllers newer than its
+    // release; without a mapping glfwGetGamepadState fails and the pad is
+    // treated as disconnected. Apply the community database over it.
+    for (size_t i = 0; i < DORIAX_GAMEPAD_MAPPINGS_COUNT; i++)
+        glfwUpdateGamepadMappings(DORIAX_GAMEPAD_MAPPINGS[i]);
 
     if (NFD_Init() != NFD_OKAY) {
         printf("Error: NFD_Init failed: %s\n", NFD_GetError());

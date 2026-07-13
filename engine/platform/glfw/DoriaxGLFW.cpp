@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include "Engine.h"
+#include "GamepadMappings.h"
 
 int DoriaxGLFW::windowPosX;
 int DoriaxGLFW::windowPosY;
@@ -85,6 +86,13 @@ int DoriaxGLFW::init(int argc, char **argv){
 
     /* create window and GL context via GLFW */
     glfwInit();
+
+    // GLFW's built-in gamepad database misses controllers newer than its
+    // release; without a mapping glfwGetGamepadState fails and the pad is
+    // treated as disconnected. Apply the community database over it.
+    for (size_t i = 0; i < DORIAX_GAMEPAD_MAPPINGS_COUNT; i++)
+        glfwUpdateGamepadMappings(DORIAX_GAMEPAD_MAPPINGS[i]);
+
     glfwWindowHint(GLFW_SAMPLES, (sampleCount == 1) ? 0 : sampleCount);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);

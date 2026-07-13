@@ -170,6 +170,7 @@ include_directories (${DORIAX_ROOT}/core/shader)
 include_directories (${DORIAX_ROOT}/core/subsystem)
 include_directories (${DORIAX_ROOT}/core/texture)
 include_directories (${DORIAX_ROOT}/core/util)
+include_directories (${DORIAX_ROOT}/platform/glfw) # GamepadMappings.h for BackendGLFW
 include_directories (${DORIAX_ROOT}/renders)
 
 include_directories (${SHADERCOMPILER_ROOT}/src)
