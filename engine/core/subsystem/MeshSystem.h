@@ -140,7 +140,6 @@ namespace doriax{
         bool createOrUpdateModel(Entity entity, ModelComponent& model, MeshComponent& mesh);
 
         void calculateMeshAABB(MeshComponent& mesh);
-        void applySkinnedBindPoseAABB(MeshComponent& mesh, const Matrix4& matrix);
 
         void load() override;
         void draw() override;

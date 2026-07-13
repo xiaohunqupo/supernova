@@ -1506,22 +1506,6 @@ void MeshSystem::calculateMeshAABB(MeshComponent& mesh){
     mesh.needUpdateAABB = true;
 }
 
-// A skinned mesh shown in bind pose renders at its RAW vertex positions: the model root carries the
-// armature transform `matrix` (e.g. an exported 0.01 unit scale + axis rotation), but the skeleton's
-// bone matrices times the inverse-bind matrices cancel that same `matrix` back out, so worldVertex =
-// root.modelMatrix * inverse(matrix) * raw = raw (at load). Every AABB consumer, though, derives world
-// bounds as `modelMatrix * mesh.aabb`. For that to land on the real bind-pose bounds the stored local
-// AABB must be inverse(matrix)*raw, not raw — otherwise culling, editor selection/gizmos, the
-// fit-to-view camera and model thumbnails all size to a box `matrix` (here 100x) off from what renders.
-// No-op when `matrix` is identity (a model already authored at scene scale).
-void MeshSystem::applySkinnedBindPoseAABB(MeshComponent& mesh, const Matrix4& matrix){
-    if (mesh.aabb.isNull() || mesh.aabb.isInfinite())
-        return;
-
-    mesh.aabb = matrix.inverse() * mesh.aabb;
-    mesh.needUpdateAABB = true;
-}
-
 void MeshSystem::createPlaneNodeSubmesh(unsigned int submeshIndex, TerrainComponent& terrain, MeshComponent& mesh, int width, int height, int widthSegments, int heightSegments){
     float width_half = (float)width / 2;
     float height_half = (float)height / 2;
@@ -3350,8 +3334,6 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             mesh.numSubmeshes = submeshIndex; // reserved-but-skipped slots (invalid data) dropped
             std::reverse(mesh.submeshes.data(), mesh.submeshes.data() + mesh.numSubmeshes);
             calculateMeshAABB(mesh);
-            if (model.gltfModel->nodes[nodeIdx].skin >= 0)
-                applySkinnedBindPoseAABB(mesh, matrix);
             mesh.needReload = true;
         }
 
@@ -3665,9 +3647,6 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         std::reverse(mesh.submeshes.data(), mesh.submeshes.data() + mesh.numSubmeshes);
 
         calculateMeshAABB(mesh);
-
-        if (anyNodeSkinned && !bakingFlatten)
-            applySkinnedBindPoseAABB(mesh, matrix);
 
         if (mesh.loaded)
             mesh.needReload = true;
