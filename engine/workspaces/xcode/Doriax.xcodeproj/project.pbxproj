@@ -24,6 +24,7 @@
 		17235ADE2FD2F66D00AF8D04 /* Progressbar.h in Headers */ = {isa = PBXBuildFile; fileRef = 17235ADB2FD2F66D00AF8D04 /* Progressbar.h */; };
 		17235ADF2FD2F66D00AF8D04 /* Progressbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */; };
 		172A59A52FC4CF36002FDFCA /* ShaderBuildTypes.h in Headers */ = {isa = PBXBuildFile; fileRef = 172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */; };
+		175DCCB130066F7F008C19EC /* Interpolation.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCB030066F7F008C19EC /* Interpolation.h */; };
 		1787AD8E2F673CE000DB1D75 /* BundleComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 1787AD8D2F673CE000DB1D75 /* BundleComponent.h */; };
 		1787AD942F6C333300DB1D75 /* SceneManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD922F6C333300DB1D75 /* SceneManager.cpp */; };
 		1787AD952F6C333300DB1D75 /* BundleManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD902F6C333300DB1D75 /* BundleManager.cpp */; };
@@ -1318,6 +1319,7 @@
 		17235ADB2FD2F66D00AF8D04 /* Progressbar.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Progressbar.h; sourceTree = "<group>"; };
 		17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Progressbar.cpp; sourceTree = "<group>"; };
 		172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderBuildTypes.h; sourceTree = "<group>"; };
+		175DCCB030066F7F008C19EC /* Interpolation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Interpolation.h; sourceTree = "<group>"; };
 		1787AD8D2F673CE000DB1D75 /* BundleComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleComponent.h; sourceTree = "<group>"; };
 		1787AD8F2F6C333300DB1D75 /* BundleManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleManager.h; sourceTree = "<group>"; };
 		1787AD902F6C333300DB1D75 /* BundleManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = BundleManager.cpp; sourceTree = "<group>"; };
@@ -3513,6 +3515,7 @@
 			children = (
 				7162FC4E25962A0E0075B97D /* AABB.h */,
 				7162FC5A25962A0E0075B97D /* AABB.cpp */,
+				175DCCB030066F7F008C19EC /* Interpolation.h */,
 				7162FC5B25962A0E0075B97D /* Matrix3.h */,
 				7162FC5125962A0E0075B97D /* Matrix3.cpp */,
 				7162FC5425962A0E0075B97D /* Matrix4.h */,
@@ -4502,6 +4505,7 @@
 				71A41CB729AC3D7C006953D3 /* SokolCmdQueue.h in Headers */,
 				71451BC0270CA16200712643 /* ActionSystem.h in Headers */,
 				71E8248E2A9C23A600C8E6F2 /* Joint2D.h in Headers */,
+				175DCCB130066F7F008C19EC /* Interpolation.h in Headers */,
 				71ABBD4627A879D4001CE3AF /* Button.h in Headers */,
 				71EA6DA52AE20B8C00CA9A75 /* Contact3D.h in Headers */,
 				71ED64C728B45E0B005D2D96 /* Angle.h in Headers */,
