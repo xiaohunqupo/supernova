@@ -50,6 +50,61 @@ float PhysicsSystem::maxScaleXYZ(const Vector3& scale){
     return std::max(scale.x, std::max(scale.y, scale.z));
 }
 
+JPH::Quat PhysicsSystem::toValidatedJoltRotation(const Quaternion& rotation, Entity entity, int shapeIndex){
+    const double w = rotation.w;
+    const double x = rotation.x;
+    const double y = rotation.y;
+    const double z = rotation.z;
+    const double lengthSquared = w * w + x * x + y * y + z * z;
+
+    constexpr double minimumLengthSquared = 1.0e-12;
+    if (!std::isfinite(lengthSquared) || lengthSquared <= minimumLengthSquared){
+        if (reportedInvalidRotations.insert(entity).second){
+            const std::string entityName = scene->getEntityName(entity);
+            if (shapeIndex < 0){
+                Log::error(
+                    "Body3D entity %u (%s) has an invalid transform rotation quaternion "
+                    "(w=%g, x=%g, y=%g, z=%g). Using identity before passing it to Jolt.",
+                    entity, entityName.c_str(), w, x, y, z);
+            }else{
+                Log::error(
+                    "Body3D entity %u (%s) has an invalid shape %d rotation quaternion "
+                    "(w=%g, x=%g, y=%g, z=%g). Using identity before passing it to Jolt.",
+                    entity, entityName.c_str(), shapeIndex, w, x, y, z);
+            }
+        }
+        return JPH::Quat::sIdentity();
+    }
+
+    // Jolt requires rotation quaternions to have unit length. Normalize at the
+    // integration boundary in every build so Release editor and Debug exports
+    // behave consistently instead of relying on Jolt's debug-only assertion.
+    // Jolt's tolerance is applied to squared length (Vec4::IsNormalized).
+    constexpr double joltNormalizationTolerance = 1.0e-5;
+    if (std::abs(lengthSquared - 1.0) > joltNormalizationTolerance
+        && warnedNonNormalizedRotations.insert(entity).second){
+        const std::string entityName = scene->getEntityName(entity);
+        if (shapeIndex < 0){
+            Log::warn(
+                "Body3D entity %u (%s) has a non-normalized transform rotation quaternion "
+                "(squared length=%g). Normalizing it before passing it to Jolt.",
+                entity, entityName.c_str(), lengthSquared);
+        }else{
+            Log::warn(
+                "Body3D entity %u (%s) has a non-normalized shape %d rotation quaternion "
+                "(squared length=%g). Normalizing it before passing it to Jolt.",
+                entity, entityName.c_str(), shapeIndex, lengthSquared);
+        }
+    }
+
+    const double inverseLength = 1.0 / std::sqrt(lengthSquared);
+    return JPH::Quat(
+        static_cast<float>(x * inverseLength),
+        static_cast<float>(y * inverseLength),
+        static_cast<float>(z * inverseLength),
+        static_cast<float>(w * inverseLength));
+}
+
 JPH::EMotionQuality PhysicsSystem::getBody3DMotionQualityToJolt(Body3DMotionQuality motionQuality){
     switch (motionQuality){
         case Body3DMotionQuality::LINEAR_CAST:
@@ -249,15 +304,17 @@ void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Bod
         Transform& transform = scene->getComponent<Transform>(entity);
         if (!body.body.IsInvalid()){
             JPH::Vec3 jNewPosition(transform.worldPosition.x, transform.worldPosition.y, transform.worldPosition.z);
-            JPH::Quat jNewQuat(transform.worldRotation.x, transform.worldRotation.y, transform.worldRotation.z, transform.worldRotation.w);
+            const Quaternion* newRotation = &transform.worldRotation;
 
             if (body.newBody && transform.needUpdate){
                 jNewPosition = JPH::Vec3(transform.position.x, transform.position.y, transform.position.z);
-                jNewQuat = JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w);
+                newRotation = &transform.rotation;
                 if (transform.parent != NULL_ENTITY){
                     Log::warn("Body position and rotation cannot be obtained from world: %u (%s)", entity, scene->getEntityName(entity).c_str());
                 }
             }
+
+            JPH::Quat jNewQuat = toValidatedJoltRotation(*newRotation, entity, -1);
 
             JPH::BodyInterface &body_interface = world3D.GetBodyInterfaceNoLock();
             JPH::Vec3 jPosition;
@@ -884,7 +941,7 @@ bool PhysicsSystem::syncBody3DShapes(Entity entity, Body3DComponent& body){
         for (size_t i = 0; i < body.numShapes; i++){
             Vector3 scaledPosition = body.shapes[i].position * entityScale;
             JPH::Vec3 jPosition(scaledPosition.x, scaledPosition.y, scaledPosition.z);
-            JPH::Quat jQuat(body.shapes[i].rotation.x, body.shapes[i].rotation.y, body.shapes[i].rotation.z, body.shapes[i].rotation.w);
+            JPH::Quat jQuat = toValidatedJoltRotation(body.shapes[i].rotation, entity, static_cast<int>(i));
             compound_shape.AddShape(jPosition, jQuat, body.shapes[i].shape);
         }
 
@@ -900,7 +957,7 @@ bool PhysicsSystem::syncBody3DShapes(Entity entity, Body3DComponent& body){
         if (shapeData.position != Vector3::ZERO || shapeData.rotation != Quaternion::IDENTITY){
             Vector3 scaledPosition = shapeData.position * getEntityScale(scene, entity);
             JPH::Vec3 jPosition(scaledPosition.x, scaledPosition.y, scaledPosition.z);
-            JPH::Quat jQuat(shapeData.rotation.x, shapeData.rotation.y, shapeData.rotation.z, shapeData.rotation.w);
+            JPH::Quat jQuat = toValidatedJoltRotation(shapeData.rotation, entity, 0);
             JPH::RotatedTranslatedShapeSettings rtShape(jPosition, jQuat, shapeData.shape);
             JPH::ShapeSettings::ShapeResult shape_result = rtShape.Create();
             if (!shape_result.IsValid()){
@@ -2403,6 +2460,8 @@ void PhysicsSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
 	} else if (componentId == scene->getComponentId<Body3DComponent>()) {
 		Body3DComponent& body3d = scene->getComponent<Body3DComponent>(entity);
 		destroyBody3D(body3d);
+		warnedNonNormalizedRotations.erase(entity);
+		reportedInvalidRotations.erase(entity);
 	} else if (componentId == scene->getComponentId<Joint2DComponent>()) {
 		Joint2DComponent& joint2d = scene->getComponent<Joint2DComponent>(entity);
 		destroyJoint2D(joint2d);

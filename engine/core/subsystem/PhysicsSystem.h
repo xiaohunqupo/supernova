@@ -24,6 +24,8 @@
 #include "Jolt/Physics/Collision/BroadPhase/ObjectVsBroadPhaseLayerFilterMask.h"
 #include "Jolt/Physics/Collision/ObjectLayerPairFilterMask.h"
 
+#include <unordered_set>
+
 namespace doriax{
 
 	class JoltActivationListener;
@@ -52,6 +54,9 @@ namespace doriax{
 		JPH::ObjectVsBroadPhaseLayerFilterMask* object_vs_broadphase_layer_filter;
 		JPH::ObjectLayerPairFilterMask* object_vs_object_layer_filter;
 
+		std::unordered_set<Entity> warnedNonNormalizedRotations;
+		std::unordered_set<Entity> reportedInvalidRotations;
+
 		void ensureWorld2D();
 		void updateBody2DPosition(Signature signature, Entity entity, Body2DComponent& body);
 		void updateBody3DPosition(Signature signature, Entity entity, Body3DComponent& body);
@@ -71,6 +76,8 @@ namespace doriax{
 		static float maxScaleXY(const Vector2& scale);
 		static float maxScaleXZ(const Vector3& scale);
 		static float maxScaleXYZ(const Vector3& scale);
+
+		JPH::Quat toValidatedJoltRotation(const Quaternion& rotation, Entity entity, int shapeIndex);
 
 	public:
 		PhysicsSystem(Scene* scene);
