@@ -53,6 +53,7 @@ editor::AnimationWindow::AnimationWindow(Project* project){
     scrollY = 0;
     minPixelsPerSecond = 20.0f;
     maxPixelsPerSecond = 500.0f;
+    playbackFollowSuspended = false;
 
     selectedFrameIndex = -1;
     prePlaySelectedFrameIndex = -1;
@@ -1116,6 +1117,10 @@ void editor::AnimationWindow::triggerTransitionPreview(Scene* scene, SceneProjec
     Animation(scene, transitionTarget).fadeIn(fadeTime);
 
     previewPrimary = transitionTarget;
+    // The timeline now follows a different clip, which may have just started
+    // from zero. Resume following even when the outgoing clip's scrollbar was
+    // moved manually during playback.
+    playbackFollowSuspended = false;
     isPlaying = true;
     selectedFrameIndex = -1;
     sceneProject->needUpdateRender = true;
@@ -1350,6 +1355,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
         ImGui::BeginDisabled(sceneIsStopped && !canPreview);
         if (ImGui::Button(ICON_FA_PLAY "##anim_play")) {
             finishTimelineDrag(scene, sceneProject, true);
+            playbackFollowSuspended = false;
             isPlaying = true;
             if (sceneIsStopped && !isPreviewing) {
                 currentTime = 0;
@@ -2635,10 +2641,41 @@ void editor::AnimationWindow::show() {
     // scrollbar range in pixels so it follows timeline zoom exactly.
     float timeAreaWidth = std::max(1.0f, canvasSize.x - labelWidth);
     float timelineContentWidth = showHorizontalScrollbar
-        ? std::max(timeAreaWidth, effectiveContentWidth)
+        // Once content overflows, allow its end to reach the viewport center.
+        // Smooth playback following can then keep the playhead centered through
+        // the final frame instead of exhausting the scroll range early.
+        ? std::max(timeAreaWidth, effectiveContentWidth
+            + std::max(0.0f, timeAreaWidth * 0.5f - trackEndPadding))
         : timeAreaWidth;
     float maxScroll = std::max(0.0f, timelineContentWidth - timeAreaWidth);
     scrollX = showHorizontalScrollbar ? std::clamp(scrollX, 0.0f, maxScroll) : 0.0f;
+
+    // ScrollbarEx is submitted after the timeline child, so detect its initial
+    // mouse-down here. Otherwise automatic following recenters once on the first
+    // drag frame before ScrollbarEx can claim the active ID.
+    if (showHorizontalScrollbar && isPlaying && !playbackFollowSuspended
+        && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        float scrollbarScreenY = viewportPos.y + viewportHeight
+            + std::min(ImGui::GetStyle().ItemSpacing.y, scrollbarGap);
+        ImRect pendingScrollbarRect(
+            ImVec2(viewportPos.x + labelWidth, scrollbarScreenY),
+            ImVec2(viewportPos.x + canvasSize.x, scrollbarScreenY + scrollbarHeight));
+        if (pendingScrollbarRect.Contains(ImGui::GetMousePos())) {
+            playbackFollowSuspended = true;
+        }
+    }
+
+    // During playback, let the playhead travel to the center and then move the
+    // timeline smoothly beneath it. A loop (or a transition to an earlier clip
+    // time) puts the playhead left of the viewport and brings the view back too.
+    if (showHorizontalScrollbar && isPlaying && !playbackFollowSuspended) {
+        float playheadContentX = currentTime * pixelsPerSecond;
+        float viewportCenterX = scrollX + timeAreaWidth * 0.5f;
+        if (playheadContentX > viewportCenterX || playheadContentX < scrollX) {
+            float followedScrollX = playheadContentX - timeAreaWidth * 0.5f;
+            scrollX = std::clamp(followedScrollX, 0.0f, maxScroll);
+        }
+    }
 
     float timeStart = scrollX / pixelsPerSecond;
     float visibleTime = timeAreaWidth / pixelsPerSecond;
@@ -2698,8 +2735,12 @@ void editor::AnimationWindow::show() {
         parentDrawList->AddRectFilled(scrollbarPos,
                                       ImVec2(scrollbarPos.x + labelWidth, scrollbarPos.y + scrollbarHeight),
                                       ImGui::GetColorU32(ImGuiCol_ScrollbarBg));
-        ImGui::ScrollbarEx(scrollbarRect, ImGui::GetID("##animation_timeline_scrollbar"),
+        ImGuiID scrollbarId = ImGui::GetID("##animation_timeline_scrollbar");
+        ImGui::ScrollbarEx(scrollbarRect, scrollbarId,
                            ImGuiAxis_X, &scrollValue, visibleValue, contentValue);
+        if (isPlaying && ImGui::GetActiveID() == scrollbarId) {
+            playbackFollowSuspended = true;
+        }
         scrollX = std::clamp((float)scrollValue, 0.0f, maxScroll);
     }
 
@@ -2749,6 +2790,7 @@ void editor::AnimationWindow::externalPlay(Entity entity, uint32_t sceneId) {
             seekPreview(scene, sceneProject, 0.0f, selectedEntity);
         }
     }
+    playbackFollowSuspended = false;
     isPlaying = true;
 }
 

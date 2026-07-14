@@ -25,6 +25,9 @@ namespace doriax::editor{
         float scrollY;
         float minPixelsPerSecond;
         float maxPixelsPerSecond;
+        // Manual scrollbar input during playback temporarily takes precedence
+        // over automatic playhead following until playback is started again.
+        bool playbackFollowSuspended;
 
         // Selection
         int selectedFrameIndex;
