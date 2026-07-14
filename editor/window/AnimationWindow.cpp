@@ -60,6 +60,11 @@ editor::AnimationWindow::AnimationWindow(Project* project){
     draggingFrameIndex = -1;
     dragStartTime = 0;
     dragStartTrack = 0;
+    selectedKeyFrameIndex = -1;
+    selectedKeyIndex = -1;
+    isDraggingKey = false;
+    keyDragStartTime = 0;
+    keyDragTime = 0;
 
     isResizingFrame = false;
     resizingFrameIndex = -1;
@@ -203,6 +208,9 @@ void editor::AnimationWindow::selectEntity(Entity entity, uint32_t sceneId) {
         currentTime = 0;
         isPlaying = false;
         selectedFrameIndex = -1;
+        selectedKeyFrameIndex = -1;
+        selectedKeyIndex = -1;
+        isDraggingKey = false;
     }
 }
 
@@ -974,6 +982,7 @@ void editor::AnimationWindow::stopPreview(Scene* scene, SceneProject* sceneProje
     isPreviewing = false;
     isDraggingFrame = false;
     draggingFrameIndex = -1;
+    isDraggingKey = false;
     isResizingFrame = false;
     resizingFrameIndex = -1;
     resizeSide = 0;
@@ -1478,6 +1487,56 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
     bool allowKeying = sceneProject->playState == ScenePlayState::STOPPED && !isPlaying;
     bool mouseOverFrame = false;
 
+    // Preview a key move without mutating the component. The PropertyCmd created
+    // on release can then capture the real old value for undo.
+    if (isDraggingKey) {
+        bool validKey = allowSelection && allowKeying
+            && selectedKeyFrameIndex >= 0 && selectedKeyFrameIndex < (int)anim.actions.size();
+        if (validKey) {
+            ActionFrame& keyFrame = anim.actions[selectedKeyFrameIndex];
+            KeyframeTracksComponent* keyframes = keyFrame.action != NULL_ENTITY
+                && scene->isEntityCreated(keyFrame.action)
+                ? scene->findComponent<KeyframeTracksComponent>(keyFrame.action) : nullptr;
+            validKey = keyframes && selectedKeyIndex >= 0
+                && selectedKeyIndex < (int)keyframes->times.size();
+
+            if (validKey && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                float animationTime = xToTime(ImGui::GetIO().MousePos.x, timeStart,
+                                              ImVec2(canvasPos.x + labelWidth, 0));
+                // Snap in timeline space, then convert to the block's local time.
+                // This keeps the key on the visible grid when the block itself has
+                // been moved to a non-grid-aligned start time.
+                float desiredLocalTime = std::max(0.0f,
+                    snapTime(std::max(0.0f, animationTime)) - keyFrame.startTime);
+                float minTime = 0.0f;
+                float maxTime = keyFrame.duration > 0.0f
+                    ? keyFrame.duration
+                    : std::max(0.0f, kAuthoringMaxTime - keyFrame.startTime);
+
+                // The values/tangents arrays share the times array's ordering, so
+                // keep the dragged key between its neighbors instead of reordering
+                // only one of those parallel arrays.
+                if (selectedKeyIndex > 0) {
+                    minTime = std::max(minTime,
+                        keyframes->times[selectedKeyIndex - 1] + kKeyTimeEpsilon);
+                }
+                if (selectedKeyIndex + 1 < (int)keyframes->times.size()) {
+                    maxTime = std::min(maxTime,
+                        keyframes->times[selectedKeyIndex + 1] - kKeyTimeEpsilon);
+                }
+                if (minTime <= maxTime) {
+                    keyDragTime = std::clamp(desiredLocalTime, minTime, maxTime);
+                }
+            }
+        }
+
+        if (!validKey) {
+            isDraggingKey = false;
+            selectedKeyFrameIndex = -1;
+            selectedKeyIndex = -1;
+        }
+    }
+
     // Find highest track
     uint32_t maxTrack = 0;
     for (const auto& frame : anim.actions) {
@@ -1510,6 +1569,11 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
         ActionFrame& frame = anim.actions[i];
         float trackY = canvasPos.y + rulerHeight + frame.track * (trackHeight + trackPadding);
         float frameDur = effectiveFrameDuration(frame, scene);
+        if (allowSelection && frame.duration <= 0.0f && isDraggingKey
+            && selectedKeyFrameIndex == (int)i) {
+            // Auto-duration blocks grow with a key dragged beyond their current end.
+            frameDur = std::max(frameDur, keyDragTime);
+        }
 
         // Action frame block
         float blockStart = timeToX(frame.startTime, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
@@ -1537,23 +1601,64 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
 
             // Keyframe diamonds sit on the block's bottom edge, below the label.
             // Keep them in the track padding so dense keys never cover the text.
+            bool mouseOverKey = false;
             if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)) {
                 if (KeyframeTracksComponent* kfComp = scene->findComponent<KeyframeTracksComponent>(frame.action)) {
                     constexpr float keyMarkerRadius = 3.0f;
+                    constexpr float keyHitRadius = 6.0f;
                     float ky = trackY + trackHeight - 2.0f;
+                    int hoveredKeyIndex = -1;
+                    float hoveredKeyDistanceSq = 1e9f;
+                    ImVec2 mousePos = ImGui::GetIO().MousePos;
                     drawList->PushClipRect(ImVec2(visStart, trackY),
                                            ImVec2(visEnd, trackY + trackHeight + trackPadding), true);
-                    for (float kt : kfComp->times) {
+                    for (size_t keyIndex = 0; keyIndex < kfComp->times.size(); keyIndex++) {
+                        bool selectedKey = allowSelection && selectedKeyFrameIndex == (int)i
+                            && selectedKeyIndex == (int)keyIndex;
+                        float kt = selectedKey && isDraggingKey ? keyDragTime : kfComp->times[keyIndex];
                         float kx = timeToX(frame.startTime + kt, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
                         if (kx >= visStart && kx <= visEnd) {
-                            drawList->AddQuadFilled(ImVec2(kx, ky - keyMarkerRadius),
-                                                    ImVec2(kx + keyMarkerRadius, ky),
-                                                    ImVec2(kx, ky + keyMarkerRadius),
-                                                    ImVec2(kx - keyMarkerRadius, ky),
-                                                    IM_COL32(255, 255, 255, 230));
+                            float radius = selectedKey ? keyMarkerRadius + 1.0f : keyMarkerRadius;
+                            ImU32 color = selectedKey
+                                ? IM_COL32(255, 210, 80, 255)
+                                : IM_COL32(255, 255, 255, 230);
+                            drawList->AddQuadFilled(ImVec2(kx, ky - radius),
+                                                    ImVec2(kx + radius, ky),
+                                                    ImVec2(kx, ky + radius),
+                                                    ImVec2(kx - radius, ky), color);
+
+                            float dx = mousePos.x - kx;
+                            float dy = mousePos.y - ky;
+                            float distanceSq = dx * dx + dy * dy;
+                            if (allowSelection && allowKeying && std::abs(dx) <= keyHitRadius
+                                && std::abs(dy) <= keyHitRadius && distanceSq < hoveredKeyDistanceSq) {
+                                hoveredKeyIndex = (int)keyIndex;
+                                hoveredKeyDistanceSq = distanceSq;
+                            }
                         }
                     }
                     drawList->PopClipRect();
+
+                    if (hoveredKeyIndex >= 0) {
+                        mouseOverKey = true;
+                        mouseOverFrame = true;
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                        float localTime = isDraggingKey && selectedKeyFrameIndex == (int)i
+                            && selectedKeyIndex == hoveredKeyIndex
+                            ? keyDragTime : kfComp->times[hoveredKeyIndex];
+                        ImGui::SetTooltip("Key %d | %.2fs (local %.2fs)\nDrag horizontally to move",
+                                          hoveredKeyIndex, frame.startTime + localTime, localTime);
+
+                        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                            selectedFrameIndex = (int)i;
+                            selectedKeyFrameIndex = (int)i;
+                            selectedKeyIndex = hoveredKeyIndex;
+                            keyDragStartTime = kfComp->times[hoveredKeyIndex];
+                            keyDragTime = keyDragStartTime;
+                            isDraggingKey = true;
+                            isDraggingPlayhead = false;
+                        }
+                    }
                 }
             }
 
@@ -1601,7 +1706,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
             // Detect edge hover for resize cursor
             bool hovered = ImGui::IsItemHovered();
             mouseOverFrame = mouseOverFrame || hovered || ImGui::IsItemActive();
-            if (hovered && !isFullLabel) {
+            if (hovered && !mouseOverKey && !isFullLabel) {
                 std::string actionLabel = getActionLabel(frame.action, scene);
                 std::string tooltip = std::to_string(i) + ": " + actionLabel;
                 if (!targetName.empty()) {
@@ -1609,7 +1714,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                 }
                 ImGui::SetTooltip("%s", tooltip.c_str());
             }
-            if (allowEditing && hovered && !isDraggingFrame && !isResizingFrame) {
+            if (allowEditing && hovered && !mouseOverKey && !isDraggingFrame && !isResizingFrame) {
                 float mouseX = ImGui::GetIO().MousePos.x;
                 bool onLeftEdge = (mouseX - blockStart) < edgeZone && (mouseX >= blockStart);
                 bool onRightEdge = (blockEnd - mouseX) < edgeZone && (mouseX <= blockEnd);
@@ -1620,8 +1725,10 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
 
             // Selection is index-based against selectedEntity's frame list, so it is
             // disabled while the timeline displays a different clip (transition preview).
-            if (allowSelection && ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            if (allowSelection && !mouseOverKey && ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
                 selectedFrameIndex = (int)i;
+                selectedKeyFrameIndex = -1;
+                selectedKeyIndex = -1;
                 if (allowEditing) {
                     float mouseX = ImGui::GetIO().MousePos.x;
                     bool onLeftEdge = (mouseX - blockStart) < edgeZone && (mouseX >= blockStart);
@@ -1642,7 +1749,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                 }
             }
 
-            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && hovered) {
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && hovered && !mouseOverKey) {
                 if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)) {
                     project->setSelectedEntity(selectedSceneId, frame.action);
                 }
@@ -1764,6 +1871,35 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
             }
         }
         ImGui::EndPopup();
+    }
+
+    // Commit the previewed time change once, so the whole drag is one undo step.
+    if (isDraggingKey && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        if (selectedKeyFrameIndex >= 0 && selectedKeyFrameIndex < (int)anim.actions.size()) {
+            ActionFrame& keyFrame = anim.actions[selectedKeyFrameIndex];
+            KeyframeTracksComponent* keyframes = keyFrame.action != NULL_ENTITY
+                && scene->isEntityCreated(keyFrame.action)
+                ? scene->findComponent<KeyframeTracksComponent>(keyFrame.action) : nullptr;
+            if (keyframes && selectedKeyIndex >= 0
+                && selectedKeyIndex < (int)keyframes->times.size()
+                && std::fabs(keyDragTime - keyDragStartTime) > 0.000001f) {
+                std::vector<float> newTimes = keyframes->times;
+                newTimes[selectedKeyIndex] = keyDragTime;
+                auto* cmd = new PropertyCmd<std::vector<float>>(
+                    project, sceneProject->id, keyFrame.action,
+                    ComponentType::KeyframeTracksComponent, "times", newTimes,
+                    [sceneProject]() {
+                        sceneProject->isModified = true;
+                        sceneProject->needUpdateRender = true;
+                    });
+                CommandHandle::get(sceneProject->id)->addCommandNoMerge(cmd);
+
+                if (isPreviewing) {
+                    seekPreview(scene, sceneProject, currentTime, selectedEntity);
+                }
+            }
+        }
+        isDraggingKey = false;
     }
 
     // Handle frame dragging
@@ -2083,7 +2219,7 @@ bool editor::AnimationWindow::drawPlayhead(ImVec2 canvasPos, ImVec2 canvasSize, 
 
     bool scrubbed = false;
     if ((ImGui::IsMouseClicked(ImGuiMouseButton_Left) || (isDraggingPlayhead && ImGui::IsMouseDragging(ImGuiMouseButton_Left))) &&
-        ImGui::IsWindowHovered() && mouseInTimeArea && !isDraggingFrame && !isResizingFrame) {
+        ImGui::IsWindowHovered() && mouseInTimeArea && !isDraggingFrame && !isResizingFrame && !isDraggingKey) {
         float newTime = xToTime(mousePos.x, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
         currentTime = snapTime(std::max(0.0f, newTime));
         isDraggingPlayhead = true;
@@ -2351,8 +2487,10 @@ void editor::AnimationWindow::show() {
     bool mouseInCanvas = mousePos.x >= canvasPos.x && mousePos.x <= canvasPos.x + canvasSize.x &&
                          mousePos.y >= canvasPos.y && mousePos.y <= canvasPos.y + canvasSize.y;
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered() && mouseInCanvas &&
-        !mouseOverFrame && !isDraggingFrame && !isResizingFrame) {
+        !mouseOverFrame && !isDraggingFrame && !isResizingFrame && !isDraggingKey) {
         selectedFrameIndex = -1;
+        selectedKeyFrameIndex = -1;
+        selectedKeyIndex = -1;
     }
 
     if (scrubbed) {

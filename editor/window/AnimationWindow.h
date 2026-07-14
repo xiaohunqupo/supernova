@@ -34,6 +34,13 @@ namespace doriax::editor{
         float dragStartTime;
         uint32_t dragStartTrack;
 
+        // Keyframe marker selection and horizontal drag preview
+        int selectedKeyFrameIndex;
+        int selectedKeyIndex;
+        bool isDraggingKey;
+        float keyDragStartTime;
+        float keyDragTime;
+
         // Resize
         bool isResizingFrame;
         int resizingFrameIndex;
