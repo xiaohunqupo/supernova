@@ -699,6 +699,34 @@ void editor::AnimationWindow::finishTimelineDrag(Scene* scene, SceneProject* sce
     }
 }
 
+// Snapshot is available only when at least one supported transform track has a
+// valid target and its frame spans the playhead.
+bool editor::AnimationWindow::hasSnapshotTracks(Scene* scene, const AnimationComponent& anim) const {
+    std::unordered_set<Entity> checkedActions;
+    for (const ActionFrame& frame : anim.actions) {
+        Entity actionEntity = frame.action;
+        if (actionEntity == NULL_ENTITY || !scene->isEntityCreated(actionEntity)) continue;
+        if (!scene->findComponent<KeyframeTracksComponent>(actionEntity)) continue;
+        if (!checkedActions.insert(actionEntity).second) continue;
+
+        if (currentTime + kKeyTimeEpsilon < frame.startTime) continue;
+        if (frame.duration > 0.0f
+            && currentTime > frame.startTime + frame.duration + kKeyTimeEpsilon) continue;
+
+        ActionComponent* action = scene->findComponent<ActionComponent>(actionEntity);
+        Entity target = action ? action->target : NULL_ENTITY;
+        if (target == NULL_ENTITY || !scene->isEntityCreated(target)
+            || !scene->findComponent<Transform>(target)) continue;
+
+        if (scene->findComponent<TranslateTracksComponent>(actionEntity)
+            || scene->findComponent<RotateTracksComponent>(actionEntity)
+            || scene->findComponent<ScaleTracksComponent>(actionEntity)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Key every keyframe track the playhead has reached with its target's current
 // transform values, as one undo step. Auto-duration blocks grow to include the
 // new key; blocks with an explicit duration are only keyed within their span.
@@ -745,8 +773,6 @@ void editor::AnimationWindow::snapshotTracks(Scene* scene, SceneProject* scenePr
     }
 
     if (pending.empty()){
-        keyNotice = "No keyframe tracks under the playhead to snapshot";
-        keyNoticeAt = ImGui::GetTime();
         return;
     }
 
@@ -1366,7 +1392,8 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     // Snapshot: key every track reached by the playhead with its target's
     // current transform values (single undo step). A scrub creates a paused
     // preview, which is safe to snapshot; only active playback is blocked.
-    bool canSnapshot = sceneIsStopped && !isPlaying;
+    bool hasSnapshotTarget = hasSnapshotTracks(scene, anim);
+    bool canSnapshot = sceneIsStopped && !isPlaying && hasSnapshotTarget;
     ImGui::BeginDisabled(!canSnapshot);
     if (ImGui::Button(ICON_FA_CAMERA "##anim_snapshot")) {
         snapshotTracks(scene, sceneProject, anim);
@@ -1377,6 +1404,8 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
             ImGui::SetTooltip("Snapshot is only available while the scene is stopped.");
         } else if (isPlaying) {
             ImGui::SetTooltip("Pause or stop animation playback to snapshot.");
+        } else if (!hasSnapshotTarget) {
+            ImGui::SetTooltip("No keyframe tracks under the playhead to snapshot");
         } else if (holdingEndPose) {
             ImGui::SetTooltip("Snapshot (%.2fs): the preview can only evaluate through %.2fs, so the object\n"
                               "is holding the clip's end pose. Adjust the pose before Snapshot if you want\n"
