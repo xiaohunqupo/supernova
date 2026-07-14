@@ -1578,39 +1578,54 @@ void editor::AnimationWindow::drawTimeRuler(ImVec2 canvasPos, ImVec2 canvasSize,
                             ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + rulerHeight),
                             IM_COL32(40, 40, 40, 255));
 
-    // Determine tick interval based on zoom
-    float tickInterval = 1.0f;
-    if (pixelsPerSecond > 200) tickInterval = 0.1f;
-    else if (pixelsPerSecond > 80) tickInterval = 0.5f;
-
-    float subTickInterval = tickInterval / 5.0f;
+    // Choose a stable 1/2/5 interval that keeps major labels readable at every
+    // zoom level. The old fixed thresholds put labels only ~20 px apart at
+    // both minimum zoom and immediately above 200 px/s.
+    constexpr float targetMajorTickSpacing = 80.0f;
+    float rawTickInterval = targetMajorTickSpacing / pixelsPerSecond;
+    float intervalMagnitude = std::pow(10.0f, std::floor(std::log10(rawTickInterval)));
+    float normalizedInterval = rawTickInterval / intervalMagnitude;
+    float niceInterval = normalizedInterval <= 1.0f ? 1.0f
+                       : normalizedInterval <= 2.0f ? 2.0f
+                       : normalizedInterval <= 5.0f ? 5.0f
+                                                    : 10.0f;
+    float tickInterval = niceInterval * intervalMagnitude;
+    constexpr int subdivisions = 5;
+    float subTickInterval = tickInterval / subdivisions;
     ImVec2 timeOrigin(canvasPos.x + labelWidth, canvasPos.y);
     float timeAreaRight = canvasPos.x + canvasSize.x;
 
-    // Draw ticks
-    float t = std::floor(timeStart / tickInterval) * tickInterval;
-    while (t <= timeEnd) {
+    int labelPrecision = tickInterval >= 1.0f
+        ? 0
+        : std::min(3, std::max(1, (int)std::ceil(-std::log10(tickInterval))));
+
+    // Derive every tick from an integer index instead of accumulating a float;
+    // this keeps long timelines aligned and lets us omit minor ticks where a
+    // major tick is already drawn.
+    long long firstSubTick = (long long)std::floor(timeStart / subTickInterval) - 1;
+    long long lastSubTick = (long long)std::ceil(timeEnd / subTickInterval) + 1;
+    for (long long tickIndex = firstSubTick; tickIndex <= lastSubTick; tickIndex++) {
+        float t = (float)tickIndex * subTickInterval;
         float x = timeToX(t, timeStart, timeOrigin);
-        if (x >= timeOrigin.x && x <= timeAreaRight) {
+        if (x < timeOrigin.x || x > timeAreaRight) {
+            continue;
+        }
+
+        bool isMajorTick = tickIndex % subdivisions == 0;
+        if (isMajorTick) {
             drawList->AddLine(ImVec2(x, canvasPos.y + rulerHeight - 10), ImVec2(x, canvasPos.y + rulerHeight),
                               IM_COL32(180, 180, 180, 255));
 
             char buf[16];
-            snprintf(buf, sizeof(buf), "%.1fs", t);
+            float roundedTime = std::round(t);
+            bool isWholeSecond = std::fabs(t - roundedTime) < 0.0001f;
+            snprintf(buf, sizeof(buf), "%.*fs", isWholeSecond ? 0 : labelPrecision,
+                     isWholeSecond ? roundedTime : t);
             drawList->AddText(ImVec2(x + 2, canvasPos.y + 2), IM_COL32(180, 180, 180, 255), buf);
-        }
-        t += tickInterval;
-    }
-
-    // Sub-ticks
-    t = std::floor(timeStart / subTickInterval) * subTickInterval;
-    while (t <= timeEnd) {
-        float x = timeToX(t, timeStart, timeOrigin);
-        if (x >= timeOrigin.x && x <= timeAreaRight) {
+        } else {
             drawList->AddLine(ImVec2(x, canvasPos.y + rulerHeight - 5), ImVec2(x, canvasPos.y + rulerHeight),
                               IM_COL32(100, 100, 100, 255));
         }
-        t += subTickInterval;
     }
 }
 
