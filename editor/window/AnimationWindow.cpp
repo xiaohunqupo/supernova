@@ -50,6 +50,7 @@ editor::AnimationWindow::AnimationWindow(Project* project){
 
     pixelsPerSecond = 100.0f;
     scrollX = 0;
+    scrollY = 0;
     minPixelsPerSecond = 20.0f;
     maxPixelsPerSecond = 500.0f;
 
@@ -2514,25 +2515,119 @@ void editor::AnimationWindow::show() {
                             getAnimationEntityLabel(displayEntity, scene).c_str());
     }
 
-    // Timeline canvas
-    ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-    ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-    if (canvasSize.y < 60) canvasSize.y = 60;
+    // The tracks live in their own vertical-scrolling viewport. The horizontal
+    // scrollbar is drawn in the parent below it, so reaching the last track is
+    // never required to pan through time.
+    ImVec2 timelineAvailable = ImGui::GetContentRegionAvail();
+    constexpr float labelWidth = 120.0f;
+    constexpr float scrollbarGap = 1.0f;
+    constexpr float trackEndPadding = 32.0f;
+    constexpr float rulerHeight = 20.0f;
+    constexpr float trackHeight = 24.0f;
+    constexpr float trackPadding = 2.0f;
 
-    float labelWidth = 120.0f;
-    float timeStart = scrollX / pixelsPerSecond;
-    float visibleTime = (canvasSize.x - labelWidth) / pixelsPerSecond;
-    float timeEnd = timeStart + visibleTime;
+    ImVec2 viewportPos = ImGui::GetCursorScreenPos();
+    // The ruler is part of the vertically scrolling child. Its zoom hit zone
+    // must follow that scrolled position instead of remaining at viewport y=0.
+    float rulerScreenY = viewportPos.y - scrollY;
+    float visibleRulerTop = std::max(viewportPos.y, rulerScreenY);
+    float visibleRulerBottom = std::min(viewportPos.y + timelineAvailable.y,
+                                       rulerScreenY + rulerHeight);
+    bool mouseAboveTracks = ImGui::IsWindowHovered()
+        && visibleRulerBottom > visibleRulerTop
+        && ImGui::GetMousePos().x >= viewportPos.x
+        && ImGui::GetMousePos().x <= viewportPos.x + timelineAvailable.x
+        && ImGui::GetMousePos().y >= visibleRulerTop
+        && ImGui::GetMousePos().y <= visibleRulerBottom;
 
-    // Handle mouse wheel zoom
-    bool mouseAboveTracks = ImGui::IsWindowHovered() && ImGui::GetMousePos().y <= (canvasPos.y + 20.0f);
-
+    // Handle mouse wheel zoom before measuring horizontal overflow.
     preventScroll = mouseAboveTracks;
-
     if (mouseAboveTracks && ImGui::GetIO().MouseWheel != 0) {
         float zoomFactor = 1.0f + ImGui::GetIO().MouseWheel * 0.1f;
         pixelsPerSecond = std::clamp(pixelsPerSecond * zoomFactor, minPixelsPerSecond, maxPixelsPerSecond);
     }
+
+    uint32_t maxDisplayTrack = 0;
+    float blockContentWidth = 0.0f;
+    for (size_t frameIndex = 0; frameIndex < displayAnim->actions.size(); frameIndex++) {
+        const ActionFrame& frame = displayAnim->actions[frameIndex];
+        maxDisplayTrack = std::max(maxDisplayTrack, frame.track);
+        float blockStartPx = frame.startTime * pixelsPerSecond;
+        float frameDuration = effectiveFrameDuration(frame, scene);
+        if (displayEntity == selectedEntity && frame.duration <= 0.0f && isDraggingKey
+            && selectedKeyFrameIndex == (int)frameIndex) {
+            // Match drawTracks' live auto-duration stretch while a key is moving.
+            frameDuration = std::max(frameDuration, keyDragTime);
+        }
+        float blockEndPx = (frame.startTime + frameDuration) * pixelsPerSecond;
+        // Zero-length blocks still draw with a ten-pixel minimum width.
+        blockContentWidth = std::max(blockContentWidth,
+            std::max(blockEndPx, blockStartPx + 10.0f));
+    }
+
+    // Duration and the authoring playhead remain reachable even when they lie
+    // beyond the last block. Apply the same trailing margin to the final
+    // effective extent so visibility and scroll range cannot disagree.
+    float authoringEndTime = std::max(getAnimationDuration(*displayAnim, scene), currentTime);
+    float effectiveContentWidth = std::max(blockContentWidth,
+        std::max(0.0f, authoringEndTime) * pixelsPerSecond);
+    if (effectiveContentWidth > 0.0f) {
+        effectiveContentWidth += trackEndPadding;
+    }
+
+    uint32_t displayTrackCount = std::max((uint32_t)3, maxDisplayTrack + 2);
+    float trackContentHeight = rulerHeight + displayTrackCount * (trackHeight + trackPadding);
+
+    // Scrollbars reduce the other axis's available space, so resolve their
+    // visibility together. Starting hidden and only enabling them makes this
+    // monotonic and settles after at most two cross-axis dependencies.
+    float scrollbarSize = ImGui::GetStyle().ScrollbarSize;
+    bool showHorizontalScrollbar = false;
+    bool showVerticalScrollbar = false;
+    for (int i = 0; i < 3; i++) {
+        float availableTimeWidth = std::max(1.0f,
+            timelineAvailable.x - (showVerticalScrollbar ? scrollbarSize : 0.0f) - labelWidth);
+        if (effectiveContentWidth > availableTimeWidth + 0.5f) {
+            showHorizontalScrollbar = true;
+        }
+
+        float availableTrackHeight = std::max(60.0f,
+            timelineAvailable.y - (showHorizontalScrollbar ? scrollbarSize + scrollbarGap : 0.0f));
+        if (trackContentHeight > availableTrackHeight + 0.5f) {
+            showVerticalScrollbar = true;
+        }
+    }
+
+    float scrollbarHeight = showHorizontalScrollbar ? ImGui::GetStyle().ScrollbarSize : 0.0f;
+    float horizontalReserve = showHorizontalScrollbar ? scrollbarHeight + scrollbarGap : 0.0f;
+    float viewportHeight = std::max(60.0f, timelineAvailable.y - horizontalReserve);
+
+    ImGuiWindowFlags trackViewportFlags = showVerticalScrollbar
+        ? ImGuiWindowFlags_AlwaysVerticalScrollbar : ImGuiWindowFlags_None;
+    if (mouseAboveTracks) {
+        trackViewportFlags |= ImGuiWindowFlags_NoScrollWithMouse;
+    }
+
+    ImGui::BeginChild("##animation_timeline_vertical", ImVec2(timelineAvailable.x, viewportHeight),
+                      ImGuiChildFlags_None, trackViewportFlags);
+
+    ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+    float visibleCanvasHeight = ImGui::GetContentRegionAvail().y;
+    ImVec2 canvasSize(ImGui::GetContentRegionAvail().x,
+                      std::max(visibleCanvasHeight, trackContentHeight));
+
+    // The label column stays fixed while the time area scrolls. Keep the
+    // scrollbar range in pixels so it follows timeline zoom exactly.
+    float timeAreaWidth = std::max(1.0f, canvasSize.x - labelWidth);
+    float timelineContentWidth = showHorizontalScrollbar
+        ? std::max(timeAreaWidth, effectiveContentWidth)
+        : timeAreaWidth;
+    float maxScroll = std::max(0.0f, timelineContentWidth - timeAreaWidth);
+    scrollX = showHorizontalScrollbar ? std::clamp(scrollX, 0.0f, maxScroll) : 0.0f;
+
+    float timeStart = scrollX / pixelsPerSecond;
+    float visibleTime = timeAreaWidth / pixelsPerSecond;
+    float timeEnd = timeStart + visibleTime;
 
     // Draw background
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -2565,14 +2660,33 @@ void editor::AnimationWindow::show() {
         }
     }
 
-    // Reserve space
+    // Restore the child layout cursor after drawTracks positioned interaction
+    // items at individual blocks, then establish the vertical content extent.
+    ImGui::SetCursorScreenPos(canvasPos);
     ImGui::Dummy(canvasSize);
+    scrollY = showVerticalScrollbar ? ImGui::GetScrollY() : 0.0f;
+    ImGui::EndChild();
 
-    // Horizontal scroll: follow the computed (auto) duration and the playhead so
-    // auto-duration clips and authoring past the end stay reachable.
-    float totalTime = std::max({10.0f, getAnimationDuration(*displayAnim, scene) * 1.5f, currentTime * 1.5f});
-    float maxScroll = std::max(0.0f, totalTime * pixelsPerSecond - canvasSize.x + labelWidth);
-    if (scrollX > maxScroll) scrollX = maxScroll;
+    if (showHorizontalScrollbar) {
+        // This control belongs to the parent window and therefore stays fixed
+        // below the viewport while the child scrolls vertically.
+        ImVec2 scrollbarPos = ImGui::GetCursorScreenPos();
+        scrollbarPos.y -= std::max(0.0f, ImGui::GetStyle().ItemSpacing.y - scrollbarGap);
+        ImGui::SetCursorScreenPos(scrollbarPos);
+        ImGui::Dummy(ImVec2(timelineAvailable.x, scrollbarHeight));
+        ImRect scrollbarRect(ImVec2(scrollbarPos.x + labelWidth, scrollbarPos.y),
+                             ImVec2(scrollbarPos.x + canvasSize.x, scrollbarPos.y + scrollbarHeight));
+        ImS64 scrollValue = (ImS64)std::llround(scrollX);
+        ImS64 visibleValue = std::max<ImS64>(1, (ImS64)std::llround(timeAreaWidth));
+        ImS64 contentValue = std::max(visibleValue, (ImS64)std::llround(timelineContentWidth));
+        ImDrawList* parentDrawList = ImGui::GetWindowDrawList();
+        parentDrawList->AddRectFilled(scrollbarPos,
+                                      ImVec2(scrollbarPos.x + labelWidth, scrollbarPos.y + scrollbarHeight),
+                                      ImGui::GetColorU32(ImGuiCol_ScrollbarBg));
+        ImGui::ScrollbarEx(scrollbarRect, ImGui::GetID("##animation_timeline_scrollbar"),
+                           ImGuiAxis_X, &scrollValue, visibleValue, contentValue);
+        scrollX = std::clamp((float)scrollValue, 0.0f, maxScroll);
+    }
 
     ImGui::End();
 

@@ -22,6 +22,7 @@ namespace doriax::editor{
         // Timeline view state
         float pixelsPerSecond;
         float scrollX;
+        float scrollY;
         float minPixelsPerSecond;
         float maxPixelsPerSecond;
 
