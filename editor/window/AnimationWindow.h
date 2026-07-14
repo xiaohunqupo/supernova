@@ -5,7 +5,6 @@
 #include "imgui.h"
 #include "yaml-cpp/yaml.h"
 
-#include <map>
 #include <unordered_set>
 
 namespace doriax::editor{
@@ -72,27 +71,22 @@ namespace doriax::editor{
         };
         std::vector<PreviewEntityState> previewState;
 
-        // Record mode (auto-key): while recording, transform changes on the
-        // animation's target entities are keyed at the playhead time. A change is
-        // committed once it settles (one quiet frame), so gizmo drags produce a
-        // single keyframe command instead of interleaving with transform commands.
-        bool isRecording;
+        // Keying: right-click a track block or the empty tracks area to store the
+        // target's current position/rotation/scale as a keyframe at the clicked
+        // time; the toolbar Snapshot button keys every track at the playhead.
+        int keyPopupFrameIndex;  // -1 = empty-area popup keying the animation's target
+        float keyPopupTime;
         // transient toolbar warning (e.g. key skipped), cleared after a few seconds
-        std::string recordNotice;
-        double recordNoticeAt;
-        struct RecordChannel {
-            Vector3 position;
-            Quaternion rotation;
-            Vector3 scale;
-            bool pendingPosition = false;
-            bool pendingRotation = false;
-            bool pendingScale = false;
-            bool valid = false;
-        };
-        std::map<Entity, RecordChannel> recordBaseline;
+        std::string keyNotice;
+        double keyNoticeAt;
 
-        void stopRecording();
-        void recordTick(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim);
+        // channel: 0 = position, 1 = rotation, 2 = scale
+        void keyTargetChannels(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim, Entity target,
+                               float time, const std::vector<int>& channels);
+        void keyTargetChannel(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim, Entity target, float time, int channel);
+        void keyTrackChannel(Scene* scene, SceneProject* sceneProject, Entity trackEntity,
+                             float localTime, float explicitDuration, int channel);
+        void snapshotTracks(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim);
 
         // Helpers
         void drawToolbar(float width, AnimationComponent& anim, Scene* scene, SceneProject* sceneProject);

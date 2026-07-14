@@ -9,6 +9,7 @@
 #include "command/type/PropertyCmd.h"
 #include "command/type/MultiPropertyCmd.h"
 #include "command/type/CreateEntityCmd.h"
+#include "command/type/CreateTrackKeyCmd.h"
 
 #include "component/ActionComponent.h"
 #include "component/AnimationComponent.h"
@@ -34,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <numeric>
 #include <unordered_set>
 
@@ -77,18 +79,14 @@ editor::AnimationWindow::AnimationWindow(Project* project){
     isWindowVisible = false;
 
     isPreviewing = false;
-    isRecording = false;
-    recordNoticeAt = 0;
+    keyPopupFrameIndex = -1;
+    keyPopupTime = 0;
+    keyNoticeAt = 0;
 
     selectedEntity = NULL_ENTITY;
     selectedSceneId = 0;
 }
 
-void editor::AnimationWindow::stopRecording(){
-    isRecording = false;
-    recordBaseline.clear();
-    recordNotice.clear();
-}
 
 void editor::AnimationWindow::setOpen(bool open){
     if (open){
@@ -102,8 +100,6 @@ void editor::AnimationWindow::setOpen(bool open){
     windowOpen = false;
     focusRequested = false;
     isWindowVisible = false;
-
-    stopRecording();
 
     if (isPreviewing) {
         SceneProject* previewSceneProject = project->getScene(selectedSceneId);
@@ -192,7 +188,6 @@ std::string editor::AnimationWindow::getActionLabel(Entity actionEntity, Scene* 
 
 void editor::AnimationWindow::selectEntity(Entity entity, uint32_t sceneId) {
     if (selectedEntity != entity || selectedSceneId != sceneId) {
-        stopRecording();
         // Stop any active preview before changing entity
         if (isPreviewing) {
             SceneProject* sceneProject = project->getScene(selectedSceneId);
@@ -280,6 +275,15 @@ editor::AnimationWindow::PreviewEntityState editor::AnimationWindow::buildPrevie
 
     YAML::Node components = Stream::encodeComponents(entity, scene, scene->getSignature(entity));
     components.remove(Catalog::getComponentName(ComponentType::AnimationComponent, true));
+
+    // Preview playback reads authored key data but does not mutate it. Keeping
+    // these components in the restore snapshot would overwrite keys authored
+    // while a scrub preview is paused (Snapshot or right-click keying).
+    components.remove(Catalog::getComponentName(ComponentType::KeyframeTracksComponent, true));
+    components.remove(Catalog::getComponentName(ComponentType::TranslateTracksComponent, true));
+    components.remove(Catalog::getComponentName(ComponentType::RotateTracksComponent, true));
+    components.remove(Catalog::getComponentName(ComponentType::ScaleTracksComponent, true));
+    components.remove(Catalog::getComponentName(ComponentType::MorphTracksComponent, true));
     state.components = components;
 
     return state;
@@ -391,17 +395,22 @@ void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, ScenePr
 
 namespace {
 
-constexpr float kRecordKeyTimeEpsilon = 0.001f;
-// Playhead ceiling while recording: effectively unbounded for authoring, but
-// finite so ImGui's drag/input math stays well-behaved
-constexpr float kRecordMaxTime = 3600.0f;
+constexpr float kKeyTimeEpsilon = 0.001f;
+// Finite ceiling for authoring beyond the current clip duration. This keeps
+// ImGui's drag math well behaved while allowing auto-duration tracks to grow.
+constexpr float kAuthoringMaxTime = 3600.0f;
 
 // Insert or update a keyframe on a tracks entity. Updates merge into one undo
 // step; inserts keep times sorted, split the segment easing so both halves
 // keep the original curve, and keep cubic-spline tangents mirrored with values.
+// Passing `batch` collects the writes into that command instead of issuing its
+// own, so several tracks can be keyed as a single undo step (snapshot). The
+// batch must not receive two writes to the same track in one pass, since each
+// write reads the live arrays (callers key each track entity at most once).
 template<typename TracksComp, typename ValueT>
 void writeTrackKey(editor::Project* project, editor::SceneProject* sceneProject, Scene* scene,
-                   Entity trackEntity, editor::ComponentType tracksType, float time, const ValueT& value){
+                   Entity trackEntity, editor::ComponentType tracksType, float time, const ValueT& value,
+                   editor::MultiPropertyCmd* batch = nullptr){
     KeyframeTracksComponent* kf = scene->findComponent<KeyframeTracksComponent>(trackEntity);
     TracksComp* tracks = scene->findComponent<TracksComp>(trackEntity);
     if (!kf || !tracks) return;
@@ -410,10 +419,16 @@ void writeTrackKey(editor::Project* project, editor::SceneProject* sceneProject,
 
     // update an existing key at (about) this time
     for (size_t i = 0; i < kf->times.size() && i < tracks->values.size(); i++){
-        if (std::fabs(kf->times[i] - time) <= kRecordKeyTimeEpsilon){
-            auto* cmd = new editor::PropertyCmd<ValueT>(project, sceneProject->id, trackEntity, tracksType,
-                "values[" + std::to_string(i) + "]", value, modifiedCb);
-            editor::CommandHandle::get(sceneProject->id)->addCommand(cmd);
+        if (std::fabs(kf->times[i] - time) <= kKeyTimeEpsilon){
+            std::string valueProp = "values[" + std::to_string(i) + "]";
+            if (batch){
+                batch->addPropertyCmd<ValueT>(project, sceneProject->id, trackEntity, tracksType,
+                    valueProp, value, modifiedCb);
+            }else{
+                auto* cmd = new editor::PropertyCmd<ValueT>(project, sceneProject->id, trackEntity, tracksType,
+                    valueProp, value, modifiedCb);
+                editor::CommandHandle::get(sceneProject->id)->addCommand(cmd);
+            }
             return;
         }
     }
@@ -432,7 +447,7 @@ void writeTrackKey(editor::Project* project, editor::SceneProject* sceneProject,
     }
     newValues.insert(newValues.begin() + (long int)j, value);
 
-    auto* multiCmd = new editor::MultiPropertyCmd();
+    editor::MultiPropertyCmd* multiCmd = batch ? batch : new editor::MultiPropertyCmd();
     multiCmd->addPropertyCmd<std::vector<float>>(project, sceneProject->id, trackEntity,
         editor::ComponentType::KeyframeTracksComponent, "times", newTimes, modifiedCb);
     multiCmd->addPropertyCmd<std::vector<ValueT>>(project, sceneProject->id, trackEntity,
@@ -443,8 +458,8 @@ void writeTrackKey(editor::Project* project, editor::SceneProject* sceneProject,
     // adjacent segments flatten toward it, the rest keeps its imported shape)
     if (!tracks->inTangents.empty() || !tracks->outTangents.empty()){
         const ValueT zeroTangent = value * 0.0f;
-        auto insertTangent = [&](const std::vector<ValueT>& tangents, const char* property){
-            std::vector<ValueT> newTangents = tangents;
+        auto insertTangent = [&](const std::vector<ValueT>& liveTangents, const char* property){
+            std::vector<ValueT> newTangents = liveTangents;
             if (newTangents.size() < oldSize){
                 newTangents.resize(oldSize, zeroTangent);
             }
@@ -473,24 +488,25 @@ void writeTrackKey(editor::Project* project, editor::SceneProject* sceneProject,
         }
     }
 
-    multiCmd->setNoMerge();
-    editor::CommandHandle::get(sceneProject->id)->addCommand(multiCmd);
+    if (!batch){
+        multiCmd->setNoMerge();
+        editor::CommandHandle::get(sceneProject->id)->addCommand(multiCmd);
+    }
 }
 
-// Where a recorded key goes: keys are stored in the track's local time, so the
-// owning frame's startTime must be subtracted from the playhead time.
+// Where a key goes: keys are stored in the track's local time, so the owning
+// frame's startTime must be subtracted from the animation time.
 struct TrackLookup {
     Entity entity = NULL_ENTITY;
     float startTime = 0.0f;
-    bool skip = false; // a matching frame exists but starts after the playhead
+    bool skip = false; // matching frames exist, but none spans the requested time
 };
 
-// Reuse the frame whose action animates `target` with the wanted track type, or
-// create the track entity (parented to the target, like the Add Action menu) and
-// register it as a new auto-duration action frame.
-TrackLookup findOrCreateTrackEntity(editor::Project* project, editor::SceneProject* sceneProject, Scene* scene,
-                               Entity animEntity, AnimationComponent& anim, Entity target, float animTime,
-                               editor::ComponentType tracksType, editor::EntityCreationType creationType, const char* name){
+// Find an existing frame whose action animates `target` with the wanted track
+// type. skip=true means matching tracks exist but none spans animTime (so the
+// caller must not create a duplicate); entity=NULL and skip=false means create.
+TrackLookup findTrackEntity(Scene* scene, AnimationComponent& anim, Entity target, float animTime,
+                            editor::ComponentType tracksType){
     auto hasTracksComp = [&](Entity e) -> bool {
         if (tracksType == editor::ComponentType::TranslateTracksComponent) return scene->findComponent<TranslateTracksComponent>(e) != nullptr;
         if (tracksType == editor::ComponentType::RotateTracksComponent) return scene->findComponent<RotateTracksComponent>(e) != nullptr;
@@ -502,155 +518,247 @@ TrackLookup findOrCreateTrackEntity(editor::Project* project, editor::SceneProje
     // overlapping tracks for the same target key the block under the playhead
     Entity best = NULL_ENTITY;
     float bestStart = 0.0f;
-    bool foundLater = false;
+    bool foundOutOfSpan = false;
     for (const ActionFrame& frame : anim.actions){
         Entity a = frame.action;
         if (a == NULL_ENTITY || !scene->isEntityCreated(a)) continue;
         if (!hasTracksComp(a) || !scene->findComponent<KeyframeTracksComponent>(a)) continue;
         ActionComponent* ac = scene->findComponent<ActionComponent>(a);
         if (ac && ac->target == target){
-            if (animTime + kRecordKeyTimeEpsilon >= frame.startTime){
+            bool hasStarted = animTime + kKeyTimeEpsilon >= frame.startTime;
+            bool pastExplicitEnd = frame.duration > 0.0f
+                && animTime > frame.startTime + frame.duration + kKeyTimeEpsilon;
+            if (hasStarted && !pastExplicitEnd){
                 if (best == NULL_ENTITY || frame.startTime > bestStart){
                     best = a;
                     bestStart = frame.startTime;
                 }
             }else{
-                // frame starts after the playhead: keying there would need a negative local time
-                foundLater = true;
+                foundOutOfSpan = true;
             }
         }
     }
     if (best != NULL_ENTITY){
         return {best, bestStart, false};
     }
-    if (foundLater){
+    if (foundOutOfSpan){
         return {NULL_ENTITY, 0.0f, true};
     }
-
-    auto* createCmd = new editor::CreateEntityCmd(project, sceneProject->id, name, creationType, target);
-    editor::CommandHandle::get(sceneProject->id)->addCommandNoMerge(createCmd);
-    Entity trackEntity = createCmd->getEntity();
-    if (trackEntity == NULL_ENTITY){
-        return {NULL_ENTITY, 0.0f, false};
-    }
-
-    // Duration 0 = auto: the block grows as keys extend. Overlaps are re-laned
-    // by autoAssignTracks.
-    std::vector<ActionFrame> newActions = anim.actions;
-    newActions.push_back({0.0f, 0.0f, trackEntity, 0});
-    auto* actionsCmd = new editor::PropertyCmd<std::vector<ActionFrame>>(project, sceneProject->id, animEntity,
-        editor::ComponentType::AnimationComponent, "actions", newActions,
-        [sceneProject]() { sceneProject->isModified = true; });
-    editor::CommandHandle::get(sceneProject->id)->addCommandNoMerge(actionsCmd);
-
-    return {trackEntity, 0.0f, false};
+    return {NULL_ENTITY, 0.0f, false};
 }
 
 }
 
-// Auto-key: poll the animation's target entities and, when a transform change
-// settles (one quiet frame, so drags stay single undo steps), key the changed
-// channels at the playhead time.
-void editor::AnimationWindow::recordTick(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim){
-    // candidates: the animation's own target plus every frame action's target
-    std::unordered_set<Entity> targets;
-    if (ActionComponent* ac = scene->findComponent<ActionComponent>(selectedEntity)){
-        if (ac->target != NULL_ENTITY && scene->isEntityCreated(ac->target)){
-            targets.insert(ac->target);
-        }
-    }
+// Key every keyframe track the playhead has reached with its target's current
+// transform values, as one undo step. Auto-duration blocks grow to include the
+// new key; blocks with an explicit duration are only keyed within their span.
+void editor::AnimationWindow::snapshotTracks(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim){
+    struct SnapshotTarget {
+        Entity action;
+        float localTime;
+        int channel; // 0 = position, 1 = rotation, 2 = scale
+        Vector3 position;
+        Quaternion rotation;
+        Vector3 scale;
+    };
+
+    std::vector<SnapshotTarget> pending;
+    std::unordered_set<Entity> keyedActions; // one write per track entity per batch
     for (const ActionFrame& frame : anim.actions){
-        if (frame.action == NULL_ENTITY || !scene->isEntityCreated(frame.action)) continue;
-        if (ActionComponent* ac = scene->findComponent<ActionComponent>(frame.action)){
-            if (ac->target != NULL_ENTITY && scene->isEntityCreated(ac->target)){
-                targets.insert(ac->target);
-            }
+        Entity actionEntity = frame.action;
+        if (actionEntity == NULL_ENTITY || !scene->isEntityCreated(actionEntity)) continue;
+        if (!scene->findComponent<KeyframeTracksComponent>(actionEntity)) continue;
+        if (!keyedActions.insert(actionEntity).second) continue;
+
+        // the playhead must have reached the block; an explicit duration also bounds it
+        if (currentTime + kKeyTimeEpsilon < frame.startTime) continue;
+        if (frame.duration > 0 && currentTime > frame.startTime + frame.duration + kKeyTimeEpsilon) continue;
+
+        ActionComponent* action = scene->findComponent<ActionComponent>(actionEntity);
+        Entity target = action ? action->target : NULL_ENTITY;
+        if (target == NULL_ENTITY || !scene->isEntityCreated(target)) continue;
+        if (!scene->findComponent<Transform>(target)) continue;
+
+        int channel = -1;
+        if (scene->findComponent<TranslateTracksComponent>(actionEntity)){
+            channel = 0;
+        }else if (scene->findComponent<RotateTracksComponent>(actionEntity)){
+            channel = 1;
+        }else if (scene->findComponent<ScaleTracksComponent>(actionEntity)){
+            channel = 2;
         }
+        if (channel < 0) continue;
+
+        Transform& transform = scene->getComponent<Transform>(target);
+        pending.push_back({actionEntity, std::max(0.0f, currentTime - frame.startTime), channel,
+                           transform.position, transform.rotation, transform.scale});
     }
 
-    for (auto it = recordBaseline.begin(); it != recordBaseline.end();){
-        if (targets.find(it->first) == targets.end()){
-            it = recordBaseline.erase(it);
+    if (pending.empty()){
+        keyNotice = "No keyframe tracks under the playhead to snapshot";
+        keyNoticeAt = ImGui::GetTime();
+        return;
+    }
+
+    MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+    for (const SnapshotTarget& entry : pending){
+        if (entry.channel == 0){
+            writeTrackKey<TranslateTracksComponent, Vector3>(project, sceneProject, scene, entry.action,
+                ComponentType::TranslateTracksComponent, entry.localTime, entry.position, multiCmd);
+        }else if (entry.channel == 1){
+            writeTrackKey<RotateTracksComponent, Quaternion>(project, sceneProject, scene, entry.action,
+                ComponentType::RotateTracksComponent, entry.localTime, entry.rotation, multiCmd);
         }else{
-            ++it;
+            writeTrackKey<ScaleTracksComponent, Vector3>(project, sceneProject, scene, entry.action,
+                ComponentType::ScaleTracksComponent, entry.localTime, entry.scale, multiCmd);
         }
     }
 
-    auto vecChanged = [](const Vector3& a, const Vector3& b){
-        return (a - b).length() > 1e-5f;
-    };
-    auto quatChanged = [](const Quaternion& a, const Quaternion& b){
-        return std::fabs(a.x - b.x) + std::fabs(a.y - b.y) + std::fabs(a.z - b.z) + std::fabs(a.w - b.w) > 1e-5f;
-    };
+    multiCmd->setNoMerge();
+    CommandHandle::get(sceneProject->id)->addCommand(multiCmd);
+}
 
-    for (Entity target : targets){
-        Transform* transform = scene->findComponent<Transform>(target);
-        if (!transform) continue;
+// Store one or more of the target's current transform channels at `time`.
+// Existing tracks share one MultiPropertyCmd; missing tracks use CreateTrackKeyCmd
+// (create + first key + ActionFrame) in that same batch for a single undo step.
+void editor::AnimationWindow::keyTargetChannels(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim,
+                                                Entity target, float time, const std::vector<int>& channels){
+    Transform* transform = scene->findComponent<Transform>(target);
+    if (!transform){
+        return;
+    }
 
-        auto noticeSkip = [&](const char* trackName){
+    auto* batch = new MultiPropertyCmd();
+    std::vector<CreateTrackKeyCmd*> createdCmds;
+    bool queuedKey = false;
+
+    for (int channel : channels){
+        ComponentType tracksType;
+        EntityCreationType creationType;
+        const char* name;
+        if (channel == 0){
+            tracksType = ComponentType::TranslateTracksComponent;
+            creationType = EntityCreationType::TRANSLATE_TRACKS;
+            name = "TranslateTracks";
+        }else if (channel == 1){
+            tracksType = ComponentType::RotateTracksComponent;
+            creationType = EntityCreationType::ROTATE_TRACKS;
+            name = "RotateTracks";
+        }else if (channel == 2){
+            tracksType = ComponentType::ScaleTracksComponent;
+            creationType = EntityCreationType::SCALE_TRACKS;
+            name = "ScaleTracks";
+        }else{
+            continue;
+        }
+
+        TrackLookup track = findTrackEntity(scene, anim, target, time, tracksType);
+
+        if (track.skip){
             std::string targetName = scene->getEntityName(target);
             if (targetName.empty()){
                 targetName = "Entity " + std::to_string(target);
             }
-            recordNotice = std::string(trackName) + " frame for \"" + targetName +
-                "\" starts after the playhead; key skipped";
-            recordNoticeAt = ImGui::GetTime();
-        };
-
-        RecordChannel& base = recordBaseline[target];
-        if (!base.valid){
-            base.position = transform->position;
-            base.rotation = transform->rotation;
-            base.scale = transform->scale;
-            base.valid = true;
+            keyNotice = std::string(name) + " for \"" + targetName + "\" has no active frame at this time; key skipped";
+            keyNoticeAt = ImGui::GetTime();
             continue;
         }
 
-        if (vecChanged(transform->position, base.position)){
-            base.position = transform->position;
-            base.pendingPosition = true;
-        }else if (base.pendingPosition){
-            base.pendingPosition = false;
-            TrackLookup track = findOrCreateTrackEntity(project, sceneProject, scene, selectedEntity, anim, target, currentTime,
-                ComponentType::TranslateTracksComponent, EntityCreationType::TRANSLATE_TRACKS, "TranslateTracks");
-            if (track.skip){
-                noticeSkip("TranslateTracks");
-            }else if (track.entity != NULL_ENTITY){
+        if (track.entity != NULL_ENTITY){
+            float localTime = std::max(0.0f, time - track.startTime);
+            if (channel == 0){
                 writeTrackKey<TranslateTracksComponent, Vector3>(project, sceneProject, scene, track.entity,
-                    ComponentType::TranslateTracksComponent, std::max(0.0f, currentTime - track.startTime), transform->position);
-            }
-        }
-
-        if (quatChanged(transform->rotation, base.rotation)){
-            base.rotation = transform->rotation;
-            base.pendingRotation = true;
-        }else if (base.pendingRotation){
-            base.pendingRotation = false;
-            TrackLookup track = findOrCreateTrackEntity(project, sceneProject, scene, selectedEntity, anim, target, currentTime,
-                ComponentType::RotateTracksComponent, EntityCreationType::ROTATE_TRACKS, "RotateTracks");
-            if (track.skip){
-                noticeSkip("RotateTracks");
-            }else if (track.entity != NULL_ENTITY){
+                    tracksType, localTime, transform->position, batch);
+            }else if (channel == 1){
                 writeTrackKey<RotateTracksComponent, Quaternion>(project, sceneProject, scene, track.entity,
-                    ComponentType::RotateTracksComponent, std::max(0.0f, currentTime - track.startTime), transform->rotation);
+                    tracksType, localTime, transform->rotation, batch);
+            }else{
+                writeTrackKey<ScaleTracksComponent, Vector3>(project, sceneProject, scene, track.entity,
+                    tracksType, localTime, transform->scale, batch);
             }
+            queuedKey = true;
+            continue;
         }
 
-        if (vecChanged(transform->scale, base.scale)){
-            base.scale = transform->scale;
-            base.pendingScale = true;
-        }else if (base.pendingScale){
-            base.pendingScale = false;
-            TrackLookup track = findOrCreateTrackEntity(project, sceneProject, scene, selectedEntity, anim, target, currentTime,
-                ComponentType::ScaleTracksComponent, EntityCreationType::SCALE_TRACKS, "ScaleTracks");
-            if (track.skip){
-                noticeSkip("ScaleTracks");
-            }else if (track.entity != NULL_ENTITY){
-                writeTrackKey<ScaleTracksComponent, Vector3>(project, sceneProject, scene, track.entity,
-                    ComponentType::ScaleTracksComponent, std::max(0.0f, currentTime - track.startTime), transform->scale);
+        // No spanning track: create one with its first key and register the frame.
+        // New auto-duration frames start at 0, so local time equals animation time.
+        float localTime = std::max(0.0f, time);
+        std::unique_ptr<CreateTrackKeyCmd> createCmd;
+        if (channel == 1){
+            createCmd = std::make_unique<CreateTrackKeyCmd>(
+                project, sceneProject->id, selectedEntity, target, creationType, name, localTime,
+                transform->rotation);
+        }else if (channel == 0){
+            createCmd = std::make_unique<CreateTrackKeyCmd>(
+                project, sceneProject->id, selectedEntity, target, creationType, name, localTime,
+                transform->position);
+        }else{
+            createCmd = std::make_unique<CreateTrackKeyCmd>(
+                project, sceneProject->id, selectedEntity, target, creationType, name, localTime,
+                transform->scale);
+        }
+        createdCmds.push_back(createCmd.get());
+        batch->addCommand(std::move(createCmd));
+        queuedKey = true;
+    }
+
+    if (!queuedKey){
+        delete batch;
+        return;
+    }
+
+    batch->setNoMerge();
+    CommandHandle::get(sceneProject->id)->addCommand(batch);
+
+    // New track entities did not exist when this preview began. Save only their
+    // runtime state now; buildPreviewEntityState deliberately excludes key data.
+    if (isPreviewing){
+        for (CreateTrackKeyCmd* cmd : createdCmds){
+            Entity trackEntity = cmd->getEntity();
+            if (trackEntity != NULL_ENTITY && scene->isEntityCreated(trackEntity)){
+                previewState.push_back(buildPreviewEntityState(scene, trackEntity));
             }
         }
     }
+}
+
+// Store one target channel as the fine-grained right-click alternative.
+void editor::AnimationWindow::keyTargetChannel(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim,
+                                               Entity target, float time, int channel){
+    keyTargetChannels(scene, sceneProject, anim, target, time, {channel});
+}
+
+// Key the exact block selected by the context menu. Unlike empty-area keying,
+// this path must never search for a newer overlapping frame of the same type.
+void editor::AnimationWindow::keyTrackChannel(Scene* scene, SceneProject* sceneProject, Entity trackEntity,
+                                              float localTime, float explicitDuration, int channel){
+    if (explicitDuration > 0.0f && localTime > explicitDuration + kKeyTimeEpsilon){
+        return;
+    }
+
+    ActionComponent* action = scene->findComponent<ActionComponent>(trackEntity);
+    Transform* transform = action ? scene->findComponent<Transform>(action->target) : nullptr;
+    if (!transform || !scene->findComponent<KeyframeTracksComponent>(trackEntity)){
+        return;
+    }
+
+    auto* batch = new MultiPropertyCmd();
+    if (channel == 0 && scene->findComponent<TranslateTracksComponent>(trackEntity)){
+        writeTrackKey<TranslateTracksComponent, Vector3>(project, sceneProject, scene, trackEntity,
+            ComponentType::TranslateTracksComponent, localTime, transform->position, batch);
+    }else if (channel == 1 && scene->findComponent<RotateTracksComponent>(trackEntity)){
+        writeTrackKey<RotateTracksComponent, Quaternion>(project, sceneProject, scene, trackEntity,
+            ComponentType::RotateTracksComponent, localTime, transform->rotation, batch);
+    }else if (channel == 2 && scene->findComponent<ScaleTracksComponent>(trackEntity)){
+        writeTrackKey<ScaleTracksComponent, Vector3>(project, sceneProject, scene, trackEntity,
+            ComponentType::ScaleTracksComponent, localTime, transform->scale, batch);
+    }else{
+        delete batch;
+        return;
+    }
+
+    batch->setNoMerge();
+    CommandHandle::get(sceneProject->id)->addCommand(batch);
 }
 
 void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProject, float time, Entity clipEntity) {
@@ -682,7 +790,12 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     previewPrimary = clipEntity;
 
     AnimationComponent& anim = scene->getComponent<AnimationComponent>(clipEntity);
-    currentTime = std::max(0.0f, std::min(time, getAnimationDuration(anim, scene)));
+    float requestedTime = std::max(0.0f, time);
+    float previewTime = std::min(requestedTime, getAnimationDuration(anim, scene));
+    // Keep the authoring playhead at the requested time even when preview
+    // evaluation can only reach the clip's current end. A new key at that time
+    // can then extend an auto-duration track.
+    currentTime = requestedTime;
 
     restorePreviewState(scene);
     applyPreviewModelBindPose(scene);
@@ -709,7 +822,7 @@ void editor::AnimationWindow::seekPreview(Scene* scene, SceneProject* sceneProje
     }
 
     // Simulate to the seek time incrementally for components that require integration (like particles)
-    float remainingTime = currentTime;
+    float remainingTime = previewTime;
     float stepSize = 1.0f / 60.0f;
     while (remainingTime > 0.0f) {
         float currentStep = std::min(stepSize, remainingTime);
@@ -1050,7 +1163,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
             isPlaying = false;
         }
     } else {
-        ImGui::BeginDisabled((sceneIsStopped && !canPreview) || isRecording);
+        ImGui::BeginDisabled(sceneIsStopped && !canPreview);
         if (ImGui::Button(ICON_FA_PLAY "##anim_play")) {
             isPlaying = true;
             if (sceneIsStopped && !isPreviewing) {
@@ -1083,51 +1196,47 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine();
 
-    // Record (auto-key)
-    ImGui::BeginDisabled(!sceneIsStopped);
-    // The click below toggles isRecording, so pop must match what was pushed
-    // this frame, not the post-click state.
-    bool recordStylePushed = isRecording;
-    if (recordStylePushed){
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.15f, 0.15f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.10f, 0.10f, 1.0f));
-    }
-    if (ImGui::Button(ICON_FA_CIRCLE "##anim_record")) {
-        if (isRecording){
-            stopRecording();
-        }else{
-            if (isPreviewing){
-                stopPreview(scene, sceneProject, true);
-            }
-            isPlaying = false;
-            recordBaseline.clear();
-            isRecording = true;
-        }
-    }
-    if (recordStylePushed){
-        ImGui::PopStyleColor(3);
+    Entity toolbarClip = timelineClip(scene);
+    AnimationComponent& toolbarClipAnim = (toolbarClip != selectedEntity)
+        ? scene->getComponent<AnimationComponent>(toolbarClip) : anim;
+    float clipDuration = getAnimationDuration(toolbarClipAnim, scene);
+    bool holdingEndPose = isPreviewing && currentTime > clipDuration + kKeyTimeEpsilon;
+
+    // Snapshot: key every track reached by the playhead with its target's
+    // current transform values (single undo step). A scrub creates a paused
+    // preview, which is safe to snapshot; only active playback is blocked.
+    bool canSnapshot = sceneIsStopped && !isPlaying;
+    ImGui::BeginDisabled(!canSnapshot);
+    if (ImGui::Button(ICON_FA_CAMERA "##anim_snapshot")) {
+        snapshotTracks(scene, sceneProject, anim);
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()){
-        ImGui::SetTooltip("Record (auto-key): move, rotate or scale the animation's target entities\n"
-                          "to add keyframes at the playhead time. Scrub the playhead between poses.\n"
-                          "Toggle off before undoing transforms: recording re-keys reverted values.");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        if (!sceneIsStopped) {
+            ImGui::SetTooltip("Snapshot is only available while the scene is stopped.");
+        } else if (isPlaying) {
+            ImGui::SetTooltip("Pause or stop animation playback to snapshot.");
+        } else if (holdingEndPose) {
+            ImGui::SetTooltip("Snapshot (%.2fs): the preview can only evaluate through %.2fs, so the object\n"
+                              "is holding the clip's end pose. Adjust the pose before Snapshot if you want\n"
+                              "different values at this later time.", currentTime, clipDuration);
+        } else {
+            ImGui::SetTooltip("Snapshot (%.2fs): store the current position, rotation and scale of every\n"
+                              "track reached by the playhead as keyframes at this time.\n"
+                              "Right-click the timeline to key a single track or channel.", currentTime);
+        }
     }
     ImGui::SameLine();
 
     // Time display. The field scrubs the timeline clip (the blend target during a
     // transition preview), so its range must come from that clip too.
     ImGui::SetNextItemWidth(60);
-    Entity toolbarClip = timelineClip(scene);
-    AnimationComponent& toolbarClipAnim = (toolbarClip != selectedEntity)
-        ? scene->getComponent<AnimationComponent>(toolbarClip) : anim;
-    // While recording the playhead may go past the current duration so keys can
-    // be authored beyond the last one (the auto-duration block grows to follow)
-    float maxTime = isRecording ? kRecordMaxTime : getAnimationDuration(toolbarClipAnim, scene);
+    float maxTime = sceneIsStopped ? std::max(kAuthoringMaxTime, clipDuration) : clipDuration;
     if (ImGui::DragFloat("##anim_time", &currentTime, 0.01f, 0.0f, maxTime, "%.2fs")) {
-        if (sceneIsStopped && canPreview && !isRecording) {
+        if (sceneIsStopped && canPreview) {
             seekPreview(scene, sceneProject, currentTime);
         } else {
             currentTime = std::max(0.0f, std::min(currentTime, maxTime));
@@ -1256,12 +1365,12 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
         }
     }
 
-    // Transient recording warnings (e.g. key skipped)
-    if (isRecording && !recordNotice.empty()) {
-        if (ImGui::GetTime() - recordNoticeAt < 4.0) {
-            ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), ICON_FA_TRIANGLE_EXCLAMATION " %s", recordNotice.c_str());
+    // Transient keying warnings (e.g. key skipped)
+    if (!keyNotice.empty()) {
+        if (ImGui::GetTime() - keyNoticeAt < 4.0) {
+            ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), ICON_FA_TRIANGLE_EXCLAMATION " %s", keyNotice.c_str());
         } else {
-            recordNotice.clear();
+            keyNotice.clear();
         }
     }
 }
@@ -1364,6 +1473,9 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
     };
 
     bool allowEditing = !isPreviewing;
+    // A scrub preview is paused but still keyable. Keep frame move/resize
+    // disabled there while allowing the advertised right-click key workflow.
+    bool allowKeying = sceneProject->playState == ScenePlayState::STOPPED && !isPlaying;
     bool mouseOverFrame = false;
 
     // Find highest track
@@ -1528,7 +1640,123 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                     project->setSelectedEntity(selectedSceneId, frame.action);
                 }
             }
+
+            // Right-click a keyframe-track block: insert a key at the clicked time
+            if (allowSelection && allowKeying && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+                bool isTracksBlock = frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)
+                    && scene->findComponent<KeyframeTracksComponent>(frame.action) != nullptr;
+                if (isTracksBlock) {
+                    keyPopupFrameIndex = (int)i;
+                    float clickTime = snapTime(xToTime(ImGui::GetIO().MousePos.x, timeStart, ImVec2(canvasPos.x + labelWidth, 0)));
+                    keyPopupTime = std::max(frame.startTime, clickTime);
+                    ImGui::OpenPopup("##timeline_key_popup");
+                }
+            }
         }
+    }
+
+    // Right-click on the empty tracks area: key the animation's target at that time
+    if (allowSelection && allowKeying && !mouseOverFrame && ImGui::IsMouseClicked(ImGuiMouseButton_Right)
+        && ImGui::IsWindowHovered()) {
+        ImVec2 keyMousePos = ImGui::GetIO().MousePos;
+        bool inTracksArea = keyMousePos.x >= canvasPos.x + labelWidth && keyMousePos.x <= canvasPos.x + canvasSize.x &&
+                            keyMousePos.y >= canvasPos.y + rulerHeight && keyMousePos.y <= canvasPos.y + canvasSize.y;
+        if (inTracksArea) {
+            keyPopupFrameIndex = -1;
+            keyPopupTime = std::max(0.0f, snapTime(xToTime(keyMousePos.x, timeStart, ImVec2(canvasPos.x + labelWidth, 0))));
+            ImGui::OpenPopup("##timeline_key_popup");
+        }
+    }
+
+    // Key-insert context menu: stores the target's current values
+    if (ImGui::BeginPopup("##timeline_key_popup")) {
+        bool validFrame = keyPopupFrameIndex >= 0 && keyPopupFrameIndex < (int)anim.actions.size();
+
+        ImGui::TextDisabled("At %.2fs", keyPopupTime);
+        float previewDuration = getAnimationDuration(anim, scene);
+        if (isPreviewing && currentTime > previewDuration + kKeyTimeEpsilon) {
+            ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f),
+                               ICON_FA_TRIANGLE_EXCLAMATION " Preview pose held at %.2fs", previewDuration);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("The playhead is at %.2fs, past the evaluable clip. Right-click keying\n"
+                                  "stores the currently held end pose unless you adjust it first.", currentTime);
+            }
+        }
+        ImGui::Separator();
+
+        if (validFrame) {
+            // key the clicked block's own channel for its own target
+            ActionFrame& keyFrame = anim.actions[keyPopupFrameIndex];
+            Entity actionEntity = keyFrame.action;
+
+            Entity target = NULL_ENTITY;
+            int channel = -1;
+            const char* channelLabel = nullptr;
+            if (actionEntity != NULL_ENTITY && scene->isEntityCreated(actionEntity)) {
+                if (ActionComponent* ac = scene->findComponent<ActionComponent>(actionEntity)) {
+                    target = ac->target;
+                }
+                if (scene->findComponent<TranslateTracksComponent>(actionEntity)) {
+                    channel = 0;
+                    channelLabel = ICON_FA_KEY "  Insert Position Key";
+                } else if (scene->findComponent<RotateTracksComponent>(actionEntity)) {
+                    channel = 1;
+                    channelLabel = ICON_FA_KEY "  Insert Rotation Key";
+                } else if (scene->findComponent<ScaleTracksComponent>(actionEntity)) {
+                    channel = 2;
+                    channelLabel = ICON_FA_KEY "  Insert Scale Key";
+                }
+            }
+
+            bool withinExplicitSpan = keyFrame.duration <= 0.0f
+                || keyPopupTime <= keyFrame.startTime + keyFrame.duration + kKeyTimeEpsilon;
+            bool canKey = allowKeying && withinExplicitSpan && channel >= 0
+                && target != NULL_ENTITY && scene->isEntityCreated(target)
+                && scene->findComponent<Transform>(target) != nullptr;
+            if (channel >= 0) {
+                ImGui::BeginDisabled(!canKey);
+                if (ImGui::MenuItem(channelLabel)) {
+                    float localTime = std::max(0.0f, keyPopupTime - keyFrame.startTime);
+                    keyTrackChannel(scene, sceneProject, actionEntity, localTime, keyFrame.duration, channel);
+                }
+                ImGui::EndDisabled();
+                if (!withinExplicitSpan) {
+                    ImGui::TextDisabled("The clicked time is outside this block's explicit duration");
+                } else if (!canKey) {
+                    ImGui::TextDisabled("The track needs a target with a Transform");
+                }
+            } else {
+                ImGui::TextDisabled("No keyable channel on this action");
+            }
+        } else {
+            // empty area: key the animation's own target, creating tracks on demand
+            Entity target = NULL_ENTITY;
+            if (ActionComponent* ac = scene->findComponent<ActionComponent>(selectedEntity)) {
+                target = ac->target;
+            }
+            bool canKey = allowKeying && target != NULL_ENTITY && scene->isEntityCreated(target)
+                && scene->findComponent<Transform>(target) != nullptr;
+
+            ImGui::BeginDisabled(!canKey);
+            if (ImGui::MenuItem(ICON_FA_KEY "  Key Position")) {
+                keyTargetChannel(scene, sceneProject, anim, target, keyPopupTime, 0);
+            }
+            if (ImGui::MenuItem(ICON_FA_KEY "  Key Rotation")) {
+                keyTargetChannel(scene, sceneProject, anim, target, keyPopupTime, 1);
+            }
+            if (ImGui::MenuItem(ICON_FA_KEY "  Key Scale")) {
+                keyTargetChannel(scene, sceneProject, anim, target, keyPopupTime, 2);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem(ICON_FA_KEY "  Key Transform")) {
+                keyTargetChannels(scene, sceneProject, anim, target, keyPopupTime, {0, 1, 2});
+            }
+            ImGui::EndDisabled();
+            if (!canKey) {
+                ImGui::TextDisabled("Set a target on the animation to key it");
+            }
+        }
+        ImGui::EndPopup();
     }
 
     // Handle frame dragging
@@ -1933,9 +2161,6 @@ void editor::AnimationWindow::show() {
         restorePreviewScene();
         currentTime = 0;
     }
-    if (isRecording && sceneProject->id != selectedSceneId) {
-        stopRecording();
-    }
 
     // Collect all entities with AnimationComponent in the scene
     auto animations = scene->getComponentArray<AnimationComponent>();
@@ -1944,7 +2169,6 @@ void editor::AnimationWindow::show() {
             restorePreviewScene();
             currentTime = 0;
         }
-        stopRecording();
         selectedEntity = NULL_ENTITY;
         selectedSceneId = 0;
         ImGui::TextDisabled("No entities with AnimationComponent in this scene.");
@@ -1961,7 +2185,6 @@ void editor::AnimationWindow::show() {
             restorePreviewScene();
             currentTime = 0;
         }
-        stopRecording();
         selectedEntity = NULL_ENTITY;
     }
 
@@ -2010,14 +2233,6 @@ void editor::AnimationWindow::show() {
         isPlaying = false;
         currentTime = 0;
     }
-    if (isRecording && !sceneIsStopped) {
-        stopRecording();
-    }
-
-    // Auto-key changed targets while recording
-    if (isRecording && sceneIsStopped) {
-        recordTick(scene, sceneProject, *animComp);
-    }
 
     // Playback update
     if (isPreviewing && sceneIsStopped) {
@@ -2049,9 +2264,10 @@ void editor::AnimationWindow::show() {
             }
         }
 
-        if (!anyRunning && isPlaying) {
-            isPlaying = false;
-        } else {
+        if (isPlaying) {
+            if (!anyRunning) {
+                isPlaying = false;
+            }
             // Drive the playhead from the dominant clip (the transition target once blended).
             Entity timeSource = previewPrimary;
             if (timeSource == NULL_ENTITY || !scene->isEntityCreated(timeSource) ||
@@ -2133,11 +2349,11 @@ void editor::AnimationWindow::show() {
     }
 
     if (scrubbed) {
-        if (sceneIsStopped && canPreviewEntity(displayEntity, scene) && !isRecording) {
+        if (sceneIsStopped && canPreviewEntity(displayEntity, scene)) {
             seekPreview(scene, sceneProject, currentTime, displayEntity);
-        } else if (isRecording) {
-            // keys may be authored past the current duration
-            currentTime = std::max(0.0f, std::min(currentTime, kRecordMaxTime));
+        } else if (sceneIsStopped) {
+            float authoringEnd = std::max(kAuthoringMaxTime, getAnimationDuration(*displayAnim, scene));
+            currentTime = std::clamp(currentTime, 0.0f, authoringEnd);
         } else {
             currentTime = std::max(0.0f, std::min(currentTime, getAnimationDuration(*displayAnim, scene)));
         }
@@ -2147,7 +2363,7 @@ void editor::AnimationWindow::show() {
     ImGui::Dummy(canvasSize);
 
     // Horizontal scroll: follow the computed (auto) duration and the playhead so
-    // auto-duration clips and recording past the end stay reachable
+    // auto-duration clips and authoring past the end stay reachable.
     float totalTime = std::max({10.0f, getAnimationDuration(*displayAnim, scene) * 1.5f, currentTime * 1.5f});
     float maxScroll = std::max(0.0f, totalTime * pixelsPerSecond - canvasSize.x + labelWidth);
     if (scrollX > maxScroll) scrollX = maxScroll;
@@ -2179,8 +2395,6 @@ void editor::AnimationWindow::externalPlay(Entity entity, uint32_t sceneId) {
     SceneProject* sceneProject = project->getScene(sceneId);
     if (!sceneProject || !sceneProject->scene) return;
     Scene* scene = sceneProject->scene;
-
-    stopRecording();
 
     if (selectedEntity != entity || selectedSceneId != sceneId) {
         selectEntity(entity, sceneId);
