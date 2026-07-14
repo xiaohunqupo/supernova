@@ -67,13 +67,14 @@ Doriax Engine combines a lightweight runtime with a modern desktop editor for cr
 
 ## Engine Features
 
-- 2D and 3D scenes
-- GLTF and OBJ model loading
-- Skeletal animation and morph targets
-- PBR materials, dynamic shadows, fog, and sky
-- Particle systems, UI, terrain LOD, and instancing
-- 3D audio, scene serialization, texture and shader pools, and multithreading
-- Integrated 2D and 3D physics powered by Box2D and Jolt Physics
+- Shared ECS runtime for 2D and 3D scenes, with scene layers and serialization
+- Sprites, tilemaps, and polygons, plus 2D lights, normal maps, and occluder shadows
+- GLTF and OBJ models with skeletal animation, morph targets, and mesh instancing
+- PBR materials with dynamic lights and cascaded shadows, sky-driven IBL, SSAO, fog, and planar mirrors
+- Keyframe tracks, runtime actions with easing, and sprite sheet animation
+- Particle systems, heightmap terrain with clipmap LOD, and a UI toolkit with anchors and widgets
+- Integrated 2D and 3D physics via Box2D and Jolt Physics (bodies, shapes, and joints)
+- Spatial 3D audio, texture and shader pools, and multithreaded async resource loading
 
 ## Platforms
 
