@@ -1535,18 +1535,25 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                                   IM_COL32(255, 220, 120, 255), 3.0f, 0, 2.0f);
             }
 
-            // Keyframe diamonds along the bottom of keyframe-track blocks
+            // Keyframe diamonds sit on the block's bottom edge, below the label.
+            // Keep them in the track padding so dense keys never cover the text.
             if (frame.action != NULL_ENTITY && scene->isEntityCreated(frame.action)) {
                 if (KeyframeTracksComponent* kfComp = scene->findComponent<KeyframeTracksComponent>(frame.action)) {
+                    constexpr float keyMarkerRadius = 3.0f;
+                    float ky = trackY + trackHeight - 2.0f;
+                    drawList->PushClipRect(ImVec2(visStart, trackY),
+                                           ImVec2(visEnd, trackY + trackHeight + trackPadding), true);
                     for (float kt : kfComp->times) {
                         float kx = timeToX(frame.startTime + kt, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
                         if (kx >= visStart && kx <= visEnd) {
-                            float ky = trackY + trackHeight - 8.0f;
-                            drawList->AddQuadFilled(ImVec2(kx, ky - 3.5f), ImVec2(kx + 3.5f, ky),
-                                                    ImVec2(kx, ky + 3.5f), ImVec2(kx - 3.5f, ky),
+                            drawList->AddQuadFilled(ImVec2(kx, ky - keyMarkerRadius),
+                                                    ImVec2(kx + keyMarkerRadius, ky),
+                                                    ImVec2(kx, ky + keyMarkerRadius),
+                                                    ImVec2(kx - keyMarkerRadius, ky),
                                                     IM_COL32(255, 255, 255, 230));
                         }
                     }
+                    drawList->PopClipRect();
                 }
             }
 
