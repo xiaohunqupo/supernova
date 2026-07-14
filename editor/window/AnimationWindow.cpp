@@ -106,8 +106,12 @@ void editor::AnimationWindow::setOpen(bool open){
     focusRequested = false;
     isWindowVisible = false;
 
+    SceneProject* previewSceneProject = project->getScene(selectedSceneId);
+    if (isDraggingKey || isDraggingFrame || isResizingFrame) {
+        finishTimelineDrag(previewSceneProject ? previewSceneProject->scene : nullptr,
+                           previewSceneProject, false);
+    }
     if (isPreviewing) {
-        SceneProject* previewSceneProject = project->getScene(selectedSceneId);
         if (previewSceneProject && previewSceneProject->scene) {
             stopPreview(previewSceneProject->scene, previewSceneProject);
         } else {
@@ -193,11 +197,15 @@ std::string editor::AnimationWindow::getActionLabel(Entity actionEntity, Scene* 
 
 void editor::AnimationWindow::selectEntity(Entity entity, uint32_t sceneId) {
     if (selectedEntity != entity || selectedSceneId != sceneId) {
+        SceneProject* previousSceneProject = project->getScene(selectedSceneId);
+        if (isDraggingKey || isDraggingFrame || isResizingFrame) {
+            finishTimelineDrag(previousSceneProject ? previousSceneProject->scene : nullptr,
+                               previousSceneProject, false);
+        }
         // Stop any active preview before changing entity
         if (isPreviewing) {
-            SceneProject* sceneProject = project->getScene(selectedSceneId);
-            if (sceneProject && sceneProject->scene) {
-                stopPreview(sceneProject->scene, sceneProject);
+            if (previousSceneProject && previousSceneProject->scene) {
+                stopPreview(previousSceneProject->scene, previousSceneProject);
             } else {
                 previewState.clear();
                 isPreviewing = false;
@@ -555,6 +563,140 @@ TrackLookup findTrackEntity(Scene* scene, AnimationComponent& anim, Entity targe
     return {NULL_ENTITY, 0.0f, false};
 }
 
+}
+
+void editor::AnimationWindow::finishTimelineDrag(Scene* scene, SceneProject* sceneProject,
+                                                 bool refreshPreview) {
+    bool timingChanged = false;
+    AnimationComponent* anim = scene && sceneProject && selectedEntity != NULL_ENTITY
+        && scene->isEntityCreated(selectedEntity)
+        ? scene->findComponent<AnimationComponent>(selectedEntity) : nullptr;
+
+    if (isDraggingKey) {
+        bool validKey = anim && selectedKeyFrameIndex >= 0
+            && selectedKeyFrameIndex < (int)anim->actions.size();
+        ActionFrame* keyFrame = validKey ? &anim->actions[selectedKeyFrameIndex] : nullptr;
+        KeyframeTracksComponent* keyframes = keyFrame && keyFrame->action != NULL_ENTITY
+            && scene->isEntityCreated(keyFrame->action)
+            ? scene->findComponent<KeyframeTracksComponent>(keyFrame->action) : nullptr;
+        validKey = keyframes && selectedKeyIndex >= 0
+            && selectedKeyIndex < (int)keyframes->times.size();
+
+        if (validKey && std::fabs(keyDragTime - keyDragStartTime) > 0.000001f) {
+            std::vector<float> newTimes = keyframes->times;
+            newTimes[selectedKeyIndex] = keyDragTime;
+            auto* cmd = new PropertyCmd<std::vector<float>>(
+                project, sceneProject->id, keyFrame->action,
+                ComponentType::KeyframeTracksComponent, "times", newTimes,
+                [sceneProject]() {
+                    sceneProject->isModified = true;
+                    sceneProject->needUpdateRender = true;
+                });
+            CommandHandle::get(sceneProject->id)->addCommandNoMerge(cmd);
+            timingChanged = true;
+        } else if (!validKey) {
+            selectedKeyFrameIndex = -1;
+            selectedKeyIndex = -1;
+        }
+        isDraggingKey = false;
+    }
+
+    if (isResizingFrame) {
+        bool validFrame = anim && resizingFrameIndex >= 0
+            && resizingFrameIndex < (int)anim->actions.size();
+        if (validFrame) {
+            ActionFrame& frame = anim->actions[resizingFrameIndex];
+            bool timeChanged = frame.startTime != resizeStartTime;
+            bool durationChanged = frame.duration != resizeStartDuration;
+            if (timeChanged || durationChanged) {
+                float finalStartTime = frame.startTime;
+                float finalDuration = frame.duration;
+
+                // Live frame edits are reverted before constructing commands so
+                // undo records the state from the beginning of the drag.
+                frame.startTime = resizeStartTime;
+                frame.duration = resizeStartDuration;
+
+                if (timeChanged && durationChanged) {
+                    auto* multiCmd = new MultiPropertyCmd();
+                    multiCmd->addPropertyCmd<float>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(resizingFrameIndex) + "].startTime", finalStartTime,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    multiCmd->addPropertyCmd<float>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(resizingFrameIndex) + "].duration", finalDuration,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    CommandHandle::get(sceneProject->id)->addCommand(multiCmd);
+                } else if (durationChanged) {
+                    auto* cmd = new PropertyCmd<float>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(resizingFrameIndex) + "].duration", finalDuration,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
+                } else {
+                    auto* cmd = new PropertyCmd<float>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(resizingFrameIndex) + "].startTime", finalStartTime,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
+                }
+                timingChanged = true;
+            }
+        }
+        isResizingFrame = false;
+        resizingFrameIndex = -1;
+        resizeSide = 0;
+    }
+
+    if (isDraggingFrame) {
+        bool validFrame = anim && draggingFrameIndex >= 0
+            && draggingFrameIndex < (int)anim->actions.size();
+        if (validFrame) {
+            ActionFrame& frame = anim->actions[draggingFrameIndex];
+            bool timeChanged = frame.startTime != dragStartTime;
+            bool trackChanged = frame.track != dragStartTrack;
+            if (timeChanged || trackChanged) {
+                float finalStartTime = frame.startTime;
+                uint32_t finalTrack = frame.track;
+
+                frame.startTime = dragStartTime;
+                frame.track = dragStartTrack;
+
+                if (timeChanged && trackChanged) {
+                    auto* multiCmd = new MultiPropertyCmd();
+                    multiCmd->addPropertyCmd<float>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(draggingFrameIndex) + "].startTime", finalStartTime,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    multiCmd->addPropertyCmd<uint32_t>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(draggingFrameIndex) + "].track", finalTrack,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    CommandHandle::get(sceneProject->id)->addCommand(multiCmd);
+                } else if (timeChanged) {
+                    auto* cmd = new PropertyCmd<float>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(draggingFrameIndex) + "].startTime", finalStartTime,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
+                } else {
+                    auto* cmd = new PropertyCmd<uint32_t>(
+                        project, sceneProject->id, selectedEntity, ComponentType::AnimationComponent,
+                        "actions[" + std::to_string(draggingFrameIndex) + "].track", finalTrack,
+                        [sceneProject]() { sceneProject->isModified = true; });
+                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
+                }
+                timingChanged = timingChanged || timeChanged;
+            }
+        }
+        isDraggingFrame = false;
+        draggingFrameIndex = -1;
+    }
+
+    if (refreshPreview && timingChanged && isPreviewing) {
+        seekPreview(scene, sceneProject, currentTime, selectedEntity);
+    }
 }
 
 // Key every keyframe track the playhead has reached with its target's current
@@ -915,6 +1057,8 @@ void editor::AnimationWindow::triggerTransitionPreview(Scene* scene, SceneProjec
         return; // current clip could not be previewed
     }
 
+    finishTimelineDrag(scene, sceneProject, true);
+
     float fadeTime = scene->getComponent<AnimationComponent>(transitionTarget).defaultFadeTime;
 
     bool alreadyActive = false;
@@ -952,6 +1096,10 @@ void editor::AnimationWindow::triggerTransitionPreview(Scene* scene, SceneProjec
 
 void editor::AnimationWindow::stopPreview(Scene* scene, SceneProject* sceneProject, bool applyBindPose) {
     if (!isPreviewing) return;
+
+    // AnimationComponent/key data are intentionally excluded from preview-state
+    // restoration, so finalize authored timeline changes before restoring poses.
+    finishTimelineDrag(scene, sceneProject, false);
 
     restorePreviewState(scene);
     if (applyBindPose) {
@@ -1174,6 +1322,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
     } else {
         ImGui::BeginDisabled(sceneIsStopped && !canPreview);
         if (ImGui::Button(ICON_FA_PLAY "##anim_play")) {
+            finishTimelineDrag(scene, sceneProject, true);
             isPlaying = true;
             if (sceneIsStopped && !isPreviewing) {
                 currentTime = 0;
@@ -1481,17 +1630,25 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
         return IM_COL32(140, 70, 180, 200);      // Purple: generic Action
     };
 
-    bool allowEditing = !isPreviewing;
-    // A scrub preview is paused but still keyable. Keep frame move/resize
-    // disabled there while allowing the advertised right-click key workflow.
-    bool allowKeying = sceneProject->playState == ScenePlayState::STOPPED && !isPlaying;
+    // A paused scrub preview is an authoring state: frame move/resize and keying
+    // remain available. Active animation playback and scene play lock the timeline.
+    bool allowEditing = sceneProject->playState == ScenePlayState::STOPPED && !isPlaying;
+    bool allowKeying = allowEditing;
     bool mouseOverFrame = false;
+
+    // Permission can change through external playback/scene controls while the
+    // mouse is still held. Finalize first instead of leaving live frame edits
+    // outside the undo stack or silently dropping a key-drag preview.
+    if ((isDraggingKey || isDraggingFrame || isResizingFrame)
+        && (!allowSelection || !allowEditing)) {
+        finishTimelineDrag(scene, sceneProject, false);
+    }
 
     // Preview a key move without mutating the component. The PropertyCmd created
     // on release can then capture the real old value for undo.
     if (isDraggingKey) {
-        bool validKey = allowSelection && allowKeying
-            && selectedKeyFrameIndex >= 0 && selectedKeyFrameIndex < (int)anim.actions.size();
+        bool validKey = selectedKeyFrameIndex >= 0
+            && selectedKeyFrameIndex < (int)anim.actions.size();
         if (validKey) {
             ActionFrame& keyFrame = anim.actions[selectedKeyFrameIndex];
             KeyframeTracksComponent* keyframes = keyFrame.action != NULL_ENTITY
@@ -1500,7 +1657,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
             validKey = keyframes && selectedKeyIndex >= 0
                 && selectedKeyIndex < (int)keyframes->times.size();
 
-            if (validKey && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            if (validKey && allowKeying && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                 float animationTime = xToTime(ImGui::GetIO().MousePos.x, timeStart,
                                               ImVec2(canvasPos.x + labelWidth, 0));
                 // Snap in timeline space, then convert to the block's local time.
@@ -1873,35 +2030,6 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
         ImGui::EndPopup();
     }
 
-    // Commit the previewed time change once, so the whole drag is one undo step.
-    if (isDraggingKey && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-        if (selectedKeyFrameIndex >= 0 && selectedKeyFrameIndex < (int)anim.actions.size()) {
-            ActionFrame& keyFrame = anim.actions[selectedKeyFrameIndex];
-            KeyframeTracksComponent* keyframes = keyFrame.action != NULL_ENTITY
-                && scene->isEntityCreated(keyFrame.action)
-                ? scene->findComponent<KeyframeTracksComponent>(keyFrame.action) : nullptr;
-            if (keyframes && selectedKeyIndex >= 0
-                && selectedKeyIndex < (int)keyframes->times.size()
-                && std::fabs(keyDragTime - keyDragStartTime) > 0.000001f) {
-                std::vector<float> newTimes = keyframes->times;
-                newTimes[selectedKeyIndex] = keyDragTime;
-                auto* cmd = new PropertyCmd<std::vector<float>>(
-                    project, sceneProject->id, keyFrame.action,
-                    ComponentType::KeyframeTracksComponent, "times", newTimes,
-                    [sceneProject]() {
-                        sceneProject->isModified = true;
-                        sceneProject->needUpdateRender = true;
-                    });
-                CommandHandle::get(sceneProject->id)->addCommandNoMerge(cmd);
-
-                if (isPreviewing) {
-                    seekPreview(scene, sceneProject, currentTime, selectedEntity);
-                }
-            }
-        }
-        isDraggingKey = false;
-    }
-
     // Handle frame dragging
     if (allowEditing && isDraggingFrame && ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
         draggingFrameIndex >= 0 && draggingFrameIndex < (int)anim.actions.size()) {
@@ -2015,105 +2143,9 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
         sceneProject->isModified = true;
     }
 
-    if (allowEditing && isResizingFrame && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-        if (resizingFrameIndex >= 0 && resizingFrameIndex < (int)anim.actions.size()) {
-            ActionFrame& frame = anim.actions[resizingFrameIndex];
-
-            bool timeChanged = (frame.startTime != resizeStartTime);
-            bool durationChanged = (frame.duration != resizeStartDuration);
-
-            if (timeChanged || durationChanged) {
-                float finalStartTime = frame.startTime;
-                float finalDuration = frame.duration;
-
-                // Revert so cmd logs exactly old -> new
-                frame.startTime = resizeStartTime;
-                frame.duration = resizeStartDuration;
-
-                if (timeChanged && durationChanged) {
-                    auto* multiCmd = new MultiPropertyCmd();
-                    multiCmd->addPropertyCmd<float>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent,
-                        "actions[" + std::to_string(resizingFrameIndex) + "].startTime", finalStartTime,
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    multiCmd->addPropertyCmd<float>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent,
-                        "actions[" + std::to_string(resizingFrameIndex) + "].duration", finalDuration,
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    CommandHandle::get(sceneProject->id)->addCommand(multiCmd);
-                } else if (durationChanged) {
-                    auto* cmd = new PropertyCmd<float>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent,
-                        "actions[" + std::to_string(resizingFrameIndex) + "].duration", finalDuration,
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
-                } else if (timeChanged) {
-                    auto* cmd = new PropertyCmd<float>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent,
-                        "actions[" + std::to_string(resizingFrameIndex) + "].startTime", finalStartTime,
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
-                }
-            }
-        }
-
-        isResizingFrame = false;
-        resizingFrameIndex = -1;
-        resizeSide = 0;
-    }
-
-    if (allowEditing && isDraggingFrame && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-        if (draggingFrameIndex >= 0 && draggingFrameIndex < (int)anim.actions.size()) {
-            ActionFrame& frame = anim.actions[draggingFrameIndex];
-
-            bool timeChanged = (frame.startTime != dragStartTime);
-            bool trackChanged = (frame.track != dragStartTrack);
-
-            if (timeChanged || trackChanged) {
-                float finalStartTime = frame.startTime;
-                uint32_t finalTrack = frame.track;
-
-                // Revert so cmd logs exactly old -> new
-                frame.startTime = dragStartTime;
-                frame.track = dragStartTrack;
-
-                if (timeChanged && trackChanged) {
-                    auto* multiCmd = new MultiPropertyCmd();
-                    multiCmd->addPropertyCmd<float>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent, 
-                        "actions[" + std::to_string(draggingFrameIndex) + "].startTime", finalStartTime,
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    multiCmd->addPropertyCmd<uint32_t>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent, 
-                        "actions[" + std::to_string(draggingFrameIndex) + "].track", finalTrack,
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    CommandHandle::get(sceneProject->id)->addCommand(multiCmd);
-                } else if (timeChanged) {
-                    auto* cmd = new PropertyCmd<float>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent, 
-                        "actions[" + std::to_string(draggingFrameIndex) + "].startTime", finalStartTime, 
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
-                } else if (trackChanged) {
-                    auto* cmd = new PropertyCmd<uint32_t>(
-                        project, selectedSceneId, selectedEntity, ComponentType::AnimationComponent, 
-                        "actions[" + std::to_string(draggingFrameIndex) + "].track", finalTrack, 
-                        [sceneProject]() { sceneProject->isModified = true; }
-                    );
-                    CommandHandle::get(sceneProject->id)->addCommand(cmd);
-                }
-            }
-        }
-
-        isDraggingFrame = false;
-        draggingFrameIndex = -1;
+    if ((isDraggingKey || isDraggingFrame || isResizingFrame)
+        && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        finishTimelineDrag(scene, sceneProject, true);
     }
 
     // Accept action entities dragged from the Structure window onto the tracks area
@@ -2546,6 +2578,8 @@ void editor::AnimationWindow::externalPlay(Entity entity, uint32_t sceneId) {
     }
 
     bool sceneIsStopped = (sceneProject->playState == ScenePlayState::STOPPED);
+
+    finishTimelineDrag(scene, sceneProject, true);
 
     if (sceneIsStopped && !isPreviewing) {
         currentTime = 0;

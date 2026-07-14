@@ -94,6 +94,9 @@ namespace doriax::editor{
         void keyTrackChannel(Scene* scene, SceneProject* sceneProject, Entity trackEntity,
                              float localTime, float explicitDuration, int channel);
         void snapshotTracks(Scene* scene, SceneProject* sceneProject, AnimationComponent& anim);
+        // Commit any active key/frame drag and clear its transient state. Playback
+        // and preview transitions call this before changing authoring permissions.
+        void finishTimelineDrag(Scene* scene, SceneProject* sceneProject, bool refreshPreview);
 
         // Helpers
         void drawToolbar(float width, AnimationComponent& anim, Scene* scene, SceneProject* sceneProject);
