@@ -769,16 +769,22 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
         }
     }
 
-    // Skip inlining raw buffer/index data only for meshes backed by a model
-    // file; the model loader will repopulate the buffers at runtime from the
-    // source file. A ModelComponent with an empty filename loads no geometry,
-    // so the mesh data must still be serialized to remain visible.
+    // Model and heightmapped terrain systems rebuild their mesh buffers at
+    // runtime. Empty model filenames and terrains without a heightmap do not
+    // qualify as runtime geometry sources, so preserve their inline buffers.
     bool hasModel = false;
     if (scene->findComponent<ModelComponent>(entity)) {
         hasModel = !scene->getComponent<ModelComponent>(entity).filename.empty();
     }
 
-    if (!hasModel && mesh.buffer.getSize() > 0){
+    bool hasTerrain = false;
+    if (scene->findComponent<TerrainComponent>(entity)) {
+        hasTerrain = !scene->getComponent<TerrainComponent>(entity).heightMap.empty();
+    }
+
+    const bool hasRuntimeGeometrySource = hasModel || hasTerrain;
+
+    if (!hasRuntimeGeometrySource && mesh.buffer.getSize() > 0){
         code << ind << "mesh.buffer.clearAll();\n";
         std::map<AttributeType, Attribute> attributes = mesh.buffer.getAttributes();
 
@@ -816,7 +822,7 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
         code << ind << "mesh.buffer.setCount(" << formatUInt(mesh.buffer.getCount()) << ");\n";
     }
 
-    if (!hasModel && mesh.indices.getSize() > 0){
+    if (!hasRuntimeGeometrySource && mesh.indices.getSize() > 0){
         code << ind << "mesh.indices.clearAll();\n";
         code << ind << "{\n";
         // See the vertex-buffer case above: index data belongs in static storage,
