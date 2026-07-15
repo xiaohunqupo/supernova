@@ -41,6 +41,12 @@
 
 using namespace doriax;
 
+namespace {
+
+constexpr float kMinimumTimelineBlockWidth = 10.0f;
+
+}
+
 editor::AnimationWindow::AnimationWindow(Project* project){
     this->project = project;
 
@@ -364,12 +370,20 @@ float editor::AnimationWindow::getAnimationDuration(const AnimationComponent& an
 
 void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, SceneProject* sceneProject) const {
     Scene* scene = sceneProject->scene;
+    // Lane packing must use the same minimum extent as rendering. Otherwise
+    // zero-duration frames do not mathematically overlap but their visible
+    // blocks are drawn on top of one another.
+    const float minimumLayoutDuration = kMinimumTimelineBlockWidth / std::max(pixelsPerSecond, 1.0f);
+    auto layoutFrameEnd = [&](const ActionFrame& frame) {
+        return frame.startTime + std::max(effectiveFrameDuration(frame, scene), minimumLayoutDuration);
+    };
+
     bool hasOverlap = false;
     for (size_t i = 0; i < anim.actions.size() && !hasOverlap; i++) {
         for (size_t j = i + 1; j < anim.actions.size() && !hasOverlap; j++) {
             if (anim.actions[i].track == anim.actions[j].track) {
-                float iEnd = anim.actions[i].startTime + effectiveFrameDuration(anim.actions[i], scene);
-                float jEnd = anim.actions[j].startTime + effectiveFrameDuration(anim.actions[j], scene);
+                float iEnd = layoutFrameEnd(anim.actions[i]);
+                float jEnd = layoutFrameEnd(anim.actions[j]);
                 if (anim.actions[i].startTime < jEnd && anim.actions[j].startTime < iEnd) {
                     hasOverlap = true;
                 }
@@ -392,7 +406,7 @@ void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, ScenePr
         std::vector<float> laneEnds;
         for (size_t idx : sorted) {
             ActionFrame& frame = anim.actions[idx];
-            float frameEnd = frame.startTime + effectiveFrameDuration(frame, scene);
+            float frameEnd = layoutFrameEnd(frame);
             int lane = -1;
             for (int l = 0; l < (int)laneEnds.size(); l++) {
                 if (frame.startTime >= laneEnds[l]) {
@@ -1792,9 +1806,8 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
         float blockEnd = timeToX(frame.startTime + frameDur, timeStart, ImVec2(canvasPos.x + labelWidth, 0));
 
         // Keep zero-length frames (auto duration not yet resolvable) visible and clickable
-        float minBlockWidth = 10.0f;
-        if (blockEnd - blockStart < minBlockWidth) {
-            blockEnd = blockStart + minBlockWidth;
+        if (blockEnd - blockStart < kMinimumTimelineBlockWidth) {
+            blockEnd = blockStart + kMinimumTimelineBlockWidth;
         }
 
         // Clamp to visible area
@@ -2587,7 +2600,7 @@ void editor::AnimationWindow::show() {
         float blockEndPx = (frame.startTime + frameDuration) * pixelsPerSecond;
         // Zero-length blocks still draw with a ten-pixel minimum width.
         blockContentWidth = std::max(blockContentWidth,
-            std::max(blockEndPx, blockStartPx + 10.0f));
+            std::max(blockEndPx, blockStartPx + kMinimumTimelineBlockWidth));
     }
 
     // Duration and the authoring playhead remain reachable even when they lie
