@@ -44,6 +44,7 @@ using namespace doriax;
 namespace {
 
 constexpr float kMinimumTimelineBlockWidth = 10.0f;
+constexpr float kTrackLabelWidth = 80.0f;
 
 }
 
@@ -1590,7 +1591,7 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
 void editor::AnimationWindow::drawTimeRuler(ImVec2 canvasPos, ImVec2 canvasSize, float timeStart, float timeEnd) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     float rulerHeight = 20.0f;
-    float labelWidth = 120.0f;
+    float labelWidth = kTrackLabelWidth;
 
     // Label column header
     drawList->AddRectFilled(canvasPos, ImVec2(canvasPos.x + labelWidth, canvasPos.y + rulerHeight),
@@ -1660,7 +1661,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
     float rulerHeight = 20.0f;
     float trackHeight = 24.0f;
     float trackPadding = 2.0f;
-    float labelWidth = 120.0f;
+    float labelWidth = kTrackLabelWidth;
 
     auto getFrameColor = [&](Entity actionEntity) -> ImU32 {
         if (actionEntity == NULL_ENTITY || !scene->isEntityCreated(actionEntity))
@@ -2299,7 +2300,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
 
 bool editor::AnimationWindow::drawPlayhead(ImVec2 canvasPos, ImVec2 canvasSize, float timeStart, float timeEnd) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    float labelWidth = 120.0f;
+    float labelWidth = kTrackLabelWidth;
 
     float playheadX = canvasPos.x + labelWidth + (currentTime - timeStart) * pixelsPerSecond;
 
@@ -2562,7 +2563,7 @@ void editor::AnimationWindow::show() {
     // scrollbar is drawn in the parent below it, so reaching the last track is
     // never required to pan through time.
     ImVec2 timelineAvailable = ImGui::GetContentRegionAvail();
-    constexpr float labelWidth = 120.0f;
+    constexpr float labelWidth = kTrackLabelWidth;
     constexpr float scrollbarGap = 1.0f;
     constexpr float trackEndPadding = 32.0f;
     constexpr float rulerHeight = 20.0f;
