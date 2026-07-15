@@ -1871,7 +1871,7 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                         float localTime = isDraggingKey && selectedKeyFrameIndex == (int)i
                             && selectedKeyIndex == hoveredKeyIndex
                             ? keyDragTime : kfComp->times[hoveredKeyIndex];
-                        ImGui::SetTooltip("Key %d | %.2fs (local %.2fs)\nDrag horizontally to move",
+                        ImGui::SetTooltip("Key %d | %.2fs (local %.2fs)",
                                           hoveredKeyIndex, frame.startTime + localTime, localTime);
 
                         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -1900,12 +1900,10 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                     }
                 }
             }
-            float availWidth = visEnd - visStart - 8;
+            float availWidth = blockEnd - blockStart - 8;
             const char* displayLabel = nullptr;
-            bool isFullLabel = false;
             if (ImGui::CalcTextSize(fullLabel.c_str()).x <= availWidth) {
                 displayLabel = fullLabel.c_str();
-                isFullLabel = true;
             } else {
                 std::string mediumLabel = indexStr + ": " + targetName;
                 if (!targetName.empty() && ImGui::CalcTextSize(mediumLabel.c_str()).x <= availWidth) {
@@ -1916,8 +1914,15 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
                 }
             }
             if (displayLabel) {
-                drawList->AddText(ImVec2(visStart + 4, trackY + 4),
+                // Keep the text attached to the block's un-clamped start so it
+                // scrolls out of view with the block instead of sticking to the
+                // left edge. Clip it to the visible block to protect the track
+                // label column when the text is partially offscreen.
+                drawList->PushClipRect(ImVec2(visStart, trackY),
+                                       ImVec2(visEnd, trackY + trackHeight), true);
+                drawList->AddText(ImVec2(blockStart + 4, trackY + 4),
                                   IM_COL32(255, 255, 255, 255), displayLabel);
+                drawList->PopClipRect();
             }
 
             // Interaction: click to select, drag to move/resize
@@ -1931,13 +1936,13 @@ bool editor::AnimationWindow::drawTracks(ImVec2 canvasPos, ImVec2 canvasSize, fl
             // Detect edge hover for resize cursor
             bool hovered = ImGui::IsItemHovered();
             mouseOverFrame = mouseOverFrame || hovered || ImGui::IsItemActive();
-            if (hovered && !mouseOverKey && !isFullLabel) {
+            if (hovered && !mouseOverKey) {
                 std::string actionLabel = getActionLabel(frame.action, scene);
-                std::string tooltip = std::to_string(i) + ": " + actionLabel;
+                std::string tooltipTitle = std::to_string(i) + ": " + actionLabel;
                 if (!targetName.empty()) {
-                    tooltip += " | " + targetName;
+                    tooltipTitle += " | " + targetName;
                 }
-                ImGui::SetTooltip("%s", tooltip.c_str());
+                ImGui::SetTooltip("%s", tooltipTitle.c_str());
             }
             if (allowEditing && hovered && !mouseOverKey && !isDraggingFrame && !isResizingFrame) {
                 float mouseX = ImGui::GetIO().MousePos.x;
