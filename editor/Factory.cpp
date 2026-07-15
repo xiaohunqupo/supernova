@@ -792,7 +792,7 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
         // Raw mesh data can be several megabytes. Keeping the generated array
         // automatic makes create_<scene>() reserve the entire blob on the thread
         // stack and can crash at function entry before any entity is created.
-        code << ind << "    static unsigned char data[] = {";
+        code << ind << "    static const unsigned char data[] = {";
         unsigned char* bufData = mesh.buffer.getData();
         for(size_t i=0; i<mesh.buffer.getSize(); i++){
                 if (i % 50 == 0) code << "\n" << ind << "        ";
@@ -810,7 +810,7 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
         code << ind << "{\n";
         // See the vertex-buffer case above: index data belongs in static storage,
         // not in the generated scene factory's stack frame.
-        code << ind << "    static unsigned char data[] = {";
+        code << ind << "    static const unsigned char data[] = {";
         unsigned char* idxData = mesh.indices.getData();
         for(size_t i=0; i<mesh.indices.getSize(); i++){
                 if (i % 50 == 0) code << "\n" << ind << "        ";

@@ -47,6 +47,7 @@ namespace doriax {
         virtual void clear();
 
         void importData(void* data, size_t size);
+        void importData(const void* data, size_t size);
 
         void addAttribute(AttributeType attribute, AttributeDataType dataType, unsigned int elements, size_t offset);
         void addAttribute(AttributeType attribute, unsigned int elements, size_t offset, bool perInstance);

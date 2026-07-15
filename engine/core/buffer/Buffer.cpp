@@ -88,6 +88,10 @@ void Buffer::clear(){
 }
 
 void Buffer::importData(void* data, size_t size){
+    importData(static_cast<const void*>(data), size);
+}
+
+void Buffer::importData(const void* data, size_t size){
     increase(size);
     memcpy(this->data, data, size);
 }
