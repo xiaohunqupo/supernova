@@ -2280,6 +2280,47 @@ void PhysicsSystem::addBroadPhaseLayer3D(uint8_t index, uint32_t groupsToInclude
 }
 
 void PhysicsSystem::load(){
+    // A newly loaded scene can receive a variable-timestep gameplay update before
+    // the fixed-step accumulator has enough time for its first physics update.
+    // Materialize physics objects now so Body2D/Body3D APIs are valid from the
+    // first gameplay callback, but do not advance either physics world here.
+    auto bodies2d = scene->getComponentArray<Body2DComponent>();
+    for (size_t i = 0; i < bodies2d->size(); i++){
+        Body2DComponent& body = bodies2d->getComponentFromIndex(i);
+        Entity entity = bodies2d->getEntity(i);
+
+        if (loadBody2D(entity) && b2Body_IsValid(body.body)){
+            updateBody2DPosition(scene->getSignature(entity), entity, body);
+        }
+    }
+
+    auto joints2d = scene->getComponentArray<Joint2DComponent>();
+    for (size_t i = 0; i < joints2d->size(); i++){
+        Joint2DComponent& joint = joints2d->getComponentFromIndex(i);
+        if ((joint.needUpdateJoint || !b2Joint_IsValid(joint.joint))
+            && loadJoint2D(joints2d->getEntity(i), joint)){
+            joint.needUpdateJoint = false;
+        }
+    }
+
+    auto bodies3d = scene->getComponentArray<Body3DComponent>();
+    for (size_t i = 0; i < bodies3d->size(); i++){
+        Body3DComponent& body = bodies3d->getComponentFromIndex(i);
+        Entity entity = bodies3d->getEntity(i);
+
+        if (loadBody3D(entity) && !body.body.IsInvalid()){
+            updateBody3DPosition(scene->getSignature(entity), entity, body);
+        }
+    }
+
+    auto joints3d = scene->getComponentArray<Joint3DComponent>();
+    for (size_t i = 0; i < joints3d->size(); i++){
+        Joint3DComponent& joint = joints3d->getComponentFromIndex(i);
+        if ((joint.needUpdateJoint || !joint.joint)
+            && loadJoint3D(joints3d->getEntity(i), joint)){
+            joint.needUpdateJoint = false;
+        }
+    }
 }
 
 void PhysicsSystem::destroy(){
