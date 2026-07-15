@@ -671,6 +671,15 @@ std::string editor::Factory::formatPropertyValue(const PropertyData& property, c
     }
 }
 
+std::string editor::Factory::beginHeapComponentCode(std::ostringstream& code, const std::string& ind, const std::string& componentType, const std::string& varName) {
+    // HybridArray uses fixed-capacity inline storage in standalone exports, so
+    // large components must not become automatic variables in scene factories.
+    const std::string storageName = varName + "Storage";
+    code << ind << "auto " << storageName << " = std::make_unique<" << componentType << ">();\n";
+    code << ind << componentType << "& " << varName << " = *" << storageName << ";\n";
+    return "std::move(*" + storageName + ")";
+}
+
 void editor::Factory::addComponentCode(std::ostringstream& code, const std::string& ind, const std::string& sceneName, const std::string& entityName, Entity entity, const std::string& componentType, const std::string& varName, bool assignExisting) {
     if (!sceneName.empty()) {
         std::string entityRef = entityName.empty() ? std::to_string(entity) : entityName;
@@ -714,7 +723,9 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
     MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
-    code << ind << "MeshComponent mesh;\n";
+    // MeshComponent contains large fixed-capacity arrays in standalone builds.
+    // Keep it off the scene factory's stack and move it directly into the ECS.
+    const std::string meshValue = beginHeapComponentCode(code, ind, "MeshComponent", "mesh");
     code << ind << "mesh.receiveIBL = " << formatBool(mesh.receiveIBL) << ";\n";
     code << ind << "mesh.castShadows = " << formatBool(mesh.castShadows) << ";\n";
     code << ind << "mesh.receiveShadows = " << formatBool(mesh.receiveShadows) << ";\n";
@@ -830,7 +841,7 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
         code << ind << "mesh.indices.setCount(" << formatUInt(mesh.indices.getCount()) << ");\n";
     }
 
-    addComponentCode(code, ind, sceneName, entityName, entity, "MeshComponent", "mesh", assignExisting);
+    addComponentCode(code, ind, sceneName, entityName, entity, "MeshComponent", meshValue, assignExisting);
     return code.str();
 }
 
@@ -1115,7 +1126,7 @@ std::string editor::Factory::createTilemapComponent(int indentSpaces, EntityRegi
     TilemapComponent& tilemap = scene->getComponent<TilemapComponent>(entity);
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
-    code << ind << "TilemapComponent tilemap;\n";
+    const std::string tilemapValue = beginHeapComponentCode(code, ind, "TilemapComponent", "tilemap");
     code << ind << "tilemap.width = " << formatUInt(tilemap.width) << ";\n";
     code << ind << "tilemap.height = " << formatUInt(tilemap.height) << ";\n";
     code << ind << "tilemap.automaticFlipY = " << formatBool(tilemap.automaticFlipY) << ";\n";
@@ -1144,7 +1155,7 @@ std::string editor::Factory::createTilemapComponent(int indentSpaces, EntityRegi
     if (tilemap.numTiles > 0) {
         code << ind << "tilemap.numTiles = " << tilemap.numTiles << ";\n";
     }
-    addComponentCode(code, ind, sceneName, entityName, entity, "TilemapComponent", "tilemap", assignExisting);
+    addComponentCode(code, ind, sceneName, entityName, entity, "TilemapComponent", tilemapValue, assignExisting);
     return code.str();
 }
 
@@ -1539,7 +1550,7 @@ std::string editor::Factory::createBody3DComponent(int indentSpaces, EntityRegis
     Body3DComponent& body = scene->getComponent<Body3DComponent>(entity);
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
-    code << ind << "Body3DComponent body3d;\n";
+    const std::string bodyValue = beginHeapComponentCode(code, ind, "Body3DComponent", "body3d");
     code << ind << "body3d.type = " << formatBodyType(body.type) << ";\n";
     code << ind << "body3d.motionQuality = " << formatBody3DMotionQuality(body.motionQuality) << ";\n";
     code << ind << "body3d.needReloadBody = " << formatBool(body.needReloadBody) << ";\n";
@@ -1601,7 +1612,7 @@ std::string editor::Factory::createBody3DComponent(int indentSpaces, EntityRegis
         }
     }
 
-    addComponentCode(code, ind, sceneName, entityName, entity, "Body3DComponent", "body3d", assignExisting);
+    addComponentCode(code, ind, sceneName, entityName, entity, "Body3DComponent", bodyValue, assignExisting);
     return code.str();
 }
 

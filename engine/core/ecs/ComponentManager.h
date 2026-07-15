@@ -7,7 +7,9 @@
 
 #include <any>
 #include <memory>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include "ComponentArray.h"
 #include "Log.h"
 
@@ -61,8 +63,19 @@ namespace doriax {
 		}
 
 		template<typename T>
-		void addComponent(Entity entity, T component) {
+		void addComponent(Entity entity) {
+			getComponentArray<T>()->insert(entity);
+		}
+
+		template<typename T>
+		void addComponent(Entity entity, const T& component) {
 			getComponentArray<T>()->insert(entity, component);
+		}
+
+		template<typename T>
+		void addComponent(Entity entity, T&& component) {
+			using Component = std::remove_cv_t<std::remove_reference_t<T>>;
+			getComponentArray<Component>()->insert(entity, std::forward<T>(component));
 		}
 
 		template<typename T>

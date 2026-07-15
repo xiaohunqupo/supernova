@@ -6,6 +6,8 @@
 #include "ComponentManager.h"
 #include "Signature.h"
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 #include "component/MeshComponent.h"
 #include "component/ModelComponent.h"
@@ -135,17 +137,33 @@ namespace doriax {
 
         template<typename T>
         void addComponent(Entity entity){
-            addComponent<T>(entity, T{});
+            componentManager.addComponent<T>(entity);
+            auto signature = entityManager.getSignature(entity);
+            signature.set(componentManager.getComponentId<T>(), true);
+            entityManager.setSignature(entity, signature);
+
+            onComponentAdded(entity, componentManager.getComponentId<T>());
         }
 
         template<typename T>
-        void addComponent(Entity entity, T component){
+        void addComponent(Entity entity, const T& component){
             componentManager.addComponent<T>(entity, component);
             auto signature = entityManager.getSignature(entity);
             signature.set(componentManager.getComponentId<T>(), true);
             entityManager.setSignature(entity, signature);
 
             onComponentAdded(entity, componentManager.getComponentId<T>());
+        }
+
+        template<typename T>
+        void addComponent(Entity entity, T&& component){
+            using Component = std::remove_cv_t<std::remove_reference_t<T>>;
+            componentManager.addComponent<Component>(entity, std::forward<T>(component));
+            auto signature = entityManager.getSignature(entity);
+            signature.set(componentManager.getComponentId<Component>(), true);
+            entityManager.setSignature(entity, signature);
+
+            onComponentAdded(entity, componentManager.getComponentId<Component>());
         }
 
         template<typename T>

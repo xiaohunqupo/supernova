@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <numeric>
 #include <memory>
+#include <utility>
 #include "Entity.h"
 #include "Log.h"
 
@@ -33,6 +34,19 @@ namespace doriax {
         std::unordered_map<Entity, size_t> entityToIndexMap{};
         std::unordered_map<size_t, Entity> indexToEntityMap{};
 
+        template<typename... Args>
+        void emplace(Entity entity, Args&&... args) {
+            if (entityToIndexMap.find(entity) != entityToIndexMap.end()) {
+                Log::error("Component added to same entity more than once");
+                return;
+            }
+
+            size_t newIndex = componentArray.size();
+            componentArray.emplace_back(std::forward<Args>(args)...);
+            entityToIndexMap[entity] = newIndex;
+            indexToEntityMap[newIndex] = entity;
+        }
+
         void moveRange(size_t start, size_t length, size_t dst){
             typename std::vector<T>::iterator first, middle, last;
             if (start < dst){
@@ -48,19 +62,16 @@ namespace doriax {
         }
 
     public:
-        void insert(Entity entity, T component) {
-            if (entityToIndexMap.find(entity) == entityToIndexMap.end()){
+        void insert(Entity entity) {
+            emplace(entity);
+        }
 
-                size_t newIndex = componentArray.size();
+        void insert(Entity entity, const T& component) {
+            emplace(entity, component);
+        }
 
-                entityToIndexMap[entity] = newIndex;
-                indexToEntityMap[newIndex] = entity;
-
-                componentArray.push_back(component);
-
-            } else {
-                Log::error("Component added to same entity more than once");
-            }
+        void insert(Entity entity, T&& component) {
+            emplace(entity, std::move(component));
         }
 
         void remove(Entity entity) {

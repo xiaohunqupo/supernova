@@ -7,6 +7,8 @@
 
 #include "Scene.h"
 #include "Entity.h"
+#include <type_traits>
+#include <utility>
 
 namespace doriax{
     class DORIAX_API EntityHandle{
@@ -39,12 +41,18 @@ namespace doriax{
 
         template <typename T>
         void addComponent() {
-            scene->addComponent<T>(entity, T{});
+            scene->addComponent<T>(entity);
         }
 
         template <typename T>
-        void addComponent(T component) {
-            scene->addComponent<T>(entity, std::move(component));
+        void addComponent(const T& component) {
+            scene->addComponent<T>(entity, component);
+        }
+
+        template <typename T>
+        void addComponent(T&& component) {
+            using Component = std::remove_cv_t<std::remove_reference_t<T>>;
+            scene->addComponent<Component>(entity, std::forward<T>(component));
         }
     
         template <typename T>
