@@ -1239,35 +1239,39 @@ void editor::AnimationWindow::drawToolbar(float width, AnimationComponent& anim,
             entityName = "Animation";
             selected = true;
         }
+        ImGui::Separator();
         if (ImGui::MenuItem(ICON_FA_PLAY "  Sprite Animation")) {
             selectedType = EntityCreationType::SPRITE_ANIMATION;
             entityName = "SpriteAnimation";
             selected = true;
         }
-        if (ImGui::MenuItem(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT "  Position Action")) {
-            selectedType = EntityCreationType::POSITION_ACTION;
-            entityName = "PositionAction";
-            selected = true;
-        }
-        if (ImGui::MenuItem(ICON_FA_ROTATE "  Rotation Action")) {
-            selectedType = EntityCreationType::ROTATION_ACTION;
-            entityName = "RotationAction";
-            selected = true;
-        }
-        if (ImGui::MenuItem(ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER "  Scale Action")) {
-            selectedType = EntityCreationType::SCALE_ACTION;
-            entityName = "ScaleAction";
-            selected = true;
-        }
-        if (ImGui::MenuItem(ICON_FA_PALETTE "  Color Action")) {
-            selectedType = EntityCreationType::COLOR_ACTION;
-            entityName = "ColorAction";
-            selected = true;
-        }
-        if (ImGui::MenuItem(ICON_FA_EYE "  Alpha Action")) {
-            selectedType = EntityCreationType::ALPHA_ACTION;
-            entityName = "AlphaAction";
-            selected = true;
+        if (ImGui::BeginMenu(ICON_FA_BOLT "  Basic animations")) {
+            if (ImGui::MenuItem(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT "  Position Action")) {
+                selectedType = EntityCreationType::POSITION_ACTION;
+                entityName = "PositionAction";
+                selected = true;
+            }
+            if (ImGui::MenuItem(ICON_FA_ROTATE "  Rotation Action")) {
+                selectedType = EntityCreationType::ROTATION_ACTION;
+                entityName = "RotationAction";
+                selected = true;
+            }
+            if (ImGui::MenuItem(ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER "  Scale Action")) {
+                selectedType = EntityCreationType::SCALE_ACTION;
+                entityName = "ScaleAction";
+                selected = true;
+            }
+            if (ImGui::MenuItem(ICON_FA_PALETTE "  Color Action")) {
+                selectedType = EntityCreationType::COLOR_ACTION;
+                entityName = "ColorAction";
+                selected = true;
+            }
+            if (ImGui::MenuItem(ICON_FA_EYE "  Alpha Action")) {
+                selectedType = EntityCreationType::ALPHA_ACTION;
+                entityName = "AlphaAction";
+                selected = true;
+            }
+            ImGui::EndMenu();
         }
         ImGui::Separator();
         if (ImGui::MenuItem(ICON_FA_ROUTE "  Translate Tracks")) {
