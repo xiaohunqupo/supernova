@@ -115,6 +115,7 @@ namespace doriax::editor{
         std::map<std::string, bool> spriteAnimationFramesButtonGroups;
         bool spriteAnimationFramesExpanded = false;
         std::map<std::string, bool> trackValuesExpanded;
+        bool keyframeEasingsExpanded = false;
         bool instancesExpanded = false;
         std::map<std::string, bool> instancesButtonGroups;
         bool pointsExpanded = false;

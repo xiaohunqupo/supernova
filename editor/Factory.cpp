@@ -1897,9 +1897,7 @@ std::string editor::Factory::createKeyframeTracksComponent(int indentSpaces, Ent
         }
         code << "};\n";
     }
-    bool anyEasing = std::any_of(kf.easings.begin(), kf.easings.end(),
-                                 [](EaseType e){ return e != EaseType::LINEAR; });
-    if (anyEasing) {
+    if (!kf.easings.empty()) {
         code << ind << "kfcomp.easings = {";
         for (size_t i = 0; i < kf.easings.size(); i++) {
             if (i > 0) code << ", ";

@@ -11717,11 +11717,6 @@ void editor::Properties::drawKeyframeTracksComponent(ComponentType cpType, Scene
         if (newEasings.size() > newSegments){
             newEasings.resize(newSegments);
         }
-        // all-linear lists collapse to empty (keeps files compact)
-        if (std::all_of(newEasings.begin(), newEasings.end(), [](EaseType e){ return e == EaseType::LINEAR; })){
-            newEasings.clear();
-        }
-
         if (newEasings != trackComp->easings){
             multiCmd->addPropertyCmd<std::vector<EaseType>>(project, sceneProject->id, entity, cpType, "easings", newEasings);
         }
@@ -11729,50 +11724,133 @@ void editor::Properties::drawKeyframeTracksComponent(ComponentType cpType, Scene
 
     drawTrackValues<KeyframeTracksComponent, float>(cpType, sceneProject, entities, RowPropertyType::Float, 0.0f, "keyframe", &KeyframeTracksComponent::times, "times", reconcileEasings);
 
-    // Per-segment easing: segment i shapes the interpolation from key i to key i+1.
-    // Missing entries mean linear (GLTF-imported clips keep an empty list).
-    size_t numSegments = comp.times.size() > 1 ? comp.times.size() - 1 : 0;
-    if (numSegments > 0){
-        ImGui::SeparatorText("Easing");
-        beginTable(cpType, getLabelSize("Ease 00 - 00"), "keyframe_easings_table");
+    // Per-segment easing: easing i shapes the interpolation from key i to key i+1.
+    // Missing entries mean linear, so the list cannot grow past the segment count.
+    beginTable(cpType, getLabelSize("Ease 00 - 00"), "keyframe_easings_table");
 
-        // CUSTOM is combo-less here: per-segment easings store only the EaseType
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::TextUnformatted("Easing");
+    ImGui::TableSetColumnIndex(1);
+
+    size_t easingCount = comp.easings.size();
+    size_t maxEasingCount = easingCount;
+    bool easingCountsDiffer = false;
+    bool canAddEasing = false;
+    bool anyTrackHasSegments = false;
+    for (Entity entity : entities){
+        if (KeyframeTracksComponent* trackComp = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity)){
+            size_t segments = trackComp->times.size() > 1 ? trackComp->times.size() - 1 : 0;
+            easingCountsDiffer = easingCountsDiffer || trackComp->easings.size() != easingCount;
+            maxEasingCount = std::max(maxEasingCount, trackComp->easings.size());
+            canAddEasing = canAddEasing || trackComp->easings.size() < segments;
+            anyTrackHasSegments = anyTrackHasSegments || segments > 0;
+        }
+    }
+
+    if (easingCountsDiffer){
+        ImGui::TextUnformatted("---");
+    }else{
+        ImGui::Text("%zu", easingCount);
+    }
+    float easingArrowWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    const char* addEasingTooltip = !anyTrackHasSegments
+        ? "Add at least two keyframe values before adding easing"
+        : "Easing already covers every keyframe segment";
+    if (drawSummaryAddButton("Add Ease##keyframe_easings_add", easingArrowWidth, canAddEasing, addEasingTooltip)){
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (Entity entity : entities){
+            if (KeyframeTracksComponent* trackComp = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity)){
+                size_t segments = trackComp->times.size() > 1 ? trackComp->times.size() - 1 : 0;
+                if (trackComp->easings.size() >= segments){
+                    continue;
+                }
+
+                std::vector<EaseType> newEasings = trackComp->easings;
+                EaseType newEasing = newEasings.empty() ? EaseType::LINEAR : newEasings.back();
+                newEasings.push_back(newEasing);
+                multiCmd->addPropertyCmd<std::vector<EaseType>>(project, sceneProject->id, entity, cpType, "easings", newEasings);
+            }
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##toggle_keyframe_easings", keyframeEasingsExpanded ? ImGuiDir_Up : ImGuiDir_Down)){
+        keyframeEasingsExpanded = !keyframeEasingsExpanded;
+    }
+
+    if (keyframeEasingsExpanded){
+        // CUSTOM is omitted here: per-segment easings store only the EaseType.
         std::vector<const char*> easeNames;
         std::vector<EaseType> easeValues;
-        for (const auto& entry : entriesEaseType) {
-            if (entry.value == (int)EaseType::CUSTOM) continue;
+        for (const auto& entry : entriesEaseType){
+            if (entry.value == (int)EaseType::CUSTOM){
+                continue;
+            }
             easeNames.push_back(entry.name);
             easeValues.push_back((EaseType)entry.value);
         }
 
-        for (size_t i = 0; i < numSegments; i++){
+        float clearButtonFramePadding = ImGui::GetStyle().FramePadding.x / 4.0f;
+        float clearButtonWidth = ImGui::CalcTextSize(ICON_FA_TRASH_CAN).x;
+        ImVec2 inputSize = ImVec2(ImGui::GetContentRegionAvail().x - clearButtonWidth - ImGui::GetStyle().ItemSpacing.x - clearButtonFramePadding * 2, 0);
+        if (inputSize.x < 100.0f){
+            inputSize.x = 100.0f;
+        }
+
+        for (size_t i = 0; i < maxEasingCount; i++){
             ImGui::PushID((int)i);
 
-            EaseType current = (i < comp.easings.size()) ? comp.easings[i] : EaseType::LINEAR;
+            EaseType current = EaseType::LINEAR;
+            bool hasCurrent = false;
+            bool easingValuesDiffer = false;
+            bool defChanged = false;
+            for (Entity entity : entities){
+                if (KeyframeTracksComponent* trackComp = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity)){
+                    size_t segments = trackComp->times.size() > 1 ? trackComp->times.size() - 1 : 0;
+                    if (i >= segments){
+                        continue;
+                    }
+
+                    EaseType entityEasing = i < trackComp->easings.size() ? trackComp->easings[i] : EaseType::LINEAR;
+                    if (!hasCurrent){
+                        current = entityEasing;
+                        hasCurrent = true;
+                    }else if (current != entityEasing){
+                        easingValuesDiffer = true;
+                    }
+                    defChanged = defChanged || entityEasing != EaseType::LINEAR;
+                }
+            }
 
             auto applyEasing = [&](EaseType newType){
-                MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+                MultiPropertyCmd* multiCmd = nullptr;
                 for (Entity entity : entities){
                     if (KeyframeTracksComponent* trackComp = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity)){
                         size_t segments = trackComp->times.size() > 1 ? trackComp->times.size() - 1 : 0;
-                        if (i >= segments) continue;
+                        if (i >= segments){
+                            continue;
+                        }
                         std::vector<EaseType> newEasings = trackComp->easings;
-                        newEasings.resize(segments, EaseType::LINEAR);
+                        newEasings.resize(std::max(newEasings.size(), i + 1), EaseType::LINEAR);
                         newEasings[i] = newType;
-                        // all-linear lists collapse to empty (keeps files compact)
-                        if (std::all_of(newEasings.begin(), newEasings.end(), [](EaseType e){ return e == EaseType::LINEAR; })){
-                            newEasings.clear();
+                        if (!multiCmd){
+                            multiCmd = new MultiPropertyCmd();
                         }
                         multiCmd->addPropertyCmd<std::vector<EaseType>>(project, sceneProject->id, entity, cpType, "easings", newEasings);
                     }
+                }
+                if (!multiCmd){
+                    return;
                 }
                 multiCmd->setNoMerge();
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
             };
 
             std::string label = "Ease " + std::to_string(i) + " - " + std::to_string(i + 1);
-            bool defChanged = (current != EaseType::LINEAR);
-            if (propertyHeader(label, -1, defChanged, false)){
+            if (propertyHeader(label, inputSize.x, defChanged, false)){
                 applyEasing(EaseType::LINEAR);
             }
 
@@ -11784,15 +11862,58 @@ void editor::Properties::drawKeyframeTracksComponent(ComponentType cpType, Scene
                 }
             }
 
-            if (ImGui::Combo("##keyframe_ease", &itemCurrent, easeNames.data(), (int)easeNames.size())){
+            if (!hasCurrent){
+                ImGui::BeginDisabled();
+            }
+            if (easingValuesDiffer){
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            }
+            bool easingChanged = ImGui::Combo("##keyframe_ease", &itemCurrent, easeNames.data(), (int)easeNames.size());
+            if (easingValuesDiffer){
+                ImGui::PopStyleColor();
+            }
+            if (!hasCurrent){
+                ImGui::EndDisabled();
+            }
+            if (easingChanged){
                 applyEasing(easeValues[itemCurrent]);
+            }
+
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(clearButtonFramePadding, ImGui::GetStyle().FramePadding.y));
+            if (ImGui::Button(ICON_FA_TRASH_CAN "##remove_keyframe_ease")){
+                MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+                for (Entity entity : entities){
+                    if (KeyframeTracksComponent* trackComp = sceneProject->scene->findComponent<KeyframeTracksComponent>(entity)){
+                        if (i >= trackComp->easings.size()){
+                            continue;
+                        }
+                        std::vector<EaseType> newEasings = trackComp->easings;
+                        newEasings.erase(newEasings.begin() + (long int)i);
+                        multiCmd->addPropertyCmd<std::vector<EaseType>>(project, sceneProject->id, entity, cpType, "easings", newEasings);
+                    }
+                }
+                multiCmd->setNoMerge();
+                CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(2);
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            if (ImGui::IsItemHovered()){
+                ImGui::SetTooltip("Remove easing");
             }
 
             ImGui::PopID();
         }
-
-        endTable();
     }
+
+    endTable();
 }
 
 template<typename Component, typename ValueType>

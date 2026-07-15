@@ -5807,10 +5807,9 @@ YAML::Node editor::Stream::encodeKeyframeTracksComponent(const KeyframeTracksCom
     }
     node["times"] = timesNode;
 
-    // All-linear tracks (e.g. GLTF-imported clips) stay compact
-    bool anyEasing = std::any_of(tracks.easings.begin(), tracks.easings.end(),
-                                 [](EaseType e){ return e != EaseType::LINEAR; });
-    if (anyEasing) {
+    // Imported linear tracks keep this list empty, while explicit entries from
+    // the Properties editor must survive a save even when they are linear.
+    if (!tracks.easings.empty()) {
         YAML::Node easingsNode;
         for (EaseType e : tracks.easings) {
             easingsNode.push_back(easeTypeToString(e));
