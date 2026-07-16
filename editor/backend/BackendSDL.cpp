@@ -23,9 +23,9 @@ static SDL_Cursor* invisibleCursor = nullptr;
 static MouseMode gameMouseMode = MouseMode::NORMAL;
 static bool gameCursorInSceneRect = false;
 static bool gameCursorHidden = false;
-// While true the editor has reclaimed the cursor (play paused, loading, or the
-// editor window unfocused). gameMouseMode still holds the game's intent and is
-// reapplied when this clears. Driven every frame from the main loop.
+// While true the editor has reclaimed the cursor (play paused or loading).
+// gameMouseMode still holds the game's intent and is reapplied when this clears.
+// Driven every frame from the main loop.
 static bool mouseControlSuspended = false;
 
 // for work with mingw32
@@ -274,12 +274,15 @@ int editor::Backend::init(int argc, char* argv[]) {
         const bool focused = (windowFlags & SDL_WINDOW_INPUT_FOCUS) != 0;
         const bool frameSyncEnabled = !activeProject->isPlaySessionActive() || activeProject->isVSyncEnabled();
 
-        // Hand the cursor back to the editor whenever a play session isn't actively
-        // running in a focused window (paused, loading, or Alt-Tabbed away) so a
-        // game-held cursor lock can't trap the mouse. The game's mouse mode is
-        // restored on resume/refocus. No-op outside a play session.
+        // Hand the cursor back to the editor while a play session isn't actively
+        // running (paused or loading) so a game-held cursor lock can't trap the
+        // mouse; the game's mouse mode is restored on resume. Window focus is
+        // deliberately NOT part of this gate: SDL releases relative-mode/grab on
+        // focus loss natively (as an exported game does), and folding focus in here
+        // broke capture under multi-viewport, where the main window reports
+        // unfocused whenever input is on a viewport panel. No-op outside a session.
         setMouseControlSuspended(activeProject->isPlaySessionActive() &&
-                                 !(activeProject->isMainScenePlaying() && focused));
+                                 !activeProject->isMainScenePlaying());
         if (!isWayland) {
             const int desiredInterval = (focused && frameSyncEnabled) ? 1 : 0;
             if (desiredInterval != currentSwapInterval) {
@@ -399,7 +402,7 @@ void editor::Backend::disableMouseCursor() {
 void editor::Backend::enableMouseCursor() {
     // Editor viewport navigation (fly-camera) released its temporary cursor lock.
     // Restore the cursor the editor should currently show: while a play session has
-    // the cursor suspended (paused/unfocused) the editor owns it, so hand it back
+    // the cursor suspended (paused/loading) the editor owns it, so hand it back
     // rather than re-asserting the game's mode (which setMouseMode would no-op
     // anyway, leaving the cursor stuck locked). Otherwise reapply the game's
     // requested mode (NORMAL while editing).

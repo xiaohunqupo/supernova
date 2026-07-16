@@ -18,9 +18,10 @@ namespace doriax::editor{
         static void enableMouseCursor();
         static void setMouseMode(MouseMode mode);
         // Temporarily hands the OS cursor back to the editor (visible + free) while a
-        // play session is paused, loading, or its window is unfocused, without
-        // discarding the game's requested mouse mode. The mode is reapplied when the
-        // suspension is lifted (resume/refocus). Driven from the main loop.
+        // play session is paused or loading, without discarding the game's requested
+        // mouse mode. The mode is reapplied when the suspension is lifted (resume).
+        // Driven from the main loop. Window focus is intentionally not a factor here:
+        // GLFW/SDL release a captured cursor on focus loss natively.
         static void setMouseControlSuspended(bool suspended);
         static void setGameCursorInSceneRect(bool inSceneRect);
         static void closeWindow();
