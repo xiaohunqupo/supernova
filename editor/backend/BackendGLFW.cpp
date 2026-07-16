@@ -16,14 +16,18 @@
 #include "Engine.h"
 #include "GamepadMappings.h"
 
+using namespace doriax;
+
 static GLFWwindow* window = nullptr;
 static GLFWcursor* invisibleCursor = nullptr;
 static nfdwindowhandle_t nativeWindow;
-static bool gameShowCursor = true;
+static MouseMode gameMouseMode = MouseMode::NORMAL;
 static bool gameCursorInSceneRect = false;
 static bool gameCursorHidden = false;
-
-using namespace doriax;
+// While true the editor has reclaimed the cursor (play paused, loading, or the
+// editor window unfocused). gameMouseMode still holds the game's intent and is
+// reapplied when this clears. Driven every frame from the main loop.
+static bool mouseControlSuspended = false;
 
 editor::App editor::Backend::app;
 std::string editor::Backend::title;
@@ -52,8 +56,31 @@ static void showEditorCursor() {
     gameCursorHidden = false;
 }
 
-static void applyGameCursorVisibility(bool force = false) {
-    const bool shouldHide = !gameShowCursor && gameCursorInSceneRect;
+// CONFINED: keep the cursor visible but trapped inside the editor window
+// (GLFW 3.4+). Falls back to a free cursor where capture mode isn't available.
+static void confineEditorCursor() {
+    ImGuiIO& io = ImGui::GetIO();
+    io.MouseDrawCursor = false;
+    io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    glfwSetCursor(window, nullptr);
+#ifdef GLFW_CURSOR_CAPTURED
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_CAPTURED);
+#else
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+#endif
+    gameCursorHidden = false;
+}
+
+// HIDDEN mode hides the cursor only while the pointer is over the game viewport,
+// so the surrounding editor UI stays usable. Called every frame with the hover
+// state; the other modes don't depend on hover and are applied once by
+// setMouseMode, so this is a no-op for them.
+static void applyHoverVisibility(bool force = false) {
+    if (mouseControlSuspended || gameMouseMode != MouseMode::HIDDEN) {
+        return;
+    }
+
+    const bool shouldHide = gameCursorInSceneRect;
     if (!force && shouldHide == gameCursorHidden) {
         return;
     }
@@ -273,6 +300,14 @@ int editor::Backend::init(int argc, char* argv[]) {
         // On Wayland, project VSync is implemented by manual pacing (see above).
         const bool focused = glfwGetWindowAttrib(window, GLFW_FOCUSED) != 0;
         const bool frameSyncEnabled = !activeProject->isPlaySessionActive() || activeProject->isVSyncEnabled();
+
+        // Hand the cursor back to the editor whenever a play session isn't actively
+        // running in a focused window (paused, loading, or Alt-Tabbed away) so a
+        // game-held cursor lock can't trap the mouse. The game's mouse mode is
+        // restored on resume/refocus. No-op outside a play session.
+        setMouseControlSuspended(activeProject->isPlaySessionActive() &&
+                                 !(activeProject->isMainScenePlaying() && focused));
+
         if (!isWayland) {
             const int desiredInterval = (focused && frameSyncEnabled) ? 1 : 0;
             if (desiredInterval != currentSwapInterval) {
@@ -385,25 +420,61 @@ void editor::Backend::disableMouseCursor() {
 }
 
 void editor::Backend::enableMouseCursor() {
-    applyGameCursorVisibility(true);
-}
-
-void editor::Backend::setShowCursor(bool showCursor) {
-    gameShowCursor = showCursor;
-    applyGameCursorVisibility();
-}
-
-void editor::Backend::setMouseLocked(bool mouseLocked) {
-    if (mouseLocked) {
-        disableMouseCursor();
+    // Editor viewport navigation (fly-camera) released its temporary cursor lock.
+    // Restore the cursor the editor should currently show: while a play session has
+    // the cursor suspended (paused/unfocused) the editor owns it, so hand it back
+    // rather than re-asserting the game's mode (which setMouseMode would no-op
+    // anyway, leaving the cursor stuck locked). Otherwise reapply the game's
+    // requested mode (NORMAL while editing).
+    if (mouseControlSuspended) {
+        showEditorCursor();
     } else {
-        enableMouseCursor();
+        setMouseMode(gameMouseMode);
+    }
+}
+
+void editor::Backend::setMouseControlSuspended(bool suspended) {
+    if (mouseControlSuspended == suspended) {
+        return;
+    }
+    mouseControlSuspended = suspended;
+    if (suspended) {
+        // Hand the cursor back to the editor without forgetting gameMouseMode.
+        showEditorCursor();
+    } else {
+        // Restore whatever the game asked for.
+        setMouseMode(gameMouseMode);
+    }
+}
+
+void editor::Backend::setMouseMode(MouseMode mode) {
+    gameMouseMode = mode;
+    if (mouseControlSuspended) {
+        // Editor owns the cursor right now; just record the intent.
+        return;
+    }
+    switch (mode) {
+        case MouseMode::CAPTURED:
+            // FPS lock (GLFW_CURSOR_DISABLED). Held for the whole session: the
+            // hover policy is disabled for this mode so a drifting virtual cursor
+            // can't release it (see applyHoverVisibility).
+            disableMouseCursor();
+            break;
+        case MouseMode::CONFINED:
+            confineEditorCursor();
+            break;
+        case MouseMode::HIDDEN:
+            applyHoverVisibility(true);
+            break;
+        case MouseMode::NORMAL:
+            showEditorCursor();
+            break;
     }
 }
 
 void editor::Backend::setGameCursorInSceneRect(bool inSceneRect) {
     gameCursorInSceneRect = inSceneRect;
-    applyGameCursorVisibility();
+    applyHoverVisibility();
 }
 
 void editor::Backend::closeWindow() {

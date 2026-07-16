@@ -121,25 +121,17 @@ void DoriaxApple::setMouseCursor(doriax::CursorType type){
 #endif
 }
 
-void DoriaxApple::setShowCursor(bool showCursor){
+void DoriaxApple::setMouseMode(doriax::MouseMode mode){
 #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-    setAppleCursorHidden(!showCursor);
-#endif
-}
-
-void DoriaxApple::setMouseLocked(bool mouseLocked){
-#if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-    if (appleMouseLocked == mouseLocked)
-        return;
-
-    CGAssociateMouseAndMouseCursorPosition(!mouseLocked);
-    appleMouseLocked = mouseLocked;
-
-    if (mouseLocked){
-        setAppleCursorHidden(true);
-    }else{
-        setAppleCursorHidden(!doriax::Engine::isShowCursor());
+    // macOS has no built-in cursor confinement, so CONFINED behaves as NORMAL.
+    const bool locked = (mode == doriax::MouseMode::CAPTURED);
+    if (appleMouseLocked != locked){
+        CGAssociateMouseAndMouseCursorPosition(!locked);
+        appleMouseLocked = locked;
     }
+
+    const bool hidden = (mode == doriax::MouseMode::HIDDEN || mode == doriax::MouseMode::CAPTURED);
+    setAppleCursorHidden(hidden);
 #endif
 }
 

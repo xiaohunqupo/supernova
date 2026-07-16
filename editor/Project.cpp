@@ -2357,7 +2357,7 @@ void editor::Project::resetEngineConfigs(bool executeViewChanged) {
     Engine::setScalingMode(Scaling::NATIVE);
     Engine::setTextureStrategy(TextureStrategy::RESIZE);
     Engine::setMouseCursor(CursorType::ARROW);
-    Engine::setShowCursor(true);
+    Engine::setMouseMode(MouseMode::NORMAL);
 
     if (executeViewChanged) {
         Engine::systemViewChanged();
@@ -5676,6 +5676,23 @@ bool editor::Project::isAnyScenePlaying() const{
 bool editor::Project::isPlaySessionActive() const{
     std::scoped_lock lock(playSessionMutex);
     return activePlaySession != nullptr;
+}
+
+bool editor::Project::isMainScenePlaying() const{
+    uint32_t mainSceneId;
+    {
+        std::scoped_lock lock(playSessionMutex);
+        if (!activePlaySession) {
+            return false;
+        }
+        mainSceneId = activePlaySession->mainSceneId;
+    }
+    for (const auto& sceneProject : scenes) {
+        if (sceneProject.id == mainSceneId) {
+            return sceneProject.playState == ScenePlayState::PLAYING;
+        }
+    }
+    return false;
 }
 
 bool editor::Project::isAnySceneSaving() const{

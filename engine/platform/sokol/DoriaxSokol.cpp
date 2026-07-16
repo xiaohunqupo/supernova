@@ -62,12 +62,22 @@ void DoriaxSokol::setMouseCursor(doriax::CursorType type){
     }
 }
 
-void DoriaxSokol::setShowCursor(bool showCursor){
-    sapp_show_mouse(showCursor);
-}
-
-void DoriaxSokol::setMouseLocked(bool mouseLocked){
-    sapp_lock_mouse(mouseLocked);
+void DoriaxSokol::setMouseMode(doriax::MouseMode mode){
+    switch (mode){
+        case doriax::MouseMode::CAPTURED:
+            sapp_lock_mouse(true);
+            break;
+        case doriax::MouseMode::HIDDEN:
+            sapp_lock_mouse(false);
+            sapp_show_mouse(false);
+            break;
+        case doriax::MouseMode::NORMAL:
+        case doriax::MouseMode::CONFINED:
+            // sokol_app has no cursor confinement, so CONFINED behaves as NORMAL.
+            sapp_lock_mouse(false);
+            sapp_show_mouse(true);
+            break;
+    }
 }
 
 std::string DoriaxSokol::getAssetPath(){

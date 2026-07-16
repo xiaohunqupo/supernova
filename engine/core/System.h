@@ -40,6 +40,16 @@ namespace doriax {
         NOT_ALLOWED
     };
 
+    // How the mouse cursor behaves. A single authoritative state replaces the old
+    // independent "show cursor" and "mouse locked" flags: visibility and motion
+    // confinement are two axes of one mode, so only the valid combinations exist.
+    enum class MouseMode{
+        NORMAL,   // visible, moves freely (default)
+        HIDDEN,   // hidden, moves freely (absolute position still reported)
+        CAPTURED, // hidden and locked to the window; relative motion only (mouse-look)
+        CONFINED  // visible, but cannot leave the window bounds
+    };
+
     class DORIAX_API System {
     private:
 
@@ -90,8 +100,7 @@ namespace doriax {
         virtual sg_swapchain getSokolSwapchain();
 
         virtual void setMouseCursor(CursorType type);
-        virtual void setShowCursor(bool showCursor);
-        virtual void setMouseLocked(bool mouseLocked);
+        virtual void setMouseMode(MouseMode mode);
         virtual void setMousePosition(float x, float y);
 
         virtual FILE* platformFopen(const char* fname, const char* mode);

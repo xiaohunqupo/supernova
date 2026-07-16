@@ -1,6 +1,7 @@
 #pragma once
 
 #include "App.h"
+#include "System.h"
 
 namespace doriax::editor{
     class Backend{
@@ -15,8 +16,12 @@ namespace doriax::editor{
 
         static void disableMouseCursor();
         static void enableMouseCursor();
-        static void setShowCursor(bool showCursor);
-        static void setMouseLocked(bool mouseLocked);
+        static void setMouseMode(MouseMode mode);
+        // Temporarily hands the OS cursor back to the editor (visible + free) while a
+        // play session is paused, loading, or its window is unfocused, without
+        // discarding the game's requested mouse mode. The mode is reapplied when the
+        // suspension is lifted (resume/refocus). Driven from the main loop.
+        static void setMouseControlSuspended(bool suspended);
         static void setGameCursorInSceneRect(bool inSceneRect);
         static void closeWindow();
 

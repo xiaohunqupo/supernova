@@ -245,19 +245,20 @@ void DoriaxWeb::setMouseCursor(doriax::CursorType type){
 
 }
 
-void DoriaxWeb::setShowCursor(bool showCursor){
-    if (!showCursor){
+void DoriaxWeb::setMouseMode(doriax::MouseMode mode){
+    if (mode == doriax::MouseMode::CAPTURED){
+        emscripten_request_pointerlock(canvas.c_str(), 1);
+        return;
+    }
+
+    emscripten_exit_pointerlock();
+
+    // The browser can't confine the pointer without pointer lock, so CONFINED
+    // behaves as NORMAL (visible cursor).
+    if (mode == doriax::MouseMode::HIDDEN){
         EM_ASM({Module.canvas.style.cursor = UTF8ToString($0);}, "none");
     }else{
         setMouseCursor(doriax::Engine::getMouseCursor());
-    }
-}
-
-void DoriaxWeb::setMouseLocked(bool mouseLocked){
-    if (mouseLocked){
-        emscripten_request_pointerlock(canvas.c_str(), 1);
-    }else{
-        emscripten_exit_pointerlock();
     }
 }
 

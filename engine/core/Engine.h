@@ -235,8 +235,7 @@ namespace doriax {
         static std::atomic<bool> asyncLoading;
 
         static CursorType mouseCursorType;
-        static bool showCursor;
-        static bool mouseLocked;
+        static MouseMode mouseMode;
 
         static Semaphore drawSemaphore;
 
@@ -318,11 +317,8 @@ namespace doriax {
         static void setMouseCursor(CursorType type);
         static CursorType getMouseCursor();
 
-        static void setShowCursor(bool showCursor);
-        static bool isShowCursor();
-
-        static void setMouseLocked(bool mouseLocked);
-        static bool isMouseLocked();
+        static void setMouseMode(MouseMode mode);
+        static MouseMode getMouseMode();
         static void setMousePosition(float x, float y);
         
         static Platform getPlatform();

@@ -98,7 +98,7 @@ static const NSRange _emptyRange = { NSNotFound, 0 };
 }
 
 -(CGPoint)getTrackedMousePoint:(NSEvent*)event{
-    if (!doriax::Engine::isMouseLocked()){
+    if (doriax::Engine::getMouseMode() != doriax::MouseMode::CAPTURED){
         _mousePoint = [self getMousePoint:event];
         _hasMousePoint = YES;
         return _mousePoint;

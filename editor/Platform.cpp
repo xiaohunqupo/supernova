@@ -34,12 +34,8 @@ std::string editor::Platform::getAssetPath(){
     return project->getProjectPath().string();
 }
 
-void editor::Platform::setShowCursor(bool showCursor){
-    Backend::setShowCursor(showCursor);
-}
-
-void editor::Platform::setMouseLocked(bool mouseLocked){
-    Backend::setMouseLocked(mouseLocked);
+void editor::Platform::setMouseMode(MouseMode mode){
+    Backend::setMouseMode(mode);
 }
 
 void editor::Platform::platformLog(const int type, const char *fmt, va_list args){

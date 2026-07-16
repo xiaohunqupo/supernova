@@ -147,6 +147,14 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
+        .beginNamespace("MouseMode")
+        .addVariable("NORMAL", MouseMode::NORMAL)
+        .addVariable("HIDDEN", MouseMode::HIDDEN)
+        .addVariable("CAPTURED", MouseMode::CAPTURED)
+        .addVariable("CONFINED", MouseMode::CONFINED)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
         .beginNamespace("ResourceLoadState")
         .addVariable("NotStarted", ResourceLoadState::NotStarted)
         .addVariable("Loading", ResourceLoadState::Loading)
@@ -221,8 +229,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticFunction("setUpdateTimeMS", &Engine::setUpdateTimeMS)
         .addStaticProperty("interpolationAlpha", &Engine::getInterpolationAlpha)
         .addStaticProperty("mouseCursor", &Engine::getMouseCursor, &Engine::setMouseCursor)
-        .addStaticProperty("showCursor", &Engine::isShowCursor, &Engine::setShowCursor)
-        .addStaticProperty("mouseLocked", &Engine::isMouseLocked, &Engine::setMouseLocked)
+        .addStaticProperty("mouseMode", &Engine::getMouseMode, &Engine::setMouseMode)
         .addStaticFunction("setMousePosition", &Engine::setMousePosition)
         .addStaticProperty("platform", &Engine::getPlatform)
         .addStaticProperty("graphicBackend", &Engine::getGraphicBackend)

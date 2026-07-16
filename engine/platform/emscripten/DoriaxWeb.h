@@ -72,8 +72,7 @@ public:
     virtual void exitFullscreen() override;
 
     virtual void setMouseCursor(doriax::CursorType type) override;
-    virtual void setShowCursor(bool showCursor) override;
-    virtual void setMouseLocked(bool mouseLocked) override;
+    virtual void setMouseMode(doriax::MouseMode mode) override;
 
     virtual std::string getUserDataPath() override;
 

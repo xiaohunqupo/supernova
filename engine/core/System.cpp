@@ -58,11 +58,7 @@ void System::setMouseCursor(CursorType type){
 
 }
 
-void System::setShowCursor(bool showCursor){
-
-}
-
-void System::setMouseLocked(bool mouseLocked){
+void System::setMouseMode(MouseMode mode){
 
 }
 

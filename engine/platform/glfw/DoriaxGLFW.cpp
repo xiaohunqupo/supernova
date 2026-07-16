@@ -288,19 +288,26 @@ void DoriaxGLFW::setMouseCursor(doriax::CursorType type){
     }
 }
 
-void DoriaxGLFW::setShowCursor(bool showCursor){
-    if (showCursor){
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    }else{
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-    }
-}
-
-void DoriaxGLFW::setMouseLocked(bool mouseLocked){
-    if (mouseLocked){
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    }else{
-        setShowCursor(doriax::Engine::isShowCursor());
+void DoriaxGLFW::setMouseMode(doriax::MouseMode mode){
+    switch (mode){
+        case doriax::MouseMode::NORMAL:
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            break;
+        case doriax::MouseMode::HIDDEN:
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+            break;
+        case doriax::MouseMode::CAPTURED:
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            break;
+        case doriax::MouseMode::CONFINED:
+            // Keep the cursor visible but trapped inside the window (GLFW 3.4+).
+            // Fall back to a free cursor where the capture mode isn't available.
+#ifdef GLFW_CURSOR_CAPTURED
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_CAPTURED);
+#else
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+#endif
+            break;
     }
 }
 

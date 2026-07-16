@@ -501,6 +501,9 @@ namespace doriax::editor{
 
         bool isAnyScenePlaying() const;
         bool isPlaySessionActive() const;
+        // True only while the active play session's main scene is actually running
+        // (PLAYING) — false when paused, loading, or no session is active.
+        bool isMainScenePlaying() const;
         bool isAnySceneSaving() const;
 
         void start(uint32_t sceneId);
