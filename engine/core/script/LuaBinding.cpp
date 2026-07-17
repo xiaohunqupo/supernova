@@ -43,6 +43,8 @@
 #include "object/ui/TextEdit.h"
 #include "object/physics/Body2D.h"
 #include "object/physics/Body3D.h"
+#include "object/physics/Joint2D.h"
+#include "object/physics/Joint3D.h"
 #include "action/Action.h"
 #include "action/TimedAction.h"
 #include "action/AlphaAction.h"
@@ -535,6 +537,8 @@ bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, dori
     DISPATCH_TYPE(Bone, "bone");
     DISPATCH_TYPE(Body2D, "body2d");
     DISPATCH_TYPE(Body3D, "body3d");
+    DISPATCH_TYPE(Joint2D, "joint2d");
+    DISPATCH_TYPE(Joint3D, "joint3d");
     DISPATCH_TYPE(Action, "action");
     DISPATCH_TYPE(TimedAction, "timedaction");
     DISPATCH_TYPE(AlphaAction, "alphaaction");

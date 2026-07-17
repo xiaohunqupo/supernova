@@ -1644,6 +1644,8 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<ReflectionProbeComponent>())) return "ReflectionProbe";
     if (signature.test(scene->getComponentId<Body2DComponent>()))      return "Body2D";
     if (signature.test(scene->getComponentId<Body3DComponent>()))      return "Body3D";
+    if (signature.test(scene->getComponentId<Joint2DComponent>()))     return "Joint2D";
+    if (signature.test(scene->getComponentId<Joint3DComponent>()))     return "Joint3D";
     if (signature.test(scene->getComponentId<AlphaActionComponent>())) return "AlphaAction";
     if (signature.test(scene->getComponentId<ColorActionComponent>())) return "ColorAction";
     if (signature.test(scene->getComponentId<PositionActionComponent>())) return "PositionAction";
@@ -1660,5 +1662,7 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<ActionComponent>()))      return "Action";
     if (signature.test(scene->getComponentId<Transform>()))            return "Object";
 
-    return "entity";
+    // generic engine type for entities with no recognized component: valid as a
+    // C++ pointer type (doriax::EntityHandle*) and known to the Lua dispatcher
+    return "EntityHandle";
 }
