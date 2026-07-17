@@ -1776,7 +1776,8 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     // v11: uniform-driven shadow PCF (ShadowQuality) — USE_SHADOWS_PCF variant removed,
     //      shadows.glsl/lighting2d.glsl loop by radius from cameraDir.w / atlasInfo.w.
     // v12: fixed game resolution — new blit fullscreen shader (blit.frag).
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v12";
+    // v13: box-projected local reflection probes in the mesh IBL path.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v13";
 }
 
 void editor::App::pushTabNotificationStyle(){

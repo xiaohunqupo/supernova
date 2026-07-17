@@ -22,6 +22,7 @@ void ComponentAddDialog::initializeCategories() {
             {ComponentType::SkyComponent, ICON_FA_CLOUD_SUN, "Sky", "Skybox or skydome", ImVec4(0.6f, 0.8f, 1.0f, 1.0f)},
             {ComponentType::FogComponent, ICON_FA_SMOG, "Fog", "Fog effect", ImVec4(0.7f, 0.7f, 0.8f, 1.0f)},
             {ComponentType::MirrorComponent, ICON_FA_CLONE, "Mirror", "Planar reflection surface", ImVec4(0.6f, 0.8f, 0.9f, 1.0f)},
+            {ComponentType::ReflectionProbeComponent, ICON_FA_CUBE, "Reflection Probe", "Local static or dynamic environment reflection", ImVec4(0.45f, 0.75f, 1.0f, 1.0f)},
             {ComponentType::ModelComponent, ICON_FA_CUBES, "Model", "3D model", ImVec4(0.8f, 0.4f, 0.4f, 1.0f)},
             {ComponentType::TerrainComponent, ICON_FA_MOUNTAIN, "Terrain", "Terrain mesh", ImVec4(0.4f, 0.7f, 0.3f, 1.0f)},
             {ComponentType::InstancedMeshComponent, ICON_FA_CLONE, "Instanced Mesh", "Instanced rendering", ImVec4(0.7f, 0.4f, 0.5f, 1.0f)}

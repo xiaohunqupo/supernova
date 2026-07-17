@@ -202,7 +202,7 @@ const std::vector<ToolDefinition>& cachedTools() {
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"name", stringSchema("Entity display name")},
-                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, image, sprite, tilemap, text, button, scrollbar, progressbar, textedit, panel, polygon, container, point_light, directional_light, spot_light, light_2d, occluder_2d, joint2d, joint3d, body2d, body3d, sky, fog, camera, sound, sound_3d, animation, sprite_animation, position_action, rotation_action, scale_action, color_action, alpha_action, model, particles, points, lines, mesh_polygon, terrain. light_2d = 2D radius-falloff light (Light2DComponent); occluder_2d = 2D shadow caster (Occluder2DComponent).")},
+                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, image, sprite, tilemap, text, button, scrollbar, progressbar, textedit, panel, polygon, container, point_light, directional_light, spot_light, light_2d, occluder_2d, joint2d, joint3d, body2d, body3d, sky, fog, camera, sound, sound_3d, animation, sprite_animation, position_action, rotation_action, scale_action, color_action, alpha_action, model, particles, points, lines, mesh_polygon, terrain, reflection_probe. light_2d = 2D radius-falloff light (Light2DComponent); occluder_2d = 2D shadow caster (Occluder2DComponent).")},
                 {"parent_id", integerSchema("Optional parent entity id for transform entities")},
                 {"position", vector3Schema("Optional local position")}
             }, {"name", "type"}),

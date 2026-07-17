@@ -656,6 +656,13 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
                 registry->addComponent<MirrorComponent>(entity, Stream::decodeMirrorComponent(componentNode));
             }
             break;
+        case ComponentType::ReflectionProbeComponent:
+            if (!componentNode.IsDefined() || componentNode.IsNull()){
+                registry->addComponent<ReflectionProbeComponent>(entity, {});
+            }else{
+                registry->addComponent<ReflectionProbeComponent>(entity, Stream::decodeReflectionProbeComponent(componentNode));
+            }
+            break;
         case ComponentType::Light2DComponent:
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<Light2DComponent>(entity, {});
@@ -1065,6 +1072,12 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
                 oldComponent = Stream::encodeMirrorComponent(registry->getComponent<MirrorComponent>(entity));
             }
             registry->removeComponent<MirrorComponent>(entity);
+            break;
+        case ComponentType::ReflectionProbeComponent:
+            if (encodeComponent){
+                oldComponent = Stream::encodeReflectionProbeComponent(registry->getComponent<ReflectionProbeComponent>(entity));
+            }
+            registry->removeComponent<ReflectionProbeComponent>(entity);
             break;
         case ComponentType::Light2DComponent:
             if (encodeComponent){

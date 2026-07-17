@@ -670,6 +670,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
+    if (ImGui::MenuItem(ICON_FA_CUBE"  Reflection Probe")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Reflection Probe", EntityCreationType::REFLECTION_PROBE, parent, addToBundle));
+        openParent = parent;
+    }
+
     if (ImGui::MenuItem(ICON_FA_MOUNTAIN"  Terrain")){
         CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Terrain", EntityCreationType::TERRAIN, parent, addToBundle));
         openParent = parent;
@@ -741,6 +746,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_CLOUD;
     }else if (signature.test(scene->getComponentId<FogComponent>())){
         return ICON_FA_SMOG;
+    }else if (signature.test(scene->getComponentId<ReflectionProbeComponent>())){
+        return ICON_FA_CUBE;
     }else if (signature.test(scene->getComponentId<UIContainerComponent>())){
         return ICON_FA_OBJECT_GROUP;
     }else if (signature.test(scene->getComponentId<ButtonComponent>())){

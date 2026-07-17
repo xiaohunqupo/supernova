@@ -10,6 +10,7 @@
 #include "component/InstancedMeshComponent.h"
 #include "component/ModelComponent.h"
 #include "component/SkyComponent.h"
+#include "component/ReflectionProbeComponent.h"
 #include "component/UILayoutComponent.h"
 #include "component/UIComponent.h"
 #include "component/ImageComponent.h"
@@ -29,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <queue>
+#include <unordered_map>
 
 namespace doriax{
 	typedef struct fs_lighting_t {
@@ -50,6 +52,12 @@ namespace doriax{
 		Vector4 ambient;                         // rgb = ambient2D (linear) * intensity, w = numLights2D
 		Vector4 atlasInfo;                       // x = 1/atlasWidth, y = 1/MAX_LIGHTS_2D, z = atlasWidth, w = PCF tap radius
 	} fs_lighting2d_t;
+
+	typedef struct fs_reflection_probe_t {
+		Vector4 position_weight; // xyz = capture position, w = local probe blend weight
+		Vector4 boxMin_intensity; // xyz = influence AABB min, w = intensity
+		Vector4 boxMax_lod;       // xyz = influence AABB max, w = max available mip LOD
+	} fs_reflection_probe_t;
 
 	typedef struct vs_shadow2d_t {
 		Vector4 lightPos_range; // xy = light world pos, w = range
@@ -90,7 +98,7 @@ namespace doriax{
 	} vs_gbuffer_t;
 
 	typedef struct fs_gbuffer_material_t {
-		Vector4 params;             // x = roughness, y = metallic, z = hasIBL, w = unused
+		Vector4 params;             // x = roughness, y = metallic, z = IBL source, w = alpha cutout
 		Vector4 baseColorFactor;
 	} fs_gbuffer_material_t;
 
@@ -190,7 +198,31 @@ namespace doriax{
 		bool hasShadows;
 		bool hasFog;
 		bool hasIBL;
+		bool hasReflectionProbes;
 		bool hasMultipleCameras;
+		bool capturingReflectionProbe;
+
+		struct ReflectionProbeRuntime{
+			FramebufferRender captureFramebuffer;
+			CameraRender capturePass;
+			std::shared_ptr<TextureRender> irradianceMap;
+			std::shared_ptr<TextureRender> prefilteredMap;
+			unsigned int resolution = 0;
+			int nextFace = 0;
+			float elapsed = 0.0f;
+			float retryDelay = 0.0f;
+			bool ready = false;
+			bool captureInProgress = false;
+			bool modeInitialized = false;
+			ReflectionProbeMode lastMode = ReflectionProbeMode::STATIC;
+			unsigned int observedCaptureRevision = 0;
+			Vector3 capturePosition;
+			Vector3 capturedPosition;
+		};
+
+		std::unordered_map<Entity, std::unique_ptr<ReflectionProbeRuntime>> reflectionProbeRuntimes;
+		Entity activeReflectionProbe = NULL_ENTITY;
+		fs_reflection_probe_t fs_reflection_probe;
 
 		// 2D light path (Light2DComponent). Deliberately independent of
 		// scene->getLightState(): the editor forces LightState::OFF in 2D scenes
@@ -327,6 +359,11 @@ namespace doriax{
 		bool loadAndProcessFog();
 		void releaseSkyEnvironment(SkyComponent& sky);
 		void updateSkyEnvironment(SkyComponent& sky);
+		void updateReflectionProbes(double dt);
+		void renderReflectionProbeCapture();
+		void releaseReflectionProbeMaps(ReflectionProbeRuntime& runtime);
+		void destroyReflectionProbe(Entity entity, ReflectionProbeComponent& probe);
+		bool selectReflectionProbe(const Vector3& worldPosition, fs_reflection_probe_t& params, TextureRender*& texture);
 		void initShadowAtlasRects();
 		void initShadowPointAtlasRects();
 		unsigned int clampShadowAtlasSlotResolution(unsigned int requestedResolution, int atlasCols, int atlasRows) const;
@@ -378,7 +415,7 @@ namespace doriax{
 		// G-buffer geometry pass for SSR: MRT packed depth + view-space normal/roughness/metallic
 		bool ensureGBufferFramebuffer(unsigned int width, unsigned int height);
 		void renderGBufferPass(CameraComponent& camera);
-		bool drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_gbuffer_t vsGBufferParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain);
+		bool drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_gbuffer_t vsGBufferParams, bool hasLocalProbe, InstancedMeshComponent* instmesh, TerrainComponent* terrain);
 		// destination == nullptr renders the composite to the swapchain (backbuffer)
 		void renderSSR(CameraComponent& camera, FramebufferRender* destination);
 

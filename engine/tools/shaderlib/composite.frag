@@ -10,6 +10,8 @@
 // prefiltered environment, then REPLACES it with the screen-space reflection
 // weighted by the SSR confidence: where SSR has a hit it takes over, and where it
 // misses the IBL reflection remains. Non-IBL surfaces keep the simple additive path.
+// Local probes also use that additive fallback: a single fullscreen composite cannot
+// reconstruct multiple per-object cubemap bindings without a deferred probe atlas.
 //
 // A fullscreen pass fragment at v_texcoord t writes destination texel t and samples
 // scene/SSR (composite space) at t. The G-buffer is in depth space (Y-flipped vs
@@ -91,7 +93,7 @@ void main(){
     }
 
     vec4 alb = texture(sampler2D(u_albedoTexture, u_albedo_smp), d);
-    float hasIBL = alb.a;
+    float iblSource = alb.a; // 0 = none, 0.5 = sky, 1 = local probe
 
     vec4 g = texture(sampler2D(u_gbufferTexture, u_gbuffer_smp), d);
     vec3 nV = octDecode(g.rg);
@@ -115,7 +117,7 @@ void main(){
     // IBL specular already present in the scene (only for surfaces that applied it).
     // Skip the environment sample entirely for non-IBL pixels.
     vec3 iblSpec = vec3(0.0);
-    if (hasIBL > 0.5){
+    if (iblSource > 0.25 && iblSource < 0.75){
         vec3 rV = reflect(-vV, nV);                    // view-space reflection
         vec3 rW = normalize(mat3(comp.invView) * rV);  // -> world space for the env lookup
         float lod = roughness * ENV_GGX_LODS;

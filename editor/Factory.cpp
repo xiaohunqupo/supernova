@@ -1286,6 +1286,33 @@ std::string editor::Factory::createMirrorComponent(int indentSpaces, EntityRegis
     return code.str();
 }
 
+std::string editor::Factory::createReflectionProbeComponent(int indentSpaces, EntityRegistry* scene, Entity entity, const fs::path& projectPath, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<ReflectionProbeComponent>(entity)) return "";
+    ReflectionProbeComponent& probe = scene->getComponent<ReflectionProbeComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "ReflectionProbeComponent probe;\n";
+    code << ind << "probe.mode = ReflectionProbeMode::" << (probe.mode == ReflectionProbeMode::DYNAMIC ? "DYNAMIC" : "STATIC") << ";\n";
+    const char* updateMode = "ON_LOAD";
+    if (probe.updateMode == ReflectionProbeUpdateMode::ON_MOVE) updateMode = "ON_MOVE";
+    else if (probe.updateMode == ReflectionProbeUpdateMode::INTERVAL) updateMode = "INTERVAL";
+    else if (probe.updateMode == ReflectionProbeUpdateMode::MANUAL) updateMode = "MANUAL";
+    code << ind << "probe.updateMode = ReflectionProbeUpdateMode::" << updateMode << ";\n";
+    code << ind << "probe.boxOffset = " << formatVector3(probe.boxOffset) << ";\n";
+    code << ind << "probe.boxSize = " << formatVector3(probe.boxSize) << ";\n";
+    code << ind << "probe.blendDistance = " << formatFloat(probe.blendDistance) << ";\n";
+    code << ind << "probe.intensity = " << formatFloat(probe.intensity) << ";\n";
+    code << ind << "probe.priority = " << formatInt(probe.priority) << ";\n";
+    code << ind << "probe.resolution = " << probe.resolution << ";\n";
+    code << ind << "probe.nearClip = " << formatFloat(probe.nearClip) << ";\n";
+    code << ind << "probe.farClip = " << formatFloat(probe.farClip) << ";\n";
+    code << ind << "probe.updateInterval = " << formatFloat(probe.updateInterval) << ";\n";
+    code << ind << "probe.includeSky = " << formatBool(probe.includeSky) << ";\n";
+    code << formatTexture(indentSpaces, probe.texture, "probe.texture", projectPath);
+    addComponentCode(code, ind, sceneName, entityName, entity, "ReflectionProbeComponent", "probe", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::createCameraComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
     if (!scene->findComponent<CameraComponent>(entity)) return "";
     CameraComponent& camera = scene->getComponent<CameraComponent>(entity);
@@ -2011,6 +2038,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::Occluder2DComponent: return createOccluder2DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::FogComponent: return createFogComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::MirrorComponent: return createMirrorComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::ReflectionProbeComponent: return createReflectionProbeComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::CameraComponent: return createCameraComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::SoundComponent: return createSoundComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ScriptComponent: return createScriptComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);

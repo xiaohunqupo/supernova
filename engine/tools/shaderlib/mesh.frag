@@ -102,8 +102,16 @@ uniform u_fs_pbrParams {
 #ifdef USE_IBL
     uniform textureCube u_lambertianEnvTexture;
     uniform textureCube u_GGXEnvTexture;
+    uniform textureCube u_reflectionProbeTexture;
     uniform sampler u_lambertianEnv_smp;
     uniform sampler u_GGXEnv_smp;
+    uniform sampler u_reflectionProbe_smp;
+
+    uniform u_fs_reflectionProbe {
+        vec4 position_weight;
+        vec4 boxMin_intensity;
+        vec4 boxMax_lod;
+    } reflectionProbe;
 #endif
 
 #ifdef USE_SHADOWS
@@ -257,7 +265,7 @@ void main() {
 
         #ifdef USE_IBL
             // image based lighting from the environment (sky) cubemaps
-            f_specular += getIBLRadianceGGX(n, v, materialInfo.perceptualRoughness, materialInfo.f0);
+            f_specular += getIBLRadianceGGX(n, v, v_position, materialInfo.perceptualRoughness, materialInfo.f0);
             f_diffuse += getIBLRadianceLambertian(n, v, materialInfo.perceptualRoughness, materialInfo.albedoColor, materialInfo.f0);
         #else
             #ifdef USE_PUNCTUAL

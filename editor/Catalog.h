@@ -43,7 +43,9 @@ namespace doriax::editor{
         UpdateFlags_Points_Texture      = 1 << 30,
         // Generic "reload the renderable's shader" flag, used by the per-component
         // customShader property of Mesh/UI/Points/Lines/Sky.
-        UpdateFlags_Shader_Reload       = (uint64_t)1 << 31
+        UpdateFlags_Shader_Reload       = (uint64_t)1 << 31,
+        UpdateFlags_Reflection_Probe_Capture  = (uint64_t)1 << 32,
+        UpdateFlags_Reflection_Probe_Sampling = (uint64_t)1 << 33
     };
 
     // the order of components here affects properties window
@@ -98,7 +100,10 @@ namespace doriax::editor{
         UIContainerComponent,
         MirrorComponent,
         Light2DComponent,
-        Occluder2DComponent
+        Occluder2DComponent,
+        // Keep new component types at the end: their ordinal is used as the bit
+        // position in EntityBundle's in-memory component override mask.
+        ReflectionProbeComponent
     };
 
     enum class PropertyType{

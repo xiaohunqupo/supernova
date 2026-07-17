@@ -79,6 +79,8 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     occluder2DBufferCapacity = 0;
     occluder2DVertexCount = 0;
     occluder2DNeedUpdateBuffer = false;
+    hasReflectionProbes = false;
+    capturingReflectionProbe = false;
 }
 
 RenderSystem::~RenderSystem(){
@@ -89,7 +91,9 @@ void RenderSystem::load(){
     hasShadows = false;
     hasFog = false;
     hasIBL = false;
+    hasReflectionProbes = false;
     hasMultipleCameras = false;
+    capturingReflectionProbe = false;
     hasLights2D = false;
     hasShadows2D = false;
     numLights2D = 0;
@@ -130,6 +134,19 @@ void RenderSystem::destroy(){
             destroySky(entity, sky);
         }
     }
+
+    auto probes = scene->getComponentArray<ReflectionProbeComponent>();
+    for (int i = 0; i < probes->size(); i++){
+        ReflectionProbeComponent& probe = probes->getComponentFromIndex(i);
+        destroyReflectionProbe(probes->getEntity(i), probe);
+    }
+    // defensive sweep: a runtime can outlive its component (e.g. the probe lost
+    // its Transform and updateReflectionProbes never revisited it)
+    for (auto& entry : reflectionProbeRuntimes){
+        entry.second->captureFramebuffer.destroyFramebuffer();
+        releaseReflectionProbeMaps(*entry.second);
+    }
+    reflectionProbeRuntimes.clear();
 
     auto transforms = scene->getComponentArray<Transform>();
     for (int i = 0; i < transforms->size(); i++){
@@ -703,6 +720,394 @@ void RenderSystem::updateSkyEnvironment(SkyComponent& sky){
     }
 
     sky.needUpdateEnvironment = false;
+}
+
+void RenderSystem::releaseReflectionProbeMaps(ReflectionProbeRuntime& runtime){
+    if (runtime.irradianceMap && runtime.irradianceMap.use_count() == 1)
+        runtime.irradianceMap->destroyTexture();
+    if (runtime.prefilteredMap && runtime.prefilteredMap.use_count() == 1)
+        runtime.prefilteredMap->destroyTexture();
+    runtime.irradianceMap.reset();
+    runtime.prefilteredMap.reset();
+}
+
+void RenderSystem::destroyReflectionProbe(Entity entity, ReflectionProbeComponent& probe){
+    auto it = reflectionProbeRuntimes.find(entity);
+    if (it != reflectionProbeRuntimes.end()){
+        it->second->captureFramebuffer.destroyFramebuffer();
+        releaseReflectionProbeMaps(*it->second);
+        reflectionProbeRuntimes.erase(it);
+    }
+    probe.texture.destroy();
+    if (activeReflectionProbe == entity)
+        activeReflectionProbe = NULL_ENTITY;
+}
+
+void RenderSystem::updateReflectionProbes(double dt){
+    auto probes = scene->getComponentArray<ReflectionProbeComponent>();
+    bool newHasReflectionProbes = probes->size() > 0;
+    if (newHasReflectionProbes != hasReflectionProbes){
+        hasReflectionProbes = newHasReflectionProbes;
+        needReloadMeshes();
+    }
+
+    activeReflectionProbe = NULL_ENTITY;
+
+    // Finish an already-started cube before scheduling another probe. This keeps
+    // the one-face-per-frame budget without interleaving two partial cubemaps.
+    for (int i = 0; i < probes->size(); i++){
+        Entity entity = probes->getEntity(i);
+        auto runtimeIt = reflectionProbeRuntimes.find(entity);
+        if (runtimeIt != reflectionProbeRuntimes.end() && runtimeIt->second->captureInProgress &&
+            probes->getComponentFromIndex(i).needUpdate && scene->findComponent<Transform>(entity)){
+            activeReflectionProbe = entity;
+            break;
+        }
+    }
+
+    for (int i = 0; i < probes->size(); i++){
+        Entity entity = probes->getEntity(i);
+        ReflectionProbeComponent& probe = probes->getComponentFromIndex(i);
+        Transform* transform = scene->findComponent<Transform>(entity);
+        if (!transform)
+            continue;
+
+        auto& runtimePtr = reflectionProbeRuntimes[entity];
+        if (!runtimePtr)
+            runtimePtr = std::make_unique<ReflectionProbeRuntime>();
+        ReflectionProbeRuntime& runtime = *runtimePtr;
+
+        if (!runtime.modeInitialized){
+            runtime.lastMode = probe.mode;
+            runtime.modeInitialized = true;
+        }else if (runtime.lastMode != probe.mode){
+            if (activeReflectionProbe == entity)
+                activeReflectionProbe = NULL_ENTITY;
+            runtime.lastMode = probe.mode;
+            runtime.captureInProgress = false;
+            runtime.nextFace = 0;
+            runtime.ready = false;
+            runtime.elapsed = 0.0f;
+            runtime.retryDelay = 0.0f;
+            probe.needUpdate = true;
+        }
+
+        // Capture-affecting editor changes can arrive while a six-face job is
+        // already running. Restart that job so no face uses the old settings.
+        if (runtime.observedCaptureRevision != probe.captureRevision){
+            if (activeReflectionProbe == entity)
+                activeReflectionProbe = NULL_ENTITY;
+            runtime.observedCaptureRevision = probe.captureRevision;
+            runtime.captureInProgress = false;
+            runtime.nextFace = 0;
+            runtime.ready = false;
+        }
+
+        auto scheduleCapture = [&](){
+            if (activeReflectionProbe != NULL_ENTITY && activeReflectionProbe != entity)
+                return;
+            if (!runtime.captureInProgress){
+                runtime.captureInProgress = true;
+                runtime.ready = false;
+                runtime.nextFace = 0;
+                // Freeze the entity origin for all six faces. boxOffset controls
+                // only the influence volume and is intentionally not a capture offset.
+                runtime.capturePosition = transform->worldPosition;
+            }
+            activeReflectionProbe = entity;
+        };
+
+        if (probe.mode == ReflectionProbeMode::STATIC){
+            bool hasAuthoredCubemap = !probe.texture.empty() && probe.texture.getNumFaces() == 6;
+            if (hasAuthoredCubemap && runtime.ready)
+                runtime.capturedPosition = transform->worldPosition;
+
+            if (!probe.needUpdate)
+                continue;
+
+            if (!Engine::isViewLoaded())
+                continue;
+
+            // An authored cubemap is the preferred static path because it can be
+            // GGX-prefiltered once and cached. With no cubemap, capture the scene
+            // once on load (or when Refresh is pressed) and then keep that result.
+            if (!hasAuthoredCubemap){
+                runtime.retryDelay = 0.0f;
+                releaseReflectionProbeMaps(runtime);
+                scheduleCapture();
+                continue;
+            }
+
+            if (activeReflectionProbe == entity)
+                activeReflectionProbe = NULL_ENTITY;
+            runtime.captureInProgress = false;
+            runtime.captureFramebuffer.destroyFramebuffer();
+            runtime.resolution = 0;
+            runtime.nextFace = 0;
+            runtime.ready = false;
+            releaseReflectionProbeMaps(runtime);
+
+            const std::string textureId = probe.texture.getId();
+            const std::string irradianceId = textureId + "|probe|irradiance";
+            const std::string prefilteredId = textureId + "|probe|prefiltered";
+            if (!textureId.empty()){
+                runtime.irradianceMap = TexturePool::get(irradianceId);
+                runtime.prefilteredMap = TexturePool::get(prefilteredId);
+                if (runtime.irradianceMap && runtime.prefilteredMap){
+                    runtime.ready = true;
+                    runtime.capturedPosition = transform->worldPosition;
+                    runtime.retryDelay = 0.0f;
+                    probe.needUpdate = false;
+                    continue;
+                }
+            }
+
+            runtime.retryDelay = std::max(0.0f, runtime.retryDelay - (float)dt);
+            if (runtime.retryDelay > 0.0f)
+                continue;
+
+            TextureLoadResult loadResult = probe.texture.load();
+            if (loadResult.state == ResourceLoadState::Loading)
+                continue;
+
+            if (loadResult.state == ResourceLoadState::Finished && loadResult.data){
+                auto irradiance = std::make_shared<TextureRender>();
+                auto prefiltered = std::make_shared<TextureRender>();
+                if (IBLEnvironment::generate(textureId, *loadResult.data, *irradiance, *prefiltered)){
+                    runtime.irradianceMap = irradiance;
+                    runtime.prefilteredMap = prefiltered;
+                    runtime.ready = true;
+                    runtime.capturedPosition = transform->worldPosition;
+                    runtime.retryDelay = 0.0f;
+                    probe.needUpdate = false;
+                    if (!textureId.empty()){
+                        TexturePool::add(irradianceId, irradiance);
+                        TexturePool::add(prefilteredId, prefiltered);
+                    }
+                    continue;
+                }
+            }
+
+            // Texture::load disables its own load latch after a failure. Re-arm
+            // it and back off so a transient authored-bake failure is recoverable
+            // without logging/retrying on every frame.
+            if (loadResult.state == ResourceLoadState::Failed)
+                probe.texture.retryLoad();
+            runtime.retryDelay = 1.0f;
+            continue;
+        }
+
+        // A component switched from an authored static probe to dynamic must not
+        // keep selecting the stale prefiltered map while its live capture updates.
+        releaseReflectionProbeMaps(runtime);
+        runtime.retryDelay = 0.0f;
+        runtime.elapsed += (float)dt;
+        Vector3 capturePosition = transform->worldPosition;
+        if (probe.updateMode == ReflectionProbeUpdateMode::ON_MOVE && runtime.ready){
+            if ((capturePosition - runtime.capturedPosition).length() > 0.0001f)
+                probe.needUpdate = true;
+        }else if (probe.updateMode == ReflectionProbeUpdateMode::INTERVAL && runtime.ready){
+            if (runtime.elapsed >= std::max(probe.updateInterval, 0.01f))
+                probe.needUpdate = true;
+        }
+
+        if (probe.needUpdate)
+            scheduleCapture();
+    }
+}
+
+bool RenderSystem::selectReflectionProbe(const Vector3& worldPosition, fs_reflection_probe_t& params, TextureRender*& texture){
+    params.position_weight = Vector4(0.0, 0.0, 0.0, 0.0);
+    params.boxMin_intensity = Vector4(-1.0, -1.0, -1.0, 1.0);
+    params.boxMax_lod = Vector4(1.0, 1.0, 1.0, 0.0);
+    texture = &emptyCubeBlack;
+
+    if (capturingReflectionProbe)
+        return false;
+
+    auto probes = scene->getComponentArray<ReflectionProbeComponent>();
+    ReflectionProbeComponent* selected = nullptr;
+    ReflectionProbeRuntime* selectedRuntime = nullptr;
+    Vector3 selectedMin;
+    Vector3 selectedMax;
+    float selectedDistance = 0.0f;
+
+    for (int i = 0; i < probes->size(); i++){
+        Entity entity = probes->getEntity(i);
+        ReflectionProbeComponent& probe = probes->getComponentFromIndex(i);
+        Transform* transform = scene->findComponent<Transform>(entity);
+        auto runtimeIt = reflectionProbeRuntimes.find(entity);
+        if (!transform || runtimeIt == reflectionProbeRuntimes.end() || !runtimeIt->second->ready)
+            continue;
+
+        Vector3 center = transform->modelMatrix * probe.boxOffset;
+        Vector3 half(
+            std::abs(probe.boxSize.x * transform->worldScale.x) * 0.5f,
+            std::abs(probe.boxSize.y * transform->worldScale.y) * 0.5f,
+            std::abs(probe.boxSize.z * transform->worldScale.z) * 0.5f);
+        Vector3 boxMin = center - half;
+        Vector3 boxMax = center + half;
+        if (worldPosition.x < boxMin.x || worldPosition.y < boxMin.y || worldPosition.z < boxMin.z ||
+            worldPosition.x > boxMax.x || worldPosition.y > boxMax.y || worldPosition.z > boxMax.z)
+            continue;
+
+        float distance = (worldPosition - center).length();
+        if (!selected || probe.priority > selected->priority ||
+            (probe.priority == selected->priority && distance < selectedDistance)){
+            selected = &probe;
+            selectedRuntime = runtimeIt->second.get();
+            selectedMin = boxMin;
+            selectedMax = boxMax;
+            selectedDistance = distance;
+        }
+    }
+
+    if (!selected || !selectedRuntime)
+        return false;
+
+    bool hasPrefilteredMap = selectedRuntime->prefilteredMap && selectedRuntime->prefilteredMap->isCreated();
+    if (hasPrefilteredMap){
+        texture = selectedRuntime->prefilteredMap.get();
+    }else{
+        if (!selectedRuntime->captureFramebuffer.isCreated())
+            return false;
+        texture = &selectedRuntime->captureFramebuffer.getColorTexture();
+    }
+
+    float edgeDistance = std::min(
+        std::min(worldPosition.x - selectedMin.x, selectedMax.x - worldPosition.x),
+        std::min(std::min(worldPosition.y - selectedMin.y, selectedMax.y - worldPosition.y),
+                 std::min(worldPosition.z - selectedMin.z, selectedMax.z - worldPosition.z)));
+    Vector3 selectedHalf = (selectedMax - selectedMin) * 0.5f;
+    float maxBlendDistance = std::max(0.0f, std::min(selectedHalf.x, std::min(selectedHalf.y, selectedHalf.z)));
+    float blendDistance = std::min(std::max(selected->blendDistance, 0.0f), maxBlendDistance);
+    float weight = blendDistance > 0.0001f
+        ? std::max(0.0f, std::min(1.0f, edgeDistance / blendDistance))
+        : 1.0f;
+
+    params.position_weight = Vector4(selectedRuntime->capturedPosition.x, selectedRuntime->capturedPosition.y,
+                                     selectedRuntime->capturedPosition.z, weight);
+    params.boxMin_intensity = Vector4(selectedMin.x, selectedMin.y, selectedMin.z, std::max(selected->intensity, 0.0f));
+    params.boxMax_lod = Vector4(selectedMax.x, selectedMax.y, selectedMax.z,
+        hasPrefilteredMap ? (float)(IBLEnvironment::SPECULAR_MIPS - 1) : 0.0f);
+    return true;
+}
+
+void RenderSystem::renderReflectionProbeCapture(){
+    if (activeReflectionProbe == NULL_ENTITY || !scene->isEntityCreated(activeReflectionProbe))
+        return;
+
+    ReflectionProbeComponent* probe = scene->findComponent<ReflectionProbeComponent>(activeReflectionProbe);
+    Transform* probeTransform = scene->findComponent<Transform>(activeReflectionProbe);
+    auto runtimeIt = reflectionProbeRuntimes.find(activeReflectionProbe);
+    if (!probe || !probeTransform || runtimeIt == reflectionProbeRuntimes.end())
+        return;
+
+    ReflectionProbeRuntime& runtime = *runtimeIt->second;
+    if (!runtime.captureInProgress || !probe->needUpdate)
+        return;
+    unsigned int resolution = std::max(16u, std::min(probe->resolution, 1024u));
+    if (!runtime.captureFramebuffer.isCreated() || runtime.resolution != resolution){
+        runtime.captureFramebuffer.destroyFramebuffer();
+        if (!runtime.captureFramebuffer.createFramebuffer(TextureType::TEXTURE_CUBE, (int)resolution, (int)resolution,
+                TextureFilter::LINEAR, TextureFilter::LINEAR, TextureWrap::CLAMP_TO_EDGE, TextureWrap::CLAMP_TO_EDGE, false)){
+            return;
+        }
+        runtime.resolution = resolution;
+        runtime.nextFace = 0;
+        runtime.ready = false;
+    }
+
+    static const Vector3 directions[6] = {
+        Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0),
+        Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)
+    };
+    static const Vector3 ups[6] = {
+        Vector3(0, -1, 0), Vector3(0, -1, 0), Vector3(0, 0, 1),
+        Vector3(0, 0, -1), Vector3(0, -1, 0), Vector3(0, -1, 0)
+    };
+
+    int face = runtime.nextFace;
+    Vector3 capturePosition = runtime.capturePosition;
+
+    Transform captureTransform;
+    captureTransform.position = capturePosition;
+    captureTransform.worldPosition = capturePosition;
+    captureTransform.worldScale = Vector3(1.0f, 1.0f, 1.0f);
+    captureTransform.parent = NULL_ENTITY;
+
+    CameraComponent captureCamera;
+    captureCamera.type = CameraType::CAMERA_PERSPECTIVE;
+    captureCamera.renderToTexture = true;
+    // cube faces flip on the opposite backends from 2D RTT (see
+    // isRenderingFlipped), so the matching winding is PIP_RTT_INVERT
+    captureCamera.invertCulling = true;
+    captureCamera.autoResize = false;
+    captureCamera.useTarget = true;
+    captureCamera.target = capturePosition + directions[face];
+    captureCamera.up = ups[face];
+    captureCamera.yfov = 1.57079632679f;
+    captureCamera.aspect = 1.0f;
+    captureCamera.nearClip = std::max(probe->nearClip, 0.001f);
+    captureCamera.farClip = std::max(probe->farClip, captureCamera.nearClip + 0.001f);
+    updateCamera(captureCamera, captureTransform);
+
+    Vector4 previousEye = fs_lighting.eyePos;
+    Vector4 previousCameraDir = fs_lighting.cameraDir;
+    fs_lighting.eyePos = Vector4(capturePosition.x, capturePosition.y, capturePosition.z, 0.0f);
+    fs_lighting.cameraDir = Vector4(captureCamera.worldDirection.x, captureCamera.worldDirection.y,
+                                    captureCamera.worldDirection.z, previousCameraDir.w);
+
+    capturingReflectionProbe = true;
+    runtime.capturePass.setClearColor(probe->includeSky ? scene->getBackgroundColor() : Vector4(0.0f, 0.0f, 0.0f, 1.0f));
+    runtime.capturePass.startRenderPass(&runtime.captureFramebuffer, (size_t)face);
+
+    auto skys = scene->getComponentArray<SkyComponent>();
+    if (probe->includeSky && skys->size() > 0){
+        SkyComponent& sky = skys->getComponentFromIndex(0);
+        if (sky.visible){
+            updateSkyViewProjection(sky, captureCamera);
+            drawSky(sky, true, true);
+        }
+    }
+
+    auto transforms = scene->getComponentArray<Transform>();
+    // Point/spot shadows are light-space and can be reused here. Directional
+    // cascades are fitted to the main camera, so their coverage is a known
+    // limitation until probe-specific directional shadow rendering is added.
+    for (int i = 0; i < transforms->size(); i++){
+        Entity entity = transforms->getEntity(i);
+        if (entity == activeReflectionProbe)
+            continue;
+        Transform& transform = transforms->getComponentFromIndex(i);
+        MeshComponent* mesh = scene->findComponent<MeshComponent>(entity);
+        if (!mesh || !transform.visible || mesh->transparent)
+            continue;
+
+        updateMVP(i, transform, captureCamera, captureTransform);
+        InstancedMeshComponent* instanced = scene->findComponent<InstancedMeshComponent>(entity);
+        TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
+        drawMesh(*mesh, transform, captureCamera, captureTransform, true, instanced, terrain, 0);
+    }
+
+    runtime.capturePass.endRenderPass();
+    capturingReflectionProbe = false;
+    fs_lighting.eyePos = previousEye;
+    fs_lighting.cameraDir = previousCameraDir;
+
+    delete captureCamera.framebuffer;
+    captureCamera.framebuffer = nullptr;
+
+    runtime.nextFace++;
+    if (runtime.nextFace >= 6){
+        runtime.nextFace = 0;
+        runtime.ready = true;
+        runtime.captureInProgress = false;
+        runtime.elapsed = 0.0f;
+        runtime.capturedPosition = capturePosition;
+        probe->needUpdate = false;
+        activeReflectionProbe = NULL_ENTITY;
+    }
 }
 
 void RenderSystem::initShadowAtlasRects(){
@@ -1525,7 +1930,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         if (terrain && (!terrain->blendMap.empty() || hasPBRTextures)){
             p_hasTexture1 = true;
         }
-        bool useIBL = hasIBL && mesh.receiveIBL;
+        bool useIBL = (hasIBL || hasReflectionProbes) && mesh.receiveIBL;
         if ((hasLights || useIBL) && mesh.receiveLights){
             p_punctual = hasLights;
             p_ibl = useIBL;
@@ -1633,6 +2038,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         }
         if ((hasLights || useIBL) && mesh.receiveLights){
             mesh.submeshes[i].slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
+            if (p_ibl){
+                mesh.submeshes[i].slotFSReflectionProbe = shaderData.getUniformBlockIndex(UniformBlockType::FS_REFLECTION_PROBE);
+            }
             if (p_receiveShadows){
                 mesh.submeshes[i].slotVSShadows = shaderData.getUniformBlockIndex(UniformBlockType::VS_SHADOWS);
                 mesh.submeshes[i].slotFSShadows = shaderData.getUniformBlockIndex(UniformBlockType::FS_SHADOWS);
@@ -1660,13 +2068,18 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         if (p_ibl){
             auto skyArray = scene->getComponentArray<SkyComponent>();
+            TextureRender* irradiance = &emptyCubeBlack;
+            TextureRender* prefiltered = &emptyCubeBlack;
             if (skyArray->size() > 0){
                 SkyComponent& sky = skyArray->getComponentFromIndex(0);
                 if (sky.irradianceMap && sky.prefilteredMap){
-                    render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, sky.irradianceMap.get());
-                    render.addTexture(shaderData.getTextureIndex(TextureShaderType::PREFILTEREDMAP), ShaderStageType::FRAGMENT, sky.prefilteredMap.get());
+                    irradiance = sky.irradianceMap.get();
+                    prefiltered = sky.prefilteredMap.get();
                 }
             }
+            render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, irradiance);
+            render.addTexture(shaderData.getTextureIndex(TextureShaderType::PREFILTEREDMAP), ShaderStageType::FRAGMENT, prefiltered);
+            render.addTexture(shaderData.getTextureIndex(TextureShaderType::REFLECTIONPROBE), ShaderStageType::FRAGMENT, &emptyCubeBlack);
         }
 
         if (terrain){
@@ -2055,6 +2468,22 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
             if (!render.beginDraw(pipType)){
                 mesh.needReload = true;
                 return false;
+            }
+
+            if (mesh.submeshes[i].hasIBL){
+                TextureRender* probeTexture = &emptyCubeBlack;
+                // Probe assignment is per renderable. Its bounds center is a
+                // better representative point than the entity origin for meshes
+                // whose geometry is offset in local space.
+                Vector3 probeSamplePosition = mesh.worldAABB != AABB::ZERO
+                    ? mesh.worldAABB.getCenter()
+                    : transform.worldPosition;
+                selectReflectionProbe(probeSamplePosition, fs_reflection_probe, probeTexture);
+                ShaderData& probeShaderData = mesh.submeshes[i].shader.get()->shaderData;
+                render.addTexture(probeShaderData.getTextureIndex(TextureShaderType::REFLECTIONPROBE), ShaderStageType::FRAGMENT, probeTexture);
+                if (mesh.submeshes[i].slotFSReflectionProbe != -1){
+                    render.applyUniformBlock(mesh.submeshes[i].slotFSReflectionProbe, sizeof(fs_reflection_probe_t), &fs_reflection_probe);
+                }
             }
 
             if (hasFog){
@@ -2455,7 +2884,7 @@ bool RenderSystem::ensureGBufferFramebuffer(unsigned int width, unsigned int hei
     return gbufferFramebuffer.isCreated();
 }
 
-bool RenderSystem::drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_gbuffer_t vsGBufferParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
+bool RenderSystem::drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_gbuffer_t vsGBufferParams, bool hasLocalProbe, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
     if (!mesh.loaded || mesh.needReload)
         return true;
 
@@ -2495,7 +2924,11 @@ bool RenderSystem::drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, c
         gbufferRender.applyUniformBlock(mesh.submeshes[i].slotVSGBufferParams, sizeof(vs_gbuffer_t), &vsGBufferParams);
 
         fs_gbuffer_material_t mat;
-        mat.params = Vector4(mesh.submeshes[i].material.roughnessFactor, mesh.submeshes[i].material.metallicFactor, mesh.submeshes[i].hasIBL ? 1.0f : 0.0f, mesh.submeshes[i].textureShadow ? 1.0f : 0.0f);
+        // IBL source encoding: 0 = none, 0.5 = sky, 1 = local probe. The SSR
+        // composite can exactly replace sky IBL; local probes need a deferred
+        // cubemap array to be reconstructed per pixel, so they use additive SSR.
+        float iblSource = mesh.submeshes[i].hasIBL ? (hasLocalProbe ? 1.0f : 0.5f) : 0.0f;
+        mat.params = Vector4(mesh.submeshes[i].material.roughnessFactor, mesh.submeshes[i].material.metallicFactor, iblSource, mesh.submeshes[i].textureShadow ? 1.0f : 0.0f);
         mat.baseColorFactor = mesh.submeshes[i].material.baseColorFactor;
         gbufferRender.applyUniformBlock(mesh.submeshes[i].slotFSGBufferMaterial, sizeof(fs_gbuffer_material_t), &mat);
 
@@ -2550,12 +2983,20 @@ void RenderSystem::renderGBufferPass(CameraComponent& camera){
         InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(entity);
         TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
 
+        fs_reflection_probe_t probeParams;
+        TextureRender* probeTexture = nullptr;
+        Vector3 probeSamplePosition = mesh.worldAABB != AABB::ZERO
+            ? mesh.worldAABB.getCenter()
+            : transform.worldPosition;
+        bool hasLocalProbe = selectReflectionProbe(probeSamplePosition, probeParams, probeTexture)
+            && probeParams.position_weight.w > 0.001f;
+
         // view-space normal matrix = transpose(inverse(view * model))
         Matrix4 viewModel = viewMatrix * transform.modelMatrix;
         Matrix4 normalMatrix = viewModel.inverse().transpose();
 
         vs_gbuffer_t params = {transform.modelMatrix, renderVP, normalMatrix};
-        drawMeshGBuffer(mesh, camera.farClip, camera.frustumPlanes, params, instmesh, terrain);
+        drawMeshGBuffer(mesh, camera.farClip, camera.frustumPlanes, params, hasLocalProbe, instmesh, terrain);
     }
     gbufferPassRender.endRenderPass();
 }
@@ -2946,6 +3387,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
         submesh.slotFSParams = -1;
         submesh.slotFSTexCoordSets = -1;
         submesh.slotFSLighting = -1;
+        submesh.slotFSReflectionProbe = -1;
         submesh.slotVSSprite = -1;
         submesh.slotVSShadows = -1;
         submesh.slotFSShadows = -1;
@@ -4736,6 +5178,13 @@ bool RenderSystem::samplesCameraTarget(const CameraComponent& camera, const Text
 }
 
 bool RenderSystem::isRenderingFlipped(const CameraComponent& camera) const{
+    // Cubemap sampling follows one fixed convention on every API, and with the
+    // classic capture table (renderReflectionProbeCapture) it expects GL-style
+    // bottom-up face storage: flip only on the backends that natively rasterize
+    // top-left. This is the inverse of the 2D RTT rule below, and its winding
+    // pairs with PIP_RTT_INVERT (one reversal off PIP_RTT on every backend).
+    if (capturingReflectionProbe)
+        return !Engine::isOpenGL();
     // OpenGL offscreen targets are bottom-up; rendering them with a Y-flipped
     // projection makes framebuffer textures top-left origin on every backend.
     // Must match the PIP_RTT pipeline selection (its winding is reversed on GL).
@@ -4871,6 +5320,8 @@ void RenderSystem::update(double dt){
         }
     }
 
+    updateReflectionProbes(dt);
+
     Entity mainCameraEntity = scene->getCamera();
     uint8_t pipelines = 0;
 
@@ -4942,6 +5393,10 @@ void RenderSystem::update(double dt){
     // mirrors render the scene with reversed winding (handedness flip); bake the
     // inverted RTT pipeline for meshes only when a mirror is present
     if (scene->getComponentArray<MirrorComponent>()->size() > 0){
+        pipelines |= PIP_RTT_INVERT;
+    }
+    if (scene->getComponentArray<ReflectionProbeComponent>()->size() > 0){
+        // probe capture renders with PIP_RTT_INVERT (see isRenderingFlipped)
         pipelines |= PIP_RTT_INVERT;
     }
 
@@ -5436,6 +5891,11 @@ void RenderSystem::draw(){
         }
     }
 
+    // Runtime-captured probes share a strict budget: one cubemap face total per
+    // frame. Static probes without an authored cubemap capture once; dynamic
+    // probes follow their configured update policy.
+    renderReflectionProbeCapture();
+
     // assigns each rendering camera its own terrain CDLOD view slot this frame:
     // main camera = 0 (selected in update(), also used by the shadow pass), each
     // render-to-texture camera = 1..N-1; cameras past the cap reuse the main view
@@ -5565,7 +6025,7 @@ void RenderSystem::draw(){
             SkyComponent& sky = skys->getComponentFromIndex(0);
             Entity entity = skys->getEntity(0);
             if (sky.visible){
-                if (hasMultipleCameras){
+                if (hasMultipleCameras || hasReflectionProbes){
                     updateSkyViewProjection(sky, camera);
                 }
 
@@ -5582,7 +6042,7 @@ void RenderSystem::draw(){
                 continue;
             }
 
-            if (hasMultipleCameras){
+            if (hasMultipleCameras || hasReflectionProbes){
                 updateMVP(i, transform, camera, cameraTransform);
             }
 
@@ -5773,6 +6233,9 @@ void RenderSystem::onComponentAdded(Entity entity, ComponentId componentId) {
     } else if (componentId == scene->getComponentId<MirrorComponent>()) {
         // a mirror enables the inverted-culling pipeline on meshes; reload so it bakes
         needReloadMeshes();
+    } else if (componentId == scene->getComponentId<ReflectionProbeComponent>()) {
+        hasReflectionProbes = true;
+        needReloadMeshes();
     }
 }
 
@@ -5831,6 +6294,11 @@ void RenderSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
 
         // reload meshes so the surface drops the projective-mirror shader variant and
         // other meshes drop the now-unused inverted-culling pipeline
+        needReloadMeshes();
+    } else if (componentId == scene->getComponentId<ReflectionProbeComponent>()) {
+        ReflectionProbeComponent& probe = scene->getComponent<ReflectionProbeComponent>(entity);
+        destroyReflectionProbe(entity, probe);
+        hasReflectionProbes = scene->getComponentArray<ReflectionProbeComponent>()->size() > 1;
         needReloadMeshes();
     }
 }

@@ -435,6 +435,11 @@ TextureLoadResult Texture::load() {
     return result;
 }
 
+void Texture::retryLoad(){
+    if (loadFromPath && !framebuffer)
+        needLoad = true;
+}
+
 void Texture::destroy(){
     if (!id.empty()){
 

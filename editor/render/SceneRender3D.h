@@ -58,6 +58,7 @@ namespace doriax::editor{
         std::map<Entity, Lines*> linePointLines;
         std::map<Entity, Lines*> polygonPointLines;
         std::map<Entity, Lines*> trackLines;
+        std::map<Entity, Lines*> reflectionProbeLines;
 
         ViewportGizmo viewgizmo;
 
@@ -88,6 +89,8 @@ namespace doriax::editor{
         void createOrUpdatePolygonPointLines(Entity entity, const Transform& transform, const std::vector<PolygonPoint>& points, bool isMesh, bool visible);
         bool instanciateTrackLines(Entity entity);
         void createOrUpdateTrackLines(Entity entity, const TranslateTracksComponent& tracks, bool visible);
+        bool instanciateReflectionProbeLines(Entity entity);
+        void createOrUpdateReflectionProbeLines(Entity entity, const Transform& transform, const ReflectionProbeComponent& probe, bool visible);
         void createCameraFrustum(Entity entity, const Transform& transform, const CameraComponent& cameraComponent, bool fixedSizeFrustum, bool isMainCamera);
         void createDirectionalLightArrow(Entity entity, const Transform& transform, const LightComponent& light, bool isSelected);
         void createPointLightSphere(Entity entity, const Transform& transform, const LightComponent& light, bool isSelected);

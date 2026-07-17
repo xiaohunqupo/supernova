@@ -2712,6 +2712,11 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::MirrorComponent, true)] = encodeMirrorComponent(mirror);
     }
 
+    if (signature.test(registry->getComponentId<ReflectionProbeComponent>())) {
+        ReflectionProbeComponent probe = registry->getComponent<ReflectionProbeComponent>(entity);
+        compNode[Catalog::getComponentName(ComponentType::ReflectionProbeComponent, true)] = encodeReflectionProbeComponent(probe);
+    }
+
     if (signature.test(registry->getComponentId<CameraComponent>())) {
         CameraComponent camera = registry->getComponent<CameraComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::CameraComponent, true)] = encodeCameraComponent(camera);
@@ -3138,6 +3143,20 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::MirrorComponent, existing, &mirror);
             registry->getComponent<MirrorComponent>(entity) = mirror;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::ReflectionProbeComponent, true);
+    if (compNode[compName]) {
+        ReflectionProbeComponent* existing = registry->findComponent<ReflectionProbeComponent>(entity);
+        ReflectionProbeComponent probe = decodeReflectionProbeComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<ReflectionProbeComponent>())){
+            registry->addComponent<ReflectionProbeComponent>(entity, probe);
+            Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(ComponentType::ReflectionProbeComponent));
+        }else{
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::ReflectionProbeComponent, existing, &probe);
+            registry->getComponent<ReflectionProbeComponent>(entity) = probe;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -4655,6 +4674,61 @@ MirrorComponent editor::Stream::decodeMirrorComponent(const YAML::Node& node, co
     if (node["normal"]) mirror.normal = decodeVector3(node["normal"]);
 
     return mirror;
+}
+
+YAML::Node editor::Stream::encodeReflectionProbeComponent(const ReflectionProbeComponent& probe) {
+    YAML::Node node;
+
+    node["mode"] = probe.mode == ReflectionProbeMode::DYNAMIC ? "dynamic" : "static";
+    switch (probe.updateMode) {
+        case ReflectionProbeUpdateMode::ON_MOVE: node["updateMode"] = "on_move"; break;
+        case ReflectionProbeUpdateMode::INTERVAL: node["updateMode"] = "interval"; break;
+        case ReflectionProbeUpdateMode::MANUAL: node["updateMode"] = "manual"; break;
+        default: node["updateMode"] = "on_load"; break;
+    }
+    node["boxOffset"] = encodeVector3(probe.boxOffset);
+    node["boxSize"] = encodeVector3(probe.boxSize);
+    node["blendDistance"] = probe.blendDistance;
+    node["intensity"] = probe.intensity;
+    node["priority"] = probe.priority;
+    node["resolution"] = probe.resolution;
+    node["nearClip"] = probe.nearClip;
+    node["farClip"] = probe.farClip;
+    node["updateInterval"] = probe.updateInterval;
+    node["includeSky"] = probe.includeSky;
+    node["texture"] = encodeTexture(probe.texture);
+
+    return node;
+}
+
+ReflectionProbeComponent editor::Stream::decodeReflectionProbeComponent(const YAML::Node& node, const ReflectionProbeComponent* oldProbe) {
+    ReflectionProbeComponent probe;
+    if (oldProbe) probe = *oldProbe;
+
+    if (node["mode"]) {
+        probe.mode = node["mode"].as<std::string>() == "dynamic" ? ReflectionProbeMode::DYNAMIC : ReflectionProbeMode::STATIC;
+    }
+    if (node["updateMode"]) {
+        const std::string value = node["updateMode"].as<std::string>();
+        if (value == "on_move") probe.updateMode = ReflectionProbeUpdateMode::ON_MOVE;
+        else if (value == "interval") probe.updateMode = ReflectionProbeUpdateMode::INTERVAL;
+        else if (value == "manual") probe.updateMode = ReflectionProbeUpdateMode::MANUAL;
+        else probe.updateMode = ReflectionProbeUpdateMode::ON_LOAD;
+    }
+    if (node["boxOffset"]) probe.boxOffset = decodeVector3(node["boxOffset"]);
+    if (node["boxSize"]) probe.boxSize = decodeVector3(node["boxSize"]);
+    if (node["blendDistance"]) probe.blendDistance = node["blendDistance"].as<float>();
+    if (node["intensity"]) probe.intensity = node["intensity"].as<float>();
+    if (node["priority"]) probe.priority = node["priority"].as<int>();
+    if (node["resolution"]) probe.resolution = node["resolution"].as<unsigned int>();
+    if (node["nearClip"]) probe.nearClip = node["nearClip"].as<float>();
+    if (node["farClip"]) probe.farClip = node["farClip"].as<float>();
+    if (node["updateInterval"]) probe.updateInterval = node["updateInterval"].as<float>();
+    if (node["includeSky"]) probe.includeSky = node["includeSky"].as<bool>();
+    if (node["texture"]) probe.texture = decodeTexture(node["texture"]);
+    probe.needUpdate = true;
+
+    return probe;
 }
 
 YAML::Node editor::Stream::encodeCameraComponent(const CameraComponent& camera) {

@@ -441,6 +441,12 @@ bool editor::CreateEntityCmd::execute(){
         scene->addComponent<FogComponent>(entity, {});
         updateFlags |= Catalog::getComponentStructuralUpdateFlags(ComponentType::FogComponent);
 
+    }else if (type == EntityCreationType::REFLECTION_PROBE){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<ReflectionProbeComponent>(entity, {});
+        updateFlags |= Catalog::getComponentStructuralUpdateFlags(ComponentType::ReflectionProbeComponent);
+
     }else if (type == EntityCreationType::ANIMATION){
 
         scene->addComponent<ActionComponent>(entity, {});

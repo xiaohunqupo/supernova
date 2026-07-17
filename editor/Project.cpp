@@ -1626,6 +1626,7 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
     }
 
     Scene* scene = sceneProject->scene;
+    const bool hasReflectionProbes = scene->getComponentArray<ReflectionProbeComponent>()->size() > 0;
 
     // resolve the effective custom shader (component > scene default > built-in) from the
     // strings rather than the cached customShaderId, which lags a reload frame after a
@@ -1651,7 +1652,28 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
             if (mesh.loaded) {
                 uint16_t customShaderId = effectiveShaderId(mesh.customShader, ShaderType::MESH);
                 for (unsigned int s = 0; s < mesh.numSubmeshes; ++s) {
-                    insertKeys(ShaderType::MESH, mesh.submeshes[s].shaderProperties, customShaderId);
+                    uint32_t meshProperties = mesh.submeshes[s].shaderProperties;
+                    // Saving/exporting can happen before RenderSystem has reloaded
+                    // meshes after a probe was added. Derive the required IBL
+                    // variant here so the exported shader set is still complete.
+                    if (hasReflectionProbes && mesh.receiveLights && mesh.receiveIBL) {
+                        meshProperties &= ~(1u << 0); // no longer MATERIAL_UNLIT
+                        meshProperties |= (1u << 6);  // HAS_NORMALS
+                        meshProperties |= (1u << 19); // USE_IBL
+                        // the unlit->lit transition also pulls in the submesh's
+                        // normal-map/tangent attributes and SSAO, mirroring
+                        // RenderSystem::loadMesh
+                        if (mesh.submeshes[s].hasNormalMap) {
+                            meshProperties |= (1u << 7); // HAS_NORMAL_MAP
+                        }
+                        if (mesh.submeshes[s].hasTangent) {
+                            meshProperties |= (1u << 8); // HAS_TANGENTS
+                        }
+                        if (scene->isSSAOEnabled()) {
+                            meshProperties |= (1u << 21); // USE_SSAO
+                        }
+                    }
+                    insertKeys(ShaderType::MESH, meshProperties, customShaderId);
                     keys.insert(ShaderPool::getShaderKey(ShaderType::DEPTH, mesh.submeshes[s].depthShaderProperties));
                     if (mesh.submeshes[s].gbufferShader) {
                         keys.insert(ShaderPool::getShaderKey(ShaderType::GBUFFER, mesh.submeshes[s].gbufferShaderProperties));
@@ -1751,6 +1773,16 @@ void editor::Project::prepareRuntimeScene(PlayRuntimeScene& entry) {
 
     Entity camera = getSceneCamera(entry.runtime);
     entry.runtime->scene->setCamera(camera);
+
+    // play reuses the edit-time Scene without a reload, so re-arm reflection
+    // probes: "On Load" (and static capture-once) probes should capture the
+    // game's starting state, not keep the edit-mode capture
+    auto probes = entry.runtime->scene->getComponentArray<ReflectionProbeComponent>();
+    for (size_t i = 0; i < probes->size(); ++i) {
+        ReflectionProbeComponent& probe = probes->getComponentFromIndex(i);
+        probe.needUpdate = true;
+        probe.captureRevision++;
+    }
 
     entry.runtime->scene->getSystem<ActionSystem>()->resetRunningActions();
 

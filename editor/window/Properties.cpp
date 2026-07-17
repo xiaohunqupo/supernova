@@ -129,6 +129,18 @@ static std::vector<editor::EnumEntry> entriesFogType = {
     { (int)FogType::EXPONENTIALSQUARED, "Exponential Squared" }
 };
 
+static std::vector<editor::EnumEntry> entriesReflectionProbeMode = {
+    { (int)ReflectionProbeMode::STATIC, "Static" },
+    { (int)ReflectionProbeMode::DYNAMIC, "Dynamic" }
+};
+
+static std::vector<editor::EnumEntry> entriesReflectionProbeUpdateMode = {
+    { (int)ReflectionProbeUpdateMode::ON_LOAD, "On Load" },
+    { (int)ReflectionProbeUpdateMode::ON_MOVE, "On Move" },
+    { (int)ReflectionProbeUpdateMode::INTERVAL, "Interval" },
+    { (int)ReflectionProbeUpdateMode::MANUAL, "Manual" }
+};
+
 static std::vector<editor::EnumEntry> entriesCameraType = {
     { (int)CameraType::CAMERA_ORTHO, "Orthographic" },
     { (int)CameraType::CAMERA_PERSPECTIVE, "Perspective" }
@@ -257,6 +269,8 @@ static std::vector<editor::EnumEntry> entriesJoint3DType = {
 
 static std::vector<int> cascadeValues = { 1, 2, 3, 4, 5, 6 };
 static std::vector<int> po2Values = { 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384 };
+// reflection probe captures are clamped to [16, 1024] in RenderSystem
+static std::vector<int> probeResolutionValues = { 16, 32, 64, 128, 256, 512, 1024 };
 
 static std::vector<editor::EnumEntry> entriesActionState = {
     { (int)ActionState::Running, "Running" },
@@ -7595,6 +7609,71 @@ void editor::Properties::drawMirrorComponent(ComponentType cpType, SceneProject*
     endTable();
 }
 
+void editor::Properties::drawReflectionProbeComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    ReflectionProbeComponent& probe = sceneProject->scene->getComponent<ReflectionProbeComponent>(entities[0]);
+
+    RowSettings modeSettings;
+    modeSettings.enumEntries = &entriesReflectionProbeMode;
+    RowSettings updateSettings;
+    updateSettings.enumEntries = &entriesReflectionProbeUpdateMode;
+    RowSettings resolutionSettings;
+    resolutionSettings.sliderValues = &probeResolutionValues;
+    RowSettings floatSettings;
+    floatSettings.secondColSize = 6 * ImGui::GetFontSize();
+    RowSettings boxOffsetSettings;
+    boxOffsetSettings.help = "Moves the influence box in local space; the cubemap is still captured at the entity origin. Large offsets can increase box-projection distortion near the volume edges.";
+    RowSettings blendSettings = floatSettings;
+    blendSettings.help = "Runtime blending is limited to the influence box's smallest world-space half-extent. The authored value is preserved so later box or scale changes can restore it.";
+
+    beginTable(cpType, getLabelSize("Update Interval"), "reflection_probe_main");
+    propertyRow(RowPropertyType::Enum, cpType, "mode", "Mode", sceneProject, entities, modeSettings);
+    if (probe.mode == ReflectionProbeMode::DYNAMIC){
+        propertyRow(RowPropertyType::Enum, cpType, "updateMode", "Update", sceneProject, entities, updateSettings);
+        if (probe.updateMode == ReflectionProbeUpdateMode::INTERVAL){
+            propertyRow(RowPropertyType::FloatPositive, cpType, "updateInterval", "Update Interval", sceneProject, entities, floatSettings);
+        }
+    }else{
+        propertyRow(RowPropertyType::TextureCube, cpType, "texture", "Cubemap", sceneProject, entities);
+    }
+    propertyRow(RowPropertyType::FloatPositive, cpType, "intensity", "Intensity", sceneProject, entities, floatSettings);
+    propertyRow(RowPropertyType::Int, cpType, "priority", "Priority", sceneProject, entities);
+    endTable();
+
+    ImGui::SeparatorText("Influence");
+    beginTable(cpType, getLabelSize("Blend Distance"), "reflection_probe_influence");
+    propertyRow(RowPropertyType::Vector3, cpType, "boxOffset", "Box Offset", sceneProject, entities, boxOffsetSettings);
+    propertyRow(RowPropertyType::Vector3, cpType, "boxSize", "Box Size", sceneProject, entities);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "blendDistance", "Blend Distance", sceneProject, entities, blendSettings);
+    endTable();
+
+    if (entities.size() == 1){
+        Transform* transform = sceneProject->scene->findComponent<Transform>(entities[0]);
+        if (transform){
+            Vector3 half(
+                std::fabs(probe.boxSize.x * transform->worldScale.x) * 0.5f,
+                std::fabs(probe.boxSize.y * transform->worldScale.y) * 0.5f,
+                std::fabs(probe.boxSize.z * transform->worldScale.z) * 0.5f);
+            float maxBlendDistance = std::max(0.0f, std::min(half.x, std::min(half.y, half.z)));
+            if (probe.blendDistance > maxBlendDistance + 0.0001f){
+                ImGui::TextDisabled("Effective blend distance: %.2f (limited by box size)", maxBlendDistance);
+            }
+        }
+    }
+
+    ImGui::SeparatorText("Capture");
+    beginTable(cpType, getLabelSize("Resolution"), "reflection_probe_capture");
+    propertyRow(RowPropertyType::UIntSlider, cpType, "resolution", "Resolution", sceneProject, entities, resolutionSettings);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "nearClip", "Near", sceneProject, entities, floatSettings);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "farClip", "Far", sceneProject, entities, floatSettings);
+    propertyRow(RowPropertyType::Bool, cpType, "includeSky", "Include Sky", sceneProject, entities);
+    endTable();
+
+    if (entities.size() == 1 && ImGui::Button(ICON_FA_ARROWS_ROTATE " Refresh Probe", ImVec2(ImGui::GetContentRegionAvail().x, 0))){
+        probe.needUpdate = true;
+        probe.captureRevision++;
+    }
+}
+
 void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     if (entities.empty()) return;
 
@@ -12538,6 +12617,8 @@ void editor::Properties::show(){
                     drawFogComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::MirrorComponent){
                     drawMirrorComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::ReflectionProbeComponent){
+                    drawReflectionProbeComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::CameraComponent){
                     drawCameraComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::SoundComponent){

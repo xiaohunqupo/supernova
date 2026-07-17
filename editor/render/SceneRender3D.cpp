@@ -323,6 +323,11 @@ editor::SceneRender3D::~SceneRender3D(){
         delete pair.second;
     }
     trackLines.clear();
+
+    for (auto& pair : reflectionProbeLines) {
+        delete pair.second;
+    }
+    reflectionProbeLines.clear();
 }
 
 void editor::SceneRender3D::createLines(){
@@ -438,6 +443,58 @@ bool editor::SceneRender3D::instanciateLinePointLines(Entity entity){
     }
 
     return false;
+}
+
+bool editor::SceneRender3D::instanciateReflectionProbeLines(Entity entity){
+    if (reflectionProbeLines.find(entity) == reflectionProbeLines.end()) {
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        reflectionProbeLines[entity] = new Lines(scene);
+        return true;
+    }
+    return false;
+}
+
+void editor::SceneRender3D::createOrUpdateReflectionProbeLines(Entity entity, const Transform& transform, const ReflectionProbeComponent& probe, bool visible){
+    Lines* probeLines = reflectionProbeLines[entity];
+    probeLines->clearLines();
+    probeLines->setVisible(transform.visible && visible);
+    if (!transform.visible || !visible) return;
+
+    Vector3 center = transform.modelMatrix * probe.boxOffset;
+    Vector3 half(
+        std::fabs(probe.boxSize.x * transform.worldScale.x) * 0.5f,
+        std::fabs(probe.boxSize.y * transform.worldScale.y) * 0.5f,
+        std::fabs(probe.boxSize.z * transform.worldScale.z) * 0.5f);
+    Vector3 mn = center - half;
+    Vector3 mx = center + half;
+    Vector3 p[8] = {
+        {mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mx.y, mn.z}, {mn.x, mx.y, mn.z},
+        {mn.x, mn.y, mx.z}, {mx.x, mn.y, mx.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+    };
+    const Vector4 color = probe.mode == ReflectionProbeMode::DYNAMIC
+        ? Vector4(0.8f, 0.35f, 1.0f, 1.0f)
+        : Vector4(0.2f, 0.8f, 1.0f, 1.0f);
+    const int edges[12][2] = {
+        {0,1}, {1,2}, {2,3}, {3,0}, {4,5}, {5,6}, {6,7}, {7,4},
+        {0,4}, {1,5}, {2,6}, {3,7}
+    };
+    for (const auto& edge : edges) probeLines->addLine(p[edge[0]], p[edge[1]], color);
+
+    float marker = std::max(0.05f, std::min(half.x, std::min(half.y, half.z)) * 0.08f);
+    probeLines->addLine(center - Vector3(marker, 0, 0), center + Vector3(marker, 0, 0), color);
+    probeLines->addLine(center - Vector3(0, marker, 0), center + Vector3(0, marker, 0), color);
+    probeLines->addLine(center - Vector3(0, 0, marker), center + Vector3(0, 0, marker), color);
+
+    // boxOffset moves only the influence volume. When its center differs from
+    // the actual capture point, show the entity origin as a smaller gold marker.
+    Vector3 capturePosition = transform.worldPosition;
+    if ((capturePosition - center).length() > 0.0001f){
+        float captureMarker = marker * 0.65f;
+        const Vector4 captureColor(1.0f, 0.72f, 0.15f, 1.0f);
+        probeLines->addLine(capturePosition - Vector3(captureMarker, 0, 0), capturePosition + Vector3(captureMarker, 0, 0), captureColor);
+        probeLines->addLine(capturePosition - Vector3(0, captureMarker, 0), capturePosition + Vector3(0, captureMarker, 0), captureColor);
+        probeLines->addLine(capturePosition - Vector3(0, 0, captureMarker), capturePosition + Vector3(0, 0, captureMarker), captureColor);
+    }
 }
 
 // endpoint handles for a selected Lines entity, drawn as small 3-axis crosses
@@ -1696,6 +1753,9 @@ void editor::SceneRender3D::hideAllGizmos(){
     for (auto& pair : trackLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : reflectionProbeLines) {
+        pair.second->setVisible(false);
+    }
 }
 
 void editor::SceneRender3D::activate(){
@@ -1794,6 +1854,7 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentLinePoints;
     std::set<Entity> currentPolygonPoints;
     std::set<Entity> currentTrackLines;
+    std::set<Entity> currentReflectionProbes;
 
     for (Entity& entity: entities){
         Signature signature = scene->getSignature(entity);
@@ -1903,6 +1964,14 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             bool isSelected = selectedEntities.find(entity) != selectedEntities.end();
 
             createOrUpdateTrackLines(entity, tracks, isSelected);
+        }
+
+        if (signature.test(scene->getComponentId<ReflectionProbeComponent>()) && signature.test(scene->getComponentId<Transform>())) {
+            ReflectionProbeComponent& probe = scene->getComponent<ReflectionProbeComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+            currentReflectionProbes.insert(entity);
+            instanciateReflectionProbeLines(entity);
+            createOrUpdateReflectionProbeLines(entity, transform, probe, selectedEntities.find(entity) != selectedEntities.end());
         }
 
         if (signature.test(scene->getComponentId<Joint3DComponent>())) {
@@ -2026,6 +2095,16 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             itTrackLines = trackLines.erase(itTrackLines);
         } else {
             ++itTrackLines;
+        }
+    }
+
+    auto itProbeLines = reflectionProbeLines.begin();
+    while (itProbeLines != reflectionProbeLines.end()) {
+        if (currentReflectionProbes.find(itProbeLines->first) == currentReflectionProbes.end()) {
+            delete itProbeLines->second;
+            itProbeLines = reflectionProbeLines.erase(itProbeLines);
+        } else {
+            ++itProbeLines;
         }
     }
 }

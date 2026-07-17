@@ -158,6 +158,8 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_fs_texCoordSets";
     }else if (type == UniformBlockType::FS_LIGHTING){
         ustr = "u_fs_lighting";
+    }else if (type == UniformBlockType::FS_REFLECTION_PROBE){
+        ustr = "u_fs_reflectionProbe";
     }else if (type == UniformBlockType::FS_FOG){
         ustr = "u_fs_fog";
     }else if (type == UniformBlockType::FS_MIRROR){
@@ -280,6 +282,8 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_lambertianEnvTexture";
     }else if (type == TextureShaderType::PREFILTEREDMAP){
         texstr = "u_GGXEnvTexture";
+    }else if (type == TextureShaderType::REFLECTIONPROBE){
+        texstr = "u_reflectionProbeTexture";
     }else if (type == TextureShaderType::UI){
         texstr = "u_uiTexture";
     }else if (type == TextureShaderType::POINTS){

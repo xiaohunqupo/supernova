@@ -58,6 +58,7 @@
 #include "component/MeshComponent.h"
 #include "component/MeshPolygonComponent.h"
 #include "component/MirrorComponent.h"
+#include "component/ReflectionProbeComponent.h"
 #include "component/ModelComponent.h"
 #include "component/MorphTracksComponent.h"
 #include "component/Occluder2DComponent.h"

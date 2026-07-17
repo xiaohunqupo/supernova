@@ -75,6 +75,9 @@ namespace doriax{
             virtual ~Texture();
 
             TextureLoadResult load();
+            // Re-arm a file-backed texture after an asynchronous or synchronous
+            // load failure. The next load() call starts a fresh attempt.
+            void retryLoad();
             void destroy();
             void invalidateRender();
 

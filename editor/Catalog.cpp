@@ -400,6 +400,22 @@ namespace {
         makeFastProperty<MirrorComponent, Vector3, &MirrorComponent::normal>("normal", PropertyType::Vector3, UpdateFlags_None),
     };
 
+    static const FastPropertyDescriptor kReflectionProbeProperties[] = {
+        makeFastProperty<ReflectionProbeComponent, ReflectionProbeMode, &ReflectionProbeComponent::mode>("mode", PropertyType::Enum, UpdateFlags_Reflection_Probe_Capture),
+        makeFastProperty<ReflectionProbeComponent, ReflectionProbeUpdateMode, &ReflectionProbeComponent::updateMode>("updateMode", PropertyType::Enum, UpdateFlags_Reflection_Probe_Sampling),
+        makeFastProperty<ReflectionProbeComponent, Vector3, &ReflectionProbeComponent::boxOffset>("boxOffset", PropertyType::Vector3, UpdateFlags_Reflection_Probe_Sampling),
+        makeFastProperty<ReflectionProbeComponent, Vector3, &ReflectionProbeComponent::boxSize>("boxSize", PropertyType::Vector3, UpdateFlags_Reflection_Probe_Sampling),
+        makeFastProperty<ReflectionProbeComponent, float, &ReflectionProbeComponent::blendDistance>("blendDistance", PropertyType::Float, UpdateFlags_Reflection_Probe_Sampling),
+        makeFastProperty<ReflectionProbeComponent, float, &ReflectionProbeComponent::intensity>("intensity", PropertyType::Float, UpdateFlags_Reflection_Probe_Sampling),
+        makeFastProperty<ReflectionProbeComponent, int, &ReflectionProbeComponent::priority>("priority", PropertyType::Int, UpdateFlags_Reflection_Probe_Sampling),
+        makeFastProperty<ReflectionProbeComponent, unsigned int, &ReflectionProbeComponent::resolution>("resolution", PropertyType::UInt, UpdateFlags_Reflection_Probe_Capture),
+        makeFastProperty<ReflectionProbeComponent, float, &ReflectionProbeComponent::nearClip>("nearClip", PropertyType::Float, UpdateFlags_Reflection_Probe_Capture),
+        makeFastProperty<ReflectionProbeComponent, float, &ReflectionProbeComponent::farClip>("farClip", PropertyType::Float, UpdateFlags_Reflection_Probe_Capture),
+        makeFastProperty<ReflectionProbeComponent, float, &ReflectionProbeComponent::updateInterval>("updateInterval", PropertyType::Float, UpdateFlags_Reflection_Probe_Sampling),
+        makeFastProperty<ReflectionProbeComponent, bool, &ReflectionProbeComponent::includeSky>("includeSky", PropertyType::Bool, UpdateFlags_Reflection_Probe_Capture),
+        makeFastProperty<ReflectionProbeComponent, Texture, &ReflectionProbeComponent::texture>("texture", PropertyType::Texture, UpdateFlags_Reflection_Probe_Capture),
+    };
+
     static const FastPropertyDescriptor kCameraProperties[] = {
         makeFastProperty<CameraComponent, CameraType, &CameraComponent::type>("type", PropertyType::Enum, UpdateFlags_Camera),
         makeFastProperty<CameraComponent, Vector3, &CameraComponent::target>("target", PropertyType::Vector3, UpdateFlags_Camera),
@@ -1224,6 +1240,10 @@ namespace {
 
     PropertyData resolveMirrorPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<MirrorComponent*>(comp), propertyName, kMirrorProperties);
+    }
+
+    PropertyData resolveReflectionProbePropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<ReflectionProbeComponent*>(comp), propertyName, kReflectionProbeProperties);
     }
 
     PropertyData resolveLight2DPropertyFast(void* comp, const std::string& propertyName) {
@@ -2115,6 +2135,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kMirrorProperties);
     }
 
+    void enumerateReflectionProbeProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kReflectionProbeProperties);
+    }
+
     void enumerateLight2DProperties(void* comp, std::map<std::string, PropertyData>& ps) {
         enumerateFromDescriptors(comp, ps, kLight2DProperties);
     }
@@ -2774,6 +2798,7 @@ namespace {
         {ComponentType::LightComponent, &findComponentPtr<LightComponent>, &resolveLightPropertyFast, &enumerateLightProperties},
         {ComponentType::FogComponent, &findComponentPtr<FogComponent>, &resolveFogPropertyFast, &enumerateFogProperties},
         {ComponentType::MirrorComponent, &findComponentPtr<MirrorComponent>, &resolveMirrorPropertyFast, &enumerateMirrorProperties},
+        {ComponentType::ReflectionProbeComponent, &findComponentPtr<ReflectionProbeComponent>, &resolveReflectionProbePropertyFast, &enumerateReflectionProbeProperties},
         {ComponentType::Light2DComponent, &findComponentPtr<Light2DComponent>, &resolveLight2DPropertyFast, &enumerateLight2DProperties},
         {ComponentType::Occluder2DComponent, &findComponentPtr<Occluder2DComponent>, &resolveOccluder2DPropertyFast, &enumerateOccluder2DProperties},
         {ComponentType::CameraComponent, &findComponentPtr<CameraComponent>, &resolveCameraPropertyFast, &enumerateCameraProperties},
@@ -2898,6 +2923,8 @@ std::string editor::Catalog::getComponentName(ComponentType component, bool remo
         name = "FogComponent";
     }else if(component == ComponentType::MirrorComponent){
         name = "MirrorComponent";
+    }else if(component == ComponentType::ReflectionProbeComponent){
+        name = "ReflectionProbeComponent";
     }else if(component == ComponentType::Light2DComponent){
         name = "Light2DComponent";
     }else if(component == ComponentType::Occluder2DComponent){
@@ -3023,6 +3050,8 @@ ComponentId editor::Catalog::getComponentId(const EntityRegistry* registry, Comp
             return registry->getComponentId<FogComponent>();
         case ComponentType::MirrorComponent:
             return registry->getComponentId<MirrorComponent>();
+        case ComponentType::ReflectionProbeComponent:
+            return registry->getComponentId<ReflectionProbeComponent>();
         case ComponentType::Light2DComponent:
             return registry->getComponentId<Light2DComponent>();
         case ComponentType::Occluder2DComponent:
@@ -3125,6 +3154,8 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
         return ComponentType::FogComponent;
     }else if(normalizedName == "mirror"){
         return ComponentType::MirrorComponent;
+    }else if(normalizedName == "reflectionprobe"){
+        return ComponentType::ReflectionProbeComponent;
     }else if(normalizedName == "light2d"){
         return ComponentType::Light2DComponent;
     }else if(normalizedName == "occluder2d"){
@@ -3288,6 +3319,9 @@ std::vector<editor::ComponentType> editor::Catalog::findComponents(EntityRegistr
     }
     if (registry->findComponent<MirrorComponent>(entity)){
         ret.push_back(ComponentType::MirrorComponent);
+    }
+    if (registry->findComponent<ReflectionProbeComponent>(entity)){
+        ret.push_back(ComponentType::ReflectionProbeComponent);
     }
     if (registry->findComponent<Light2DComponent>(entity)){
         ret.push_back(ComponentType::Light2DComponent);
@@ -3502,6 +3536,7 @@ uint64_t editor::Catalog::getComponentStructuralUpdateFlags(ComponentType compTy
         // adding/removing a mirror toggles the inverted-culling pipeline baked
         // into meshes, so they must reload
         case ComponentType::MirrorComponent:
+        case ComponentType::ReflectionProbeComponent:
             return UpdateFlags_Scene_Mesh_Reload;
         default:
             return UpdateFlags_None;
@@ -3581,6 +3616,12 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, uint
                 sky->needUpdateTexture = true;
             if (updateFlags & UpdateFlags_Sky)
                 sky->needUpdateSky = true;
+        }
+    }
+    if (updateFlags & UpdateFlags_Reflection_Probe_Capture){
+        if (ReflectionProbeComponent* probe = registry->findComponent<ReflectionProbeComponent>(entity)){
+            probe->needUpdate = true;
+            probe->captureRevision++;
         }
     }
     if (updateFlags & UpdateFlags_Shader_Reload){
@@ -3822,6 +3863,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::MirrorComponent: {
             YAML::Node encoded = Stream::encodeMirrorComponent(sourceRegistry->getComponent<MirrorComponent>(sourceEntity));
             targetRegistry->getComponent<MirrorComponent>(targetEntity) = Stream::decodeMirrorComponent(encoded);
+            break;
+        }
+
+        case ComponentType::ReflectionProbeComponent: {
+            YAML::Node encoded = Stream::encodeReflectionProbeComponent(sourceRegistry->getComponent<ReflectionProbeComponent>(sourceEntity));
+            targetRegistry->getComponent<ReflectionProbeComponent>(targetEntity) = Stream::decodeReflectionProbeComponent(encoded);
             break;
         }
 

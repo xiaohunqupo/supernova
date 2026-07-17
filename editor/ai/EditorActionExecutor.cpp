@@ -391,7 +391,8 @@ bool parseEntityType(const std::string& typeName, EntityCreationType& type) {
         {"points", EntityCreationType::POINTS},
         {"lines", EntityCreationType::LINES},
         {"mesh_polygon", EntityCreationType::MESH_POLYGON},
-        {"terrain", EntityCreationType::TERRAIN}
+        {"terrain", EntityCreationType::TERRAIN},
+        {"reflection_probe", EntityCreationType::REFLECTION_PROBE}
     };
     auto it = map.find(lower(typeName));
     if (it == map.end()) return false;
@@ -1573,7 +1574,7 @@ ActionResult EditorActionExecutor::inspectComponent(const Json& arguments) {
 
 ActionResult EditorActionExecutor::listComponentTypes() {
     Json components = Json::array();
-    for (int i = static_cast<int>(ComponentType::Transform); i <= static_cast<int>(ComponentType::Occluder2DComponent); ++i) {
+    for (int i = static_cast<int>(ComponentType::Transform); i <= static_cast<int>(ComponentType::ReflectionProbeComponent); ++i) {
         ComponentType type = static_cast<ComponentType>(i);
         std::string name = Catalog::getComponentName(type);
         if (!name.empty()) {

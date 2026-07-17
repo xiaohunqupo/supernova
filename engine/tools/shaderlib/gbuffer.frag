@@ -3,8 +3,8 @@
 // G-buffer geometry pass (fragment), MRT output:
 //   color[0] = packed view depth (identical to depth.frag, so SSAO/SSR depth is unchanged)
 //   color[1] = view-space normal (octahedral .rg) + roughness (.b) + metallic (.a)
-//   color[2] = linear base color (.rgb) + hasIBL flag (.a) -> lets the composite
-//              recompute the IBL-specular term for the energy-conserving SSR blend
+//   color[2] = linear base color (.rgb) + IBL source (.a):
+//              0 = none, 0.5 = sky, 1 = local reflection probe
 
 layout(location = 0) out vec4 frag_depth;
 layout(location = 1) out vec4 frag_gbuffer;
@@ -14,7 +14,7 @@ in vec2 v_projZW;
 in vec3 v_normal;
 
 uniform u_fs_gbufferMaterial {
-    vec4 params;        // x = roughness, y = metallic, z = hasIBL, w = alpha-cutout
+    vec4 params;        // x = roughness, y = metallic, z = IBL source, w = alpha-cutout
     vec4 baseColorFactor;
 } gbufferMaterial;
 
