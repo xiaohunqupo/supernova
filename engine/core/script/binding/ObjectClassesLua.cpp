@@ -11,6 +11,7 @@
 
 #include "EntityHandle.h"
 #include "Fog.h"
+#include "ReflectionProbe.h"
 #include "SkyBox.h"
 #include "Object.h"
 #include "Camera.h"
@@ -343,6 +344,43 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("getVertexCount", &Occluder2D::getVertexCount)
         .addProperty("closed", &Occluder2D::isClosed, &Occluder2D::setClosed)
         .addProperty("enabled", &Occluder2D::isEnabled, &Occluder2D::setEnabled)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("ReflectionProbeMode")
+        .addVariable("STATIC", ReflectionProbeMode::STATIC)
+        .addVariable("DYNAMIC", ReflectionProbeMode::DYNAMIC)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("ReflectionProbeUpdateMode")
+        .addVariable("ON_LOAD", ReflectionProbeUpdateMode::ON_LOAD)
+        .addVariable("ON_MOVE", ReflectionProbeUpdateMode::ON_MOVE)
+        .addVariable("INTERVAL", ReflectionProbeUpdateMode::INTERVAL)
+        .addVariable("MANUAL", ReflectionProbeUpdateMode::MANUAL)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .deriveClass<ReflectionProbe, Object>("ReflectionProbe")
+        .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
+        .addProperty("mode", &ReflectionProbe::getMode, &ReflectionProbe::setMode)
+        .addProperty("updateMode", &ReflectionProbe::getUpdateMode, &ReflectionProbe::setUpdateMode)
+        .addProperty("boxOffset", &ReflectionProbe::getBoxOffset, (void(ReflectionProbe::*)(Vector3))&ReflectionProbe::setBoxOffset)
+        .addFunction("setBoxOffset", (void(ReflectionProbe::*)(const float, const float, const float))&ReflectionProbe::setBoxOffset)
+        .addProperty("boxSize", &ReflectionProbe::getBoxSize, (void(ReflectionProbe::*)(Vector3))&ReflectionProbe::setBoxSize)
+        .addFunction("setBoxSize", (void(ReflectionProbe::*)(const float, const float, const float))&ReflectionProbe::setBoxSize)
+        .addProperty("blendDistance", &ReflectionProbe::getBlendDistance, &ReflectionProbe::setBlendDistance)
+        .addProperty("intensity", &ReflectionProbe::getIntensity, &ReflectionProbe::setIntensity)
+        .addProperty("priority", &ReflectionProbe::getPriority, &ReflectionProbe::setPriority)
+        .addProperty("resolution", &ReflectionProbe::getResolution, &ReflectionProbe::setResolution)
+        .addFunction("setClipPlanes", &ReflectionProbe::setClipPlanes)
+        .addProperty("nearClip", &ReflectionProbe::getNearClip, &ReflectionProbe::setNearClip)
+        .addProperty("farClip", &ReflectionProbe::getFarClip, &ReflectionProbe::setFarClip)
+        .addProperty("updateInterval", &ReflectionProbe::getUpdateInterval, &ReflectionProbe::setUpdateInterval)
+        .addProperty("includeSky", &ReflectionProbe::isIncludeSky, &ReflectionProbe::setIncludeSky)
+        .addFunction("setTextures", &ReflectionProbe::setTextures)
+        .addFunction("setTexture", &ReflectionProbe::setTexture)
+        .addFunction("refresh", &ReflectionProbe::refresh)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

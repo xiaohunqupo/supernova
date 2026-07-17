@@ -28,6 +28,7 @@
 #include "object/Camera.h"
 #include "object/Bone.h"
 #include "object/environment/Fog.h"
+#include "object/environment/ReflectionProbe.h"
 #include "object/environment/SkyBox.h"
 #include "object/sound/Sound.h"
 #include "object/ui/UILayout.h"
@@ -505,6 +506,7 @@ bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, dori
 
     DISPATCH_TYPE(Fog, "fog");
     DISPATCH_TYPE(SkyBox, "skybox");
+    DISPATCH_TYPE(ReflectionProbe, "reflectionprobe");
     DISPATCH_TYPE(Object, "object");
     DISPATCH_TYPE(Camera, "camera");
     DISPATCH_TYPE(Light, "light");

@@ -1641,6 +1641,7 @@ std::string editor::ProjectUtils::getEntityTypeName(Scene* scene, Entity entity)
     if (signature.test(scene->getComponentId<Occluder2DComponent>()))  return "Occluder2D";
     if (signature.test(scene->getComponentId<LightComponent>()))       return "Light";
     if (signature.test(scene->getComponentId<CameraComponent>()))      return "Camera";
+    if (signature.test(scene->getComponentId<ReflectionProbeComponent>())) return "ReflectionProbe";
     if (signature.test(scene->getComponentId<Body2DComponent>()))      return "Body2D";
     if (signature.test(scene->getComponentId<Body3DComponent>()))      return "Body3D";
     if (signature.test(scene->getComponentId<AlphaActionComponent>())) return "AlphaAction";

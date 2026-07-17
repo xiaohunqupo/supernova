@@ -633,6 +633,7 @@ set(DORIAX_SRCS
     core/object/Tilemap.cpp
     core/object/sound/Sound.cpp
     core/object/environment/Fog.cpp
+    core/object/environment/ReflectionProbe.cpp
     core/object/environment/SkyBox.cpp
     core/object/physics/Body2D.cpp
     core/object/physics/Body3D.cpp
