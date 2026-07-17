@@ -611,6 +611,22 @@ TextureStrategy editor::Stream::stringToTextureStrategy(const std::string& str) 
     return TextureStrategy::RESIZE;
 }
 
+std::string editor::Stream::windowModeToString(WindowMode mode) {
+    switch (mode) {
+        case WindowMode::WINDOWED: return "windowed";
+        case WindowMode::MAXIMIZED: return "maximized";
+        case WindowMode::FULLSCREEN: return "fullscreen";
+        default: return "windowed";
+    }
+}
+
+editor::WindowMode editor::Stream::stringToWindowMode(const std::string& str) {
+    if (str == "windowed") return WindowMode::WINDOWED;
+    if (str == "maximized") return WindowMode::MAXIMIZED;
+    if (str == "fullscreen") return WindowMode::FULLSCREEN;
+    return WindowMode::WINDOWED;
+}
+
 std::string editor::Stream::lightTypeToString(LightType type) {
     switch (type) {
         case LightType::DIRECTIONAL: return "directional";
@@ -1311,6 +1327,14 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
     root["textureStrategy"] = textureStrategyToString(project->getTextureStrategy());
     root["vsync"] = project->isVSyncEnabled();
 
+    root["windowMode"] = windowModeToString(project->getWindowMode());
+    root["windowWidth"] = project->getWindowWidth();
+    root["windowHeight"] = project->getWindowHeight();
+    root["windowResizable"] = project->isWindowResizable();
+    if (!project->getWindowTitle().empty()) {
+        root["windowTitle"] = project->getWindowTitle();
+    }
+
     if (!project->getAssetsDir().empty() && project->getAssetsDir() != ".") {
         root["assetsDir"] = project->getAssetsDir().string();
     }
@@ -1448,6 +1472,28 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
 
     if (node["vsync"].IsDefined()) {
         project->setVSyncEnabled(node["vsync"].as<bool>());
+    }
+
+    if (node["windowMode"]) {
+        project->setWindowMode(stringToWindowMode(node["windowMode"].as<std::string>()));
+    }
+
+    if (node["windowWidth"] && node["windowHeight"]) {
+        project->setWindowSize(
+            node["windowWidth"].as<unsigned int>(),
+            node["windowHeight"].as<unsigned int>()
+        );
+    } else {
+        // Projects saved before window settings existed follow the canvas size
+        project->setWindowSize(project->getCanvasWidth(), project->getCanvasHeight());
+    }
+
+    if (node["windowResizable"].IsDefined()) {
+        project->setWindowResizable(node["windowResizable"].as<bool>());
+    }
+
+    if (node["windowTitle"]) {
+        project->setWindowTitle(node["windowTitle"].as<std::string>());
     }
 
     if (node["assetsDir"]) {

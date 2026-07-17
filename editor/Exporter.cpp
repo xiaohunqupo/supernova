@@ -731,8 +731,33 @@ bool editor::Exporter::copyEngine() {
     const std::string projectSettingsMarker = "# @DORIAX_PROJECT_SETTINGS@";
     const size_t projectSettingsPos = cmakeContent.find(projectSettingsMarker);
     if (projectSettingsPos != std::string::npos) {
-        const std::string projectSettings = std::string("set(DORIAX_VSYNC_ENABLED ")
+        const WindowSettings window = project->getWindowSettings();
+
+        // The title crosses two quoting layers: the CMake string literal here and
+        // the C string literal it becomes through add_definitions. Escape for the
+        // C level first, then for the CMake level ($ stops variable expansion).
+        // Control characters are sanitized upstream in Project::getWindowSettings().
+        std::string title;
+        for (char c : window.title) {
+            if (c == '\\' || c == '"') title += '\\';
+            title += c;
+        }
+        std::string cmakeTitle;
+        for (char c : title) {
+            if (c == '\\' || c == '"' || c == '$') cmakeTitle += '\\';
+            cmakeTitle += c;
+        }
+
+        // First line reuses the marker's existing indentation; subsequent lines
+        // match the surrounding standalone setup block (4 spaces).
+        const std::string indent = "\n    ";
+        std::string projectSettings = std::string("set(DORIAX_VSYNC_ENABLED ")
             + (project->isVSyncEnabled() ? "ON" : "OFF") + ")";
+        projectSettings += indent + "set(DORIAX_WINDOW_WIDTH " + std::to_string(window.width) + ")";
+        projectSettings += indent + "set(DORIAX_WINDOW_HEIGHT " + std::to_string(window.height) + ")";
+        projectSettings += indent + "set(DORIAX_WINDOW_MODE " + std::to_string(static_cast<int>(window.mode)) + ")";
+        projectSettings += indent + std::string("set(DORIAX_WINDOW_RESIZABLE ") + (window.resizable ? "ON" : "OFF") + ")";
+        projectSettings += indent + "set(DORIAX_WINDOW_TITLE \"" + cmakeTitle + "\")";
         cmakeContent.replace(projectSettingsPos, projectSettingsMarker.size(), projectSettings);
     } else {
         Out::warning("Exported CMakeLists.txt is missing the project settings marker; using platform defaults");

@@ -85,6 +85,9 @@ namespace doriax::editor {
         static std::string textureStrategyToString(TextureStrategy strategy);
         static TextureStrategy stringToTextureStrategy(const std::string& str);
 
+        static std::string windowModeToString(WindowMode mode);
+        static WindowMode stringToWindowMode(const std::string& str);
+
         static float finiteOr(float value, float fallback = 0.0f);
         static double finiteOr(double value, double fallback = 0.0);
         static float positiveFiniteOr(float value, float fallback = 1.0f);

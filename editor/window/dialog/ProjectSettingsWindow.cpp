@@ -15,6 +15,10 @@ static const char* textureStrategyNames[] = { "Fit", "Resize", "None" };
 static const TextureStrategy textureStrategyValues[] = { TextureStrategy::FIT, TextureStrategy::RESIZE, TextureStrategy::NONE };
 static const int textureStrategyCount = sizeof(textureStrategyValues) / sizeof(textureStrategyValues[0]);
 
+static const char* windowModeNames[] = { "Windowed", "Maximized", "Fullscreen" };
+static const WindowMode windowModeValues[] = { WindowMode::WINDOWED, WindowMode::MAXIMIZED, WindowMode::FULLSCREEN };
+static const int windowModeCount = sizeof(windowModeValues) / sizeof(windowModeValues[0]);
+
 static int findScalingIndex(Scaling mode) {
     for (int i = 0; i < scalingModeCount; i++) {
         if (scalingModeValues[i] == mode) return i;
@@ -25,6 +29,13 @@ static int findScalingIndex(Scaling mode) {
 static int findTextureStrategyIndex(TextureStrategy strategy) {
     for (int i = 0; i < textureStrategyCount; i++) {
         if (textureStrategyValues[i] == strategy) return i;
+    }
+    return 0;
+}
+
+static int findWindowModeIndex(WindowMode mode) {
+    for (int i = 0; i < windowModeCount; i++) {
+        if (windowModeValues[i] == mode) return i;
     }
     return 0;
 }
@@ -165,6 +176,12 @@ void ProjectSettingsWindow::open(Project* project) {
     m_scalingModeIndex = findScalingIndex(project->getScalingMode());
     m_textureStrategyIndex = findTextureStrategyIndex(project->getTextureStrategy());
     m_vsyncEnabled = project->isVSyncEnabled();
+    m_windowModeIndex = findWindowModeIndex(project->getWindowMode());
+    m_windowWidth = (int)project->getWindowWidth();
+    m_windowHeight = (int)project->getWindowHeight();
+    m_windowResizable = project->isWindowResizable();
+    m_windowTitleOriginal = project->getWindowTitle();
+    snprintf(m_windowTitleBuffer, sizeof(m_windowTitleBuffer), "%s", m_windowTitleOriginal.c_str());
     m_assetsDir = project->getAssetsDir();
     m_luaDir = project->getLuaDir();
     m_shadersDir = project->getShadersDir();
@@ -301,6 +318,69 @@ void ProjectSettingsWindow::drawSettings() {
     ImGui::SetItemTooltip("Synchronize Play mode and supported desktop builds to the display refresh rate. macOS Metal exports remain synchronized.");
     ImGui::TableNextColumn();
     ImGui::Checkbox("##VSync", &m_vsyncEnabled);
+
+    // Window mode row
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Window Mode");
+    ImGui::SetItemTooltip("Initial window state of desktop builds. Web and mobile ignore window settings.");
+    ImGui::TableNextColumn();
+    {
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("##WindowMode", windowModeNames[m_windowModeIndex])) {
+            for (int i = 0; i < windowModeCount; i++) {
+                bool isSelected = (m_windowModeIndex == i);
+                if (ImGui::Selectable(windowModeNames[i], isSelected)) {
+                    m_windowModeIndex = i;
+                }
+                if (isSelected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
+
+    // Window width row
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Window Width");
+    ImGui::TableNextColumn();
+    {
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputInt("##WindowWidth", &m_windowWidth);
+        if (m_windowWidth < 1) m_windowWidth = 1;
+    }
+
+    // Window height row
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Window Height");
+    ImGui::TableNextColumn();
+    {
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputInt("##WindowHeight", &m_windowHeight);
+        if (m_windowHeight < 1) m_windowHeight = 1;
+    }
+
+    // Window resizable row
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Window Resizable");
+    ImGui::SetItemTooltip("Applies to desktop builds. Exported Windows and macOS builds are always resizable.");
+    ImGui::TableNextColumn();
+    ImGui::Checkbox("##WindowResizable", &m_windowResizable);
+
+    // Window title row
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Window Title");
+    ImGui::TableNextColumn();
+    {
+        std::string titleHint = m_project->getName().empty() ? "Doriax" : m_project->getName();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputTextWithHint("##WindowTitle", titleHint.c_str(), m_windowTitleBuffer, sizeof(m_windowTitleBuffer));
+    }
 
     // Start scene row
     ImGui::TableNextRow();
@@ -503,6 +583,14 @@ void ProjectSettingsWindow::drawSettings() {
         m_project->setScalingMode(scalingModeValues[m_scalingModeIndex]);
         m_project->setTextureStrategy(textureStrategyValues[m_textureStrategyIndex]);
         m_project->setVSyncEnabled(m_vsyncEnabled);
+        m_project->setWindowMode(windowModeValues[m_windowModeIndex]);
+        m_project->setWindowSize(m_windowWidth, m_windowHeight);
+        m_project->setWindowResizable(m_windowResizable);
+        // The edit buffer truncates long titles; only write it back if the user
+        // actually changed it, so an untouched over-long title survives OK.
+        if (m_windowTitleBuffer != m_windowTitleOriginal.substr(0, sizeof(m_windowTitleBuffer) - 1)) {
+            m_project->setWindowTitle(m_windowTitleBuffer);
+        }
         m_project->setAssetsDir(m_assetsDir);
         m_project->setLuaDir(m_luaDir);
         m_project->setShadersDir(m_shadersDir);

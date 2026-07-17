@@ -6,6 +6,18 @@
 #include "sokol_app.h"
 #include "sokol_glue.h"
 
+// 0 = windowed, 1 = maximized, 2 = fullscreen
+// (sokol_app has no maximized or non-resizable window support: mode 1 falls
+// back to windowed and DORIAX_WINDOW_RESIZABLE is ignored — sokol windows
+// are always resizable)
+#ifndef DORIAX_WINDOW_MODE
+#define DORIAX_WINDOW_MODE 0
+#endif
+
+#ifndef DORIAX_WINDOW_TITLE
+#define DORIAX_WINDOW_TITLE "Doriax"
+#endif
+
 static float mousePosX = 0.0f;
 static float mousePosY = 0.0f;
 
@@ -102,8 +114,9 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     app_desc.cleanup_cb = sokol_cleanup;
     app_desc.width = DEFAULT_WINDOW_WIDTH;
     app_desc.height = DEFAULT_WINDOW_HEIGHT;
+    app_desc.fullscreen = (DORIAX_WINDOW_MODE == 2);
     app_desc.sample_count = 4;
-    app_desc.window_title = "Doriax";
+    app_desc.window_title = DORIAX_WINDOW_TITLE;
 
     doriax::Engine::systemInit(argc, argv, new DoriaxSokol());
 

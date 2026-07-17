@@ -1318,6 +1318,65 @@ bool editor::Project::isVSyncEnabled() const{
     return vsyncEnabled;
 }
 
+void editor::Project::setWindowMode(WindowMode windowMode){
+    this->windowMode = windowMode;
+}
+
+editor::WindowMode editor::Project::getWindowMode() const{
+    return windowMode;
+}
+
+void editor::Project::setWindowSize(unsigned int width, unsigned int height){
+    this->windowWidth = width;
+    this->windowHeight = height;
+}
+
+unsigned int editor::Project::getWindowWidth() const{
+    return windowWidth;
+}
+
+unsigned int editor::Project::getWindowHeight() const{
+    return windowHeight;
+}
+
+void editor::Project::setWindowResizable(bool resizable){
+    this->windowResizable = resizable;
+}
+
+bool editor::Project::isWindowResizable() const{
+    return windowResizable;
+}
+
+void editor::Project::setWindowTitle(const std::string& title){
+    this->windowTitle = title;
+}
+
+std::string editor::Project::getWindowTitle() const{
+    return windowTitle;
+}
+
+editor::WindowSettings editor::Project::getWindowSettings() const{
+    WindowSettings settings;
+    settings.mode = windowMode;
+    settings.width = windowWidth;
+    settings.height = windowHeight;
+    settings.resizable = windowResizable;
+    if (!windowTitle.empty()) {
+        settings.title = windowTitle;
+    } else if (!name.empty()) {
+        settings.title = name;
+    }
+    // The title is embedded in generated C++ and CMake string literals whose
+    // escaping only covers quotes/backslashes; a control character (e.g. a
+    // newline from a hand-edited project.yaml) would still break the literal.
+    // Unsigned compare so UTF-8 continuation bytes are left untouched.
+    for (char& c : settings.title) {
+        unsigned char uc = static_cast<unsigned char>(c);
+        if (uc < 0x20 || uc == 0x7F) c = ' ';
+    }
+    return settings;
+}
+
 void editor::Project::setAssetsDir(const std::filesystem::path& assetsDir){
     this->assetsDir = assetsDir;
 }
@@ -2416,6 +2475,11 @@ void editor::Project::resetConfigs() {
     scalingMode = Scaling::FITWIDTH;
     textureStrategy = TextureStrategy::RESIZE;
     vsyncEnabled = true;
+    windowMode = WindowMode::WINDOWED;
+    windowWidth = canvasWidth;
+    windowHeight = canvasHeight;
+    windowResizable = true;
+    windowTitle = "";
     assetsDir = ".";
     luaDir = ".";
     shadersDir = "shaders";
@@ -3208,7 +3272,7 @@ bool editor::Project::writeSceneToPath(uint32_t sceneId, const std::filesystem::
 
     std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
     std::vector<BundleSceneInfo> bundleBuildInfos = collectAllBundles();
-    generator.configure(scenesToConfig, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight, vsyncEnabled);
+    generator.configure(scenesToConfig, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight, vsyncEnabled, getWindowSettings());
 
     Out::info("Scene saved to: \"%s\"", fullPath.string().c_str());
 
@@ -5882,7 +5946,7 @@ void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session
 
         std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
         std::vector<BundleSceneInfo> bundleBuildInfos = collectAllBundles();
-        generator.configure(scenesToGenerate, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight, vsyncEnabled);
+        generator.configure(scenesToGenerate, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight, vsyncEnabled, getWindowSettings());
 
         const bool hasCppScripts = !mergedCppScripts.empty();
 

@@ -13,6 +13,19 @@
 #define DORIAX_VSYNC_ENABLED 1
 #endif
 
+// 0 = windowed, 1 = maximized, 2 = fullscreen
+#ifndef DORIAX_WINDOW_MODE
+#define DORIAX_WINDOW_MODE 0
+#endif
+
+#ifndef DORIAX_WINDOW_RESIZABLE
+#define DORIAX_WINDOW_RESIZABLE 1
+#endif
+
+#ifndef DORIAX_WINDOW_TITLE
+#define DORIAX_WINDOW_TITLE "Doriax"
+#endif
+
 int DoriaxGLFW::windowPosX;
 int DoriaxGLFW::windowPosY;
 int DoriaxGLFW::windowWidth;
@@ -102,12 +115,30 @@ int DoriaxGLFW::init(int argc, char **argv){
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    window = glfwCreateWindow(windowWidth, windowHeight, "Doriax", 0, 0);
+    glfwWindowHint(GLFW_RESIZABLE, DORIAX_WINDOW_RESIZABLE ? GLFW_TRUE : GLFW_FALSE);
+
+    monitor = glfwGetPrimaryMonitor();
+
+    // start fullscreen at the current desktop video mode; fall back to windowed
+    // when the monitor or its video mode is unavailable (e.g. headless session)
+    const GLFWvidmode* videoMode = nullptr;
+    if (DORIAX_WINDOW_MODE == 2 && monitor)
+        videoMode = glfwGetVideoMode(monitor);
+
+    if (videoMode) {
+        glfwWindowHint(GLFW_RED_BITS, videoMode->redBits);
+        glfwWindowHint(GLFW_GREEN_BITS, videoMode->greenBits);
+        glfwWindowHint(GLFW_BLUE_BITS, videoMode->blueBits);
+        glfwWindowHint(GLFW_REFRESH_RATE, videoMode->refreshRate);
+        window = glfwCreateWindow(videoMode->width, videoMode->height, DORIAX_WINDOW_TITLE, monitor, 0);
+    } else {
+        if (DORIAX_WINDOW_MODE == 1)
+            glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+        window = glfwCreateWindow(windowWidth, windowHeight, DORIAX_WINDOW_TITLE, 0, 0);
+    }
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(DORIAX_VSYNC_ENABLED ? 1 : 0);
-
-    monitor = glfwGetPrimaryMonitor();
 
     glfwSetMouseButtonCallback(window, [](GLFWwindow*, int btn, int action, int mods) {
         if (action==GLFW_PRESS){

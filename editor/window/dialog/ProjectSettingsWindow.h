@@ -21,6 +21,12 @@ namespace doriax::editor {
         int m_scalingModeIndex = 0;
         int m_textureStrategyIndex = 0;
         bool m_vsyncEnabled = true;
+        int m_windowModeIndex = 0;
+        int m_windowWidth = 0;
+        int m_windowHeight = 0;
+        bool m_windowResizable = true;
+        char m_windowTitleBuffer[256] = {0};
+        std::string m_windowTitleOriginal;
         int m_startSceneIndex = 0;
         fs::path m_assetsDir;
         fs::path m_luaDir;

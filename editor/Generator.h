@@ -60,6 +60,24 @@ namespace doriax::editor {
         std::string unavailableReason;    // e.g. "requires Ninja on PATH"
     };
 
+    // Values must stay in sync with the DORIAX_WINDOW_MODE macro consumed by
+    // the engine platform backends (0 = windowed, 1 = maximized, 2 = fullscreen).
+    enum class WindowMode {
+        WINDOWED = 0,
+        MAXIMIZED = 1,
+        FULLSCREEN = 2
+    };
+
+    // Initial window state for generated/exported desktop builds.
+    // Web and mobile targets ignore these settings.
+    struct WindowSettings {
+        WindowMode mode = WindowMode::WINDOWED;
+        unsigned int width = 1280;
+        unsigned int height = 720;
+        bool resizable = true;
+        std::string title = "Doriax";
+    };
+
     class Generator {
     private:
         std::future<void> buildFuture;
@@ -92,13 +110,13 @@ namespace doriax::editor {
         // Returns false (with a logged error) if the cache could not be removed,
         // usually because another program holds a lock on the build directory.
         bool cleanBuildDirectory(const fs::path& buildPath);
-        std::string getPlatformCMakeConfig();
+        std::string getPlatformCMakeConfig(const WindowSettings& windowSettings);
         std::string getPlatformEditorHeader();
-        std::string getPlatformEditorSource(const fs::path& projectPath, bool vsyncEnabled);
+        std::string getPlatformEditorSource(const fs::path& projectPath, bool vsyncEnabled, const WindowSettings& windowSettings);
         std::string buildInitSceneScriptsSource(const std::vector<SceneScriptSource>& scriptFiles);
         std::string buildCleanupSceneScriptsSource(const std::vector<SceneScriptSource>& scriptFiles);
 
-        void writeSourceFiles(const fs::path& projectPath, const fs::path& projectInternalPath, std::string libName, const std::vector<SceneScriptSource>& scriptFiles, const std::vector<SceneBuildInfo>& scenes, const std::vector<BundleSceneInfo>& bundles);
+        void writeSourceFiles(const fs::path& projectPath, const fs::path& projectInternalPath, std::string libName, const std::vector<SceneScriptSource>& scriptFiles, const std::vector<SceneBuildInfo>& scenes, const std::vector<BundleSceneInfo>& bundles, const WindowSettings& windowSettings);
         void terminateCurrentProcess();
 
     public:
@@ -109,7 +127,7 @@ namespace doriax::editor {
         std::vector<BundleInstanceInfo> writeBundleSources(const std::map<fs::path, EntityBundle>& entityBundles, uint32_t sceneId, const fs::path& projectPath, const fs::path& projectInternalPath);
         void writeSceneSource(Scene* scene, const std::string& sceneName, const std::vector<Entity>& entities, const Entity camera, const fs::path& projectPath, const fs::path& projectInternalPath, std::vector<BundleInstanceInfo>& bundleInstances);
         void clearSceneSource(const std::string& sceneName, const fs::path& projectInternalPath);
-        void configure(const std::vector<SceneBuildInfo>& scenes, std::string libName, const std::vector<SceneScriptSource>& scriptFiles, const std::vector<BundleSceneInfo>& bundles, const fs::path& projectPath, const fs::path& projectInternalPath, Scaling scalingMode = Scaling::FITWIDTH, TextureStrategy textureStrategy = TextureStrategy::RESIZE, unsigned int canvasWidth = 1280, unsigned int canvasHeight = 720, bool vsyncEnabled = true);
+        void configure(const std::vector<SceneBuildInfo>& scenes, std::string libName, const std::vector<SceneScriptSource>& scriptFiles, const std::vector<BundleSceneInfo>& bundles, const fs::path& projectPath, const fs::path& projectInternalPath, Scaling scalingMode = Scaling::FITWIDTH, TextureStrategy textureStrategy = TextureStrategy::RESIZE, unsigned int canvasWidth = 1280, unsigned int canvasHeight = 720, bool vsyncEnabled = true, const WindowSettings& windowSettings = WindowSettings());
         void build(const fs::path projectPath, const fs::path projectInternalPath, const fs::path buildPath, const std::string& cCompiler = "", const std::string& cxxCompiler = "", const std::string& generator = "");
         bool isBuildInProgress() const;
         void waitForBuildToComplete();

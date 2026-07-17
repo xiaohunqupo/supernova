@@ -144,6 +144,11 @@ namespace doriax::editor{
         Scaling scalingMode;
         TextureStrategy textureStrategy;
         bool vsyncEnabled;
+        WindowMode windowMode;
+        unsigned int windowWidth;
+        unsigned int windowHeight;
+        bool windowResizable;
+        std::string windowTitle;  // empty = use the project name
         std::filesystem::path assetsDir;
         std::filesystem::path luaDir;
         std::filesystem::path shadersDir;        // compiled .sdat output dir (engine/build-facing)
@@ -296,6 +301,24 @@ namespace doriax::editor{
 
         void setVSyncEnabled(bool enabled);
         bool isVSyncEnabled() const;
+
+        void setWindowMode(WindowMode windowMode);
+        WindowMode getWindowMode() const;
+
+        void setWindowSize(unsigned int width, unsigned int height);
+        unsigned int getWindowWidth() const;
+        unsigned int getWindowHeight() const;
+
+        void setWindowResizable(bool resizable);
+        bool isWindowResizable() const;
+
+        // Stored title; empty means "use the project name"
+        void setWindowTitle(const std::string& title);
+        std::string getWindowTitle() const;
+
+        // Window configuration for generated/exported desktop builds,
+        // with the title fallback already resolved
+        WindowSettings getWindowSettings() const;
 
         void setAssetsDir(const std::filesystem::path& assetsDir);
         std::filesystem::path getAssetsDir() const;

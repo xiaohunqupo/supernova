@@ -33,9 +33,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     endif()
     file(TO_CMAKE_PATH ${PROJECT_ROOT} PROJECT_ROOT)
 
-    add_definitions("-DDEFAULT_WINDOW_WIDTH=960")
-    add_definitions("-DDEFAULT_WINDOW_HEIGHT=540")
-
     # Project-wide runtime settings are injected here by the editor Exporter.
     # Standalone engine builds keep the defaults declared by each platform.
     # @DORIAX_PROJECT_SETTINGS@
@@ -48,6 +45,33 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         set(DORIAX_VSYNC_ENABLED_VALUE 0)
     endif()
     add_definitions("-DDORIAX_VSYNC_ENABLED=${DORIAX_VSYNC_ENABLED_VALUE}")
+
+    if(NOT DEFINED DORIAX_WINDOW_WIDTH)
+        set(DORIAX_WINDOW_WIDTH 960)
+    endif()
+    if(NOT DEFINED DORIAX_WINDOW_HEIGHT)
+        set(DORIAX_WINDOW_HEIGHT 540)
+    endif()
+    # 0 = windowed, 1 = maximized, 2 = fullscreen
+    if(NOT DEFINED DORIAX_WINDOW_MODE)
+        set(DORIAX_WINDOW_MODE 0)
+    endif()
+    if(NOT DEFINED DORIAX_WINDOW_RESIZABLE)
+        set(DORIAX_WINDOW_RESIZABLE ON)
+    endif()
+    if(NOT DEFINED DORIAX_WINDOW_TITLE)
+        set(DORIAX_WINDOW_TITLE "Doriax")
+    endif()
+    if(DORIAX_WINDOW_RESIZABLE)
+        set(DORIAX_WINDOW_RESIZABLE_VALUE 1)
+    else()
+        set(DORIAX_WINDOW_RESIZABLE_VALUE 0)
+    endif()
+    add_definitions("-DDEFAULT_WINDOW_WIDTH=${DORIAX_WINDOW_WIDTH}")
+    add_definitions("-DDEFAULT_WINDOW_HEIGHT=${DORIAX_WINDOW_HEIGHT}")
+    add_definitions("-DDORIAX_WINDOW_MODE=${DORIAX_WINDOW_MODE}")
+    add_definitions("-DDORIAX_WINDOW_RESIZABLE=${DORIAX_WINDOW_RESIZABLE_VALUE}")
+    add_definitions("-DDORIAX_WINDOW_TITLE=\"${DORIAX_WINDOW_TITLE}\"")
 
     # Per-project HybridArray capacities (SceneMaxValues) are injected here by the
     # editor Exporter, replacing the marker below. When building manually (without
