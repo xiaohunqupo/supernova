@@ -156,6 +156,9 @@ namespace doriax::editor{
         std::string cmakeCCompiler;
         std::string cmakeCxxCompiler;
         std::string cmakeGenerator;
+        // Atomic: read by the play-startup thread while the settings dialog can
+        // write it from the UI thread.
+        std::atomic<unsigned int> cmakeBuildJobs{0};
         CommandHistory projectHistory;
 
         uint32_t startSceneId;
@@ -341,6 +344,8 @@ namespace doriax::editor{
         std::string getCMakeCCompiler() const;
         std::string getCMakeCxxCompiler() const;
         std::string getCMakeGenerator() const;
+        void setCMakeBuildJobs(unsigned int jobs);
+        unsigned int getCMakeBuildJobs() const;
 
         uint32_t getStartSceneId() const;
         void setStartSceneId(uint32_t sceneId);

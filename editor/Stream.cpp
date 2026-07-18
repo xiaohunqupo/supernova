@@ -1357,6 +1357,9 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
     if (!project->getCMakeGenerator().empty()) {
         root["cmakeGenerator"] = project->getCMakeGenerator();
     }
+    if (project->getCMakeBuildJobs() != 0) {
+        root["cmakeBuildJobs"] = project->getCMakeBuildJobs();
+    }
 
     if (project->getStartSceneId() != NULL_PROJECT_SCENE) {
         root["startSceneId"] = project->getStartSceneId();
@@ -1517,6 +1520,14 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
         std::string cxx = node["cmakeCxxCompiler"] ? node["cmakeCxxCompiler"].as<std::string>() : "";
         std::string gen = node["cmakeGenerator"] ? node["cmakeGenerator"].as<std::string>() : "";
         project->setCMakeKit(cc, cxx, gen);
+    }
+    if (node["cmakeBuildJobs"]) {
+        // Only sanitized to a machine-independent range here; clamping to this
+        // machine's core count would silently rewrite a shared project file
+        // (the per-machine cap is applied at build time instead).
+        const long long jobs = node["cmakeBuildJobs"].as<long long>();
+        const long long maxJobs = static_cast<long long>(Generator::MAX_SUPPORTED_PARALLEL_BUILD_JOBS);
+        project->setCMakeBuildJobs(static_cast<unsigned int>(std::clamp(jobs, 0LL, maxJobs)));
     }
 
     if (node["startSceneId"]) {

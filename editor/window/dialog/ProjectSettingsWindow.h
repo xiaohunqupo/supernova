@@ -34,6 +34,8 @@ namespace doriax::editor {
         fs::path m_shaderSourcesDir;
         std::vector<CMakeKit> m_availableKits;
         int m_cmakeKitIndex = 0;
+        int m_cmakeBuildJobs = 0;
+        std::string m_cmakeBuildJobsTooltip;
 
         void drawSettings();
         void drawGeneralSettings();

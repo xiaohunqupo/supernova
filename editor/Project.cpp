@@ -1428,6 +1428,17 @@ std::string editor::Project::getCMakeGenerator() const{
     return cmakeGenerator;
 }
 
+void editor::Project::setCMakeBuildJobs(unsigned int jobs){
+    // Stored unclamped: the per-machine cap is applied at build time
+    // (Generator::build), so a value configured on a machine with more
+    // cores survives load/save round-trips on this one.
+    cmakeBuildJobs = jobs;
+}
+
+unsigned int editor::Project::getCMakeBuildJobs() const{
+    return cmakeBuildJobs;
+}
+
 uint32_t editor::Project::getStartSceneId() const{
     return startSceneId;
 }
@@ -2487,6 +2498,7 @@ void editor::Project::resetConfigs() {
     cmakeCCompiler = "";
     cmakeCxxCompiler = "";
     cmakeGenerator = "";
+    cmakeBuildJobs = 0;
     selectedScene = NULL_PROJECT_SCENE;
     selectedSceneForProperties = NULL_PROJECT_SCENE;
     nextSceneId = 0;
@@ -5946,6 +5958,7 @@ void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session
 
         std::vector<SceneScriptSource> mergedCppScripts = collectAllSceneCppScripts();
         std::vector<BundleSceneInfo> bundleBuildInfos = collectAllBundles();
+        const unsigned int requestedBuildJobs = cmakeBuildJobs.load();
         generator.configure(scenesToGenerate, libName, mergedCppScripts, bundleBuildInfos, getProjectPath(), getProjectInternalPath(), scalingMode, textureStrategy, canvasWidth, canvasHeight, vsyncEnabled, getWindowSettings());
 
         const bool hasCppScripts = !mergedCppScripts.empty();
@@ -5960,7 +5973,7 @@ void editor::Project::runPlayStartup(const std::shared_ptr<PlaySession>& session
             }
 
             fs::path buildPath = getProjectInternalPath() / "build";
-            generator.build(getProjectPath(), getProjectInternalPath(), buildPath, cmakeCCompiler, cmakeCxxCompiler, cmakeGenerator);
+            generator.build(getProjectPath(), getProjectInternalPath(), buildPath, cmakeCCompiler, cmakeCxxCompiler, cmakeGenerator, requestedBuildJobs);
             generator.waitForBuildToComplete();
 
             if (isCancelled()) { markStartupDone(); return; }

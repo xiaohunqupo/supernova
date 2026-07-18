@@ -91,11 +91,11 @@ static void drawCombo(const char* id, const char* const* names, int count, int& 
     ImGui::EndCombo();
 }
 
-static void drawPositiveIntSetting(const char* label, const char* id, int& value) {
-    beginSettingsRow(label);
+static void drawIntSetting(const char* label, const char* id, int& value, int minValue = 1, const char* tooltip = nullptr) {
+    beginSettingsRow(label, tooltip);
     ImGui::SetNextItemWidth(-1);
     ImGui::InputInt(id, &value);
-    value = std::max(value, 1);
+    value = std::max(value, minValue);
 }
 
 static void drawDirectorySetting(
@@ -309,6 +309,12 @@ void ProjectSettingsWindow::open(Project* project) {
 
     m_availableKits = Generator::detectAvailableKits();
     m_cmakeKitIndex = 0; // 0 = "Default"
+    m_cmakeBuildJobs = static_cast<int>(project->getCMakeBuildJobs());
+    m_cmakeBuildJobsTooltip =
+        "Maximum number of concurrent build jobs used for C++ scripts. Set to 0 to automatically use " +
+        std::to_string(Generator::getAutomaticParallelBuildJobs()) + " detected logical CPU threads. " +
+        "Lower this on memory-constrained systems. Values above " +
+        std::to_string(Generator::getMaxParallelBuildJobs()) + " are capped at build time on this machine.";
     std::string currentCxx = project->getCMakeCxxCompiler();
     std::string currentGen = project->getCMakeGenerator();
     if (!currentCxx.empty() || !currentGen.empty()) {
@@ -456,8 +462,8 @@ void ProjectSettingsWindow::drawGeneralSettings() {
 
 void ProjectSettingsWindow::drawCanvasSettings() {
     drawSettingsPanel("##CanvasSettingsPanel", [this]() {
-        drawPositiveIntSetting("Canvas Width", "##CanvasWidth", m_canvasWidth);
-        drawPositiveIntSetting("Canvas Height", "##CanvasHeight", m_canvasHeight);
+        drawIntSetting("Canvas Width", "##CanvasWidth", m_canvasWidth);
+        drawIntSetting("Canvas Height", "##CanvasHeight", m_canvasHeight);
 
         beginSettingsRow("Scaling Mode");
         drawCombo("##ScalingMode", scalingModeNames, scalingModeCount, m_scalingModeIndex);
@@ -474,8 +480,8 @@ void ProjectSettingsWindow::drawWindowSettings() {
         beginSettingsRow("Window Mode", "Initial window state of desktop builds. Web and mobile ignore window settings.");
         drawCombo("##WindowMode", windowModeNames, windowModeCount, m_windowModeIndex);
 
-        drawPositiveIntSetting("Window Width", "##WindowWidth", m_windowWidth);
-        drawPositiveIntSetting("Window Height", "##WindowHeight", m_windowHeight);
+        drawIntSetting("Window Width", "##WindowWidth", m_windowWidth);
+        drawIntSetting("Window Height", "##WindowHeight", m_windowHeight);
 
         beginSettingsRow("Window Resizable", "Applies to desktop builds. Exported Windows and macOS builds are always resizable.");
         ImGui::Checkbox("##WindowResizable", &m_windowResizable);
@@ -548,14 +554,16 @@ void ProjectSettingsWindow::drawBuildSettings() {
             ImGui::EndCombo();
         }
 
-        if (m_cmakeKitIndex == 0) return;
+        if (m_cmakeKitIndex > 0) {
+            const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
+            if (!kit.cCompiler.empty() || !kit.cxxCompiler.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                ImGui::TextWrapped("C: %s\nCXX: %s", kit.cCompiler.c_str(), kit.cxxCompiler.c_str());
+                ImGui::PopStyleColor();
+            }
+        }
 
-        const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
-        if (kit.cCompiler.empty() && kit.cxxCompiler.empty()) return;
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        ImGui::TextWrapped("C: %s\nCXX: %s", kit.cCompiler.c_str(), kit.cxxCompiler.c_str());
-        ImGui::PopStyleColor();
+        drawIntSetting("Parallel Jobs", "##CMakeBuildJobs", m_cmakeBuildJobs, 0, m_cmakeBuildJobsTooltip.c_str());
     });
 }
 
@@ -594,6 +602,7 @@ void ProjectSettingsWindow::applySettings() {
         m_project->setCMakeKit("", "", "");
         AppSettings::setLastCMakeKit("", "", "");
     }
+    m_project->setCMakeBuildJobs(static_cast<unsigned int>(m_cmakeBuildJobs));
 }
 
 } // namespace doriax::editor

@@ -94,8 +94,8 @@ namespace doriax::editor {
         std::mutex processPidMutex;
     #endif
 
-        bool configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator);
-        bool buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& generator);
+        bool configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator, unsigned int parallelJobs);
+        bool buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& generator, unsigned int parallelJobs);
         // Windows: command prefix that loads the MSVC toolchain environment
         // (vcvars) so non-Visual-Studio generators such as Ninja can find the
         // Windows SDK and CRT libraries. Returns "" when not needed / not found.
@@ -124,11 +124,16 @@ namespace doriax::editor {
         ~Generator();
         static std::string checkBuildTools();
         static std::vector<CMakeKit> detectAvailableKits();
+        // MSVC's /MP processMax accepts at most 65536, making this the universal
+        // (machine-independent) ceiling for a stored Parallel Jobs value.
+        static constexpr unsigned int MAX_SUPPORTED_PARALLEL_BUILD_JOBS = 65536;
+        static unsigned int getAutomaticParallelBuildJobs();
+        static unsigned int getMaxParallelBuildJobs();
         std::vector<BundleInstanceInfo> writeBundleSources(const std::map<fs::path, EntityBundle>& entityBundles, uint32_t sceneId, const fs::path& projectPath, const fs::path& projectInternalPath);
         void writeSceneSource(Scene* scene, const std::string& sceneName, const std::vector<Entity>& entities, const Entity camera, const fs::path& projectPath, const fs::path& projectInternalPath, std::vector<BundleInstanceInfo>& bundleInstances);
         void clearSceneSource(const std::string& sceneName, const fs::path& projectInternalPath);
         void configure(const std::vector<SceneBuildInfo>& scenes, std::string libName, const std::vector<SceneScriptSource>& scriptFiles, const std::vector<BundleSceneInfo>& bundles, const fs::path& projectPath, const fs::path& projectInternalPath, Scaling scalingMode = Scaling::FITWIDTH, TextureStrategy textureStrategy = TextureStrategy::RESIZE, unsigned int canvasWidth = 1280, unsigned int canvasHeight = 720, bool vsyncEnabled = true, const WindowSettings& windowSettings = WindowSettings());
-        void build(const fs::path projectPath, const fs::path projectInternalPath, const fs::path buildPath, const std::string& cCompiler = "", const std::string& cxxCompiler = "", const std::string& generator = "");
+        void build(const fs::path projectPath, const fs::path projectInternalPath, const fs::path buildPath, const std::string& cCompiler = "", const std::string& cxxCompiler = "", const std::string& generator = "", unsigned int parallelJobs = 0);
         bool isBuildInProgress() const;
         void waitForBuildToComplete();
         bool didLastBuildSucceed() const;
