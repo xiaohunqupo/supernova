@@ -28,6 +28,9 @@ namespace doriax{
             this->scene = scene;
         }
 
+        SubSystem(const SubSystem&) = delete;
+        SubSystem& operator=(const SubSystem&) = delete;
+
         virtual void setPaused(bool value) {
             this->paused = value;
         }
