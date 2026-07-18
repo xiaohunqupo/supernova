@@ -552,6 +552,7 @@ void editor::ResourcesWindow::renderHeader() {
         ImGui::OpenPopup("SettingsPopup");
     }
 
+    ImGui::SetNextWindowSize(ImVec2(300.0f, 0.0f));
     if (ImGui::BeginPopup("SettingsPopup")) {
         ImGui::Text("Settings");
         ImGui::SameLine();
@@ -577,33 +578,53 @@ void editor::ResourcesWindow::renderHeader() {
             ImGui::SetTooltip("Reset to defaults");
         }
         ImGui::Separator();
-        if (ImGui::SliderInt("Icon Size", &iconSize, 16.0f, THUMBNAIL_SIZE)) {
-            iconPadding = 1.5f * iconSize;
-            AppSettings::setResourcesIconSize(iconSize);
-            AppSettings::saveSettings();
-        }
-        ImGui::Separator();
-        ImGui::Text("Layout");
-        LayoutType prevLayout = currentLayout;
-        if (ImGui::RadioButton("Auto", currentLayout == LayoutType::AUTO)) currentLayout = LayoutType::AUTO;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Grid", currentLayout == LayoutType::GRID)) currentLayout = LayoutType::GRID;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Split view", currentLayout == LayoutType::SPLIT)) currentLayout = LayoutType::SPLIT;
-        if (currentLayout != prevLayout) {
-            AppSettings::setResourcesLayout(static_cast<int>(currentLayout));
-            AppSettings::saveSettings();
-        }
 
-        ImGui::Separator();
-        ImGui::Text("Item view");
-        ItemViewStyle prevStyle = itemViewStyle;
-        if (ImGui::RadioButton("Classic", itemViewStyle == ItemViewStyle::CLASSIC)) itemViewStyle = ItemViewStyle::CLASSIC;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Card", itemViewStyle == ItemViewStyle::CARD)) itemViewStyle = ItemViewStyle::CARD;
-        if (itemViewStyle != prevStyle) {
-            AppSettings::setResourcesItemViewStyle(static_cast<int>(itemViewStyle));
-            AppSettings::saveSettings();
+        // Same label | input layout as SceneWindow's scene settings popup, but the
+        // value column stretches to fill the remaining popup width
+        if (ImGui::BeginTable("resources_settings_table", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            // Explicit stretch: tables inside auto-resizing popups default to
+            // SizingFixedFit, which would shrink this column to its content
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Icon size");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderInt("##IconSize", &iconSize, 16.0f, THUMBNAIL_SIZE)) {
+                iconPadding = 1.5f * iconSize;
+                AppSettings::setResourcesIconSize(iconSize);
+                AppSettings::saveSettings();
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Layout");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-1);
+            const char* layoutNames[] = { "Auto", "Grid", "Split (files only)", "Split" };
+            int layoutIndex = static_cast<int>(currentLayout);
+            if (ImGui::Combo("##Layout", &layoutIndex, layoutNames, IM_ARRAYSIZE(layoutNames))) {
+                currentLayout = static_cast<LayoutType>(layoutIndex);
+                AppSettings::setResourcesLayout(static_cast<int>(currentLayout));
+                AppSettings::saveSettings();
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Item view");
+            ImGui::TableSetColumnIndex(1);
+            ItemViewStyle prevStyle = itemViewStyle;
+            if (ImGui::RadioButton("Classic", itemViewStyle == ItemViewStyle::CLASSIC)) itemViewStyle = ItemViewStyle::CLASSIC;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Card", itemViewStyle == ItemViewStyle::CARD)) itemViewStyle = ItemViewStyle::CARD;
+            if (itemViewStyle != prevStyle) {
+                AppSettings::setResourcesItemViewStyle(static_cast<int>(itemViewStyle));
+                AppSettings::saveSettings();
+            }
+
+            ImGui::EndTable();
         }
 
         ImGui::EndPopup();
@@ -2441,7 +2462,7 @@ void editor::ResourcesWindow::show() {
     LayoutType effectiveLayout = currentLayout;
     if (currentLayout == LayoutType::AUTO) {
         float windowWidth = ImGui::GetWindowWidth();
-        effectiveLayout = (windowWidth < layoutAutoThreshold) ? LayoutType::GRID : LayoutType::SPLIT;
+        effectiveLayout = (windowWidth < layoutAutoThreshold) ? LayoutType::GRID : LayoutType::SPLIT_FILES_ONLY;
     }
 
     ImGuiTableFlags table_flags_for_sort_specs = ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Borders;
@@ -2472,7 +2493,7 @@ void editor::ResourcesWindow::show() {
         ImGui::BeginChild("FileTableScrollRegion", ImVec2(0, 0), true);
         renderFileListing(true);
         ImGui::EndChild();
-    } else if (effectiveLayout == LayoutType::SPLIT) {
+    } else if (effectiveLayout == LayoutType::SPLIT_FILES_ONLY || effectiveLayout == LayoutType::SPLIT) {
         float splitterWidth = 4.0f;
         ImGui::BeginChild("LeftPanel", ImVec2(leftPanelWidth, 0), true);
         renderDirectoryTree(project->getProjectPath());
@@ -2521,7 +2542,7 @@ void editor::ResourcesWindow::show() {
         }
         ImGui::PopStyleVar();
         ImGui::BeginChild("FileTableScrollRegion", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
-        renderFileListing(false);
+        renderFileListing(effectiveLayout == LayoutType::SPLIT);
         ImGui::EndChild();
         ImGui::EndChild();
     }
@@ -2592,9 +2613,11 @@ void editor::ResourcesWindow::show() {
             else if (ImGui::IsKeyPressed(ImGuiKey_X)) copySelectedFiles(true);
             else if (ImGui::IsKeyPressed(ImGuiKey_V) && !clipboardFiles.empty()) pasteFiles(currentPath);
             else if (ImGui::IsKeyPressed(ImGuiKey_A)) {
+                // Directories are only selectable when the listing shows them
+                bool listingShowsDirectories = (effectiveLayout != LayoutType::SPLIT_FILES_ONLY);
                 selectedFiles.clear();
                 for (const auto& file : files) {
-                    if (currentLayout == LayoutType::GRID || !file.isDirectory) selectedFiles.insert(file.name);
+                    if (listingShowsDirectories || !file.isDirectory) selectedFiles.insert(file.name);
                 }
                 if (!files.empty()) lastSelectedFile = files.back().name;
             }

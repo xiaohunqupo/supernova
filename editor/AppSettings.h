@@ -30,7 +30,7 @@ private:
 
     // Resources window settings
     static int resourcesIconSize;
-    static int resourcesLayout;      // 0=AUTO, 1=GRID, 2=SPLIT
+    static int resourcesLayout;      // 0=AUTO, 1=GRID, 2=SPLIT_FILES_ONLY, 3=SPLIT
     static int resourcesItemViewStyle; // 0=CARD, 1=CLASSIC
     static float resourcesLeftPanelWidth;
 

@@ -66,9 +66,10 @@ namespace doriax::editor {
         CodeEditor* codeEditor;
 
         enum class LayoutType {
-            AUTO,  // Automatically switch between GRID and SPLIT based on window size
-            GRID,  // Current single-column list view
-            SPLIT   // New two-column tree view
+            AUTO,              // Automatically switch between GRID and SPLIT_FILES_ONLY based on window size
+            GRID,              // Single panel, directories shown in the file listing
+            SPLIT_FILES_ONLY,  // Directory tree sidebar, listing shows files only
+            SPLIT              // Directory tree sidebar, directories included in the listing
         };
         LayoutType currentLayout = LayoutType::AUTO;
 
