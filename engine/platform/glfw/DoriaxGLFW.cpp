@@ -259,6 +259,45 @@ void DoriaxGLFW::exitFullscreen(){
     glfwSetWindowMonitor(window, nullptr,  windowPosX, windowPosY, windowWidth, windowHeight, 0);
 }
 
+bool DoriaxGLFW::isWindowMaximized(){
+    return glfwGetWindowAttrib(window, GLFW_MAXIMIZED) == GLFW_TRUE;
+}
+
+void DoriaxGLFW::maximizeWindow(){
+    // GLFW ignores maximize on fullscreen windows
+    glfwMaximizeWindow(window);
+}
+
+void DoriaxGLFW::restoreWindow(){
+    glfwRestoreWindow(window);
+}
+
+void DoriaxGLFW::setWindowSize(int width, int height){
+    if (width < 1 || height < 1)
+        return;
+
+    if (isFullscreen()){
+        // keep the display mode; resize the window that exitFullscreen restores
+        windowWidth = width;
+        windowHeight = height;
+        return;
+    }
+
+    glfwSetWindowSize(window, width, height);
+}
+
+bool DoriaxGLFW::isWindowResizable(){
+    return glfwGetWindowAttrib(window, GLFW_RESIZABLE) == GLFW_TRUE;
+}
+
+void DoriaxGLFW::setWindowResizable(bool resizable){
+    glfwSetWindowAttrib(window, GLFW_RESIZABLE, resizable ? GLFW_TRUE : GLFW_FALSE);
+}
+
+void DoriaxGLFW::setWindowTitle(const std::string& title){
+    glfwSetWindowTitle(window, title.c_str());
+}
+
 void DoriaxGLFW::setMouseCursor(doriax::CursorType type){
     GLFWcursor* cursor = NULL;
 

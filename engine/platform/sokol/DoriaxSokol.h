@@ -19,6 +19,10 @@ public:
     virtual void requestFullscreen() override;
     virtual void exitFullscreen() override;
 
+    // sokol_app has no maximize/resize/resizable control; only the title
+    // is overridable, the rest keep the base no-ops
+    virtual void setWindowTitle(const std::string& title) override;
+
     virtual void setMouseCursor(doriax::CursorType type) override;
     virtual void setMouseMode(doriax::MouseMode mode) override;
 

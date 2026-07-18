@@ -38,6 +38,10 @@ void DoriaxSokol::exitFullscreen(){
         sapp_toggle_fullscreen();
 }
 
+void DoriaxSokol::setWindowTitle(const std::string& title){
+    sapp_set_window_title(title.c_str());
+}
+
 void DoriaxSokol::setMouseCursor(doriax::CursorType type){
     if (type == doriax::CursorType::ARROW){
         sapp_set_mouse_cursor(SAPP_MOUSECURSOR_ARROW);

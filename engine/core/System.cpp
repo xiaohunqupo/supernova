@@ -90,6 +90,34 @@ void System::exitFullscreen(){
 
 }
 
+bool System::isWindowMaximized(){
+    return false;
+}
+
+void System::maximizeWindow(){
+
+}
+
+void System::restoreWindow(){
+
+}
+
+void System::setWindowSize(int width, int height){
+
+}
+
+bool System::isWindowResizable(){
+    return false;
+}
+
+void System::setWindowResizable(bool resizable){
+
+}
+
+void System::setWindowTitle(const std::string& title){
+
+}
+
 char System::getDirSeparator(){
 #if defined(_WIN32)
     return '\\';

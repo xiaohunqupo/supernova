@@ -86,6 +86,17 @@ namespace doriax {
         virtual void requestFullscreen();
         virtual void exitFullscreen();
 
+        // Desktop window control. Maximize/resize/resizable are no-ops where
+        // the platform offers no such control (mobile, web, sokol app backend);
+        // setWindowTitle also applies on web (tab title) and sokol.
+        virtual bool isWindowMaximized();
+        virtual void maximizeWindow();
+        virtual void restoreWindow();
+        virtual void setWindowSize(int width, int height);
+        virtual bool isWindowResizable();
+        virtual void setWindowResizable(bool resizable);
+        virtual void setWindowTitle(const std::string& title);
+
         virtual char getDirSeparator();
         
         virtual std::string getAssetPath();

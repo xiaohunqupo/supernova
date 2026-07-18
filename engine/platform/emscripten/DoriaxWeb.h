@@ -71,6 +71,10 @@ public:
     virtual void requestFullscreen() override;
     virtual void exitFullscreen() override;
 
+    // Sets the browser tab title; the other window APIs keep the base
+    // no-ops since the canvas has no OS window
+    virtual void setWindowTitle(const std::string& title) override;
+
     virtual void setMouseCursor(doriax::CursorType type) override;
     virtual void setMouseMode(doriax::MouseMode mode) override;
 

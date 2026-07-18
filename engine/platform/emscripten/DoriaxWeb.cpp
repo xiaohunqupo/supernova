@@ -214,6 +214,10 @@ void DoriaxWeb::exitFullscreen(){
     EMSCRIPTEN_RESULT ret = emscripten_exit_fullscreen();
 }
 
+void DoriaxWeb::setWindowTitle(const std::string& title){
+    emscripten_set_window_title(title.c_str());
+}
+
 void DoriaxWeb::setMouseCursor(doriax::CursorType type){
     std::string cursor;
 

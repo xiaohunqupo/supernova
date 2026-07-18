@@ -55,6 +55,14 @@ public:
     virtual void requestFullscreen() override;
     virtual void exitFullscreen() override;
 
+    virtual bool isWindowMaximized() override;
+    virtual void maximizeWindow() override;
+    virtual void restoreWindow() override;
+    virtual void setWindowSize(int width, int height) override;
+    virtual bool isWindowResizable() override;
+    virtual void setWindowResizable(bool resizable) override;
+    virtual void setWindowTitle(const std::string& title) override;
+
     virtual void setMouseCursor(doriax::CursorType type) override;
     virtual void setMouseMode(doriax::MouseMode mode) override;
     virtual void setMousePosition(float x, float y) override;
