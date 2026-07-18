@@ -36,6 +36,12 @@ namespace doriax::editor {
         int m_cmakeKitIndex = 0;
 
         void drawSettings();
+        void drawGeneralSettings();
+        void drawCanvasSettings();
+        void drawWindowSettings();
+        void drawDirectoriesSettings();
+        void drawBuildSettings();
+        void applySettings();
 
     public:
         ProjectSettingsWindow() = default;

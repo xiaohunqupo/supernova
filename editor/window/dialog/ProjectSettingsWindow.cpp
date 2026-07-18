@@ -1,9 +1,9 @@
 #include "ProjectSettingsWindow.h"
 #include "util/FileDialogs.h"
-#include "Backend.h"
 #include "AppSettings.h"
 #include "window/Widgets.h"
-#include "external/IconsFontAwesome6.h"
+
+#include <algorithm>
 
 namespace doriax::editor {
 
@@ -18,6 +18,13 @@ static const int textureStrategyCount = sizeof(textureStrategyValues) / sizeof(t
 static const char* windowModeNames[] = { "Windowed", "Maximized", "Fullscreen" };
 static const WindowMode windowModeValues[] = { WindowMode::WINDOWED, WindowMode::MAXIMIZED, WindowMode::FULLSCREEN };
 static const int windowModeCount = sizeof(windowModeValues) / sizeof(windowModeValues[0]);
+
+static constexpr float dialogWidth = 600.0f;
+static constexpr float dialogHeight = 480.0f;
+static constexpr float settingsLabelWidth = 160.0f;
+static constexpr float settingsPanelPadding = 12.0f;
+static constexpr float settingsButtonWidth = 120.0f;
+static constexpr ImGuiWindowFlags noScrollFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
 static int findScalingIndex(Scaling mode) {
     for (int i = 0; i < scalingModeCount; i++) {
@@ -40,19 +47,120 @@ static int findWindowModeIndex(WindowMode mode) {
     return 0;
 }
 
+template <typename DrawContents>
+static void drawSettingsPanel(const char* panelId, DrawContents drawContents) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(settingsPanelPadding, settingsPanelPadding));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(style.CellPadding.x, 6.0f));
+
+    // Allow vertical scrolling only when content exceeds the fixed dialog;
+    // ImGui hides the scrollbar while everything fits.
+    bool panelVisible = ImGui::BeginChild(panelId, ImVec2(0, 0), ImGuiChildFlags_Borders);
+    float labelWidth = std::min(settingsLabelWidth, ImGui::GetContentRegionAvail().x * 0.4f);
+    if (panelVisible && ImGui::BeginTable("##SettingsTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, labelWidth);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        drawContents();
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar(3);
+}
+
+static void beginSettingsRow(const char* label, const char* tooltip = nullptr) {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    if (tooltip) ImGui::SetItemTooltip("%s", tooltip);
+    ImGui::TableNextColumn();
+}
+
+static void drawCombo(const char* id, const char* const* names, int count, int& selectedIndex) {
+    if (selectedIndex < 0 || selectedIndex >= count) selectedIndex = 0;
+
+    ImGui::SetNextItemWidth(-1);
+    if (!ImGui::BeginCombo(id, names[selectedIndex])) return;
+
+    for (int i = 0; i < count; i++) {
+        bool selected = selectedIndex == i;
+        if (ImGui::Selectable(names[i], selected)) selectedIndex = i;
+        if (selected) ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+}
+
+static void drawPositiveIntSetting(const char* label, const char* id, int& value) {
+    beginSettingsRow(label);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputInt(id, &value);
+    value = std::max(value, 1);
+}
+
+static void drawDirectorySetting(
+    Project* project,
+    const char* label,
+    const char* tooltip,
+    const char* pathId,
+    const char* buttonId,
+    fs::path& directory,
+    const fs::path& defaultDirectory,
+    bool keepAbsolutePathOnError = false
+) {
+    beginSettingsRow(label, tooltip);
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float browseWidth = ImGui::CalcTextSize("Browse").x + style.FramePadding.x * 2.0f;
+    float pathWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x - browseWidth - style.ItemSpacing.x);
+
+    fs::path displayPath = directory.empty() ? defaultDirectory : directory;
+    if (displayPath == ".") displayPath = "<Project root>";
+    Widgets::pathDisplay(pathId, displayPath, Vector2(pathWidth, ImGui::GetFrameHeight()));
+
+    ImGui::SameLine();
+    if (!project) {
+        ImGui::BeginDisabled();
+        ImGui::Button(buttonId);
+        ImGui::EndDisabled();
+        return;
+    }
+
+    if (!ImGui::Button(buttonId)) return;
+
+    std::string selectedPath = FileDialogs::openFileDialog(project->getProjectPath().string(), FILE_DIALOG_ALL, true);
+    if (selectedPath.empty()) return;
+
+    std::error_code ec;
+    fs::path relativePath = fs::relative(fs::path(selectedPath), project->getProjectPath(), ec);
+    if (!ec && !relativePath.empty()) {
+        directory = relativePath;
+    } else {
+        directory = keepAbsolutePathOnError ? fs::path(selectedPath) : defaultDirectory;
+    }
+}
+
+static void showDisabledItemTooltip(const std::string& text) {
+    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) return;
+
+    ImGui::BeginTooltip();
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+    ImGui::TextUnformatted(text.c_str());
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
+}
+
 static void drawScalingPreview(Scaling mode, int canvasWidth, int canvasHeight) {
     if (canvasWidth <= 0 || canvasHeight <= 0) return;
 
     float canvasAspect = (float)canvasWidth / (float)canvasHeight;
+    canvasAspect = std::clamp(canvasAspect, 15.0f / 70.0f, 80.0f / 15.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Base canvas size for preview
-    float baseH = 50.0f;
-    float baseW = baseH * canvasAspect;
-    if (baseW > 80.0f) { baseW = 80.0f; baseH = baseW / canvasAspect; }
-    if (baseH > 70.0f) { baseH = 70.0f; baseW = baseH * canvasAspect; }
-    if (baseW < 15.0f) { baseW = 15.0f; baseH = baseW / canvasAspect; }
-    if (baseH < 15.0f) { baseH = 15.0f; baseW = baseH * canvasAspect; }
+    // Base canvas size for preview. The bounded aspect ratio keeps the derived
+    // height between 15 and 70 pixels.
+    float baseW = std::clamp(50.0f * canvasAspect, 15.0f, 80.0f);
+    float baseH = baseW / canvasAspect;
 
     // Three viewport configurations: reference, wider, taller
     float vpW[3] = { baseW * 1.15f, baseW * 1.8f,  baseW * 0.55f };
@@ -216,16 +324,19 @@ void ProjectSettingsWindow::show() {
 
     ImGui::OpenPopup("Project Settings##ProjectSettingsModal");
 
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 center = viewport->GetWorkCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSizeConstraints(
-        ImVec2(600, 0),
-        ImVec2(600, ImGui::GetMainViewport()->WorkSize.y * 0.9f)
+    ImVec2 size(
+        std::min(dialogWidth, viewport->WorkSize.x * 0.9f),
+        std::min(dialogHeight, viewport->WorkSize.y * 0.9f)
     );
+    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings |
                              ImGuiWindowFlags_Modal |
-                             ImGuiWindowFlags_AlwaysAutoResize;
+                             ImGuiWindowFlags_NoResize |
+                             noScrollFlags;
 
     bool popupOpen = ImGui::BeginPopupModal("Project Settings##ProjectSettingsModal", &m_isOpen, flags);
 
@@ -240,382 +351,230 @@ void ProjectSettingsWindow::show() {
 }
 
 void ProjectSettingsWindow::drawSettings() {
-    ImGui::PushItemWidth(-1);
-    ImGui::BeginTable("project_settings", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp);
-    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 160);
-    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float footerY = ImGui::GetWindowHeight() - style.WindowPadding.y - ImGui::GetFrameHeight();
+    float tabRegionHeight = std::max(1.0f, footerY - style.ItemSpacing.y - ImGui::GetCursorPosY());
 
-    // Canvas width row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Canvas Width");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputInt("##CanvasWidth", &m_canvasWidth);
-        if (m_canvasWidth < 1) m_canvasWidth = 1;
-    }
+    ImGui::BeginChild(
+        "##ProjectSettingsTabRegion",
+        ImVec2(0, tabRegionHeight),
+        ImGuiChildFlags_None,
+        noScrollFlags
+    );
 
-    // Canvas height row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Canvas Height");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputInt("##CanvasHeight", &m_canvasHeight);
-        if (m_canvasHeight < 1) m_canvasHeight = 1;
-    }
-
-    // Scaling mode row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Scaling Mode");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##ScalingMode", scalingModeNames[m_scalingModeIndex])) {
-            for (int i = 0; i < scalingModeCount; i++) {
-                bool isSelected = (m_scalingModeIndex == i);
-                if (ImGui::Selectable(scalingModeNames[i], isSelected)) {
-                    m_scalingModeIndex = i;
-                }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
+    if (ImGui::BeginTabBar("##ProjectSettingsTabs", ImGuiTabBarFlags_FittingPolicyShrink)) {
+        if (ImGui::BeginTabItem("General")) {
+            drawGeneralSettings();
+            ImGui::EndTabItem();
         }
+
+        if (ImGui::BeginTabItem("Canvas")) {
+            drawCanvasSettings();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Window")) {
+            drawWindowSettings();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Directories")) {
+            drawDirectoriesSettings();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Build")) {
+            drawBuildSettings();
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::EndChild();
+
+    ImGui::SetCursorPos(ImVec2(style.WindowPadding.x, footerY - style.ItemSpacing.y));
+    ImGui::Separator();
+
+    float footerWidth = std::max(1.0f, ImGui::GetWindowWidth() - style.WindowPadding.x * 2.0f);
+    float buttonWidth = std::clamp((footerWidth - style.ItemSpacing.x) * 0.5f, 1.0f, settingsButtonWidth);
+    float buttonsWidth = buttonWidth * 2.0f + style.ItemSpacing.x;
+    float buttonX = style.WindowPadding.x + std::max(0.0f, (footerWidth - buttonsWidth) * 0.5f);
+    ImGui::SetCursorPos(ImVec2(buttonX, footerY));
+
+    if (ImGui::Button("OK", ImVec2(buttonWidth, 0))) {
+        applySettings();
+        m_isOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+        m_isOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+}
+
+void ProjectSettingsWindow::drawGeneralSettings() {
+    drawSettingsPanel("##GeneralSettingsPanel", [this]() {
+        beginSettingsRow("Start Scene");
+
+        const auto& scenes = m_project->getScenes();
+        if (scenes.empty()) return;
+
+        if (m_startSceneIndex < 0 || m_startSceneIndex >= static_cast<int>(scenes.size())) {
+            m_startSceneIndex = 0;
+        }
+
+        ImGui::SetNextItemWidth(-1);
+        if (!ImGui::BeginCombo("##StartScene", scenes[m_startSceneIndex].name.c_str())) return;
+
+        for (int i = 0; i < static_cast<int>(scenes.size()); i++) {
+            bool selected = m_startSceneIndex == i;
+            if (ImGui::Selectable(scenes[i].name.c_str(), selected)) m_startSceneIndex = i;
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    });
+}
+
+void ProjectSettingsWindow::drawCanvasSettings() {
+    drawSettingsPanel("##CanvasSettingsPanel", [this]() {
+        drawPositiveIntSetting("Canvas Width", "##CanvasWidth", m_canvasWidth);
+        drawPositiveIntSetting("Canvas Height", "##CanvasHeight", m_canvasHeight);
+
+        beginSettingsRow("Scaling Mode");
+        drawCombo("##ScalingMode", scalingModeNames, scalingModeCount, m_scalingModeIndex);
         ImGui::Spacing();
         drawScalingPreview(scalingModeValues[m_scalingModeIndex], m_canvasWidth, m_canvasHeight);
-    }
 
-    // Texture strategy row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Texture Strategy");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##TextureStrategy", textureStrategyNames[m_textureStrategyIndex])) {
-            for (int i = 0; i < textureStrategyCount; i++) {
-                bool isSelected = (m_textureStrategyIndex == i);
-                if (ImGui::Selectable(textureStrategyNames[i], isSelected)) {
-                    m_textureStrategyIndex = i;
-                }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-    }
+        beginSettingsRow("Texture Strategy");
+        drawCombo("##TextureStrategy", textureStrategyNames, textureStrategyCount, m_textureStrategyIndex);
+    });
+}
 
-    // VSync row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("VSync");
-    ImGui::SetItemTooltip("Synchronize Play mode and supported desktop builds to the display refresh rate. macOS Metal exports remain synchronized.");
-    ImGui::TableNextColumn();
-    ImGui::Checkbox("##VSync", &m_vsyncEnabled);
+void ProjectSettingsWindow::drawWindowSettings() {
+    drawSettingsPanel("##WindowSettingsPanel", [this]() {
+        beginSettingsRow("Window Mode", "Initial window state of desktop builds. Web and mobile ignore window settings.");
+        drawCombo("##WindowMode", windowModeNames, windowModeCount, m_windowModeIndex);
 
-    // Window mode row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Window Mode");
-    ImGui::SetItemTooltip("Initial window state of desktop builds. Web and mobile ignore window settings.");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##WindowMode", windowModeNames[m_windowModeIndex])) {
-            for (int i = 0; i < windowModeCount; i++) {
-                bool isSelected = (m_windowModeIndex == i);
-                if (ImGui::Selectable(windowModeNames[i], isSelected)) {
-                    m_windowModeIndex = i;
-                }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-    }
+        drawPositiveIntSetting("Window Width", "##WindowWidth", m_windowWidth);
+        drawPositiveIntSetting("Window Height", "##WindowHeight", m_windowHeight);
 
-    // Window width row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Window Width");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputInt("##WindowWidth", &m_windowWidth);
-        if (m_windowWidth < 1) m_windowWidth = 1;
-    }
+        beginSettingsRow("Window Resizable", "Applies to desktop builds. Exported Windows and macOS builds are always resizable.");
+        ImGui::Checkbox("##WindowResizable", &m_windowResizable);
 
-    // Window height row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Window Height");
-    ImGui::TableNextColumn();
-    {
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputInt("##WindowHeight", &m_windowHeight);
-        if (m_windowHeight < 1) m_windowHeight = 1;
-    }
-
-    // Window resizable row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Window Resizable");
-    ImGui::SetItemTooltip("Applies to desktop builds. Exported Windows and macOS builds are always resizable.");
-    ImGui::TableNextColumn();
-    ImGui::Checkbox("##WindowResizable", &m_windowResizable);
-
-    // Window title row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Window Title");
-    ImGui::TableNextColumn();
-    {
+        beginSettingsRow("Window Title");
         std::string titleHint = m_project->getName().empty() ? "Doriax" : m_project->getName();
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##WindowTitle", titleHint.c_str(), m_windowTitleBuffer, sizeof(m_windowTitleBuffer));
-    }
 
-    // Start scene row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Start Scene");
-    ImGui::TableNextColumn();
-    {
-        const auto& scenes = m_project->getScenes();
-        if (!scenes.empty()) {
-            if (m_startSceneIndex < 0 || m_startSceneIndex >= (int)scenes.size()) {
-                m_startSceneIndex = 0;
-            }
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::BeginCombo("##StartScene", scenes[m_startSceneIndex].name.c_str())) {
-                for (int i = 0; i < (int)scenes.size(); i++) {
-                    bool isSelected = (m_startSceneIndex == i);
-                    if (ImGui::Selectable(scenes[i].name.c_str(), isSelected)) {
-                        m_startSceneIndex = i;
-                    }
-                    if (isSelected) {
-                        ImGui::SetItemDefaultFocus();
-                    }
-                }
-                ImGui::EndCombo();
-            }
+        beginSettingsRow("VSync", "Synchronize Play mode and supported desktop builds to the display refresh rate. macOS Metal exports remain synchronized.");
+        ImGui::Checkbox("##VSync", &m_vsyncEnabled);
+    });
+}
+
+void ProjectSettingsWindow::drawDirectoriesSettings() {
+    drawSettingsPanel("##DirectoriesSettingsPanel", [this]() {
+        drawDirectorySetting(
+            m_project, "Assets Directory", nullptr, "##AssetsPath", "Browse##assets",
+            m_assetsDir, fs::path(".")
+        );
+        drawDirectorySetting(
+            m_project, "Lua Directory", nullptr, "##LuaPath", "Browse##lua",
+            m_luaDir, fs::path("."), true
+        );
+        drawDirectorySetting(
+            m_project, "Shader Binaries Directory", "Where compiled .sdat shaders are written/loaded (engine-facing).",
+            "##ShadersPath", "Browse##shaders", m_shadersDir, fs::path("shaders")
+        );
+        drawDirectorySetting(
+            m_project, "Shader Sources Directory", "Where forked shader sources (.vert/.frag/.glsl) are stored. Editor-only; the engine never reads it.",
+            "##ShaderSourcesPath", "Browse##shadersources", m_shaderSourcesDir, fs::path("shaders")
+        );
+    });
+}
+
+void ProjectSettingsWindow::drawBuildSettings() {
+    drawSettingsPanel("##BuildSettingsPanel", [this]() {
+        beginSettingsRow("Compiler");
+
+        if (m_cmakeKitIndex < 0 || m_cmakeKitIndex > static_cast<int>(m_availableKits.size())) {
+            m_cmakeKitIndex = 0;
         }
-    }
 
-    // Assets directory row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Assets Directory");
-    ImGui::TableNextColumn();
-    {
-        float browseWidth = ImGui::CalcTextSize("Browse").x + ImGui::GetStyle().FramePadding.x * 2;
-        float inputWidth = ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x;
+        const char* currentLabel = m_cmakeKitIndex == 0
+            ? "Default"
+            : m_availableKits[m_cmakeKitIndex - 1].displayName.c_str();
 
-        Vector2 pathSize = Vector2(inputWidth, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
-        fs::path assetsDisplay = (m_assetsDir.empty() || m_assetsDir == ".") ? fs::path("<Project root>") : m_assetsDir;
-        Widgets::pathDisplay("##AssetsPath", assetsDisplay, pathSize);
-
-        ImGui::SameLine();
-        if (ImGui::Button("Browse##assets")) {
-            std::string defaultPath = m_project ? m_project->getProjectPath().string() : "";
-            std::string selectedPath = FileDialogs::openFileDialog(defaultPath, FILE_DIALOG_ALL, true);
-            if (!selectedPath.empty()) {
-                std::error_code ec;
-                fs::path relPath = fs::relative(fs::path(selectedPath), m_project->getProjectPath(), ec);
-                m_assetsDir = (ec || relPath.empty()) ? fs::path(".") : relPath;
-            }
-        }
-    }
-
-    // Lua directory row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Lua Directory");
-    ImGui::TableNextColumn();
-    {
-        float browseWidth = ImGui::CalcTextSize("Browse").x + ImGui::GetStyle().FramePadding.x * 2;
-        float inputWidth = ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x;
-
-        Vector2 pathSize = Vector2(inputWidth, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
-        fs::path luaDisplay = (m_luaDir.empty() || m_luaDir == ".") ? fs::path("<Project root>") : m_luaDir;
-        Widgets::pathDisplay("##LuaPath", luaDisplay, pathSize);
-
-        ImGui::SameLine();
-        if (ImGui::Button("Browse##lua")) {
-            std::string defaultPath = m_project ? m_project->getProjectPath().string() : "";
-            std::string selectedPath = FileDialogs::openFileDialog(defaultPath, FILE_DIALOG_ALL, true);
-            if (!selectedPath.empty()) {
-                std::error_code ec;
-                fs::path relPath = fs::relative(fs::path(selectedPath), m_project->getProjectPath(), ec);
-                m_luaDir = (ec || relPath.empty()) ? fs::path(selectedPath) : relPath;
-            }
-        }
-    }
-
-    // Shaders directory row (compiled .sdat output the engine/runtime loads)
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Shader Binaries Directory");
-    ImGui::SetItemTooltip("Where compiled .sdat shaders are written/loaded (engine-facing).");
-    ImGui::TableNextColumn();
-    {
-        float browseWidth = ImGui::CalcTextSize("Browse").x + ImGui::GetStyle().FramePadding.x * 2;
-        float inputWidth = ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x;
-
-        Vector2 pathSize = Vector2(inputWidth, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
-        fs::path shadersDisplay = m_shadersDir.empty() ? fs::path("shaders")
-                                : (m_shadersDir == "." ? fs::path("<Project root>") : m_shadersDir);
-        Widgets::pathDisplay("##ShadersPath", shadersDisplay, pathSize);
-
-        ImGui::SameLine();
-        if (ImGui::Button("Browse##shaders")) {
-            std::string defaultPath = m_project ? m_project->getProjectPath().string() : "";
-            std::string selectedPath = FileDialogs::openFileDialog(defaultPath, FILE_DIALOG_ALL, true);
-            if (!selectedPath.empty()) {
-                std::error_code ec;
-                fs::path relPath = fs::relative(fs::path(selectedPath), m_project->getProjectPath(), ec);
-                m_shadersDir = (ec || relPath.empty()) ? fs::path("shaders") : relPath;
-            }
-        }
-    }
-
-    // Shader sources directory row (editor-only; .vert/.frag/.glsl forks)
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Shader Sources Directory");
-    ImGui::SetItemTooltip("Where forked shader sources (.vert/.frag/.glsl) are stored. Editor-only; the engine never reads it.");
-    ImGui::TableNextColumn();
-    {
-        float browseWidth = ImGui::CalcTextSize("Browse").x + ImGui::GetStyle().FramePadding.x * 2;
-        float inputWidth = ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x;
-
-        Vector2 pathSize = Vector2(inputWidth, ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2);
-        fs::path sourcesDisplay = m_shaderSourcesDir.empty() ? fs::path("shaders")
-                                : (m_shaderSourcesDir == "." ? fs::path("<Project root>") : m_shaderSourcesDir);
-        Widgets::pathDisplay("##ShaderSourcesPath", sourcesDisplay, pathSize);
-
-        ImGui::SameLine();
-        if (ImGui::Button("Browse##shadersources")) {
-            std::string defaultPath = m_project ? m_project->getProjectPath().string() : "";
-            std::string selectedPath = FileDialogs::openFileDialog(defaultPath, FILE_DIALOG_ALL, true);
-            if (!selectedPath.empty()) {
-                std::error_code ec;
-                fs::path relPath = fs::relative(fs::path(selectedPath), m_project->getProjectPath(), ec);
-                m_shaderSourcesDir = (ec || relPath.empty()) ? fs::path("shaders") : relPath;
-            }
-        }
-    }
-
-    // CMake Kit row
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Compiler");
-    ImGui::TableNextColumn();
-    {
         ImGui::SetNextItemWidth(-1);
-        const char* currentLabel = (m_cmakeKitIndex == 0) ? "Default" : m_availableKits[m_cmakeKitIndex - 1].displayName.c_str();
         if (ImGui::BeginCombo("##CMakeKit", currentLabel)) {
-            bool isSelected = (m_cmakeKitIndex == 0);
-            if (ImGui::Selectable("Default", isSelected)) {
-                m_cmakeKitIndex = 0;
-            }
-            if (isSelected) {
-                ImGui::SetItemDefaultFocus();
-            }
+            bool selected = m_cmakeKitIndex == 0;
+            if (ImGui::Selectable("Default", selected)) m_cmakeKitIndex = 0;
+            if (selected) ImGui::SetItemDefaultFocus();
+
             for (size_t i = 0; i < m_availableKits.size(); i++) {
                 const auto& kit = m_availableKits[i];
                 if (!kit.available) {
                     ImGui::BeginDisabled();
                     ImGui::Selectable((kit.displayName + "  (unavailable)").c_str(), false);
                     ImGui::EndDisabled();
-                    // Disabled items don't register hover by default; AllowWhenDisabled
-                    // lets us show a tooltip explaining why the kit can't be used.
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                        ImGui::BeginTooltip();
-                        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
-                        ImGui::TextUnformatted(kit.unavailableReason.c_str());
-                        ImGui::PopTextWrapPos();
-                        ImGui::EndTooltip();
-                    }
+                    showDisabledItemTooltip(kit.unavailableReason);
                     continue;
                 }
-                isSelected = (m_cmakeKitIndex == static_cast<int>(i + 1));
-                if (ImGui::Selectable(kit.displayName.c_str(), isSelected)) {
+
+                selected = m_cmakeKitIndex == static_cast<int>(i + 1);
+                if (ImGui::Selectable(kit.displayName.c_str(), selected)) {
                     m_cmakeKitIndex = static_cast<int>(i + 1);
                 }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
+                if (selected) ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
-        if (m_cmakeKitIndex > 0) {
-            const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
-            // MSVC kits carry no explicit compiler path (CMake selects cl.exe itself),
-            // so only show the paths when a kit actually specifies them.
-            if (!kit.cCompiler.empty() || !kit.cxxCompiler.empty()) {
-                ImGui::TextDisabled("C: %s  CXX: %s", kit.cCompiler.c_str(), kit.cxxCompiler.c_str());
-            }
-        }
+
+        if (m_cmakeKitIndex == 0) return;
+
+        const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
+        if (kit.cCompiler.empty() && kit.cxxCompiler.empty()) return;
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("C: %s\nCXX: %s", kit.cCompiler.c_str(), kit.cxxCompiler.c_str());
+        ImGui::PopStyleColor();
+    });
+}
+
+void ProjectSettingsWindow::applySettings() {
+    m_project->setCanvasSize(m_canvasWidth, m_canvasHeight);
+    m_project->setScalingMode(scalingModeValues[m_scalingModeIndex]);
+    m_project->setTextureStrategy(textureStrategyValues[m_textureStrategyIndex]);
+    m_project->setVSyncEnabled(m_vsyncEnabled);
+    m_project->setWindowMode(windowModeValues[m_windowModeIndex]);
+    m_project->setWindowSize(m_windowWidth, m_windowHeight);
+    m_project->setWindowResizable(m_windowResizable);
+
+    // The edit buffer truncates long titles. Preserve an untouched title that
+    // is longer than the buffer instead of writing back the truncated value.
+    if (m_windowTitleBuffer != m_windowTitleOriginal.substr(0, sizeof(m_windowTitleBuffer) - 1)) {
+        m_project->setWindowTitle(m_windowTitleBuffer);
     }
 
-    ImGui::EndTable();
-    ImGui::PopItemWidth();
+    m_project->setAssetsDir(m_assetsDir);
+    m_project->setLuaDir(m_luaDir);
+    m_project->setShadersDir(m_shadersDir);
+    m_project->setShaderSourcesDir(m_shaderSourcesDir);
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    // --- Buttons ---
-    float windowWidth = ImGui::GetWindowSize().x;
-    float buttonsWidth = 250;
-    ImGui::SetCursorPosX((windowWidth - buttonsWidth) * 0.5f);
-
-    if (ImGui::Button("OK", ImVec2(120, 0))) {
-        m_project->setCanvasSize(m_canvasWidth, m_canvasHeight);
-        m_project->setScalingMode(scalingModeValues[m_scalingModeIndex]);
-        m_project->setTextureStrategy(textureStrategyValues[m_textureStrategyIndex]);
-        m_project->setVSyncEnabled(m_vsyncEnabled);
-        m_project->setWindowMode(windowModeValues[m_windowModeIndex]);
-        m_project->setWindowSize(m_windowWidth, m_windowHeight);
-        m_project->setWindowResizable(m_windowResizable);
-        // The edit buffer truncates long titles; only write it back if the user
-        // actually changed it, so an untouched over-long title survives OK.
-        if (m_windowTitleBuffer != m_windowTitleOriginal.substr(0, sizeof(m_windowTitleBuffer) - 1)) {
-            m_project->setWindowTitle(m_windowTitleBuffer);
-        }
-        m_project->setAssetsDir(m_assetsDir);
-        m_project->setLuaDir(m_luaDir);
-        m_project->setShadersDir(m_shadersDir);
-        m_project->setShaderSourcesDir(m_shaderSourcesDir);
-        const auto& scenes = m_project->getScenes();
-        if (m_startSceneIndex >= 0 && m_startSceneIndex < (int)scenes.size()) {
-            m_project->setStartSceneId(scenes[m_startSceneIndex].id);
-        }
-        if (m_cmakeKitIndex > 0) {
-            const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
-            m_project->setCMakeKit(kit.cCompiler, kit.cxxCompiler, kit.generator);
-            // Remember the explicit choice so new (temp) projects inherit it.
-            AppSettings::setLastCMakeKit(kit.cCompiler, kit.cxxCompiler, kit.generator);
-        } else {
-            m_project->setCMakeKit("", "", "");
-            AppSettings::setLastCMakeKit("", "", "");
-        }
-        m_isOpen = false;
-        ImGui::CloseCurrentPopup();
+    const auto& scenes = m_project->getScenes();
+    if (m_startSceneIndex >= 0 && m_startSceneIndex < static_cast<int>(scenes.size())) {
+        m_project->setStartSceneId(scenes[m_startSceneIndex].id);
     }
 
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-        m_isOpen = false;
-        ImGui::CloseCurrentPopup();
+    if (m_cmakeKitIndex > 0) {
+        const auto& kit = m_availableKits[m_cmakeKitIndex - 1];
+        m_project->setCMakeKit(kit.cCompiler, kit.cxxCompiler, kit.generator);
+        AppSettings::setLastCMakeKit(kit.cCompiler, kit.cxxCompiler, kit.generator);
+    } else {
+        m_project->setCMakeKit("", "", "");
+        AppSettings::setLastCMakeKit("", "", "");
     }
 }
 
