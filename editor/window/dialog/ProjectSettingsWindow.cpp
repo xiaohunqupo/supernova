@@ -295,13 +295,15 @@ void ProjectSettingsWindow::open(Project* project) {
     m_shadersDir = project->getShadersDir();
     m_shaderSourcesDir = project->getShaderSourcesDir();
 
-    m_startSceneIndex = 0;
-    uint32_t savedStartSceneId = project->getStartSceneId();
-    const auto& scenes = project->getScenes();
-    for (int i = 0; i < (int)scenes.size(); i++) {
-        if (scenes[i].id == savedStartSceneId) {
-            m_startSceneIndex = i;
-            break;
+    m_startSceneId = project->getStartSceneId();
+    const SceneProject* startScene = project->getScene(m_startSceneId);
+    if (!startScene || startScene->filepath.empty()) {
+        m_startSceneId = NULL_PROJECT_SCENE;
+        for (const auto& scene : project->getScenes()) {
+            if (!scene.filepath.empty()) {
+                m_startSceneId = scene.id;
+                break;
+            }
         }
     }
 
@@ -420,18 +422,32 @@ void ProjectSettingsWindow::drawGeneralSettings() {
         beginSettingsRow("Start Scene");
 
         const auto& scenes = m_project->getScenes();
-        if (scenes.empty()) return;
+        const SceneProject* selectedScene = m_project->getScene(m_startSceneId);
+        if (!selectedScene || selectedScene->filepath.empty()) {
+            selectedScene = nullptr;
+            m_startSceneId = NULL_PROJECT_SCENE;
+            for (const auto& scene : scenes) {
+                if (!scene.filepath.empty()) {
+                    selectedScene = &scene;
+                    m_startSceneId = scene.id;
+                    break;
+                }
+            }
+        }
 
-        if (m_startSceneIndex < 0 || m_startSceneIndex >= static_cast<int>(scenes.size())) {
-            m_startSceneIndex = 0;
+        if (!selectedScene) {
+            ImGui::TextDisabled("No saved scenes");
+            return;
         }
 
         ImGui::SetNextItemWidth(-1);
-        if (!ImGui::BeginCombo("##StartScene", scenes[m_startSceneIndex].name.c_str())) return;
+        if (!ImGui::BeginCombo("##StartScene", selectedScene->name.c_str())) return;
 
-        for (int i = 0; i < static_cast<int>(scenes.size()); i++) {
-            bool selected = m_startSceneIndex == i;
-            if (ImGui::Selectable(scenes[i].name.c_str(), selected)) m_startSceneIndex = i;
+        for (const auto& scene : scenes) {
+            if (scene.filepath.empty()) continue;
+
+            bool selected = m_startSceneId == scene.id;
+            if (ImGui::Selectable(scene.name.c_str(), selected)) m_startSceneId = scene.id;
             if (selected) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
@@ -563,9 +579,11 @@ void ProjectSettingsWindow::applySettings() {
     m_project->setShadersDir(m_shadersDir);
     m_project->setShaderSourcesDir(m_shaderSourcesDir);
 
-    const auto& scenes = m_project->getScenes();
-    if (m_startSceneIndex >= 0 && m_startSceneIndex < static_cast<int>(scenes.size())) {
-        m_project->setStartSceneId(scenes[m_startSceneIndex].id);
+    const SceneProject* startScene = m_project->getScene(m_startSceneId);
+    if (startScene && !startScene->filepath.empty()) {
+        m_project->setStartSceneId(startScene->id);
+    } else {
+        m_project->setStartSceneId(NULL_PROJECT_SCENE);
     }
 
     if (m_cmakeKitIndex > 0) {

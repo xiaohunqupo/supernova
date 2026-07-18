@@ -19,13 +19,15 @@ void ExportWindow::open(Project* project) {
     m_assetsDirBuffer[sizeof(m_assetsDirBuffer) - 1] = '\0';
     strncpy(m_luaDirBuffer, m_luaDir.string().c_str(), sizeof(m_luaDirBuffer) - 1);
     m_luaDirBuffer[sizeof(m_luaDirBuffer) - 1] = '\0';
-    m_startSceneIndex = 0;
-    uint32_t savedStartSceneId = project->getStartSceneId();
-    const auto& startScenes = project->getScenes();
-    for (int i = 0; i < (int)startScenes.size(); i++) {
-        if (startScenes[i].id == savedStartSceneId) {
-            m_startSceneIndex = i;
-            break;
+    m_startSceneId = project->getStartSceneId();
+    const SceneProject* startScene = project->getScene(m_startSceneId);
+    if (!startScene || startScene->filepath.empty()) {
+        m_startSceneId = NULL_PROJECT_SCENE;
+        for (const auto& scene : project->getScenes()) {
+            if (!scene.filepath.empty()) {
+                m_startSceneId = scene.id;
+                break;
+            }
         }
     }
     m_selectedShaderIndex = -1;
@@ -220,16 +222,28 @@ void ExportWindow::drawSettings() {
     ImGui::TableNextColumn();
     {
         const auto& scenes = m_project->getScenes();
-        if (!scenes.empty()) {
-            if (m_startSceneIndex < 0 || m_startSceneIndex >= (int)scenes.size()) {
-                m_startSceneIndex = 0;
+        const SceneProject* selectedScene = m_project->getScene(m_startSceneId);
+        if (!selectedScene || selectedScene->filepath.empty()) {
+            selectedScene = nullptr;
+            m_startSceneId = NULL_PROJECT_SCENE;
+            for (const auto& scene : scenes) {
+                if (!scene.filepath.empty()) {
+                    selectedScene = &scene;
+                    m_startSceneId = scene.id;
+                    break;
+                }
             }
+        }
+
+        if (selectedScene) {
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::BeginCombo("##StartScene", scenes[m_startSceneIndex].name.c_str())) {
-                for (int i = 0; i < (int)scenes.size(); i++) {
-                    bool isSelected = (m_startSceneIndex == i);
-                    if (ImGui::Selectable(scenes[i].name.c_str(), isSelected)) {
-                        m_startSceneIndex = i;
+            if (ImGui::BeginCombo("##StartScene", selectedScene->name.c_str())) {
+                for (const auto& scene : scenes) {
+                    if (scene.filepath.empty()) continue;
+
+                    bool isSelected = m_startSceneId == scene.id;
+                    if (ImGui::Selectable(scene.name.c_str(), isSelected)) {
+                        m_startSceneId = scene.id;
                     }
                     if (isSelected) {
                         ImGui::SetItemDefaultFocus();
@@ -237,6 +251,8 @@ void ExportWindow::drawSettings() {
                 }
                 ImGui::EndCombo();
             }
+        } else {
+            ImGui::TextDisabled("No saved scenes");
         }
     }
 
@@ -321,7 +337,18 @@ void ExportWindow::drawSettings() {
         canExport = false;
     }
 
-    if (m_shaderEntries.empty()) {
+    bool hasSavedScenes = false;
+    for (const auto& scene : m_project->getScenes()) {
+        if (!scene.filepath.empty()) {
+            hasSavedScenes = true;
+            break;
+        }
+    }
+
+    if (!hasSavedScenes) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), ICON_FA_TRIANGLE_EXCLAMATION " No saved scenes in project");
+        canExport = false;
+    } else if (m_shaderEntries.empty()) {
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), ICON_FA_TRIANGLE_EXCLAMATION " No shaders in list");
     }
 
@@ -350,9 +377,9 @@ void ExportWindow::drawSettings() {
         }
 
         // Set start scene
-        const auto& scenes = m_project->getScenes();
-        if (m_startSceneIndex >= 0 && m_startSceneIndex < (int)scenes.size()) {
-            exportConfig.startSceneId = scenes[m_startSceneIndex].id;
+        const SceneProject* startScene = m_project->getScene(m_startSceneId);
+        if (startScene && !startScene->filepath.empty()) {
+            exportConfig.startSceneId = startScene->id;
             m_project->setStartSceneId(exportConfig.startSceneId);
         }
 

@@ -27,7 +27,7 @@ namespace doriax::editor {
         bool m_windowResizable = true;
         char m_windowTitleBuffer[256] = {0};
         std::string m_windowTitleOriginal;
-        int m_startSceneIndex = 0;
+        uint32_t m_startSceneId = NULL_PROJECT_SCENE;
         fs::path m_assetsDir;
         fs::path m_luaDir;
         fs::path m_shadersDir;

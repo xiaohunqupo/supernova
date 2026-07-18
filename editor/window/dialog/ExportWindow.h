@@ -28,7 +28,7 @@ namespace doriax::editor {
         fs::path m_luaDir;
 
         // Start scene
-        int m_startSceneIndex = 0;
+        uint32_t m_startSceneId = NULL_PROJECT_SCENE;
 
         // Shader list: each entry is a shader to export
         struct ShaderEntry {
