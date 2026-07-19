@@ -1744,6 +1744,19 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
                         }
                     }
                     insertKeys(ShaderType::MESH, meshProperties, customShaderId);
+                    // The runtime only computes depthShaderProperties while
+                    // shadows or SSAO are active, so the stored value can be a
+                    // stale 0 for scenes whose shadow lights arrive at runtime
+                    // (scripts spawning them). Derive the props from the same
+                    // submesh flags RenderSystem::loadMesh uses, and keep the
+                    // stored key too (identical when it was computed).
+                    bool isTerrain = signature.test(scene->getComponentId<TerrainComponent>());
+                    bool isInstanced = signature.test(scene->getComponentId<InstancedMeshComponent>());
+                    uint32_t depthProperties = ShaderPool::getDepthMeshProperties(
+                        mesh.submeshes[s].textureShadow, mesh.submeshes[s].hasSkinning,
+                        mesh.submeshes[s].hasMorphTarget, mesh.submeshes[s].hasMorphNormal,
+                        mesh.submeshes[s].hasMorphTangent, isTerrain, isInstanced);
+                    keys.insert(ShaderPool::getShaderKey(ShaderType::DEPTH, depthProperties));
                     keys.insert(ShaderPool::getShaderKey(ShaderType::DEPTH, mesh.submeshes[s].depthShaderProperties));
                     if (mesh.submeshes[s].gbufferShader) {
                         keys.insert(ShaderPool::getShaderKey(ShaderType::GBUFFER, mesh.submeshes[s].gbufferShaderProperties));
@@ -1794,6 +1807,20 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
 
     if (scene->isFixedResolutionEnabled()) {
         keys.insert(ShaderPool::getShaderKey(ShaderType::BLIT, 0));
+    }
+
+    // 2D lights with shadows render occluder segments through the shadow2d
+    // pass. The runtime additionally gates on an enabled Occluder2D existing
+    // (RenderSystem::loadLights2D), but scripts can spawn occluders at runtime,
+    // so a shadow-casting light alone is enough to require the shader.
+    {
+        auto lights2d = scene->getComponentArray<Light2DComponent>();
+        for (int i = 0; i < (int)lights2d->size(); i++) {
+            if (lights2d->getComponentFromIndex(i).shadows) {
+                keys.insert(ShaderPool::getShaderKey(ShaderType::SHADOW2D, 0));
+                break;
+            }
+        }
     }
 }
 

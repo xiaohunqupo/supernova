@@ -30,104 +30,13 @@
 
 using namespace doriax;
 
-namespace {
-    constexpr std::chrono::milliseconds kReadSleepMs{10};
-    constexpr std::chrono::milliseconds kKillGracePeriod{100};
-
-#ifdef _WIN32
-    // Run "cmd.exe /c <command>" and capture its output WITHOUT flashing a console
-    // window. The editor is a GUI app with no console of its own, so _popen() and
-    // system() each briefly pop up a cmd.exe window; CreateProcess with
-    // CREATE_NO_WINDOW avoids that flicker. Returns the captured output (stdout, plus
-    // stderr unless the command redirects it) with trailing whitespace trimmed.
-    std::string runCaptureNoWindow(const std::string& command) {
-        SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
-        HANDLE hRead = nullptr, hWrite = nullptr;
-        if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return "";
-        SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
-
-        STARTUPINFOA si{};
-        si.cb = sizeof(si);
-        si.dwFlags = STARTF_USESTDHANDLES;
-        si.hStdOutput = hWrite;
-        si.hStdError = hWrite;
-
-        PROCESS_INFORMATION pi{};
-        std::string cmdLine = "cmd.exe /c " + command;
-        if (!CreateProcessA(nullptr, cmdLine.data(), nullptr, nullptr, TRUE,
-                            CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-            CloseHandle(hRead);
-            CloseHandle(hWrite);
-            return "";
-        }
-        CloseHandle(hWrite);
-
-        std::string result;
-        char buffer[4096];
-        DWORD bytesRead = 0;
-        // Read until the child closes its end of the pipe (i.e. exits); reading
-        // concurrently avoids a deadlock if output exceeds the pipe buffer.
-        while (ReadFile(hRead, buffer, sizeof(buffer), &bytesRead, nullptr) && bytesRead > 0) {
-            result.append(buffer, bytesRead);
-        }
-        CloseHandle(hRead);
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' '))
-            result.pop_back();
-        return result;
-    }
-
-    std::string findVswherePath() {
-        auto tryEnv = [](const char* envVar) -> std::string {
-            const char* pf = std::getenv(envVar);
-            if (!pf) return "";
-            fs::path p = fs::path(pf) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe";
-            if (fs::exists(p)) return p.string();
-            return "";
-        };
-        std::string result = tryEnv("ProgramFiles(x86)");
-        if (result.empty()) result = tryEnv("ProgramFiles");
-        return result;
-    }
-
-    std::string vsInstallationPath() {
-        std::string vswhere = findVswherePath();
-        if (vswhere.empty()) return "";
-        return runCaptureNoWindow("\"" + vswhere + "\" -products * -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>nul");
-    }
-
-    bool hasVSWithCppTools() {
-        return !vsInstallationPath().empty();
-    }
-
-    // Path to vcvarsall.bat for the latest VS install with C++ tools, or "".
-    std::string findVcvarsall() {
-        std::string installPath = vsInstallationPath();
-        if (installPath.empty()) return "";
-        fs::path vcvars = fs::path(installPath) / "VC" / "Auxiliary" / "Build" / "vcvarsall.bat";
-        std::error_code ec;
-        if (fs::exists(vcvars, ec)) return vcvars.string();
-        return "";
-    }
-#endif
-}
-
 fs::path editor::Generator::getGeneratedPath(const fs::path& projectInternalPath) {
     return projectInternalPath / "generated";
 }
 
 editor::Generator::Generator() :
-    lastBuildSucceeded(false),
-    cancelRequested(false)
+    lastBuildSucceeded(false)
 {
-#ifdef _WIN32
-    currentProcessHandle = NULL;
-#else
-    currentProcessPid = 0;
-#endif
 }
 
 editor::Generator::~Generator() {
@@ -221,30 +130,6 @@ bool editor::Generator::clearStaleCMakeCache(const fs::path& projectPath, const 
         return cleanBuildDirectory(buildPath);
     }
     return true;
-}
-
-std::string editor::Generator::msvcEnvPrefix(const std::string& generator) {
-#ifdef _WIN32
-    // Ninja (unlike the Visual Studio generator) runs the compiler directly and
-    // does NOT set up the MSVC toolchain environment. A standalone Clang or MSVC
-    // toolchain then cannot find the Windows SDK and CRT import libraries, so
-    // linking fails with errors like "could not open 'kernel32.lib'". Loading
-    // vcvars populates INCLUDE/LIB/PATH so the SDK is found. The Visual Studio
-    // generator configures this itself, and MinGW must not use MSVC's env.
-    if (generator == "Ninja") {
-        std::string vcvars = findVcvarsall();
-        if (!vcvars.empty()) {
-            // Do NOT suppress vcvars output: when it cannot find the Windows SDK
-            // it prints "[ERROR:...]" diagnostics that are essential for
-            // troubleshooting missing '*.lib' link failures. The banner is a
-            // few harmless lines on success.
-            return "call \"" + vcvars + "\" x64 && ";
-        }
-        Out::warning("Could not locate the Visual Studio environment (vcvarsall.bat). If linking fails with missing '*.lib' files, run the editor from a Developer Command Prompt or install the Windows SDK with Visual Studio.");
-    }
-#endif
-    (void)generator;
-    return "";
 }
 
 void editor::Generator::resolveDefaultKit(std::string& cCompiler, std::string& cxxCompiler, std::string& generator) {
@@ -441,7 +326,7 @@ bool editor::Generator::configureCMake(const fs::path& projectPath, const fs::pa
     cmakeCommand += "-DDORIAX_LIB_DIR=\"" + toCMakePath(exePath.string()) + "\"";
 
     Out::info("Configuring CMake project with command: %s", cmakeCommand.c_str());
-    bool result = runCommand(msvcEnvPrefix(generator) + cmakeCommand, projectPath);
+    bool result = runCommand(CommandRunner::msvcEnvPrefix(generator) + cmakeCommand, projectPath);
 
     // Record which kit was used so we can detect changes next time.
     if (result) {
@@ -477,277 +362,12 @@ bool editor::Generator::buildProject(const fs::path& projectPath, const fs::path
     buildCommand += " --parallel " + std::to_string(parallelJobs);
     Out::info("Building project with %u parallel jobs...", parallelJobs);
     // The build step invokes the compiler/linker again, so it needs the same
-    // MSVC environment as configure (see msvcEnvPrefix).
-    return runCommand(msvcEnvPrefix(generator) + buildCommand, buildPath);
+    // MSVC environment as configure (see CommandRunner::msvcEnvPrefix).
+    return runCommand(CommandRunner::msvcEnvPrefix(generator) + buildCommand, buildPath);
 }
 
 bool editor::Generator::runCommand(const std::string& command, const fs::path& workingDir) {
-    cancelRequested.store(false, std::memory_order_relaxed);
-
-    #ifdef _WIN32
-        SECURITY_ATTRIBUTES sa{ sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE };
-        HANDLE hReadPipe = nullptr;
-        HANDLE hWritePipe = nullptr;
-        if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
-            Out::error("Failed to create pipe (Win32). Error code: %lu", GetLastError());
-            return false;
-        }
-        SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
-
-        STARTUPINFOA si{};
-        si.cb = sizeof(STARTUPINFOA);
-        si.dwFlags = STARTF_USESTDHANDLES;
-        si.hStdOutput = hWritePipe;
-        si.hStdError  = hWritePipe;
-        si.hStdInput  = nullptr;
-
-        PROCESS_INFORMATION pi{};
-        std::string cmdLine = "cmd.exe /c " + command;
-
-        if (!CreateProcessA(
-                nullptr,
-                cmdLine.data(),
-                nullptr,
-                nullptr,
-                TRUE,
-                CREATE_NO_WINDOW,
-                nullptr,
-                workingDir.empty() ? nullptr : workingDir.string().c_str(),
-                &si,
-                &pi))
-        {
-            DWORD err = GetLastError();
-            CloseHandle(hReadPipe);
-            CloseHandle(hWritePipe);
-            Out::error("Failed to create process. Error code: %lu", err);
-            return false;
-        }
-
-        CloseHandle(hWritePipe);
-
-        {
-            std::lock_guard<std::mutex> lock(processHandleMutex);
-            currentProcessHandle = pi.hProcess;
-        }
-
-        constexpr size_t BUFFER_SIZE = 4096;
-        char buffer[BUFFER_SIZE];
-        std::string accumulator;
-
-        auto drainPipe = [&]() {
-            DWORD bytesAvailable = 0;
-            while (PeekNamedPipe(hReadPipe, nullptr, 0, nullptr, &bytesAvailable, nullptr) && bytesAvailable > 0) {
-                DWORD bytesRead = 0;
-                if (!ReadFile(hReadPipe, buffer, static_cast<DWORD>(BUFFER_SIZE - 1), &bytesRead, nullptr) || bytesRead == 0) {
-                    break;
-                }
-
-                accumulator.append(buffer, bytesRead);
-
-                size_t pos = 0;
-                size_t nextPos = 0;
-                while ((nextPos = accumulator.find('\n', pos)) != std::string::npos) {
-                    std::string line = accumulator.substr(pos, nextPos - pos);
-                    if (!line.empty() && line.back() == '\r') {
-                        line.pop_back();
-                    }
-                    if (!line.empty()) {
-                        Out::build("%s", line.c_str());
-                    }
-                    pos = nextPos + 1;
-                }
-                accumulator.erase(0, pos);
-            }
-        };
-
-        DWORD exitCode = 1;
-        bool finished = false;
-
-        while (!finished) {
-            if (cancelRequested.load(std::memory_order_relaxed)) {
-                terminateCurrentProcess();
-                CloseHandle(pi.hThread);
-                {
-                    std::lock_guard<std::mutex> lock(processHandleMutex);
-                    currentProcessHandle = NULL;
-                }
-                CloseHandle(pi.hProcess);
-                CloseHandle(hReadPipe);  // Close pipe at the end
-                return false;
-            }
-
-            drainPipe();
-
-            DWORD waitResult = WaitForSingleObject(pi.hProcess, 50);
-            if (waitResult == WAIT_OBJECT_0) {
-                finished = true;
-                GetExitCodeProcess(pi.hProcess, &exitCode);
-            } else if (waitResult == WAIT_FAILED) {
-                finished = true;
-            } else {
-                std::this_thread::sleep_for(kReadSleepMs);
-            }
-        }
-
-        // The process can exit with output still buffered in the pipe — for a
-        // command that fails immediately that is ALL of its output. Drain it
-        // so errors are not silently dropped.
-        drainPipe();
-
-        if (!accumulator.empty()) {
-            Out::build("%s", accumulator.c_str());
-        }
-
-        if (exitCode != 0) {
-            Out::build("Process exited with code %lu", exitCode);
-        }
-
-        CloseHandle(hReadPipe);
-        CloseHandle(pi.hThread);
-
-        {
-            std::lock_guard<std::mutex> lock(processHandleMutex);
-            currentProcessHandle = NULL;
-        }
-        CloseHandle(pi.hProcess);
-
-        return exitCode == 0;
-    #else
-        int pipefd[2];
-        if (pipe(pipefd) != 0) {
-            Out::error("Failed to create pipe (POSIX): %s", strerror(errno));
-            return false;
-        }
-
-        // Make read end non-blocking
-        int flags = fcntl(pipefd[0], F_GETFL, 0);
-        fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
-
-        posix_spawn_file_actions_t actions;
-        posix_spawn_file_actions_init(&actions);
-        posix_spawn_file_actions_addclose(&actions, pipefd[0]);
-        posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
-        posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDERR_FILENO);
-        posix_spawn_file_actions_addclose(&actions, pipefd[1]);
-
-        pid_t pid = 0;
-        std::string workDirStr = workingDir.string();
-        std::string cdPrefix;
-        if (!workDirStr.empty()) {
-            cdPrefix = "cd \"" + workDirStr + "\" && ";
-        }
-        std::string shellCommand = cdPrefix + command;
-
-        char *argv[] = { const_cast<char*>("/bin/sh"),
-                        const_cast<char*>("-c"),
-                        const_cast<char*>(shellCommand.c_str()),
-                        nullptr };
-
-        int spawnResult = posix_spawn(&pid, "/bin/sh", &actions, nullptr, argv, environ);
-        posix_spawn_file_actions_destroy(&actions);
-        close(pipefd[1]);
-
-        if (spawnResult != 0) {
-            close(pipefd[0]);
-            Out::error("Failed to spawn process (POSIX): %s", strerror(spawnResult));
-            return false;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(processPidMutex);
-            currentProcessPid = pid;
-        }
-
-        constexpr size_t BUFFER_SIZE = 4096;
-        char buffer[BUFFER_SIZE];
-        bool processExited = false;
-
-        while (!processExited) {
-            // Check for cancellation
-            if (cancelRequested.load(std::memory_order_relaxed)) {
-                terminateCurrentProcess();
-                processExited = true;
-                break;
-            }
-
-            // Try to read with a short timeout
-            ssize_t bytesRead = read(pipefd[0], buffer, BUFFER_SIZE - 1);
-
-            if (bytesRead > 0) {
-                buffer[bytesRead] = '\0';
-                std::string line(buffer);
-                if (!line.empty() && line.back() == '\n') {
-                    line.pop_back();
-                }
-                if (!line.empty()) {
-                    Out::build("%s", line.c_str());
-                }
-            } else if (bytesRead == 0) {
-                // EOF - pipe closed
-                processExited = true;
-            } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // No data available, check process status
-                int status;
-                pid_t result = waitpid(pid, &status, WNOHANG);
-                if (result == pid) {
-                    processExited = true;
-                } else if (result == -1) {
-                    processExited = true;
-                }
-                // Sleep briefly to avoid busy-waiting
-                std::this_thread::sleep_for(kReadSleepMs);
-            } else {
-                // Read error
-                Out::error("Error reading from pipe: %s", strerror(errno));
-                processExited = true;
-            }
-        }
-
-        // The process can exit with output still buffered in the pipe — for a
-        // command that fails immediately that is ALL of its output. Drain it
-        // (non-blocking read) so errors are not silently dropped.
-        while (true) {
-            ssize_t bytesRead = read(pipefd[0], buffer, BUFFER_SIZE - 1);
-            if (bytesRead <= 0) break;
-            buffer[bytesRead] = '\0';
-            std::string line(buffer);
-            if (!line.empty() && line.back() == '\n') {
-                line.pop_back();
-            }
-            if (!line.empty()) {
-                Out::build("%s", line.c_str());
-            }
-        }
-
-        // Always close the pipe after the loop
-        close(pipefd[0]);
-
-        int status = 0;
-        while (waitpid(pid, &status, 0) == -1 && errno == EINTR) {
-            // retry on EINTR
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(processPidMutex);
-            currentProcessPid = 0;
-        }
-
-        if (cancelRequested.load(std::memory_order_relaxed)) {
-            return false;
-        }
-
-        if (WIFEXITED(status)) {
-            int code = WEXITSTATUS(status);
-            if (code != 0) {
-                Out::build("Process exited with code %d", code);
-            }
-            return code == 0;
-        }
-        if (WIFSIGNALED(status)) {
-            Out::warning("Process terminated by signal %d", WTERMSIG(status));
-        }
-        return false;
-    #endif
+    return commandRunner.run(command, workingDir);
 }
 
 std::string editor::Generator::getPlatformCMakeConfig(const WindowSettings& windowSettings) {
@@ -1223,35 +843,6 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     agentsContent += "- **Standalone mode** (`DORIAX_EDITOR_PLUGIN=OFF`, default): builds as an executable; includes `main.cpp` and all Factory sources. This standalone build is for local testing only — production distribution uses the editor's separate export pipeline.\n";
 
     FileUtils::writeIfChanged(agentsFile, agentsContent);
-}
-
-void editor::Generator::terminateCurrentProcess() {
-    #ifdef _WIN32
-        HANDLE handleSnapshot = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(processHandleMutex);
-            handleSnapshot = currentProcessHandle;
-        }
-        if (handleSnapshot) {
-            TerminateProcess(handleSnapshot, 1);
-        }
-    #else
-        pid_t pidSnapshot = 0;
-        {
-            std::lock_guard<std::mutex> lock(processPidMutex);
-            pidSnapshot = currentProcessPid;
-        }
-        if (pidSnapshot > 0) {
-            if (kill(pidSnapshot, SIGTERM) != 0 && errno != ESRCH) {
-                Out::warning("Failed to send SIGTERM to pid %d: %s", pidSnapshot, strerror(errno));
-            }
-
-            std::this_thread::sleep_for(kKillGracePeriod);
-            if (kill(pidSnapshot, 0) == 0) {
-                kill(pidSnapshot, SIGKILL);
-            }
-        }
-    #endif
 }
 
 std::vector<editor::BundleInstanceInfo> editor::Generator::writeBundleSources(const std::map<fs::path, EntityBundle>& entityBundles, uint32_t sceneId, const fs::path& projectPath, const fs::path& projectInternalPath) {
@@ -1887,7 +1478,7 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
 
     auto runCmd = [](const std::string& cmd) -> std::string {
 #ifdef _WIN32
-        return runCaptureNoWindow(cmd + " 2>nul");
+        return CommandRunner::runCaptureNoWindow(cmd + " 2>nul");
 #else
         FILE* pipe = popen((cmd + " 2>/dev/null").c_str(), "r");
         if (!pipe) return "";
@@ -2024,7 +1615,7 @@ std::vector<editor::CMakeKit> editor::Generator::detectAvailableKits() {
 #ifdef _WIN32
     // --- MSVC ---
     {
-        std::string vswhere = findVswherePath();
+        std::string vswhere = CommandRunner::findVswherePath();
         std::string vsName;
         if (!vswhere.empty()) {
             vsName = runCmd("\"" + vswhere + "\" -products * -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property displayName");
@@ -2055,7 +1646,7 @@ std::string editor::Generator::checkBuildTools() {
     auto commandExists = [](const char* cmd) -> bool {
         // `where` prints the path when found, nothing when not. Use the no-window
         // runner so this probe doesn't flash a cmd.exe window.
-        return !runCaptureNoWindow(std::string("where ") + cmd + " 2>nul").empty();
+        return !CommandRunner::runCaptureNoWindow(std::string("where ") + cmd + " 2>nul").empty();
     };
 #else
     auto commandExists = [](const char* cmd) -> bool {
@@ -2076,7 +1667,7 @@ std::string editor::Generator::checkBuildTools() {
 
     bool hasCompiler = false;
 #ifdef _WIN32
-    hasCompiler = commandExists("cl") || commandExists("g++") || commandExists("clang++") || hasVSWithCppTools();
+    hasCompiler = commandExists("cl") || commandExists("g++") || commandExists("clang++") || CommandRunner::hasVSWithCppTools();
 #elif defined(__APPLE__)
     hasCompiler = commandExists("clang++") || commandExists("g++");
 #else
@@ -2101,7 +1692,7 @@ void editor::Generator::build(const fs::path projectPath, const fs::path project
     waitForBuildToComplete();
 
     lastBuildSucceeded.store(false, std::memory_order_relaxed);
-    cancelRequested.store(false, std::memory_order_relaxed);
+    commandRunner.resetCancel();
 
     buildFuture = std::async(std::launch::async, [this, projectPath, buildPath, cCompiler, cxxCompiler, generator, parallelJobs]() {
         try {
@@ -2134,7 +1725,7 @@ void editor::Generator::build(const fs::path projectPath, const fs::path project
                 std::min(requestedOrAutomaticJobs, getMaxParallelBuildJobs());
 
             if (!configureCMake(projectPath, buildPath, configType, cc, cxx, gen, effectiveParallelJobs)) {
-                if (cancelRequested.load(std::memory_order_relaxed)) {
+                if (commandRunner.isCancelRequested()) {
                     Out::warning("Build configuration cancelled.");
                 } else {
                     Out::error("CMake configuration failed");
@@ -2144,7 +1735,7 @@ void editor::Generator::build(const fs::path projectPath, const fs::path project
             }
 
             if (!buildProject(projectPath, buildPath, configType, gen, effectiveParallelJobs)) {
-                if (cancelRequested.load(std::memory_order_relaxed)) {
+                if (commandRunner.isCancelRequested()) {
                     Out::warning("Build cancelled.");
                 } else {
                     Out::error("Build failed");
@@ -2185,17 +1776,15 @@ std::future<void> editor::Generator::cancelBuild() {
     return std::async(std::launch::async, [this]() {
         // Check if build is in progress inside the async task
         if (!isBuildInProgress()) {
-            cancelRequested.store(false, std::memory_order_relaxed);
+            commandRunner.resetCancel();
             return;
         }
 
         Out::warning("Cancelling build process...");
-        cancelRequested.store(true, std::memory_order_relaxed);
-
         // Attempt to terminate the running process, then wait for the build to complete.
-        terminateCurrentProcess();
+        commandRunner.cancel();
         waitForBuildToComplete();
-        cancelRequested.store(false, std::memory_order_relaxed);
+        commandRunner.resetCancel();
         lastBuildSucceeded.store(false, std::memory_order_relaxed);
         Out::warning("Build process cancelled.");
     });

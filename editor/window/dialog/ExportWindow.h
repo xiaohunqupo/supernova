@@ -15,8 +15,16 @@ namespace doriax::editor {
 
     class ExportWindow {
     private:
+        // Modal flow: pick a mode card, configure it, watch the export run.
+        enum class Step {
+            ModeSelect,
+            Settings,
+            Progress
+        };
+
         bool m_isOpen = false;
-        bool m_exporting = false;
+        Step m_step = Step::ModeSelect;
+        ExportMode m_mode = ExportMode::SourceCode;
         Project* m_project = nullptr;
 
         // UI state
@@ -45,7 +53,7 @@ namespace doriax::editor {
         int m_addShaderTypeIndex = 0;
         bool m_addShaderProps[32] = {};
 
-        // Platform selection
+        // Platform selection (Source Code mode only)
         struct PlatformEntry {
             Platform platform;
             std::string name;
@@ -53,13 +61,30 @@ namespace doriax::editor {
         };
         std::vector<PlatformEntry> m_platformEntries;
 
+        // Cached tool checks: both spawn processes, so never probe per-frame.
+        std::string m_emsdkOverride;           // mirrors AppSettings::getEmsdkPath()
+        EmsdkInfo m_emsdkInfo;
+        std::string m_missingBuildTools;       // Generator::checkBuildTools() result
+
         Exporter m_exporter;
 
         void populateShaderList();
         void populatePlatformList();
+        void refreshEmsdkStatus();
+        void selectMode(ExportMode mode);
+        void drawModeSelect();
+        bool drawModeCard(const char* id, const char* icon, const char* title, const char* description, const ImVec2& size);
         void drawSettings();
+        void drawOutputDirRow(const char* label);
+        void drawAssetsLuaRows();
+        void drawStartSceneRow();
+        void drawDesktopKitRows();
+        void drawEmsdkRow();
+        void drawShaderSection();
+        void drawPlatformSection();
         void drawProgress();
         void drawAddShaderDialog();
+        void startConfiguredExport();
 
     public:
         ExportWindow() = default;

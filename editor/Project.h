@@ -224,7 +224,6 @@ namespace doriax::editor{
         Entity createNewEntity(uint32_t sceneId, std::string entityName);
         bool createNewComponent(uint32_t sceneId, Entity entity, ComponentType component);
         void calculateSceneMaxValues(const SceneProject* sceneProject, SceneMaxValues& maxValues) const;
-        void collectSceneShaderKeys(const SceneProject* sceneProject, std::set<ShaderKey>& shaderKeys) const;
         void resetEngineConfigs(bool executeViewChanged);
         void resetConfigs();
 
@@ -288,6 +287,10 @@ namespace doriax::editor{
 
     public:
         Project();
+
+        // Live-derive the shader keys a scene needs from its current components
+        // (used at scene save and by the Export window's pre-populated list).
+        void collectSceneShaderKeys(const SceneProject* sceneProject, std::set<ShaderKey>& shaderKeys) const;
 
         std::string getName() const;
         void setName(std::string name);

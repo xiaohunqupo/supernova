@@ -13,6 +13,7 @@ std::filesystem::path AppSettings::lastProjectPath;
 std::string AppSettings::lastCMakeCCompiler;
 std::string AppSettings::lastCMakeCxxCompiler;
 std::string AppSettings::lastCMakeGenerator;
+std::string AppSettings::emsdkPath;
 int AppSettings::windowWidth = 1280;
 int AppSettings::windowHeight = 720;
 bool AppSettings::isMaximized = false;
@@ -73,6 +74,11 @@ bool AppSettings::loadSettings() {
             if (kitNode["c_compiler"]) lastCMakeCCompiler = kitNode["c_compiler"].as<std::string>();
             if (kitNode["cxx_compiler"]) lastCMakeCxxCompiler = kitNode["cxx_compiler"].as<std::string>();
             if (kitNode["generator"]) lastCMakeGenerator = kitNode["generator"].as<std::string>();
+        }
+
+        // Load Emscripten SDK path override
+        if (settingsData["emsdk"] && settingsData["emsdk"]["path"]) {
+            emsdkPath = settingsData["emsdk"]["path"].as<std::string>();
         }
 
         // Load recent projects
@@ -181,6 +187,15 @@ bool AppSettings::saveSettings() {
         } else {
             settingsData.remove("cmake_kit");
         }
+
+        // Emscripten SDK path override
+        if (!emsdkPath.empty()) {
+            YAML::Node emsdkNode;
+            emsdkNode["path"] = emsdkPath;
+            settingsData["emsdk"] = emsdkNode;
+        } else {
+            settingsData.remove("emsdk");
+        }
         
         // Window settings
         YAML::Node windowNode;
@@ -257,6 +272,15 @@ void AppSettings::setLastCMakeKit(const std::string& cCompiler, const std::strin
     lastCMakeCCompiler = cCompiler;
     lastCMakeCxxCompiler = cxxCompiler;
     lastCMakeGenerator = generator;
+    saveSettings();
+}
+
+std::string AppSettings::getEmsdkPath() {
+    return emsdkPath;
+}
+
+void AppSettings::setEmsdkPath(const std::string& path) {
+    emsdkPath = path;
     saveSettings();
 }
 

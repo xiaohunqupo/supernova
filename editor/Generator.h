@@ -12,13 +12,7 @@
 #include "Scene.h"
 #include "Factory.h"
 #include "util/EntityBundle.h"
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <sys/types.h>  // pid_t
-#include <spawn.h>
-#endif
+#include "util/CommandRunner.h"
 
 namespace fs = std::filesystem;
 
@@ -82,24 +76,12 @@ namespace doriax::editor {
     private:
         std::future<void> buildFuture;
         std::atomic<bool> lastBuildSucceeded;
-        std::atomic<bool> cancelRequested;
+        CommandRunner commandRunner;
 
         static fs::path getGeneratedPath(const fs::path& projectInternalPath);
 
-    #ifdef _WIN32
-        HANDLE currentProcessHandle;
-        std::mutex processHandleMutex;
-    #else
-        pid_t currentProcessPid;
-        std::mutex processPidMutex;
-    #endif
-
         bool configureCMake(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator, unsigned int parallelJobs);
         bool buildProject(const fs::path& projectPath, const fs::path& buildPath, const std::string& configType, const std::string& generator, unsigned int parallelJobs);
-        // Windows: command prefix that loads the MSVC toolchain environment
-        // (vcvars) so non-Visual-Studio generators such as Ninja can find the
-        // Windows SDK and CRT libraries. Returns "" when not needed / not found.
-        std::string msvcEnvPrefix(const std::string& generator);
         // Resolve a "Default" (all-empty) compiler selection to the best
         // ABI-compatible detected kit so it respects the same ABI check as the
         // Project Settings dropdown. No-op on non-Windows. Modifies in place.
@@ -117,7 +99,6 @@ namespace doriax::editor {
         std::string buildCleanupSceneScriptsSource(const std::vector<SceneScriptSource>& scriptFiles);
 
         void writeSourceFiles(const fs::path& projectPath, const fs::path& projectInternalPath, std::string libName, const std::vector<SceneScriptSource>& scriptFiles, const std::vector<SceneBuildInfo>& scenes, const std::vector<BundleSceneInfo>& bundles, const WindowSettings& windowSettings);
-        void terminateCurrentProcess();
 
     public:
         Generator();

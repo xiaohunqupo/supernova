@@ -234,6 +234,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/util/ScriptParser.cpp
     ${EDITOR_DIR}/util/PngWriter.cpp
     ${EDITOR_DIR}/util/UIUtils.cpp
+    ${EDITOR_DIR}/util/CommandRunner.cpp
 
     ${EDITOR_DIR}/shader/ShaderBuilder.cpp
 

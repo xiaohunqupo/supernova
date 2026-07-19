@@ -1,6 +1,7 @@
 #include "Exporter.h"
 #include "EditorHost.h"
 #include "Factory.h"
+#include "Generator.h"
 #include "Out.h"
 #include "Stream.h"
 #include "util/Base64.h"
@@ -10,17 +11,50 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <future>
 #include <map>
+#include <vector>
 
 using namespace doriax;
+
+namespace {
+    // Parses make-style "[ 47%]" and ninja-style "[123/456]" build-line prefixes
+    // into a 0..1 fraction so the compile step can drive the progress bar.
+    bool parseBuildProgress(const std::string& line, float& fraction) {
+        if (line.empty() || line[0] != '[') return false;
+        size_t close = line.find(']');
+        if (close == std::string::npos || close > 16) return false;
+        std::string inner = line.substr(1, close - 1);
+        try {
+            size_t slash = inner.find('/');
+            if (slash != std::string::npos) {
+                int current = std::stoi(inner.substr(0, slash));
+                int total = std::stoi(inner.substr(slash + 1));
+                if (total <= 0 || current < 0 || current > total) return false;
+                fraction = (float)current / (float)total;
+                return true;
+            }
+            size_t percent = inner.find('%');
+            if (percent == std::string::npos) return false;
+            int value = std::stoi(inner.substr(0, percent));
+            if (value < 0 || value > 100) return false;
+            fraction = value / 100.0f;
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+}
 
 editor::Exporter::Exporter() {
 }
 
 editor::Exporter::~Exporter() {
     cancelRequested.store(true);
+    commandRunner.cancel();
     if (exportThread.joinable()) {
         exportThread.join();
     }
@@ -29,7 +63,20 @@ editor::Exporter::~Exporter() {
 void editor::Exporter::setProgress(const std::string& step, float value) {
     std::lock_guard<std::mutex> lock(progressMutex);
     progress.currentStep = step;
+    progress.overallProgress = value * progressScale;
+    progress.detailLine.clear();
+}
+
+void editor::Exporter::setProgressRaw(const std::string& step, float value) {
+    std::lock_guard<std::mutex> lock(progressMutex);
+    progress.currentStep = step;
     progress.overallProgress = value;
+    progress.detailLine.clear();
+}
+
+void editor::Exporter::setDetail(const std::string& line) {
+    std::lock_guard<std::mutex> lock(progressMutex);
+    progress.detailLine = line;
 }
 
 void editor::Exporter::setError(const std::string& message) {
@@ -51,6 +98,7 @@ bool editor::Exporter::isRunning() const {
 
 void editor::Exporter::cancelExport() {
     cancelRequested.store(true);
+    commandRunner.cancel();
 }
 
 bool editor::Exporter::isCancelled() const {
@@ -118,8 +166,17 @@ bool editor::Exporter::generateShaders(const ExportConfig& cfg) {
 void editor::Exporter::runExport() {
     const bool shaderGenerationOnly = (project == nullptr);
     const bool useSceneShaderKeys = !shaderGenerationOnly && config.selectedShaderKeys.empty();
+    const bool buildMode = !shaderGenerationOnly && config.mode != ExportMode::SourceCode;
 
-    if (!checkTargetDir()) return;
+    // Generation steps report progress in the [0,1] SourceCode range; for build
+    // modes they occupy the first half, leaving the rest for configure/build/collect.
+    progressScale = buildMode ? 0.5f : 1.0f;
+
+    if (buildMode) {
+        if (!prepareCacheTarget()) return;
+    } else {
+        if (!checkTargetDir()) return;
+    }
     if (isCancelled()) { setError("Export cancelled"); return; }
 
     if (shaderGenerationOnly) {
@@ -155,6 +212,26 @@ void editor::Exporter::runExport() {
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!buildAndSaveShaders()) return;
 
+    if (buildMode) {
+        if (isCancelled()) { setError("Export cancelled"); return; }
+        if (!configureBuild()) return;
+        if (isCancelled()) { setError("Export cancelled"); return; }
+        if (!runBuild()) return;
+        if (isCancelled()) { setError("Export cancelled"); return; }
+        bool collected = (config.mode == ExportMode::Desktop)
+            ? collectDesktopArtifacts()
+            : collectWebArtifacts();
+        if (!collected) return;
+
+        setProgressRaw("Export complete", 1.0f);
+        {
+            std::lock_guard<std::mutex> lock(progressMutex);
+            progress.finished = true;
+        }
+        Out::info("Project exported successfully to: %s", config.destinationDir.string().c_str());
+        return;
+    }
+
     setProgress("Export complete", 1.0f);
     {
         std::lock_guard<std::mutex> lock(progressMutex);
@@ -179,6 +256,25 @@ void editor::Exporter::collectSelectedShaderKeys(bool mergeWithExisting) {
 
 fs::path editor::Exporter::getExportProjectRoot() const {
     return config.targetDir / "project";
+}
+
+std::string editor::Exporter::getAppName() const {
+    if (project->getName().empty()) {
+        return "doriax-project";
+    }
+    return Factory::toIdentifier(project->getName());
+}
+
+fs::path editor::Exporter::getBuildCacheDir() const {
+    return project->getProjectInternalPath() / "export" / (config.mode == ExportMode::Desktop ? "desktop" : "web");
+}
+
+std::string editor::Exporter::getEffectiveGenerator() const {
+    if (!config.cmakeGenerator.empty()) {
+        return config.cmakeGenerator;
+    }
+    const char* envGenerator = std::getenv("CMAKE_GENERATOR");
+    return envGenerator ? envGenerator : "";
 }
 
 fs::path editor::Exporter::getShaderOutputDir() const {
@@ -241,6 +337,284 @@ bool editor::Exporter::checkTargetDir() {
     if (project && !fs::is_empty(config.targetDir, ec)) {
         setError("Target directory is not empty");
         return false;
+    }
+
+    return true;
+}
+
+bool editor::Exporter::prepareCacheTarget() {
+    setProgress("Preparing build cache...", 0.0f);
+
+    if (config.destinationDir.empty()) {
+        setError("Destination directory not specified");
+        return false;
+    }
+
+    config.targetDir = getBuildCacheDir();
+
+    std::error_code ec;
+    fs::create_directories(config.targetDir, ec);
+    if (ec) {
+        setError("Failed to create build cache directory: " + ec.message());
+        return false;
+    }
+
+    // Stale generated sources from renamed/deleted scenes would be picked up by
+    // the exported CMake's recursive glob and break the link, so the (small)
+    // project tree is wiped and fully re-copied every export. The engine tree is
+    // kept and synced with copyTreeIfChanged() so the build stays incremental.
+    fs::remove_all(getExportProjectRoot(), ec);
+    if (ec) {
+        setError("Failed to clear cached project sources: " + ec.message());
+        return false;
+    }
+
+    return true;
+}
+
+bool editor::Exporter::configureBuild() {
+    setProgressRaw("Configuring build...", 0.5f);
+
+    if (isCancelled()) { setError("Export cancelled"); return false; }
+
+    const fs::path buildDir = config.targetDir / "build";
+
+    std::string emcmake;
+    std::string kitId;
+    if (config.mode == ExportMode::Web) {
+        EmsdkInfo emsdk = detectEmsdk(config.emsdkPath);
+        if (!emsdk.found) {
+            setError("Emscripten SDK not found. Set the EMSDK environment variable, add emcmake to PATH, or choose the emsdk folder in the export settings.");
+            return false;
+        }
+        emcmake = emsdk.emcmake;
+        Out::info("Using Emscripten %s", emsdk.description.c_str());
+        kitId = "web\n" + emcmake + "\n" + config.buildType;
+    } else {
+        std::string effectiveGenerator = getEffectiveGenerator();
+        // The Xcode generator builds a macOS .app bundle (MACOSX_BUNDLE in the
+        // engine CMake), whose layout artifact collection does not handle and
+        // whose assets would need embedding into the bundle. Every other
+        // generator on macOS uses the sokol backend with a plain executable.
+        if (effectiveGenerator == "Xcode") {
+            if (config.cmakeGenerator.empty()) {
+                setError("Desktop export does not support the Xcode generator (it produces an app bundle). Unset the CMAKE_GENERATOR environment variable to use the default toolchain.");
+            } else {
+                setError("Desktop export does not support the Xcode generator (it produces an app bundle). Clear the generator in Project Settings to use the default toolchain.");
+            }
+            return false;
+        }
+        kitId = "desktop\n" + effectiveGenerator + "\n" + config.cmakeCCompiler + "\n" + config.cmakeCxxCompiler + "\n" + config.buildType;
+    }
+
+    // CMake cannot switch generators or toolchains in place: wipe the build
+    // tree whenever the kit differs from the one that configured it.
+    std::error_code ec;
+    const fs::path kitMarker = buildDir / ".doriax_export_kit";
+    if (fs::exists(buildDir, ec)) {
+        std::string prevKit;
+        {
+            std::ifstream f(kitMarker);
+            if (f.is_open()) {
+                prevKit.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            }
+        }
+        if (prevKit != kitId) {
+            Out::warning("Build settings changed. Cleaning export build directory...");
+            fs::remove_all(buildDir, ec);
+            if (ec) {
+                setError("Failed to clean export build directory: " + ec.message());
+                return false;
+            }
+        }
+    }
+
+    // CMake re-parses stored paths treating backslashes as escapes; it accepts
+    // forward slashes on every platform (see Generator::configureCMake).
+    auto toCMakePath = [](const std::string& p) {
+        std::string out = p;
+        std::replace(out.begin(), out.end(), '\\', '/');
+        return out;
+    };
+
+    std::string cmd;
+    if (config.mode == ExportMode::Web) {
+        // The emcmake wrapper injects the Emscripten toolchain file; the
+        // subsequent cmake --build needs no wrapper.
+        cmd = "\"" + toCMakePath(emcmake) + "\" cmake ";
+    } else {
+        cmd = "cmake ";
+        if (!config.cmakeGenerator.empty()) {
+            cmd += "-G \"" + config.cmakeGenerator + "\" ";
+        }
+        if (!config.cmakeCCompiler.empty()) {
+            cmd += "-DCMAKE_C_COMPILER=\"" + toCMakePath(config.cmakeCCompiler) + "\" ";
+        }
+        if (!config.cmakeCxxCompiler.empty()) {
+            cmd += "-DCMAKE_CXX_COMPILER=\"" + toCMakePath(config.cmakeCxxCompiler) + "\" ";
+        }
+    }
+    cmd += "-DCMAKE_BUILD_TYPE=" + config.buildType + " ";
+    cmd += "\"" + toCMakePath(config.targetDir.string()) + "\" ";
+    cmd += "-B \"" + toCMakePath(buildDir.string()) + "\"";
+
+    if (config.mode == ExportMode::Desktop) {
+        cmd = CommandRunner::msvcEnvPrefix(getEffectiveGenerator()) + cmd;
+    }
+
+    Out::info("Configuring export build: %s", cmd.c_str());
+    bool ok = commandRunner.run(cmd, config.targetDir, [this](const std::string& line) {
+        Out::build("%s", line.c_str());
+        setDetail(line);
+    });
+
+    if (!ok) {
+        if (isCancelled()) {
+            setError("Export cancelled");
+        } else {
+            setError("Build configuration failed. See the Output window for details.");
+        }
+        return false;
+    }
+
+    fs::create_directories(buildDir, ec);
+    std::ofstream f(kitMarker);
+    if (f.is_open()) {
+        f << kitId;
+    }
+
+    return true;
+}
+
+bool editor::Exporter::runBuild() {
+    setProgressRaw("Compiling project...", 0.6f);
+
+    if (isCancelled()) { setError("Export cancelled"); return false; }
+
+    const fs::path buildDir = config.targetDir / "build";
+
+    unsigned int jobs = config.buildJobs == 0 ? Generator::getAutomaticParallelBuildJobs() : config.buildJobs;
+    jobs = std::min(jobs, Generator::getMaxParallelBuildJobs());
+
+    std::string cmd = "cmake --build \"" + buildDir.string() + "\" --config " + config.buildType + " --parallel " + std::to_string(jobs);
+    if (config.mode == ExportMode::Desktop) {
+        // The build step invokes the compiler/linker, so it needs the same
+        // MSVC environment as configure.
+        cmd = CommandRunner::msvcEnvPrefix(getEffectiveGenerator()) + cmd;
+    }
+
+    Out::info("Building export with %u parallel jobs...", jobs);
+    bool ok = commandRunner.run(cmd, buildDir, [this](const std::string& line) {
+        Out::build("%s", line.c_str());
+        float fraction = 0.0f;
+        std::lock_guard<std::mutex> lock(progressMutex);
+        progress.detailLine = line;
+        if (parseBuildProgress(line, fraction)) {
+            progress.overallProgress = 0.6f + 0.35f * fraction;
+        }
+    });
+
+    if (!ok) {
+        if (isCancelled()) {
+            setError("Export cancelled");
+        } else {
+            setError("Build failed. See the Output window for details.");
+        }
+        return false;
+    }
+
+    return true;
+}
+
+bool editor::Exporter::collectDesktopArtifacts() {
+    setProgressRaw("Copying artifacts...", 0.95f);
+
+    const fs::path buildDir = config.targetDir / "build";
+    std::string exeName = getAppName();
+#ifdef _WIN32
+    exeName += ".exe";
+#endif
+
+    std::error_code ec;
+    fs::path exePath = buildDir / exeName;
+    if (!fs::exists(exePath, ec)) {
+        // Multi-config generators (Visual Studio) place binaries in a per-config subdir.
+        fs::path configExePath = buildDir / config.buildType / exeName;
+        if (fs::exists(configExePath, ec)) {
+            exePath = configExePath;
+        } else if (fs::exists(buildDir / (getAppName() + ".app"), ec)
+                   || fs::exists(buildDir / config.buildType / (getAppName() + ".app"), ec)) {
+            // A stale Xcode-configured cache can slip past the generator guard.
+            setError("The build produced an app bundle, which Desktop export does not support. Delete the project's .doriax/export/desktop folder and export again with the default toolchain.");
+            return false;
+        } else {
+            setError("Built executable not found at: " + exePath.string() + " or " + configExePath.string());
+            return false;
+        }
+    }
+
+    fs::create_directories(config.destinationDir, ec);
+    if (ec) {
+        setError("Failed to create destination directory: " + ec.message());
+        return false;
+    }
+
+    fs::copy_file(exePath, config.destinationDir / exeName, fs::copy_options::overwrite_existing, ec);
+    if (ec) {
+        setError("Failed to copy executable: " + ec.message());
+        return false;
+    }
+
+    // The desktop runtime resolves "assets" and "lua" relative to the working
+    // directory, so ship them next to the executable.
+    const fs::path projectRoot = getExportProjectRoot();
+    for (const char* dir : {"assets", "lua"}) {
+        fs::path src = projectRoot / dir;
+        if (!fs::exists(src, ec)) continue;
+        copyTree(src, config.destinationDir / dir, ec);
+        if (ec) {
+            setError(std::string("Failed to copy ") + dir + ": " + ec.message());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool editor::Exporter::collectWebArtifacts() {
+    setProgressRaw("Copying artifacts...", 0.95f);
+
+    const fs::path buildDir = config.targetDir / "build";
+    const std::string appName = getAppName();
+
+    std::error_code ec;
+    fs::create_directories(config.destinationDir, ec);
+    if (ec) {
+        setError("Failed to create destination directory: " + ec.message());
+        return false;
+    }
+
+    for (const char* ext : {".html", ".js", ".wasm"}) {
+        fs::path src = buildDir / (appName + ext);
+        if (!fs::exists(src, ec)) {
+            setError("Built web output not found: " + src.string());
+            return false;
+        }
+        fs::copy_file(src, config.destinationDir / (appName + ext), fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            setError("Failed to copy " + src.filename().string() + ": " + ec.message());
+            return false;
+        }
+    }
+
+    // The .data preload bundle exists only when the project has assets or lua.
+    fs::path dataSrc = buildDir / (appName + ".data");
+    if (fs::exists(dataSrc, ec)) {
+        fs::copy_file(dataSrc, config.destinationDir / (appName + ".data"), fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            setError("Failed to copy " + dataSrc.filename().string() + ": " + ec.message());
+            return false;
+        }
     }
 
     return true;
@@ -643,6 +1017,84 @@ void editor::Exporter::copyTree(const fs::path& src, const fs::path& dst, std::e
 #endif
 }
 
+void editor::Exporter::copyTreeIfChanged(const fs::path& src, const fs::path& dst, std::error_code& ec, bool pruneStale) {
+#ifdef _WIN32
+    // Prefix absolute paths so Win32 APIs used by std::filesystem can traverse
+    // directory trees beyond the legacy MAX_PATH limit (see copyTree).
+    auto adjustPath = [](const fs::path& path) {
+        const fs::path absolutePath = fs::absolute(path);
+        const fs::path::string_type nativePath = absolutePath.native();
+
+        if (nativePath.rfind(L"\\\\?\\", 0) == 0) {
+            return absolutePath;
+        }
+        if (nativePath.rfind(L"\\\\", 0) == 0) {
+            return fs::path(L"\\\\?\\UNC\\" + nativePath.substr(2));
+        }
+        return fs::path(L"\\\\?\\" + nativePath);
+    };
+#else
+    auto adjustPath = [](const fs::path& path) { return path; };
+#endif
+
+    auto filesEqual = [](const fs::path& a, const fs::path& b) -> bool {
+        std::ifstream fa(a, std::ios::binary);
+        std::ifstream fb(b, std::ios::binary);
+        if (!fa || !fb) return false;
+        constexpr size_t BUFFER_SIZE = 1 << 16;
+        std::vector<char> bufA(BUFFER_SIZE), bufB(BUFFER_SIZE);
+        while (true) {
+            fa.read(bufA.data(), BUFFER_SIZE);
+            fb.read(bufB.data(), BUFFER_SIZE);
+            std::streamsize readA = fa.gcount();
+            std::streamsize readB = fb.gcount();
+            if (readA != readB) return false;
+            if (readA == 0) return true;
+            if (std::memcmp(bufA.data(), bufB.data(), (size_t)readA) != 0) return false;
+        }
+    };
+
+    // Unlike copyTree, unchanged destination files are left untouched so they
+    // keep their mtime and incremental builds over the tree skip recompiling.
+    ec.clear();
+    const fs::path srcAdj = adjustPath(src);
+    const fs::path dstAdj = adjustPath(dst);
+    try {
+        fs::create_directories(dstAdj);
+        for (const auto& entry : fs::recursive_directory_iterator(srcAdj)) {
+            const fs::path target = dstAdj / fs::relative(entry.path(), srcAdj);
+            if (entry.is_directory()) {
+                fs::create_directories(target);
+            } else if (entry.is_regular_file()) {
+                if (fs::exists(target)
+                    && fs::file_size(target) == entry.file_size()
+                    && filesEqual(entry.path(), target)) {
+                    continue;
+                }
+                fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+            }
+        }
+
+        // Mirror semantics for the build cache: drop destination entries the
+        // source no longer has, or files removed/renamed in an SDK update
+        // would keep being compiled by the exported build's recursive globs.
+        if (pruneStale) {
+            std::vector<fs::path> stale;
+            for (const auto& entry : fs::recursive_directory_iterator(dstAdj)) {
+                if (!fs::exists(srcAdj / fs::relative(entry.path(), dstAdj))) {
+                    stale.push_back(entry.path());
+                }
+            }
+            for (const fs::path& path : stale) {
+                // No-op for children of an already-removed directory.
+                fs::remove_all(path);
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        ec = e.code();
+    }
+}
+
 bool editor::Exporter::copyEngine() {
     setProgress("Copying engine...", 0.5f);
 
@@ -668,7 +1120,7 @@ bool editor::Exporter::copyEngine() {
         return false;
     }
 
-    auto copyDir = [&](const std::string& name) -> bool {
+    auto copyDir = [&](const std::string& name, bool pruneStale) -> bool {
         fs::path src = sdkRoot / name;
         fs::path dst = config.targetDir / name;
 
@@ -676,7 +1128,9 @@ bool editor::Exporter::copyEngine() {
             setError(name + " directory not found at: " + src.string());
             return false;
         }
-        copyTree(src, dst, ec);
+        // Content-compare copy: unchanged files keep their mtime so the
+        // Desktop/Web build cache stays incremental across exports.
+        copyTreeIfChanged(src, dst, ec, pruneStale);
         if (ec) {
             setError("Failed to copy " + name + " directory: " + ec.message());
             return false;
@@ -684,13 +1138,41 @@ bool editor::Exporter::copyEngine() {
         return true;
     };
 
-    if (!copyDir("core")) return false;
-    if (!copyDir("libs")) return false;
-    if (!copyDir("platform")) return false;
-    if (!copyDir("renders")) return false;
-    if (!copyDir("shaders")) return false;
+    if (!copyDir("core", true)) return false;
+    if (!copyDir("libs", true)) return false;
+    if (!copyDir("platform", true)) return false;
+    if (!copyDir("renders", true)) return false;
     //if (!copyDir("tools")) return false;
-    if (!copyDir("workspaces")) return false;
+    if (!copyDir("workspaces", true)) return false;
+
+    // The SDK "shaders" dir holds only stub headers (getBase64Shader returning
+    // "") under the exact names buildAndSaveShaders generates into. Copy them
+    // only when missing: syncing would clobber the previous export's generated
+    // headers with stubs just to regenerate them, bumping their mtime and
+    // recompiling every TU that includes them on each incremental export.
+    {
+        fs::path src = sdkRoot / "shaders";
+        fs::path dst = config.targetDir / "shaders";
+        if (!fs::exists(src, ec)) {
+            setError("shaders directory not found at: " + src.string());
+            return false;
+        }
+        fs::create_directories(dst, ec);
+        if (ec) {
+            setError("Failed to create shaders directory: " + ec.message());
+            return false;
+        }
+        for (const auto& entry : fs::directory_iterator(src)) {
+            if (!entry.is_regular_file()) continue;
+            fs::path target = dst / entry.path().filename();
+            if (fs::exists(target, ec)) continue;
+            fs::copy_file(entry.path(), target, ec);
+            if (ec) {
+                setError("Failed to copy shaders directory: " + ec.message());
+                return false;
+            }
+        }
+    }
 
     fs::path cmakeSrc = sdkRoot / "CMakeLists.txt";
     fs::path cmakeDst = config.targetDir / "CMakeLists.txt";
@@ -698,22 +1180,14 @@ bool editor::Exporter::copyEngine() {
         setError("CMakeLists.txt not found at: " + cmakeSrc.string());
         return false;
     }
-    fs::copy_file(cmakeSrc, cmakeDst, fs::copy_options::overwrite_existing, ec);
-    if (ec) {
-        setError("Failed to copy CMakeLists.txt: " + ec.message());
-        return false;
-    }
 
-    std::string appName;
-    if (project->getName().empty()) {
-        appName = "doriax-project";
-    } else {
-        appName = Factory::toIdentifier(project->getName());
-    }
+    std::string appName = getAppName();
 
-    std::ifstream cmakeIfs(cmakeDst, std::ios::in | std::ios::binary);
+    // Patch from the SDK source and write with writeIfChanged so an unchanged
+    // result keeps its mtime (no spurious reconfigure of the build cache).
+    std::ifstream cmakeIfs(cmakeSrc, std::ios::in | std::ios::binary);
     if (!cmakeIfs) {
-        setError("Failed to read exported CMakeLists.txt");
+        setError("Failed to read SDK CMakeLists.txt");
         return false;
     }
     std::string cmakeContent((std::istreambuf_iterator<char>(cmakeIfs)), std::istreambuf_iterator<char>());
@@ -1003,4 +1477,60 @@ std::string editor::Exporter::getPlatformName(::doriax::Platform platform) {
         case Platform::Windows: return "Windows";
         default:                return "Unknown";
     }
+}
+
+editor::EmsdkInfo editor::Exporter::detectEmsdk(const std::string& overridePath) {
+    EmsdkInfo info;
+
+#ifdef _WIN32
+    const char* emcmakeName = "emcmake.bat";
+#else
+    const char* emcmakeName = "emcmake";
+#endif
+
+    auto tryRoot = [&](const fs::path& root, const std::string& source) -> bool {
+        if (root.empty()) return false;
+        std::error_code ec;
+        // Accept both the emsdk root and the emscripten dir pointed at directly.
+        const fs::path candidates[] = {
+            root / "upstream" / "emscripten" / emcmakeName,
+            root / emcmakeName
+        };
+        for (const fs::path& candidate : candidates) {
+            if (fs::exists(candidate, ec)) {
+                info.found = true;
+                info.emcmake = candidate.string();
+                info.description = "from " + source + " (" + candidate.string() + ")";
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // An explicit override is an explicit choice: when set, it alone decides.
+    if (!overridePath.empty()) {
+        tryRoot(fs::path(overridePath), "configured path");
+        return info;
+    }
+
+    const char* emsdkEnv = std::getenv("EMSDK");
+    if (emsdkEnv && tryRoot(fs::path(emsdkEnv), "EMSDK environment variable")) {
+        return info;
+    }
+
+#ifdef _WIN32
+    if (!CommandRunner::runCaptureNoWindow("where emcmake.bat 2>nul").empty()) {
+        info.found = true;
+        info.emcmake = "emcmake";
+        info.description = "on PATH";
+    }
+#else
+    if (std::system("command -v emcmake >/dev/null 2>&1") == 0) {
+        info.found = true;
+        info.emcmake = "emcmake";
+        info.description = "on PATH";
+    }
+#endif
+
+    return info;
 }

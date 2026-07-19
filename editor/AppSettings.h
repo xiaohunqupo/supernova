@@ -22,6 +22,10 @@ private:
     static std::string lastCMakeCCompiler;
     static std::string lastCMakeCxxCompiler;
     static std::string lastCMakeGenerator;
+
+    // Emscripten SDK root override for Web exports ("" = auto-detect).
+    // Machine-specific, so stored editor-wide rather than per-project.
+    static std::string emsdkPath;
     
     // Window settings
     static int windowWidth;
@@ -66,6 +70,10 @@ public:
     static std::string getLastCMakeCxxCompiler();
     static std::string getLastCMakeGenerator();
     static void setLastCMakeKit(const std::string& cCompiler, const std::string& cxxCompiler, const std::string& generator);
+
+    // Emscripten SDK root override for Web exports ("" = auto-detect)
+    static std::string getEmsdkPath();
+    static void setEmsdkPath(const std::string& path);
     
     // Window settings
     static int getWindowWidth();
