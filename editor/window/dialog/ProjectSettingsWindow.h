@@ -5,6 +5,7 @@
 
 #include <string>
 #include <filesystem>
+#include <unordered_map>
 
 namespace doriax::editor {
 
@@ -27,6 +28,11 @@ namespace doriax::editor {
         bool m_windowResizable = true;
         char m_windowTitleBuffer[256] = {0};
         std::string m_windowTitleOriginal;
+        fs::path m_windowIcon;
+
+        // Per-frame preview textures over the pool-cached thumbnails, cleared
+        // at the end of each draw (same lifecycle as Properties).
+        std::unordered_map<std::string, Texture> m_thumbnailTextures;
         uint32_t m_startSceneId = NULL_PROJECT_SCENE;
         fs::path m_assetsDir;
         fs::path m_luaDir;
@@ -41,6 +47,7 @@ namespace doriax::editor {
         void drawGeneralSettings();
         void drawCanvasSettings();
         void drawWindowSettings();
+        Texture* findThumbnail(const std::string& path);
         void drawDirectoriesSettings();
         void drawBuildSettings();
         void applySettings();

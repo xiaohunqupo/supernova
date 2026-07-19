@@ -119,6 +119,7 @@ namespace doriax::editor {
         bool copyLua();
         bool copyCppScripts();
         bool copyEngine();
+        bool writeAppIcon();
         bool buildAndSaveShaders();
 
         // Aggregates SceneMaxValues across all project scenes and builds the

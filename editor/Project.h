@@ -149,6 +149,7 @@ namespace doriax::editor{
         unsigned int windowHeight;
         bool windowResizable;
         std::string windowTitle;  // empty = use the project name
+        std::filesystem::path windowIcon;  // project-relative image path; empty = no icon
         std::filesystem::path assetsDir;
         std::filesystem::path luaDir;
         std::filesystem::path shadersDir;        // compiled .sdat output dir (engine/build-facing)
@@ -321,6 +322,9 @@ namespace doriax::editor{
         // Stored title; empty means "use the project name"
         void setWindowTitle(const std::string& title);
         std::string getWindowTitle() const;
+
+        void setWindowIcon(const std::filesystem::path& iconPath);
+        std::filesystem::path getWindowIcon() const;
 
         // Window configuration for generated/exported desktop builds,
         // with the title fallback already resolved

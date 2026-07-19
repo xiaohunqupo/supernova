@@ -62,6 +62,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     if(NOT DEFINED DORIAX_WINDOW_TITLE)
         set(DORIAX_WINDOW_TITLE "Doriax")
     endif()
+    # ON only when the editor export generated project/app_icon.h (+ .ico/.rc)
+    if(NOT DEFINED DORIAX_WINDOW_ICON)
+        set(DORIAX_WINDOW_ICON OFF)
+    endif()
     if(DORIAX_WINDOW_RESIZABLE)
         set(DORIAX_WINDOW_RESIZABLE_VALUE 1)
     else()
@@ -72,6 +76,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_definitions("-DDORIAX_WINDOW_MODE=${DORIAX_WINDOW_MODE}")
     add_definitions("-DDORIAX_WINDOW_RESIZABLE=${DORIAX_WINDOW_RESIZABLE_VALUE}")
     add_definitions("-DDORIAX_WINDOW_TITLE=\"${DORIAX_WINDOW_TITLE}\"")
+    # X11 class / Wayland app_id (APP_NAME is a plain identifier, safe to quote).
+    # Desktop environments match it against <APP_NAME>.desktop for the app icon.
+    add_definitions("-DDORIAX_APP_ID=\"${APP_NAME}\"")
+    if(DORIAX_WINDOW_ICON AND EXISTS "${PROJECT_ROOT}/app_icon.h")
+        add_definitions("-DDORIAX_WINDOW_ICON")
+    endif()
 
     # Per-project HybridArray capacities (SceneMaxValues) are injected here by the
     # editor Exporter, replacing the marker below. When building manually (without
@@ -790,6 +800,12 @@ endif()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     file(GLOB_RECURSE PROJECT_SOURCE ${PROJECT_ROOT}/*.cpp)
+
+    # Embed the exported icon into the Windows executable (Explorer, taskbar
+    # and window icon). Other platforms set the window icon at runtime instead.
+    if(WIN32 AND DORIAX_WINDOW_ICON AND EXISTS "${PROJECT_ROOT}/app_icon.rc")
+        list(APPEND PLATFORM_SOURCE ${PROJECT_ROOT}/app_icon.rc)
+    endif()
 
     set(all_code_files
         ${PROJECT_SOURCE}

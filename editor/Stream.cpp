@@ -1334,6 +1334,9 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
     if (!project->getWindowTitle().empty()) {
         root["windowTitle"] = project->getWindowTitle();
     }
+    if (!project->getWindowIcon().empty()) {
+        root["windowIcon"] = project->getWindowIcon().string();
+    }
 
     if (!project->getAssetsDir().empty() && project->getAssetsDir() != ".") {
         root["assetsDir"] = project->getAssetsDir().string();
@@ -1497,6 +1500,10 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
 
     if (node["windowTitle"]) {
         project->setWindowTitle(node["windowTitle"].as<std::string>());
+    }
+
+    if (node["windowIcon"]) {
+        project->setWindowIcon(std::filesystem::path(node["windowIcon"].as<std::string>()));
     }
 
     if (node["assetsDir"]) {

@@ -1355,6 +1355,14 @@ std::string editor::Project::getWindowTitle() const{
     return windowTitle;
 }
 
+void editor::Project::setWindowIcon(const std::filesystem::path& iconPath){
+    this->windowIcon = iconPath;
+}
+
+std::filesystem::path editor::Project::getWindowIcon() const{
+    return windowIcon;
+}
+
 editor::WindowSettings editor::Project::getWindowSettings() const{
     WindowSettings settings;
     settings.mode = windowMode;
@@ -2518,6 +2526,7 @@ void editor::Project::resetConfigs() {
     windowHeight = canvasHeight;
     windowResizable = true;
     windowTitle = "";
+    windowIcon.clear();
     assetsDir = ".";
     luaDir = ".";
     shadersDir = "shaders";

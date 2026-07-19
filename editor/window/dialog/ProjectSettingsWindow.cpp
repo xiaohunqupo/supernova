@@ -1,6 +1,7 @@
 #include "ProjectSettingsWindow.h"
 #include "util/FileDialogs.h"
 #include "AppSettings.h"
+#include "Backend.h"
 #include "window/Widgets.h"
 
 #include <algorithm>
@@ -276,6 +277,54 @@ static void drawScalingPreview(Scaling mode, int canvasWidth, int canvasHeight) 
     ImGui::Dummy(ImVec2(totalW, maxH));
 }
 
+// Same thumbnail flow as Properties::findThumbnail: load the ResourcesWindow-
+// generated thumbnail from the pool, requesting async generation when missing.
+Texture* ProjectSettingsWindow::findThumbnail(const std::string& path) {
+    if (path.empty()) return nullptr;
+
+    std::filesystem::path texPath = path;
+    const std::filesystem::path projectPath = m_project->getProjectPath();
+
+    if (texPath.is_relative() && !projectPath.empty()) {
+        texPath = projectPath / texPath;
+    }
+    texPath = texPath.lexically_normal();
+
+    if (!texPath.is_absolute()) return nullptr;
+
+    std::error_code ec;
+    if (!std::filesystem::exists(texPath, ec) || ec) {
+        return nullptr;
+    }
+
+    const std::filesystem::path thumbnailPath = m_project->getThumbnailPath(texPath);
+    const std::string thumbPathStr = thumbnailPath.string();
+
+    // Fast path: return from cache if already loaded
+    auto thumbIt = m_thumbnailTextures.find(thumbPathStr);
+    if (thumbIt != m_thumbnailTextures.end() && !thumbIt->second.empty()) {
+        return &thumbIt->second;
+    }
+
+    std::error_code thumbEc;
+    const bool thumbnailExists = std::filesystem::exists(thumbnailPath, thumbEc) && !thumbEc;
+
+    if (thumbnailExists) {
+        TextureData thumbData(thumbnailPath.string().c_str());
+        if (thumbData.getData() && thumbData.getSize() > 0) {
+            Texture thumbTexture(thumbPathStr, thumbData);
+            m_thumbnailTextures[thumbPathStr] = thumbTexture;
+            return &m_thumbnailTextures[thumbPathStr];
+        }
+    }
+
+    // Thumbnail missing or failed to load — request generation
+    if (ResourcesWindow* resourcesWindow = Backend::getApp().getResourcesWindow()) {
+        resourcesWindow->requestThumbnailGeneration(texPath, thumbnailExists);
+    }
+    return nullptr;
+}
+
 void ProjectSettingsWindow::open(Project* project) {
     m_isOpen = true;
     m_project = project;
@@ -290,6 +339,7 @@ void ProjectSettingsWindow::open(Project* project) {
     m_windowResizable = project->isWindowResizable();
     m_windowTitleOriginal = project->getWindowTitle();
     snprintf(m_windowTitleBuffer, sizeof(m_windowTitleBuffer), "%s", m_windowTitleOriginal.c_str());
+    m_windowIcon = project->getWindowIcon();
     m_assetsDir = project->getAssetsDir();
     m_luaDir = project->getLuaDir();
     m_shadersDir = project->getShadersDir();
@@ -421,6 +471,10 @@ void ProjectSettingsWindow::drawSettings() {
         m_isOpen = false;
         ImGui::CloseCurrentPopup();
     }
+
+    // Per-frame lifecycle, matching Properties: the pool keeps the underlying
+    // thumbnail textures cached, so re-creating the wrappers next frame is cheap.
+    m_thumbnailTextures.clear();
 }
 
 void ProjectSettingsWindow::drawGeneralSettings() {
@@ -490,6 +544,59 @@ void ProjectSettingsWindow::drawWindowSettings() {
         std::string titleHint = m_project->getName().empty() ? "Doriax" : m_project->getName();
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##WindowTitle", titleHint.c_str(), m_windowTitleBuffer, sizeof(m_windowTitleBuffer));
+
+        beginSettingsRow("Icon", "Application icon for desktop builds: embedded into the Windows executable and used as the window/taskbar icon. Square PNG recommended (256x256 or larger).");
+        {
+            const ImGuiStyle& style = ImGui::GetStyle();
+            float browseWidth = ImGui::CalcTextSize("Browse").x + style.FramePadding.x * 2.0f;
+            float clearWidth = ImGui::CalcTextSize("Clear").x + style.FramePadding.x * 2.0f;
+            float pathWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x - browseWidth - clearWidth - style.ItemSpacing.x * 2.0f);
+
+            fs::path iconDisplay = m_windowIcon.empty() ? fs::path("<None>") : m_windowIcon;
+            Widgets::pathDisplay("##WindowIconPath", iconDisplay, Vector2(pathWidth, ImGui::GetFrameHeight()));
+
+            ImGui::SameLine();
+            if (ImGui::Button("Browse##windowicon")) {
+                std::string defaultPath = m_project->getProjectPath().string();
+                std::string selectedPath = FileDialogs::openFileDialog(defaultPath, FILE_DIALOG_IMAGE, false);
+                if (!selectedPath.empty()) {
+                    // Store project-relative when the file is inside the project
+                    // so the setting survives moving the project folder.
+                    std::error_code ec;
+                    fs::path relPath = fs::relative(fs::path(selectedPath), m_project->getProjectPath(), ec);
+                    if (ec || relPath.empty() || relPath.string().rfind("..", 0) == 0) {
+                        m_windowIcon = fs::path(selectedPath);
+                    } else {
+                        m_windowIcon = relPath;
+                    }
+                }
+            }
+
+            ImGui::SameLine();
+            ImGui::BeginDisabled(m_windowIcon.empty());
+            if (ImGui::Button("Clear##windowicon")) {
+                m_windowIcon.clear();
+            }
+            ImGui::EndDisabled();
+
+            if (!m_windowIcon.empty()) {
+                if (Texture* thumb = findThumbnail(m_windowIcon.string())) {
+                    ImGui::Spacing();
+
+                    const float previewSize = 64.0f;
+                    float thumbWidth = (float)thumb->getWidth();
+                    float thumbHeight = (float)thumb->getHeight();
+                    float scale = previewSize / std::max(1.0f, std::max(thumbWidth, thumbHeight));
+                    ImVec2 imageSize(std::max(1.0f, thumbWidth * scale), std::max(1.0f, thumbHeight * scale));
+
+                    ImVec2 imagePos = ImGui::GetCursorScreenPos();
+                    ImGui::Image(thumb->getRender()->getGLHandler(), imageSize);
+                    ImGui::GetWindowDrawList()->AddRect(
+                        imagePos, ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y),
+                        ImGui::GetColorU32(ImGuiCol_Border));
+                }
+            }
+        }
 
         beginSettingsRow("VSync", "Synchronize Play mode and supported desktop builds to the display refresh rate. macOS Metal exports remain synchronized.");
         ImGui::Checkbox("##VSync", &m_vsyncEnabled);
@@ -581,6 +688,7 @@ void ProjectSettingsWindow::applySettings() {
     if (m_windowTitleBuffer != m_windowTitleOriginal.substr(0, sizeof(m_windowTitleBuffer) - 1)) {
         m_project->setWindowTitle(m_windowTitleBuffer);
     }
+    m_project->setWindowIcon(m_windowIcon);
 
     m_project->setAssetsDir(m_assetsDir);
     m_project->setLuaDir(m_luaDir);
