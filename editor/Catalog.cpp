@@ -1058,7 +1058,10 @@ namespace {
 
         // numFramesRect
         if (propertyName == "numFramesRect") {
-            return {PropertyType::UInt, UpdateFlags_Sprite, (void*)&def.numFramesRect, (void*)&comp->numFramesRect};
+            // Frame definitions are animation metadata. They do not change the
+            // sprite quad, so rebuilding it here only causes the texture to be
+            // loaded again after applying a large slice operation.
+            return {PropertyType::UInt, UpdateFlags_None, (void*)&def.numFramesRect, (void*)&comp->numFramesRect};
         }
 
         // framesRect[N].field
@@ -1077,7 +1080,7 @@ namespace {
 
         pos++;
         if (pos == propertyName.size()) {
-            return {PropertyType::Custom, UpdateFlags_Sprite, (void*)&defFrame, (void*)&frame};
+            return {PropertyType::Custom, UpdateFlags_None, (void*)&defFrame, (void*)&frame};
         }
         if (propertyName[pos] != '.') {
             return PropertyData();
@@ -1086,10 +1089,10 @@ namespace {
         const size_t fieldPos = pos + 1;
 
         if (propertyName.compare(fieldPos, 4, "name") == 0 && fieldPos + 4 == propertyName.size()) {
-            return {PropertyType::String, UpdateFlags_Sprite, (void*)&defFrame.name, (void*)&frame.name};
+            return {PropertyType::String, UpdateFlags_None, (void*)&defFrame.name, (void*)&frame.name};
         }
         if (propertyName.compare(fieldPos, 4, "rect") == 0 && fieldPos + 4 == propertyName.size()) {
-            return {PropertyType::Vector4, UpdateFlags_Sprite, (void*)&defFrame.rect, (void*)&frame.rect};
+            return {PropertyType::Vector4, UpdateFlags_None, (void*)&defFrame.rect, (void*)&frame.rect};
         }
 
         return PropertyData();
@@ -2061,7 +2064,7 @@ namespace {
 
         enumerateFromDescriptors(compRef, ps, kSpriteTopProperties);
 
-        ps["numFramesRect"] = {PropertyType::UInt, UpdateFlags_Sprite, (void*)&def.numFramesRect, compRef ? (void*)&comp->numFramesRect : nullptr};
+        ps["numFramesRect"] = {PropertyType::UInt, UpdateFlags_None, (void*)&def.numFramesRect, compRef ? (void*)&comp->numFramesRect : nullptr};
 
         for (unsigned int i = 0; i < (compRef ? comp->numFramesRect : 0); i++) {
             std::string idx = std::to_string(i);
@@ -2069,8 +2072,8 @@ namespace {
             SpriteFrameData& frame = comp->framesRect[i];
             SpriteFrameData& defFrame = def.framesRect[0];
 
-            ps["framesRect[" + idx + "].name"] = {PropertyType::String, UpdateFlags_Sprite, (void*)&defFrame.name, (void*)&frame.name};
-            ps["framesRect[" + idx + "].rect"] = {PropertyType::Vector4, UpdateFlags_Sprite, (void*)&defFrame.rect, (void*)&frame.rect};
+            ps["framesRect[" + idx + "].name"] = {PropertyType::String, UpdateFlags_None, (void*)&defFrame.name, (void*)&frame.name};
+            ps["framesRect[" + idx + "].rect"] = {PropertyType::Vector4, UpdateFlags_None, (void*)&defFrame.rect, (void*)&frame.rect};
         }
     }
 

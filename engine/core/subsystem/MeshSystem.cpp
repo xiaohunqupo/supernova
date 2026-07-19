@@ -103,12 +103,21 @@ bool MeshSystem::createSprite(SpriteComponent& sprite, MeshComponent& mesh, Came
     unsigned int texHeight = 0;
 
     if (!mainTexture.empty()){
-        TextureLoadResult texResult = mainTexture.load();
-        if (texResult.state == ResourceLoadState::Finished){
-            texWidth = mainTexture.getWidth();
-            texHeight = mainTexture.getHeight();
-        }else if (texResult.state == ResourceLoadState::Loading){
-            return false;
+        // A sprite refresh only needs the source dimensions. File-backed
+        // textures retain those after their CPU pixels are released, while
+        // load() would decode and resize the whole image again. This matters
+        // especially for large sprite sheets which are already GPU-resident.
+        texWidth = mainTexture.getWidth();
+        texHeight = mainTexture.getHeight();
+
+        if (texWidth == 0 || texHeight == 0){
+            TextureLoadResult texResult = mainTexture.load();
+            if (texResult.state == ResourceLoadState::Finished){
+                texWidth = mainTexture.getWidth();
+                texHeight = mainTexture.getHeight();
+            }else if (texResult.state == ResourceLoadState::Loading){
+                return false;
+            }
         }
     }
 
