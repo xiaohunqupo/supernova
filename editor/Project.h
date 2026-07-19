@@ -493,7 +493,15 @@ namespace doriax::editor{
 
         static std::vector<Entity> getTopLevelEntities(const EntityRegistry* registry, const std::vector<Entity>& orderedEntities);
         static void remapEntityProperties(EntityRegistry* registry, const std::vector<Entity>& entities, const std::unordered_map<Entity, Entity>& entityMap);
-        static void remapEntityPropertiesInComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, const std::vector<std::string>& properties, const std::unordered_map<Entity, Entity>& entityMap);
+        // previousValues == nullptr: registry-bound remap — refs missing from entityMap
+        // (entities outside the bundle) become NULL_ENTITY so scene-local IDs never
+        // enter the shared registry. previousValues != nullptr: instance-bound remap —
+        // on a null or unmapped registry value the instance's pre-copy value decides:
+        // if it pointed at a bundle member (or was None) the registry None is applied,
+        // so intentional shared clears propagate; only out-of-bundle or cross-scene
+        // (sceneId != 0) pre-copy values are restored as per-instance wiring.
+        static void remapEntityPropertiesInComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, const std::vector<std::string>& properties, const std::unordered_map<Entity, Entity>& entityMap, const std::unordered_map<std::string, EntityReference>* previousValues);
+        static std::unordered_map<std::string, EntityReference> captureEntityRefProperties(EntityRegistry* registry, Entity entity, ComponentType componentType);
 
         //=== EntityBundle part ===
 
