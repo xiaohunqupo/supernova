@@ -14,6 +14,9 @@
     #include <windows.h>
 #elif defined(__APPLE__)
     #include <mach-o/dyld.h>
+#elif defined(__FreeBSD__)
+    #include <sys/types.h>
+    #include <sys/sysctl.h>
 #endif
 
 namespace doriax::editor {
@@ -48,12 +51,31 @@ public:
             }
             buffer.resize(size);
         }
-#else
+#elif defined(__FreeBSD__)
+        const int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+        size_t size = 0;
+        if (::sysctl(mib, 4, nullptr, &size, nullptr, 0) != 0 || size == 0) {
+            return {};
+        }
+
+        std::vector<char> buffer(size);
+        if (::sysctl(mib, 4, buffer.data(), &size, nullptr, 0) != 0 || size == 0) {
+            return {};
+        }
+
+        const size_t pathLength = buffer[size - 1] == '\0' ? size - 1 : size;
+        if (pathLength == 0) {
+            return {};
+        }
+        executablePath = std::string(buffer.data(), pathLength);
+#elif defined(__linux__)
         std::error_code readLinkError;
         executablePath = fs::read_symlink("/proc/self/exe", readLinkError);
         if (readLinkError) {
             return {};
         }
+#else
+        return {};
 #endif
 
         std::error_code ec;
