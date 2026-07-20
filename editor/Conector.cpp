@@ -6,6 +6,9 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <atomic>
+#include <system_error>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -73,17 +76,80 @@ bool editor::Conector::connect(const fs::path& buildPath, std::string libName){
     #endif
 
     fs::path fullLibPath = buildPath / fs::path(libPath);
-    if (fileExists(fullLibPath)) {
-        libHandle = loadSharedLibrary(fullLibPath.string());
-        if (libHandle) {
-            Out::info("Successfully connected to library");
-            return true;
-        }
-    } else {
+    if (!fileExists(fullLibPath)) {
         Out::error("Library file not found: %s", libPath.c_str());
+        return false;
     }
 
-    return false;
+    // Load a freshly-named COPY of the built library rather than the build
+    // output directly. The dynamic loader identifies a library by its file
+    // identity and dlclose()/FreeLibrary() are not guaranteed to unmap it, so
+    // re-loading the same path after a rebuild can hand back the OLD code that
+    // is still resident in the process (the reason a fresh rebuild only takes
+    // effect after restarting the editor). On Windows LoadLibrary also keeps the
+    // .dll locked, blocking the next build from overwriting it. A unique filename
+    // per load forces the loader to map the new file every time.
+    static std::atomic<unsigned long long> loadCounter{0};
+    #ifdef _WIN32
+        const std::string ext = ".dll";
+    #elif defined(__APPLE__)
+        const std::string ext = ".dylib";
+    #else
+        const std::string ext = ".so";
+    #endif
+    const std::string uniqueName = libName + "_" + std::to_string(loadCounter++) + "_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ext;
+
+    // Stage the copy in the build dir, falling back to the system temp dir if
+    // that is not writable (disk full, permissions, read-only mount, ...). We
+    // deliberately never fall back to loading fullLibPath directly: that path is
+    // identity-cached by the loader and would silently re-run stale code, the
+    // exact "build succeeded, Play runs old code" bug this staging prevents.
+    std::error_code ec;
+    std::vector<fs::path> stagingDirs;
+    stagingDirs.push_back(buildPath / "hotreload");
+    fs::path tempBase = fs::temp_directory_path(ec);
+    if (!ec && !tempBase.empty()) {
+        stagingDirs.push_back(tempBase / "doriax_hotreload");
+    }
+
+    fs::path copyPath;
+    for (const fs::path& dir : stagingDirs) {
+        std::error_code dirEc;
+        fs::create_directories(dir, dirEc);
+
+        // Best-effort sweep of copies left behind by previous sessions/crashes.
+        // Still-mapped files fail to remove and are simply skipped.
+        for (const auto& entry : fs::directory_iterator(dir, dirEc)) {
+            std::error_code rmEc;
+            fs::remove(entry.path(), rmEc);
+        }
+
+        fs::path candidate = dir / uniqueName;
+        std::error_code cpEc;
+        fs::copy_file(fullLibPath, candidate, fs::copy_options::overwrite_existing, cpEc);
+        if (!cpEc) {
+            copyPath = candidate;
+            break;
+        }
+        Out::warning("Could not stage hot-reload copy in %s (%s)", dir.string().c_str(), cpEc.message().c_str());
+    }
+
+    if (copyPath.empty()) {
+        Out::error("Failed to stage a loadable copy of the script library; aborting to avoid running stale code");
+        return false;
+    }
+
+    libHandle = loadSharedLibrary(copyPath.string());
+    if (!libHandle) {
+        std::error_code rmEc;
+        fs::remove(copyPath, rmEc);
+        return false;
+    }
+
+    loadedLibCopy = copyPath;
+    Out::info("Successfully connected to library");
+    return true;
 }
 
 void editor::Conector::disconnect(){
@@ -92,6 +158,14 @@ void editor::Conector::disconnect(){
         libHandle = nullptr;
 
         Out::info("Disconnected from library successfully");
+    }
+
+    if (!loadedLibCopy.empty()) {
+        // Safe to unlink even if the OS kept the library mapped: on POSIX the
+        // inode outlives the directory entry, and on Windows this is best-effort.
+        std::error_code ec;
+        fs::remove(loadedLibCopy, ec);
+        loadedLibCopy.clear();
     }
 }
 

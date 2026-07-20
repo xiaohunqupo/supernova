@@ -11,6 +11,7 @@ namespace doriax::editor{
     class Conector{
     private:
         void* libHandle;
+        fs::path loadedLibCopy;
 
         bool fileExists(const fs::path& path);
         void* loadSharedLibrary(const std::string& libPath);
