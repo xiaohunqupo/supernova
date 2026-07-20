@@ -202,7 +202,18 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             list(APPEND PLATFORM_OPTIONS -pthread)
         endif()
 
-        set(ALLOW_MEMORY_GROWTH "-s ALLOW_MEMORY_GROWTH=1 -s GROWABLE_ARRAYBUFFERS=0")
+        # GROWABLE_ARRAYBUFFERS only exists on recent Emscripten, and emcc errors
+        # out on unknown -s names, so probe settings.js instead of passing it
+        # blindly. SDKs without the setting predate the feature entirely — their
+        # behaviour already matches =0, so omitting the flag there is equivalent.
+        set(ALLOW_MEMORY_GROWTH "-s ALLOW_MEMORY_GROWTH=1")
+        if(EXISTS "${EMSCRIPTEN_ROOT_PATH}/src/settings.js")
+            file(STRINGS "${EMSCRIPTEN_ROOT_PATH}/src/settings.js" HAS_GROWABLE_ARRAYBUFFERS
+                REGEX "^var GROWABLE_ARRAYBUFFERS" LIMIT_COUNT 1)
+            if(HAS_GROWABLE_ARRAYBUFFERS)
+                set(ALLOW_MEMORY_GROWTH "${ALLOW_MEMORY_GROWTH} -s GROWABLE_ARRAYBUFFERS=0")
+            endif()
+        endif()
 
         list(APPEND PLATFORM_PROPERTIES
             LINK_FLAGS
