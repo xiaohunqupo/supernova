@@ -36,7 +36,6 @@ bool editor::ComponentToBundleSharedCmd::execute() {
             bundle->clearComponentOverride(sceneProject->id, entityData.entity, componentType);
 
             Entity registryEntity = bundle->getRegistryEntity(sceneId, entityData.entity);
-            std::unordered_map<std::string, EntityReference> previousRefs = Project::captureEntityRefProperties(sceneProject->scene, entityData.entity, componentType);
             Catalog::copyComponent(bundle->registry.get(), registryEntity, sceneProject->scene, entityData.entity, componentType);
             std::unordered_map<Entity, Entity> registryToLocal;
             if (const EntityBundle::Instance* instance = bundle->getInstance(sceneId, entityData.entity)) {
@@ -44,7 +43,7 @@ bool editor::ComponentToBundleSharedCmd::execute() {
                     registryToLocal[member.registryEntity] = member.localEntity;
                 }
             }
-            Project::remapEntityPropertiesInComponent(sceneProject->scene, entityData.entity, componentType, {}, registryToLocal, &previousRefs);
+            Project::remapEntityPropertiesInComponent(sceneProject->scene, entityData.entity, componentType, {}, registryToLocal);
         }
 
     }

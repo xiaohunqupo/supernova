@@ -492,16 +492,19 @@ namespace doriax::editor{
         bool updateScriptProperties(SceneProject* sceneProject, Entity entity, std::vector<ScriptEntry>& scripts, const std::string& inMemoryContent = "", const std::string& inMemoryPath = "");
 
         static std::vector<Entity> getTopLevelEntities(const EntityRegistry* registry, const std::vector<Entity>& orderedEntities);
+        // Remaps every entity reference across a set of entities. References to a mapped
+        // member are translated; references to anything outside the map (entities outside
+        // the bundle, per-scene children) are cleared to NULL_ENTITY so a raw scene-local
+        // or registry ID never leaks across the bundle boundary.
         static void remapEntityProperties(EntityRegistry* registry, const std::vector<Entity>& entities, const std::unordered_map<Entity, Entity>& entityMap);
-        // previousValues == nullptr: registry-bound remap — refs missing from entityMap
-        // (entities outside the bundle) become NULL_ENTITY so scene-local IDs never
-        // enter the shared registry. previousValues != nullptr: instance-bound remap —
-        // on a null or unmapped registry value the instance's pre-copy value decides:
-        // if it pointed at a bundle member (or was None) the registry None is applied,
-        // so intentional shared clears propagate; only out-of-bundle or cross-scene
-        // (sceneId != 0) pre-copy values are restored as per-instance wiring.
-        static void remapEntityPropertiesInComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, const std::vector<std::string>& properties, const std::unordered_map<Entity, Entity>& entityMap, const std::unordered_map<std::string, EntityReference>* previousValues);
-        static std::unordered_map<std::string, EntityReference> captureEntityRefProperties(EntityRegistry* registry, Entity entity, ComponentType componentType);
+        // Same rule as remapEntityProperties, scoped to one component. When `properties`
+        // is non-empty only those are remapped; a request for an aggregate property (e.g.
+        // "scripts") also covers the indexed references expanded from it.
+        static void remapEntityPropertiesInComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, const std::vector<std::string>& properties, const std::unordered_map<Entity, Entity>& entityMap);
+        // Promotes to a per-instance override every member component holding an entity
+        // reference that points outside the bundle (cross-scene, or a non-member local
+        // entity). Such references cannot be shared, so overriding keeps and persists them.
+        static void overrideExternalRefComponents(EntityRegistry* scene, EntityBundle::Instance& instance);
 
         //=== EntityBundle part ===
 

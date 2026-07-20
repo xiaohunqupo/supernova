@@ -43,7 +43,6 @@ void editor::ComponentToBundleLocalCmd::undo() {
             bundle->clearComponentOverride(sceneProject->id, entity, componentType);
 
             Entity registryEntity = bundle->getRegistryEntity(sceneId, entity);
-            std::unordered_map<std::string, EntityReference> previousRefs = Project::captureEntityRefProperties(sceneProject->scene, entity, componentType);
             Catalog::copyComponent(bundle->registry.get(), registryEntity, sceneProject->scene, entity, componentType);
             std::unordered_map<Entity, Entity> registryToLocal;
             if (const EntityBundle::Instance* instance = bundle->getInstance(sceneId, entity)) {
@@ -51,7 +50,7 @@ void editor::ComponentToBundleLocalCmd::undo() {
                     registryToLocal[member.registryEntity] = member.localEntity;
                 }
             }
-            Project::remapEntityPropertiesInComponent(sceneProject->scene, entity, componentType, {}, registryToLocal, &previousRefs);
+            Project::remapEntityPropertiesInComponent(sceneProject->scene, entity, componentType, {}, registryToLocal);
         }
     }
 

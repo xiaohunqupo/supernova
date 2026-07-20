@@ -4379,10 +4379,9 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         if (propertyHeader(label, settings.secondColSize, defChanged, settings.child)){
             for (Entity& entity : entities){
-                auto multiCmd = new MultiPropertyCmd();
-                multiCmd->addPropertyCmd<unsigned int>(project, sceneProject->id, entity, cpType, id, *defVal, settings.onValueChanged);
-                multiCmd->addPropertyCmd<uint32_t>(project, sceneProject->id, entity, cpType, id + ".sceneId", (uint32_t)0, nullptr);
-                cmd = multiCmd;
+                // Write entity and sceneId as one command so bundle propagation sees the
+                // complete reference (a split write would propagate a stale sceneId).
+                cmd = new PropertyCmd<EntityReference>(project, sceneProject->id, entity, cpType, id, EntityReference{*defVal, 0}, settings.onValueChanged);
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
                 finishProperty = true;
             }
@@ -4477,10 +4476,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         auto extPickerResult = drawEntityPickerPopup(extPickerPopupId, settings.entityFilter, sceneProject, true, newValue, currentSceneId);
         if (extPickerResult.chosen) {
             for (Entity& entity : entities) {
-                auto multiCmd = new MultiPropertyCmd();
-                multiCmd->addPropertyCmd<unsigned int>(project, sceneProject->id, entity, cpType, id, extPickerResult.entity, settings.onValueChanged);
-                multiCmd->addPropertyCmd<uint32_t>(project, sceneProject->id, entity, cpType, id + ".sceneId", extPickerResult.sceneId, nullptr);
-                cmd = multiCmd;
+                cmd = new PropertyCmd<EntityReference>(project, sceneProject->id, entity, cpType, id, EntityReference{extPickerResult.entity, extPickerResult.sceneId}, settings.onValueChanged);
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
             }
             finishProperty = true;
@@ -4507,10 +4503,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
                 if (payload->IsDelivery() && valid) {
                     for (Entity& entity : entities) {
-                        auto multiCmd = new MultiPropertyCmd();
-                        multiCmd->addPropertyCmd<unsigned int>(project, sceneProject->id, entity, cpType, id, droppedEntity, settings.onValueChanged);
-                        multiCmd->addPropertyCmd<uint32_t>(project, sceneProject->id, entity, cpType, id + ".sceneId", storedSceneId, nullptr);
-                        cmd = multiCmd;
+                        cmd = new PropertyCmd<EntityReference>(project, sceneProject->id, entity, cpType, id, EntityReference{droppedEntity, storedSceneId}, settings.onValueChanged);
                         CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
                     }
                     finishProperty = true;
@@ -4534,10 +4527,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
                 if (payload->IsDelivery() && valid) {
                     for (Entity& entity : entities) {
-                        auto multiCmd = new MultiPropertyCmd();
-                        multiCmd->addPropertyCmd<unsigned int>(project, sceneProject->id, entity, cpType, id, droppedEntity, settings.onValueChanged);
-                        multiCmd->addPropertyCmd<uint32_t>(project, sceneProject->id, entity, cpType, id + ".sceneId", (uint32_t)0, nullptr);
-                        cmd = multiCmd;
+                        cmd = new PropertyCmd<EntityReference>(project, sceneProject->id, entity, cpType, id, EntityReference{droppedEntity, 0}, settings.onValueChanged);
                         CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
                     }
                     finishProperty = true;
@@ -4555,10 +4545,7 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(clearButtonFramePadding, ImGui::GetStyle().FramePadding.y));
         if (ImGui::Button((ICON_FA_XMARK "##clear_ext_entity_" + id).c_str())) {
             for (Entity& entity : entities) {
-                auto multiCmd = new MultiPropertyCmd();
-                multiCmd->addPropertyCmd<unsigned int>(project, sceneProject->id, entity, cpType, id, (unsigned int)NULL_ENTITY, settings.onValueChanged);
-                multiCmd->addPropertyCmd<uint32_t>(project, sceneProject->id, entity, cpType, id + ".sceneId", (uint32_t)0, nullptr);
-                cmd = multiCmd;
+                cmd = new PropertyCmd<EntityReference>(project, sceneProject->id, entity, cpType, id, EntityReference{NULL_ENTITY, 0}, settings.onValueChanged);
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
             }
             finishProperty = true;
