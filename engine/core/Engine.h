@@ -327,8 +327,7 @@ namespace doriax {
         static float getFramerate();
         static float getDeltatime();
 
-        // Upper bound (in seconds) for the value returned by getDeltatime() and used
-        // by the update loop. Equivalent to Unity's Time.maximumDeltaTime. Default 0.25.
+        // Upper bound (in seconds) for the value returned by getDeltatime() and used by the update loop. Default 0.25.
         static float getMaxDeltatime();
         static void setMaxDeltatime(float seconds);
 
