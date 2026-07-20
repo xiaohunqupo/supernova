@@ -328,6 +328,8 @@ Texture* ProjectSettingsWindow::findThumbnail(const std::string& path) {
 void ProjectSettingsWindow::open(Project* project) {
     m_isOpen = true;
     m_project = project;
+    m_projectNameOriginal = project->getName();
+    snprintf(m_projectNameBuffer, sizeof(m_projectNameBuffer), "%s", m_projectNameOriginal.c_str());
     m_canvasWidth = project->getCanvasWidth();
     m_canvasHeight = project->getCanvasHeight();
     m_scalingModeIndex = findScalingIndex(project->getScalingMode());
@@ -479,6 +481,10 @@ void ProjectSettingsWindow::drawSettings() {
 
 void ProjectSettingsWindow::drawGeneralSettings() {
     drawSettingsPanel("##GeneralSettingsPanel", [this]() {
+        beginSettingsRow("Project Name");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##ProjectName", m_projectNameBuffer, sizeof(m_projectNameBuffer));
+
         beginSettingsRow("Start Scene");
 
         const auto& scenes = m_project->getScenes();
@@ -675,6 +681,13 @@ void ProjectSettingsWindow::drawBuildSettings() {
 }
 
 void ProjectSettingsWindow::applySettings() {
+    // The edit buffer truncates long names. Only write back when the value
+    // changed, since setName also rebuilds libName and the window title.
+    std::string projectName = m_projectNameBuffer;
+    if (!projectName.empty() && projectName != m_projectNameOriginal.substr(0, sizeof(m_projectNameBuffer) - 1)) {
+        m_project->setName(projectName);
+    }
+
     m_project->setCanvasSize(m_canvasWidth, m_canvasHeight);
     m_project->setScalingMode(scalingModeValues[m_scalingModeIndex]);
     m_project->setTextureStrategy(textureStrategyValues[m_textureStrategyIndex]);

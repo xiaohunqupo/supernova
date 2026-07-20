@@ -17,6 +17,8 @@ namespace doriax::editor {
         Project* m_project = nullptr;
 
         // UI state
+        char m_projectNameBuffer[256] = {0};
+        std::string m_projectNameOriginal;
         int m_canvasWidth = 0;
         int m_canvasHeight = 0;
         int m_scalingModeIndex = 0;
