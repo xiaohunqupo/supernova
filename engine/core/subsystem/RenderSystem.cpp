@@ -5536,7 +5536,24 @@ void RenderSystem::update(double dt){
                 loadMesh(entity, mesh, pipelines, instmesh, terrain);
             }
             if (mesh.needUpdateAABB || transform.needUpdate){
-                mesh.worldAABB = transform.modelMatrix * mesh.aabb;
+                // A skinned mesh has its own model matrix cancelled out at render time: each
+                // bonesMatrix carries inverseDerivedTransform (= modelMatrix.inverse()), so the
+                // shader places geometry at modelMatrix * bonesMatrix[b] * vertex (see mesh.vert
+                // / skinning.glsl). Bounding it with modelMatrix * aabb then mis-sizes the box
+                // whenever the mesh node scale differs from the skeleton's real scale (e.g. an
+                // armature exported at 0.01), which breaks ray picking and frustum culling. So
+                // bound the posed mesh by merging the local AABB through every active bone. A
+                // non-skinned mesh keeps only identity bone matrices, so it merges nothing and
+                // falls back to the plain modelMatrix * aabb.
+                const Matrix4 identityMatrix;
+                AABB skinnedAABB;
+                for (int b = 0; b < MAX_BONES; b++){
+                    if (mesh.bonesMatrix[b] != identityMatrix){
+                        skinnedAABB.merge((transform.modelMatrix * mesh.bonesMatrix[b]) * mesh.aabb);
+                    }
+                }
+                mesh.worldAABB = skinnedAABB.isNull() ? (transform.modelMatrix * mesh.aabb) : skinnedAABB;
+
                 mesh.needUpdateAABB = false;
             }
         }else if (signature.test(scene->getComponentId<UIComponent>())){
@@ -5670,12 +5687,19 @@ void RenderSystem::update(double dt){
                         // entity's own mesh. Multi-node skinned models split each mesh node into a
                         // child entity (each with its own MeshComponent), so the same bone must drive
                         // every child mesh that shares this skeleton.
-                        if (MeshComponent* mesh = scene->findComponent<MeshComponent>(bone.model))
+                        // A moved bone changes the skinned bounds, so flag the driven mesh(es)
+                        // for a world-AABB rebuild. Bones are processed after their mesh in this
+                        // loop, so this takes effect next frame with the fresh bonesMatrix.
+                        if (MeshComponent* mesh = scene->findComponent<MeshComponent>(bone.model)){
                             mesh->bonesMatrix[bone.index] = skinning;
+                            mesh->needUpdateAABB = true;
+                        }
 
                         for (auto const& meshNode : model->meshNodesMapping){
-                            if (MeshComponent* childMesh = scene->findComponent<MeshComponent>(meshNode.second))
+                            if (MeshComponent* childMesh = scene->findComponent<MeshComponent>(meshNode.second)){
                                 childMesh->bonesMatrix[bone.index] = skinning;
+                                childMesh->needUpdateAABB = true;
+                            }
                         }
                     }
                 }
