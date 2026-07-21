@@ -97,4 +97,65 @@ bool UIUtils::searchInput(const char* id, std::string hint, char* buffer, size_t
     return changed;
 }
 
+bool UIUtils::sliderFloatInput(const char* id, float* value, float minValue, float maxValue, const char* format, ImGuiSliderFlags flags) {
+    // Only one widget can be text-edited at a time (it holds keyboard focus), so shared statics are
+    // enough to remember which slider was double-clicked into an input field and its pre-click value.
+    static ImGuiID editingId = 0;
+    static bool focusPending = false;
+    static float clickValue = 0.0f;
+    static int editFrame = -1; // ImGui frame count when the edit target was last drawn
+
+    const ImGuiID widgetId = ImGui::GetID(id);
+    const int frame = ImGui::GetFrameCount();
+
+    // If the edit target was not drawn on the previous frame, its input field was torn down without a
+    // deactivation event (row collapsed, panel switched, or hidden while focus was still pending).
+    // Cancel the edit and fall back to the slider; clearing focusPending too avoids stealing focus
+    // when the row reappears.
+    if (editingId == widgetId && frame - editFrame > 1) {
+        editingId = 0;
+        focusPending = false;
+    }
+
+    bool changed = false;
+
+    if (editingId == widgetId) {
+        editFrame = frame;
+        // Double-clicked: type the exact value. InputFloat auto-selects its text on activation and
+        // does not clamp, so values outside [minValue, maxValue] can be entered.
+        if (focusPending) {
+            ImGui::SetKeyboardFocusHere();
+            focusPending = false;
+        }
+        changed = ImGui::InputFloat(id, value, 0.0f, 0.0f, format);
+        if (ImGui::IsItemDeactivated()) {
+            editingId = 0;
+        }
+    } else {
+        const float before = *value;
+        changed = ImGui::SliderFloat(id, value, minValue, maxValue, format, flags);
+
+        // Remember the value from before the interaction started (sliders seek to the cursor on click).
+        if (ImGui::IsItemActivated()) {
+            clickValue = before;
+        }
+
+        // Suppress the slider's click-to-seek: a plain click (including the first click of a
+        // double-click) must not move the value. Only dragging past the threshold adjusts it, so
+        // double-clicking to open the text field never changes the value nor pushes an undo command.
+        if (ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            *value = clickValue;
+            changed = false;
+        }
+
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            editingId = widgetId;
+            focusPending = true;
+            editFrame = frame; // mark handled this frame so the teardown guard waits for a real gap
+        }
+    }
+
+    return changed;
+}
+
 }

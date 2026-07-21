@@ -4,6 +4,7 @@
 #include "imgui_internal.h"
 
 #include "util/Util.h"
+#include "util/UIUtils.h"
 #include "util/FileDialogs.h"
 #include "util/EntityPayload.h"
 #include "util/CameraTextureLink.h"
@@ -429,8 +430,9 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
             break;
         case ScenePropertyInputType::SliderFloat:
             if constexpr (std::is_same_v<T, float>) {
+                // Slider that can be double-clicked to type an exact value (also allows values above the max).
                 ImGui::SetNextItemWidth(-1);
-                changed = ImGui::SliderFloat(("##" + propertyName).c_str(), &value, minValue, maxValue);
+                changed = UIUtils::sliderFloatInput(("##" + propertyName).c_str(), &value, minValue, maxValue);
             }
             break;
         case ScenePropertyInputType::ColorRGB:
