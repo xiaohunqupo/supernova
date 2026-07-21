@@ -1770,6 +1770,13 @@ float MeshSystem::getTerrainHeight(TerrainComponent& terrain, float x, float y){
     if (x < 0 || y < 0 || x >= terrain.terrainSize || y >= terrain.terrainSize)
         return 0;
 
+    // The heightmap may be empty, a framebuffer, or present-but-unloaded (a missing
+    // or corrupt file leaves a null data pointer with needLoad already cleared).
+    // Sample any of these as flat rather than dereferencing null data and crashing.
+    if (terrain.heightMap.empty() || terrain.heightMap.isFramebuffer() || !terrain.heightMap.hasData()){
+        return 0;
+    }
+
     TextureData& textureData = terrain.heightMap.getData();
 
     int posX = floor(textureData.getWidth() * x / terrain.terrainSize);

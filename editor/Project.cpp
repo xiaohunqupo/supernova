@@ -3293,8 +3293,16 @@ bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::files
         fout.close();
 
         sceneProject->filepath = relPath;
+        // Terrain map writes are asynchronous; when any failed to reach disk the
+        // save is incomplete even though the scene YAML is written: keep the
+        // scene dirty so quit/open flows still prompt, and report failure so
+        // save-and-quit flows don't proceed to close while sculpt data exists
+        // only in memory. The next save retries the writes.
+        if (!TerrainEditWindow::cleanUnusedTerrainMaps(this)){
+            sceneProject->isModified = true;
+            return false;
+        }
         sceneProject->isModified = false;
-        TerrainEditWindow::cleanUnusedTerrainMaps(this);
     } catch (const std::exception& e) {
         Out::error("Failed to save scene file: %s", e.what());
         return false;

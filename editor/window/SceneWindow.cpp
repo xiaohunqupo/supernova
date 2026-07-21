@@ -1058,7 +1058,9 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 mouseLeftDown = true;
             }
             mouseLeftDragPos = Vector2(x, y);
-            if (mouseLeftStartPos.distance(mouseLeftDragPos) > 5){
+            // Terrain brush strokes skip the drag threshold: holding the button
+            // keeps applying flow and tiny precise drags still paint.
+            if (mouseLeftStartPos.distance(mouseLeftDragPos) > 5 || sceneProject->sceneRender->isTerrainEditing()){
                 mouseLeftDraggedInside = true;
             }
             if (mouseLeftDraggedInside){
@@ -1356,6 +1358,28 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
     if (!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemFocused()){
         if (project->getSelectedSceneId() == sceneId){
             if (!walkingMode){
+
+                // Brush shortcuts while terrain editing: [ / ] resize the brush,
+                // Shift+[ / Shift+] adjust its strength.
+                if (TerrainEditWindow* terrainEditWindow = Backend::getApp().getTerrainEditWindow()){
+                    if (terrainEditWindow->isEditingScene(sceneProject->scene)){
+                        const bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
+                        if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)){
+                            if (shiftHeld){
+                                terrainEditWindow->adjustBrushStrength(1.0f / 1.15f);
+                            }else{
+                                terrainEditWindow->adjustBrushSize(1.0f / 1.15f);
+                            }
+                        }
+                        if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)){
+                            if (shiftHeld){
+                                terrainEditWindow->adjustBrushStrength(1.15f);
+                            }else{
+                                terrainEditWindow->adjustBrushSize(1.15f);
+                            }
+                        }
+                    }
+                }
 
                 if (sceneProject->sceneType != SceneType::SCENE_UI){
                     if (ImGui::IsKeyPressed(ImGuiKey_W)) {

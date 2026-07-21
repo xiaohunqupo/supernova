@@ -31,10 +31,6 @@ namespace doriax::editor{
              return "material";
         }
 
-        inline static std::string getEntityExtensions() {
-             return "entity";
-        }
-
         inline static std::string getModelExtensions() {
              return "gltf,glb,obj";
         }

@@ -84,6 +84,10 @@ namespace doriax{
             TextureRender* getRender(TextureRender* fallBackTexture = NULL);
             std::string getPath(size_t index = 0) const;
             TextureData& getData(size_t index = 0) const;
+            // True when the backing data array exists, so getData() can be dereferenced.
+            // A present-but-unloaded or load-failed texture (empty file, missing path)
+            // keeps a null data pointer even though it is not empty().
+            bool hasData() const;
             std::string getId() const;
 
             size_t getNumFaces() const;

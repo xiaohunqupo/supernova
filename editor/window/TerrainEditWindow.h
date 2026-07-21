@@ -6,6 +6,7 @@
 
 #include "imgui.h"
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -34,10 +35,10 @@ namespace doriax::editor{
 
     struct TerrainBrushCursor{
         bool visible = false;
-        Vector3 center = Vector3::ZERO;
-        Vector3 axisX = Vector3::ZERO;
-        Vector3 axisZ = Vector3::ZERO;
-        TerrainBrushShape shape = TerrainBrushShape::Circle;
+        // World-space closed loops draped over the terrain surface: the brush
+        // boundary and (when the falloff has a gradient) the half-strength contour.
+        std::vector<Vector3> outerPoints;
+        std::vector<Vector3> innerPoints;
     };
 
     enum class TerrainMapTarget{
@@ -75,6 +76,21 @@ namespace doriax::editor{
         Entity entity = NULL_ENTITY;
         TerrainMapTarget target = TerrainMapTarget::HeightMap;
         TerrainMapSnapshot beforeSnapshot;
+        // Brush mode for this stroke (modifiers can override the selected mode)
+        TerrainBrushMode effectiveMode = TerrainBrushMode::Raise;
+        // Normalized flatten target, sampled from the terrain at stroke start
+        float flattenTarget = 0.5f;
+        // Stamp pacing: previous stamp position/time for path interpolation and
+        // time-based flow
+        bool hasLastPoint = false;
+        Vector3 lastPoint = Vector3::ZERO;
+        std::chrono::steady_clock::time_point lastStampTime;
+        // Float-space copy of the edited map (1 channel for heights, 4 for blend):
+        // stamps accumulate here and are quantized to the stored bit depth only on
+        // write-back, so gentle repeated stamps aren't lost to rounding.
+        std::vector<float> workingPixels;
+        int workingWidth = 0;
+        int workingHeight = 0;
         bool heightReferenceValid = false;
         float heightReferenceTerrainSize = 0.0f;
         float heightReferenceMaxHeight = 0.0f;
@@ -96,6 +112,7 @@ namespace doriax::editor{
         bool brushActive;
         bool normalizeBlendPaint;
         bool heightMapStartAtMiddle;
+        bool flattenPickOnStroke;
 
         uint32_t selectedSceneId;
         Entity selectedEntity;
@@ -144,8 +161,8 @@ namespace doriax::editor{
         bool snapshotsEqual(const TerrainMapSnapshot& a, const TerrainMapSnapshot& b);
         void applySnapshotToTexture(Project* project, Texture& texture, const TerrainMapSnapshot& snapshot);
         bool ensureEditableMap(Project* project, SceneProject* sceneProject, Entity entity, TerrainMapTarget target, int resolution);
-        float readHeight(TextureData& data, int x, int y);
         void writeHeight(TextureData& data, int x, int y, float value);
+        static float bilinearHeightSample(const unsigned char* pixels, int width, int height, int channels, int bytesPerChannel, float texelX, float texelY);
         bool raycastTerrainStrokeSurface(const Ray& localRay, TerrainComponent& terrain, const ActiveStroke* activeStroke, Vector3& localPoint, float& localHeight) const;
 
         SceneProject* findSceneProject(Scene* scene) const;
@@ -158,6 +175,7 @@ namespace doriax::editor{
         void captureStrokeHeightReference(TerrainComponent& terrain);
         bool findTerrainHit(Scene* scene, const Ray& ray, Entity& entity, Vector3& localPoint, Vector3& worldPoint, float& localHeight, const ActiveStroke* activeStroke = nullptr) const;
         bool applyBrush(SceneProject* sceneProject, Entity entity, const Vector3& localPoint);
+        bool stampBrush(TerrainComponent& terrain, TextureData& data, TerrainMapTarget target, const Vector3& localPoint, float deltaTime);
         void refreshTerrain(SceneProject* sceneProject, Entity entity, TerrainMapTarget target);
         void clearStroke();
 
@@ -167,7 +185,15 @@ namespace doriax::editor{
     public:
         static constexpr const char* WINDOW_NAME = "Terrain Editor";
 
-        static void cleanUnusedTerrainMaps(Project* project);
+        static constexpr float MIN_BRUSH_SIZE = 0.1f;
+        static constexpr float MAX_BRUSH_SIZE = 50.0f;
+        static constexpr float MIN_BRUSH_STRENGTH = 0.01f;
+        static constexpr float MAX_BRUSH_STRENGTH = 1.0f;
+
+        // Returns false when terrain map edits could not be persisted to disk —
+        // the caller should keep the scene marked unsaved so another save (which
+        // retries the writes) is prompted for.
+        static bool cleanUnusedTerrainMaps(Project* project);
 
         TerrainEditWindow(Project* project);
         ~TerrainEditWindow();
@@ -183,6 +209,9 @@ namespace doriax::editor{
         bool paintStroke(Scene* scene, const Ray& ray);
         void endStroke();
         bool updateCursor(Scene* scene, const Ray& ray, TerrainBrushCursor& cursor) const;
+
+        void adjustBrushSize(float factor);
+        void adjustBrushStrength(float factor);
     };
 
 }

@@ -516,6 +516,10 @@ TextureData& Texture::getData(size_t index) const{
     return data->at(index);
 }
 
+bool Texture::hasData() const{
+    return data != nullptr;
+}
+
 std::string Texture::getId() const{
     return id;
 }

@@ -138,23 +138,29 @@ bool UIUtils::sliderFloatInput(const char* id, float* value, float minValue, flo
         const float before = *value;
         changed = ImGui::SliderFloat(id, value, minValue, maxValue, format, flags);
 
-        // Remember the value from before the interaction started (sliders seek to the cursor on click).
-        if (ImGui::IsItemActivated()) {
+        // Capture the value from before this click sequence so a double-click can restore it.
+        // Sliders seek to the cursor on click, so the slider behaves normally (click-to-seek and
+        // drag both move the value). On the second click of a double-click the slider re-activates
+        // after the first click already moved the value, so skip that re-capture and keep the
+        // value from before the first click.
+        if (ImGui::IsItemActivated() && !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
             clickValue = before;
         }
 
-        // Suppress the slider's click-to-seek: a plain click (including the first click of a
-        // double-click) must not move the value. Only dragging past the threshold adjusts it, so
-        // double-clicking to open the text field never changes the value nor pushes an undo command.
-        if (ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-            *value = clickValue;
-            changed = false;
-        }
-
+        // Double-click opens the text field to type an exact value. Restore the value from before
+        // the double-click so opening the editor discards the two clicks' seek, and report the
+        // restore as a change so an undoing caller merges the transient seek away into the value
+        // that is ultimately typed instead of leaving a stray undo step at the clicked position.
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
             editingId = widgetId;
             focusPending = true;
             editFrame = frame; // mark handled this frame so the teardown guard waits for a real gap
+            if (*value != clickValue) {
+                *value = clickValue;
+                changed = true;
+            } else {
+                changed = false;
+            }
         }
     }
 

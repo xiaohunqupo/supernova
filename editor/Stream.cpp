@@ -1381,6 +1381,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         terrainNode["blendMapResolution"] = ts.blendMapResolution;
         terrainNode["normalizeBlendPaint"] = ts.normalizeBlendPaint;
         terrainNode["heightMapStartAtMiddle"] = ts.heightMapStartAtMiddle;
+        terrainNode["flattenPickOnStroke"] = ts.flattenPickOnStroke;
         root["terrainEditor"] = terrainNode;
     }
 
@@ -1554,6 +1555,8 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
         if (tn["blendMapResolution"].IsDefined()) ts.blendMapResolution = tn["blendMapResolution"].as<int>();
         if (tn["normalizeBlendPaint"].IsDefined()) ts.normalizeBlendPaint = tn["normalizeBlendPaint"].as<bool>();
         if (tn["heightMapStartAtMiddle"].IsDefined()) ts.heightMapStartAtMiddle = tn["heightMapStartAtMiddle"].as<bool>();
+        if (tn["flattenPickOnStroke"].IsDefined()) ts.flattenPickOnStroke = tn["flattenPickOnStroke"].as<bool>();
+        else ts.brushStrength = TerrainEditorSettings{}.brushStrength; // file predates time-based flow; old per-event strengths are far too weak under the new semantics
         project->getTerrainEditorSettings() = ts;
     }
 

@@ -1705,32 +1705,25 @@ void editor::SceneRender::updateTerrainBrushCursor(){
 
     TerrainEditWindow* terrainEditWindow = Backend::getApp().getTerrainEditWindow();
     TerrainBrushCursor cursor;
-    if (!terrainEditWindow || !terrainEditWindow->updateCursor(scene, mouseRay, cursor) || !cursor.visible){
+    if (!terrainEditWindow || !terrainEditWindow->updateCursor(scene, mouseRay, cursor) || !cursor.visible || cursor.outerPoints.size() < 2){
         terrainBrushLines->setVisible(false);
         return;
     }
 
     terrainBrushLines->clearLines();
-    const Vector4 color(1.0f, 0.78f, 0.22f, 1.0f);
-    if (cursor.shape == TerrainBrushShape::Circle){
-        const int segments = 48;
-        Vector3 previous = cursor.center + cursor.axisX;
-        for (int i = 1; i <= segments; i++){
-            float angle = (2.0f * static_cast<float>(M_PI) * static_cast<float>(i)) / static_cast<float>(segments);
-            Vector3 point = cursor.center + cursor.axisX * std::cos(angle) + cursor.axisZ * std::sin(angle);
-            terrainBrushLines->addLine(previous, point, color);
-            previous = point;
+    auto addLoop = [&](const std::vector<Vector3>& points, const Vector4& color){
+        if (points.size() < 2){
+            return;
         }
-    }else{
-        Vector3 p0 = cursor.center - cursor.axisX - cursor.axisZ;
-        Vector3 p1 = cursor.center + cursor.axisX - cursor.axisZ;
-        Vector3 p2 = cursor.center + cursor.axisX + cursor.axisZ;
-        Vector3 p3 = cursor.center - cursor.axisX + cursor.axisZ;
-        terrainBrushLines->addLine(p0, p1, color);
-        terrainBrushLines->addLine(p1, p2, color);
-        terrainBrushLines->addLine(p2, p3, color);
-        terrainBrushLines->addLine(p3, p0, color);
-    }
+        for (size_t i = 0; i < points.size(); i++){
+            terrainBrushLines->addLine(points[i], points[(i + 1) % points.size()], color);
+        }
+    };
+
+    // Brush boundary plus the (dimmer) half-strength falloff contour, both draped
+    // over the terrain surface by updateCursor.
+    addLoop(cursor.outerPoints, Vector4(1.0f, 0.78f, 0.22f, 1.0f));
+    addLoop(cursor.innerPoints, Vector4(0.75f, 0.58f, 0.16f, 1.0f));
 
     terrainBrushLines->setVisible(true);
 }

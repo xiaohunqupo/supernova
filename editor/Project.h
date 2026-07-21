@@ -114,12 +114,13 @@ namespace doriax::editor{
         int brushShape = 0;          // TerrainBrushShape::Circle
         int brushFalloff = 0;        // TerrainBrushFalloff::Smooth
         float brushSize = 4.0f;
-        float brushStrength = 0.04f;
+        float brushStrength = 0.3f;  // normalized flow per second at full falloff
         float flattenHeight = 0.5f;
         int heightMapResolution = 512;
         int blendMapResolution = 512;
         bool normalizeBlendPaint = true;
         bool heightMapStartAtMiddle = true;
+        bool flattenPickOnStroke = true;
     };
 
     using SharedMoveRecovery = std::map<std::string, SharedMoveRecoveryEntry>;
