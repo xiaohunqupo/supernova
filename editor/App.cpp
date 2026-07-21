@@ -1777,7 +1777,10 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     //      shadows.glsl/lighting2d.glsl loop by radius from cameraDir.w / atlasInfo.w.
     // v12: fixed game resolution — new blit fullscreen shader (blit.frag).
     // v13: box-projected local reflection probes in the mesh IBL path.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v13";
+    // v14: G-buffer (SSR) terrain fix — gbuffer.vert no longer declares a_texcoord1
+    //      for terrain (generates the base-tile UV in-shader), so the terrain G-buffer
+    //      pipeline's vertex layout is continuous and passes sokol validation.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v14";
 }
 
 void editor::App::pushTabNotificationStyle(){

@@ -31,7 +31,13 @@ out vec3 v_normal;          // view space
 #endif
 
 #if defined(HAS_BASECOLOR_TEXTURE) || defined(HAS_METALLICROUGHNESS_TEXTURE)
-    in vec2 a_texcoord1;
+    // Terrain carries no texcoord vertex attribute (its UVs are generated from the
+    // world position in-shader, like mesh.vert). Declaring a_texcoord1 for terrain
+    // would leave that attribute slot unbound, making the pipeline's vertex layout
+    // non-continuous and failing sokol validation, so only non-terrain declares it.
+    #ifndef HAS_TERRAIN
+        in vec2 a_texcoord1;
+    #endif
     out vec2 v_uv1;
 #endif
 
@@ -86,7 +92,12 @@ void main() {
     #endif
 
     #if defined(HAS_BASECOLOR_TEXTURE) || defined(HAS_METALLICROUGHNESS_TEXTURE)
-        v_uv1 = a_texcoord1;
+        #ifdef HAS_TERRAIN
+            // base-tile terrain UV, matching mesh.vert's getTerrainTiledTexture()
+            v_uv1 = (objPos.xz + (terrain.size / 2.0)) / terrain.size * float(terrain.textureBaseTiles);
+        #else
+            v_uv1 = a_texcoord1;
+        #endif
     #endif
 
     gl_Position = mvpMatrix * pos;
