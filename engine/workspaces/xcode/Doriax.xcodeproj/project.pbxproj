@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		17A9D0023000000000A1B2C3 /* ReflectionProbeComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 17A9D0013000000000A1B2C3 /* ReflectionProbeComponent.h */; };
 		17145B362FF7FC3B00543CB7 /* Light2DComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 17145B342FF7FC3B00543CB7 /* Light2DComponent.h */; };
 		17145B372FF7FC3B00543CB7 /* Occluder2DComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 17145B352FF7FC3B00543CB7 /* Occluder2DComponent.h */; };
 		17145B3C2FF7FC5E00543CB7 /* Light2D.h in Headers */ = {isa = PBXBuildFile; fileRef = 17145B382FF7FC5E00543CB7 /* Light2D.h */; };
@@ -26,6 +25,12 @@
 		17235ADF2FD2F66D00AF8D04 /* Progressbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */; };
 		172A59A52FC4CF36002FDFCA /* ShaderBuildTypes.h in Headers */ = {isa = PBXBuildFile; fileRef = 172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */; };
 		175DCCB130066F7F008C19EC /* Interpolation.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCB030066F7F008C19EC /* Interpolation.h */; };
+		175DCCB3300FA1C2008C19EC /* ReflectionProbeComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCB2300FA1C2008C19EC /* ReflectionProbeComponent.h */; };
+		175DCCB6300FA1F2008C19EC /* ReflectionProbe.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCB4300FA1F2008C19EC /* ReflectionProbe.h */; };
+		175DCCB7300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 175DCCB5300FA1F2008C19EC /* ReflectionProbe.cpp */; };
+		175DCCB8300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 175DCCB5300FA1F2008C19EC /* ReflectionProbe.cpp */; };
+		175DCCBB300FA22F008C19EC /* Export.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCB9300FA22F008C19EC /* Export.h */; };
+		175DCCBC300FA22F008C19EC /* SceneSettings.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCBA300FA22F008C19EC /* SceneSettings.h */; };
 		1787AD8E2F673CE000DB1D75 /* BundleComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 1787AD8D2F673CE000DB1D75 /* BundleComponent.h */; };
 		1787AD942F6C333300DB1D75 /* SceneManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD922F6C333300DB1D75 /* SceneManager.cpp */; };
 		1787AD952F6C333300DB1D75 /* BundleManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1787AD902F6C333300DB1D75 /* BundleManager.cpp */; };
@@ -577,9 +582,6 @@
 		7170A3DA2818A8A30003E965 /* SkyBox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7170A3D22818A8A30003E965 /* SkyBox.cpp */; };
 		7170A3DB2818A8A30003E965 /* Fog.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7170A3D32818A8A30003E965 /* Fog.cpp */; };
 		7170A3DC2818A8A30003E965 /* Fog.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7170A3D32818A8A30003E965 /* Fog.cpp */; };
-		17A9D0053000000000A1B2C3 /* ReflectionProbe.h in Headers */ = {isa = PBXBuildFile; fileRef = 17A9D0033000000000A1B2C3 /* ReflectionProbe.h */; };
-		17A9D0063000000000A1B2C3 /* ReflectionProbe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17A9D0043000000000A1B2C3 /* ReflectionProbe.cpp */; };
-		17A9D0073000000000A1B2C3 /* ReflectionProbe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17A9D0043000000000A1B2C3 /* ReflectionProbe.cpp */; };
 		717AD876290B5DF3007D7DB5 /* soloud_bus.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD7C0290B5DF2007D7DB5 /* soloud_bus.h */; };
 		717AD877290B5DF3007D7DB5 /* soloud_sfxr.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD7C1290B5DF2007D7DB5 /* soloud_sfxr.h */; };
 		717AD878290B5DF3007D7DB5 /* soloud_biquadresonantfilter.h in Headers */ = {isa = PBXBuildFile; fileRef = 717AD7C2290B5DF2007D7DB5 /* soloud_biquadresonantfilter.h */; };
@@ -1310,7 +1312,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		17A9D0013000000000A1B2C3 /* ReflectionProbeComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ReflectionProbeComponent.h; sourceTree = "<group>"; };
 		17145B342FF7FC3B00543CB7 /* Light2DComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Light2DComponent.h; sourceTree = "<group>"; };
 		17145B352FF7FC3B00543CB7 /* Occluder2DComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Occluder2DComponent.h; sourceTree = "<group>"; };
 		17145B382FF7FC5E00543CB7 /* Light2D.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Light2D.h; sourceTree = "<group>"; };
@@ -1325,6 +1326,11 @@
 		17235ADC2FD2F66D00AF8D04 /* Progressbar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Progressbar.cpp; sourceTree = "<group>"; };
 		172A59A42FC4CF36002FDFCA /* ShaderBuildTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderBuildTypes.h; sourceTree = "<group>"; };
 		175DCCB030066F7F008C19EC /* Interpolation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Interpolation.h; sourceTree = "<group>"; };
+		175DCCB2300FA1C2008C19EC /* ReflectionProbeComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ReflectionProbeComponent.h; sourceTree = "<group>"; };
+		175DCCB4300FA1F2008C19EC /* ReflectionProbe.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ReflectionProbe.h; sourceTree = "<group>"; };
+		175DCCB5300FA1F2008C19EC /* ReflectionProbe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ReflectionProbe.cpp; sourceTree = "<group>"; };
+		175DCCB9300FA22F008C19EC /* Export.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Export.h; sourceTree = "<group>"; };
+		175DCCBA300FA22F008C19EC /* SceneSettings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneSettings.h; sourceTree = "<group>"; };
 		1787AD8D2F673CE000DB1D75 /* BundleComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleComponent.h; sourceTree = "<group>"; };
 		1787AD8F2F6C333300DB1D75 /* BundleManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BundleManager.h; sourceTree = "<group>"; };
 		1787AD902F6C333300DB1D75 /* BundleManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = BundleManager.cpp; sourceTree = "<group>"; };
@@ -2019,8 +2025,6 @@
 		7170A3D12818A8A30003E965 /* Fog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Fog.h; sourceTree = "<group>"; };
 		7170A3D22818A8A30003E965 /* SkyBox.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = SkyBox.cpp; sourceTree = "<group>"; };
 		7170A3D32818A8A30003E965 /* Fog.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Fog.cpp; sourceTree = "<group>"; };
-		17A9D0033000000000A1B2C3 /* ReflectionProbe.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ReflectionProbe.h; sourceTree = "<group>"; };
-		17A9D0043000000000A1B2C3 /* ReflectionProbe.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ReflectionProbe.cpp; sourceTree = "<group>"; };
 		717AD7A2290B5DA1007D7DB5 /* libsoloud-macos.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libsoloud-macos.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		717AD7B1290B5DCA007D7DB5 /* libsoloud-ios.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libsoloud-ios.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		717AD7C0290B5DF2007D7DB5 /* soloud_bus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = soloud_bus.h; sourceTree = "<group>"; };
@@ -3364,9 +3368,11 @@
 				71451BC1270CA17F00712643 /* action */,
 				7162FC7B25962A0E0075B97D /* buffer */,
 				7162FC4425962A0E0075B97D /* component */,
+				7162FC7A25962A0E0075B97D /* Doriax.h */,
 				71E36B8125D5996400EFEED4 /* ecs */,
 				7162FC2B25962A0E0075B97D /* Engine.h */,
 				7162FC7225962A0E0075B97D /* Engine.cpp */,
+				175DCCB9300FA22F008C19EC /* Export.h */,
 				7128D05D25BB02F800965B51 /* Input.h */,
 				7128D08525BB033D00965B51 /* Input.cpp */,
 				7162FC2F25962A0E0075B97D /* io */,
@@ -3380,10 +3386,10 @@
 				7162FC3825962A0E0075B97D /* render */,
 				7162FC8625962A0E0075B97D /* Scene.h */,
 				7162FC2D25962A0E0075B97D /* Scene.cpp */,
+				175DCCBA300FA22F008C19EC /* SceneSettings.h */,
 				71BE622C25B1DB9D006D6E02 /* script */,
 				71CC839D26B8C54A00EEBB93 /* shader */,
 				7162FC6F25962A0E0075B97D /* subsystem */,
-				7162FC7A25962A0E0075B97D /* Doriax.h */,
 				71BE61FE25B1DB22006D6E02 /* System.h */,
 				71BE61FF25B1DB22006D6E02 /* System.cpp */,
 				7162FC6A25962A0E0075B97D /* texture */,
@@ -3484,7 +3490,6 @@
 				7162FC4525962A0E0075B97D /* MeshComponent.h */,
 				71ABBD3E27A879B9001CE3AF /* MeshPolygonComponent.h */,
 				17FB42722FDDA6E3002F919C /* MirrorComponent.h */,
-				17A9D0013000000000A1B2C3 /* ReflectionProbeComponent.h */,
 				7170A3CA2818A87E0003E965 /* ModelComponent.h */,
 				71E5450D284D5BDF00C68FAB /* MorphTracksComponent.h */,
 				17145B352FF7FC3B00543CB7 /* Occluder2DComponent.h */,
@@ -3494,6 +3499,7 @@
 				713E581327BA9D1300376680 /* PolygonComponent.h */,
 				71451BB5270C9D0F00712643 /* PositionActionComponent.h */,
 				17235AD92FD2F65000AF8D04 /* ProgressbarComponent.h */,
+				175DCCB2300FA1C2008C19EC /* ReflectionProbeComponent.h */,
 				71E54510284D5BE000C68FAB /* RotateTracksComponent.h */,
 				71451BBB270C9D1000712643 /* RotationActionComponent.h */,
 				71451BB8270C9D0F00712643 /* ScaleActionComponent.h */,
@@ -3795,12 +3801,12 @@
 		7170A3CF2818A8A30003E965 /* environment */ = {
 			isa = PBXGroup;
 			children = (
-				7170A3D32818A8A30003E965 /* Fog.cpp */,
 				7170A3D12818A8A30003E965 /* Fog.h */,
-				17A9D0043000000000A1B2C3 /* ReflectionProbe.cpp */,
-				17A9D0033000000000A1B2C3 /* ReflectionProbe.h */,
-				7170A3D22818A8A30003E965 /* SkyBox.cpp */,
+				7170A3D32818A8A30003E965 /* Fog.cpp */,
+				175DCCB4300FA1F2008C19EC /* ReflectionProbe.h */,
+				175DCCB5300FA1F2008C19EC /* ReflectionProbe.cpp */,
 				7170A3D02818A8A30003E965 /* SkyBox.h */,
+				7170A3D22818A8A30003E965 /* SkyBox.cpp */,
 			);
 			path = environment;
 			sourceTree = "<group>";
@@ -4396,6 +4402,7 @@
 				7128D10225C2354A00965B51 /* SystemRender.h in Headers */,
 				715253542CD057C400D294D8 /* Sphere.h in Headers */,
 				71E544FE284D5BB700C68FAB /* Animation.h in Headers */,
+				175DCCB3300FA1C2008C19EC /* ReflectionProbeComponent.h in Headers */,
 				17A4DD6D2F5E4F8800C1BFC6 /* HybridArray.h in Headers */,
 				713E581527BA9D1300376680 /* PolygonComponent.h in Headers */,
 				7157764E2B050C230049C970 /* FontPool.h in Headers */,
@@ -4430,6 +4437,8 @@
 				71ABBD4B27A87A2E001CE3AF /* MeshSystem.h in Headers */,
 				7170A3D72818A8A30003E965 /* SkyBox.h in Headers */,
 				71BE620025B1DB22006D6E02 /* System.h in Headers */,
+				175DCCBB300FA22F008C19EC /* Export.h in Headers */,
+				175DCCBC300FA22F008C19EC /* SceneSettings.h in Headers */,
 				71E54508284D5BB700C68FAB /* MorphTracks.h in Headers */,
 				7105CAA82AD61BD5007C91BA /* JoltPhysicsAux.h in Headers */,
 				71ABBD10277A313C001CE3AF /* AlphaAction.h in Headers */,
@@ -4449,7 +4458,6 @@
 				71E824912A9C23A600C8E6F2 /* Body2D.h in Headers */,
 				718FDDFA2837CA9A00AF314C /* hlsl5.h in Headers */,
 				7170A3D82818A8A30003E965 /* Fog.h in Headers */,
-				17A9D0053000000000A1B2C3 /* ReflectionProbe.h in Headers */,
 				71BE624525B1DB9E006D6E02 /* TexturePool.h in Headers */,
 				7105CAAC2AD61C7A007C91BA /* Body3DComponent.h in Headers */,
 				713E581227BA9CE400376680 /* Polygon.h in Headers */,
@@ -4467,7 +4475,6 @@
 				711BFE3A2E6E5AE500677D11 /* ScriptComponent.h in Headers */,
 				71FCE4BE28E0FA01003C5217 /* LuaFunction.h in Headers */,
 				17FB42732FDDA6E3002F919C /* MirrorComponent.h in Headers */,
-				17A9D0023000000000A1B2C3 /* ReflectionProbeComponent.h in Headers */,
 				17235ADA2FD2F65000AF8D04 /* ProgressbarComponent.h in Headers */,
 				71AD5E712E9F2B86004951AB /* ScriptProperty.h in Headers */,
 				71AD5E722E9F2B86004951AB /* ScriptBase.h in Headers */,
@@ -4489,6 +4496,7 @@
 				7170A3CC2818A87E0003E965 /* ModelComponent.h in Headers */,
 				17FB42772FDDA782002F919C /* IBLEnvironment.h in Headers */,
 				713E580827BA9CB700376680 /* MeshPolygon.h in Headers */,
+				175DCCB6300FA1F2008C19EC /* ReflectionProbe.h in Headers */,
 				71ABBD23277A31E6001CE3AF /* UISystem.h in Headers */,
 				71033D662BD1A7D200D81FB5 /* ScrollbarComponent.h in Headers */,
 				71E54518284D5BE000C68FAB /* KeyframeTracksComponent.h in Headers */,
@@ -5598,6 +5606,7 @@
 				7157344B2D9A23A40078952E /* OBB.cpp in Sources */,
 				7105A56928B305B20092EA05 /* ECSClassesLua.cpp in Sources */,
 				71451BDD270CA17F00712643 /* RotationAction.cpp in Sources */,
+				175DCCB8300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */,
 				71ABBD0F277A313C001CE3AF /* AlphaAction.cpp in Sources */,
 				716803CF2DF75EA200ED71BE /* ThreadPoolManager.cpp in Sources */,
 				716803D02DF75EA200ED71BE /* ResourceProgress.cpp in Sources */,
@@ -5669,7 +5678,6 @@
 				71EA6DA82AE20B8C00CA9A75 /* CollideShapeResult3D.cpp in Sources */,
 				713D82A9259D307F00567F9F /* Object.cpp in Sources */,
 				7170A3DC2818A8A30003E965 /* Fog.cpp in Sources */,
-				17A9D0073000000000A1B2C3 /* ReflectionProbe.cpp in Sources */,
 				71033D6A2BD1A7F100D81FB5 /* Scrollbar.cpp in Sources */,
 				71BE623925B1DB9E006D6E02 /* LuaBinding.cpp in Sources */,
 				71F2254F2C58740F006ED3CA /* Points.cpp in Sources */,
@@ -5780,6 +5788,7 @@
 				7157344D2D9A23A40078952E /* OBB.cpp in Sources */,
 				7105A56828B305B20092EA05 /* ECSClassesLua.cpp in Sources */,
 				71451BDC270CA17F00712643 /* RotationAction.cpp in Sources */,
+				175DCCB7300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */,
 				71ABBD0E277A313C001CE3AF /* AlphaAction.cpp in Sources */,
 				716803D12DF75EA200ED71BE /* ThreadPoolManager.cpp in Sources */,
 				716803D22DF75EA200ED71BE /* ResourceProgress.cpp in Sources */,
@@ -5853,7 +5862,6 @@
 				7162FD3B25963AE00075B97D /* AABB.cpp in Sources */,
 				71033D692BD1A7F100D81FB5 /* Scrollbar.cpp in Sources */,
 				7170A3DB2818A8A30003E965 /* Fog.cpp in Sources */,
-				17A9D0063000000000A1B2C3 /* ReflectionProbe.cpp in Sources */,
 				71F2254E2C58740F006ED3CA /* Points.cpp in Sources */,
 				71BE623825B1DB9E006D6E02 /* LuaBinding.cpp in Sources */,
 				71D74953296731F200348AB8 /* Tilemap.cpp in Sources */,
