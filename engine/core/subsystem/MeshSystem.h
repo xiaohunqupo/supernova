@@ -92,6 +92,7 @@ namespace doriax{
         float maxTerrainHeightArea(TerrainComponent& terrain, float x, float z, float w, float h);
         float minTerrainHeightArea(TerrainComponent& terrain, float x, float z, float w, float h);
         void createPlaneNodeSubmesh(unsigned int submeshIndex, TerrainComponent& terrain, MeshComponent& mesh, int width, int height, int widthSegments, int heightSegments);
+        void resetTerrainToUnbuilt(TerrainComponent& terrain, MeshComponent& mesh);
         bool createTerrain(TerrainComponent& terrain, MeshComponent& mesh);
         void createTerrainNode(TerrainComponent& terrain, float x, float y, float size, int lodDepth);
         void updateTerrainAutoRanges(TerrainComponent& terrain);

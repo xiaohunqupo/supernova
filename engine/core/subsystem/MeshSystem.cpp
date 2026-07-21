@@ -1880,6 +1880,30 @@ void MeshSystem::createTerrainNode(TerrainComponent& terrain, float x, float y, 
     }
 }
 
+// Returns the terrain to the "unbuilt" state (the same one the empty-heightmap path
+// produces). heightMapLoaded=false is what gates updateTerrain's LOD walk, so once a
+// build is rejected or fails, no stale/undersized node tree or ranges array is ever
+// indexed by terrainNodeLODSelect. Idempotent and safe whether or not a tree existed.
+void MeshSystem::resetTerrainToUnbuilt(TerrainComponent& terrain, MeshComponent& mesh){
+    terrain.heightMapLoaded = false;
+    terrain.numNodes = 0;
+    terrain.nodes.clear();
+    for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
+        for (int s = 0; s < 2; s++){
+            terrain.views[v].nodesbuffer[s].clear();
+        }
+        terrain.views[v].needUpdateNodesBuffer = false;
+    }
+    mesh.verticesAABB = AABB::ZERO;
+    mesh.aabb = AABB::ZERO;
+    mesh.worldAABB = AABB::ZERO;
+    mesh.needUpdateAABB = false;
+    if (mesh.loaded || mesh.loadCalled){
+        mesh.needReload = true;
+    }
+    terrain.needUpdateTerrain = false;
+}
+
 bool MeshSystem::createTerrain(TerrainComponent& terrain, MeshComponent& mesh){
     // Check heightmap loading state BEFORE clearing buffers to avoid leaving
     // the mesh with empty data when the heightmap is still loading.
@@ -1912,7 +1936,20 @@ bool MeshSystem::createTerrain(TerrainComponent& terrain, MeshComponent& mesh){
     mesh.indices.clear();
 
     size_t idealSize = getTerrainGridArraySize(terrain.rootGridSize, terrain.levels);
-    terrain.nodes.resize(idealSize);
+    // createOrUpdateTerrain already caps idealSize; this catch is a last resort for a
+    // genuine out-of-memory at an in-budget size, so the terrain fails to build (and
+    // stops retrying) instead of aborting the process.
+    try {
+        terrain.nodes.resize(idealSize);
+    } catch (const std::bad_alloc&) {
+        // Fully unbuild: mesh.buffer/indices are already cleared above and grid[]/
+        // heightMapLoaded still describe the previous tree, so leaving them would let
+        // updateTerrain index an empty node vector. Reset (and stop retrying — a later
+        // property change like lowering Levels re-arms needUpdateTerrain).
+        Log::error("Terrain node allocation failed (%zu nodes). Lower Levels or Root Grid Size.", idealSize);
+        resetTerrainToUnbuilt(terrain, mesh);
+        return false;
+    }
 
     mesh.numSubmeshes = 2;
     // fullRes submesh
@@ -4129,29 +4166,33 @@ bool MeshSystem::createOrUpdateTerrain(TerrainComponent& terrain, MeshComponent&
         }
 
         if (MAX_TERRAINGRID < (terrain.rootGridSize*terrain.rootGridSize)){
+            // Tear down rather than only skip: rootGridSize has already moved past the
+            // grid[] cap, so a previously built tree left live would make updateTerrain
+            // loop rootGridSize^2 times over the fixed MAX_TERRAINGRID-slot grid[] and
+            // read out of bounds.
             Log::error("Cannot create full terrain, increase MAX_TERRAINGRID to %u", (terrain.rootGridSize*terrain.rootGridSize));
-            terrain.needUpdateTerrain = false;
+            resetTerrainToUnbuilt(terrain, mesh);
+            return false;
+        }
+
+        // Reject an exponential node explosion instead of crashing: a large "levels"
+        // makes the quadtree node vector request trillions of elements (bad_alloc).
+        // The levels check runs first so getTerrainGridArraySize's 4^i math can't
+        // overflow before the node-count check sees it.
+        if (terrain.rootGridSize < 1 || terrain.levels < 1 || terrain.levels > MAX_TERRAIN_LEVELS ||
+            getTerrainGridArraySize(terrain.rootGridSize, terrain.levels) > MAX_TERRAIN_NODES){
+            // Tear the terrain down rather than only skipping the rebuild: levels/ranges
+            // have already moved to the new (over-budget) depth, so keeping the old tree
+            // live would make updateTerrain walk past its leaves and index ranges[] and
+            // childs[] out of bounds. resetTerrainToUnbuilt gates updateTerrain off.
+            Log::error("Terrain LOD too high (rootGridSize=%d, levels=%d): would exceed the %u-node budget. Lower Levels (or Root Grid Size).",
+                       terrain.rootGridSize, terrain.levels, MAX_TERRAIN_NODES);
+            resetTerrainToUnbuilt(terrain, mesh);
             return false;
         }
 
         if (terrain.heightMap.empty()){
-            terrain.heightMapLoaded = false;
-            terrain.numNodes = 0;
-            terrain.nodes.clear();
-            for (int v = 0; v < MAX_TERRAIN_VIEWS; v++){
-                for (int s = 0; s < 2; s++){
-                    terrain.views[v].nodesbuffer[s].clear();
-                }
-                terrain.views[v].needUpdateNodesBuffer = false;
-            }
-            mesh.verticesAABB = AABB::ZERO;
-            mesh.aabb = AABB::ZERO;
-            mesh.worldAABB = AABB::ZERO;
-            mesh.needUpdateAABB = false;
-            if (mesh.loaded || mesh.loadCalled){
-                mesh.needReload = true;
-            }
-            terrain.needUpdateTerrain = false;
+            resetTerrainToUnbuilt(terrain, mesh);
             return false;
         }
 

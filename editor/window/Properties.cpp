@@ -2946,7 +2946,12 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
 
         if (dif)
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-        if (ImGui::DragInt(("##input_int_"+id).c_str(), &newValue, static_cast<int>(ceil(settings.stepSize)), 0.0f, 0.0f)){
+        // Clamp (drag and typed) only when a real range is configured; otherwise stay
+        // unbounded as before (ImGui treats min == max as "no limit").
+        const bool clampInt = settings.intMax > settings.intMin;
+        if (ImGui::DragInt(("##input_int_"+id).c_str(), &newValue, static_cast<int>(ceil(settings.stepSize)),
+                           clampInt ? settings.intMin : 0, clampInt ? settings.intMax : 0, "%d",
+                           clampInt ? ImGuiSliderFlags_AlwaysClamp : 0)){
             for (Entity& entity : entities){
                 cmd = new PropertyCmd<int>(project, sceneProject->id, entity, cpType, id, newValue, settings.onValueChanged);
                 CommandHandle::get(project->getSelectedSceneId())->addCommand(cmd);
@@ -7365,13 +7370,26 @@ void editor::Properties::drawTerrainComponent(ComponentType cpType, SceneProject
     settingsInt.stepSize = 1.0f;
     settingsInt.secondColSize = 6 * ImGui::GetFontSize();
 
+    // Bound the quadtree so it can never request an impossible node allocation
+    // (see the MAX_TERRAIN_NODES guard in MeshSystem). rootGridSize^2 must fit in
+    // MAX_TERRAINGRID (16 -> max 4); Levels is capped so even at the largest root
+    // grid the node count stays within the engine budget, so any value set here
+    // always renders instead of tripping the engine's rejection.
+    RowSettings settingsRootGrid = settingsInt;
+    settingsRootGrid.intMin = 1;
+    settingsRootGrid.intMax = 4;
+
+    RowSettings settingsLevels = settingsInt;
+    settingsLevels.intMin = 1;
+    settingsLevels.intMax = 9;
+
     ImGui::SeparatorText("Shape");
     beginTable(cpType, getLabelSize("Root Grid Size"), "terrain_shape");
     propertyRow(RowPropertyType::FloatPositive, cpType, "terrainSize", "Size", sceneProject, entities, settingsFloat);
     propertyRow(RowPropertyType::FloatPositive, cpType, "maxHeight", "Max Height", sceneProject, entities, settingsFloat);
     propertyRow(RowPropertyType::FloatPositive, cpType, "resolution", "Resolution", sceneProject, entities, settingsResolution);
-    propertyRow(RowPropertyType::Int, cpType, "rootGridSize", "Root Grid Size", sceneProject, entities, settingsInt);
-    propertyRow(RowPropertyType::Int, cpType, "levels", "Levels", sceneProject, entities, settingsInt);
+    propertyRow(RowPropertyType::Int, cpType, "rootGridSize", "Root Grid Size", sceneProject, entities, settingsRootGrid);
+    propertyRow(RowPropertyType::Int, cpType, "levels", "Levels", sceneProject, entities, settingsLevels);
     propertyRow(RowPropertyType::Vector2, cpType, "offset", "Offset", sceneProject, entities);
     endTable();
 

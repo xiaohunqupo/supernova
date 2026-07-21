@@ -12,6 +12,13 @@
 // beyond this cap fall back to the main camera's selection (view 0).
 #define MAX_TERRAIN_VIEWS 4
 
+// The quadtree materializes rootGridSize^2 * (4^levels - 1)/3 nodes, so "levels"
+// grows the node count exponentially. These bounds keep the node vector from
+// requesting an impossible allocation (a large "levels" would abort with bad_alloc).
+// MAX_TERRAIN_LEVELS also keeps getTerrainGridArraySize's 4^i math within size_t.
+#define MAX_TERRAIN_LEVELS 20
+#define MAX_TERRAIN_NODES 2000000u
+
 #include "buffer/InterleavedBuffer.h"
 #include "buffer/IndexBuffer.h"
 #include "texture/Material.h"

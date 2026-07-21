@@ -64,6 +64,10 @@ namespace doriax::editor{
     struct RowSettings{
         float stepSize = 0.1f;
         float secondColSize = -1;
+        // Inclusive clamp for RowPropertyType::Int (drag and typed entry). Left at
+        // 0/0 (min >= max) the field stays unbounded, preserving existing rows.
+        int intMin = 0;
+        int intMax = 0;
         bool child = false;
         std::string help = "";
         const char *format = "%.2f";
