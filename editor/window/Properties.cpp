@@ -29,6 +29,7 @@
 #include "window/Structure.h"
 #include "App.h"
 #include "Backend.h"
+#include "Factory.h"
 #include "component/ActionComponent.h"
 #include "component/AlphaActionComponent.h"
 #include "component/AnimationComponent.h"
@@ -7976,7 +7977,9 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
 
                 // Class Name
                 propertyHeader("Class Name", secondColSize);
-                if (ImGui::InputText("##new_name", nameBuffer, sizeof(nameBuffer))) {
+                if (ImGui::InputText("##new_name", nameBuffer, sizeof(nameBuffer),
+                        ImGuiInputTextFlags_CallbackCharFilter,
+                        ScriptCreateDialog::classNameCharFilter)) {
                     // Edit happening
                 }
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -8075,10 +8078,15 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
                     // Empty class name falls back to header (or source) filename stem
                     if (newName.empty()) {
                         newName = !hdrPath.empty() ? hdrPath.stem().string() : srcPath.stem().string();
-                        if (!newName.empty()) {
-                            strncpy(nameBuffer, newName.c_str(), sizeof(nameBuffer) - 1);
-                            nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-                        }
+                    }
+
+                    // Normalize to a valid C++ identifier - the same rule the Create
+                    // Script dialog uses - since className is emitted verbatim as a
+                    // class token by the code generator. Reflect it back in the field.
+                    if (!newName.empty()) {
+                        newName = Factory::toIdentifier(newName);
+                        strncpy(nameBuffer, newName.c_str(), sizeof(nameBuffer) - 1);
+                        nameBuffer[sizeof(nameBuffer) - 1] = '\0';
                     }
 
                     for (const Entity& entity : entities) {
@@ -12471,8 +12479,13 @@ void editor::Properties::show(){
         ImGui::SameLine();
 
         if (ImGui::Button(ICON_FA_FILE_CIRCLE_PLUS " New Script", ImVec2(buttonWidth, 0))) {
-            std::string defaultName = "NewScript";
             Entity firstEntity = entities.empty() ? NULL_ENTITY : entities[0];
+            std::string defaultName = "NewScript";
+            if (firstEntity != NULL_ENTITY) {
+                std::string entityName = sceneProject->scene->getEntityName(firstEntity);
+                if (!entityName.empty())
+                    defaultName = entityName + "Script";
+            }
             scriptCreateDialog.open(
                 sceneProject->scene,
                 firstEntity,

@@ -56,6 +56,11 @@ public:
     void show();
     bool isOpen() const { return m_isOpen; }
     void close() { m_isOpen = false; }
+
+    // ImGui CallbackCharFilter that keeps a class/base name field typeable only
+    // as valid C++ identifier characters (invalid chars -> '_'). Shared so other
+    // class-name inputs (e.g. Properties' "Edit Script Details") behave the same.
+    static int classNameCharFilter(ImGuiInputTextCallbackData* data);
 };
 
 } // namespace editor

@@ -1,10 +1,28 @@
 #include "ScriptCreateDialog.h"
 #include "external/IconsFontAwesome6.h"
 #include "Scene.h"
+#include "Factory.h"
 #include <fstream>
 
 namespace doriax {
 namespace editor {
+
+// ImGui input filter: while typing, restrict the class/base name to characters
+// that are legal in a C++ identifier - any other character (space, punctuation,
+// ...) is converted to '_' immediately. Structural normalization that cannot be
+// done per-character without fighting the typist - stripping leading/trailing
+// underscores, prefixing a leading digit, escaping C++ keywords - is deferred to
+// Factory::toIdentifier(), applied when editing finishes, so the committed name
+// always equals the identifier the code generator emits.
+int ScriptCreateDialog::classNameCharFilter(ImGuiInputTextCallbackData* data) {
+    ImWchar c = data->EventChar;
+    bool isValid = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                   (c >= '0' && c <= '9') || c == '_';
+    if (!isValid) {
+        data->EventChar = '_';
+    }
+    return 0;
+}
 
 void ScriptCreateDialog::open(Scene* scene,
                               Entity entity,
@@ -20,7 +38,7 @@ void ScriptCreateDialog::open(Scene* scene,
     m_scriptType = ScriptType::SUBCLASS;
     m_onCreate = onCreate;
     m_onCancel = onCancel;
-    std::string base = defaultBaseName.empty() ? "NewScript" : defaultBaseName;
+    std::string base = defaultBaseName.empty() ? "NewScript" : sanitizeClassName(defaultBaseName);
     strncpy(m_baseNameBuffer, base.c_str(), sizeof(m_baseNameBuffer) - 1);
     m_baseNameBuffer[sizeof(m_baseNameBuffer) - 1] = '\0';
 }
@@ -81,16 +99,12 @@ void ScriptCreateDialog::displayDirectoryTree(const fs::path& rootPath, const fs
 }
 
 std::string ScriptCreateDialog::sanitizeClassName(const std::string& in) const {
-    std::string out;
-    out.reserve(in.size());
-    for (char c : in) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_')
-            out.push_back(c);
-    }
-    if (out.empty()) out = "NewScript";
-    if (std::isdigit(static_cast<unsigned char>(out[0])))
-        out = "_" + out;
-    return out;
+    if (in.empty()) return "NewScript";
+    // Reuse the same identifier validation the code generator/loader rely on
+    // (Factory::toIdentifier): collapses invalid characters to underscores,
+    // strips leading/trailing underscores, ensures a valid identifier start and
+    // avoids C++ keywords - so the class name always compiles.
+    return Factory::toIdentifier(in);
 }
 
 fs::path ScriptCreateDialog::makeHeaderPath(const std::string& className) const {
@@ -407,8 +421,20 @@ void ScriptCreateDialog::show() {
         "##basename",
         m_baseNameBuffer,
         sizeof(m_baseNameBuffer),
-        ImGuiInputTextFlags_EnterReturnsTrue
+        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCharFilter,
+        classNameCharFilter
     );
+
+    // When editing finishes (Enter or focus loss), snap the field to the exact
+    // identifier that will be generated - applying the leading/trailing '_' strip,
+    // leading-digit prefix and keyword escaping that the per-char filter can't do
+    // mid-typing - so the visible name stays identical to the created class name.
+    // Skipped while empty so an intentionally cleared field isn't auto-refilled.
+    if (ImGui::IsItemDeactivatedAfterEdit() && m_baseNameBuffer[0] != '\0') {
+        std::string canonical = sanitizeClassName(m_baseNameBuffer);
+        strncpy(m_baseNameBuffer, canonical.c_str(), sizeof(m_baseNameBuffer) - 1);
+        m_baseNameBuffer[sizeof(m_baseNameBuffer) - 1] = '\0';
+    }
 
     std::string baseName = m_baseNameBuffer;
     bool hasBase = !baseName.empty();
