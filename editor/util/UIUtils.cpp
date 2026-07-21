@@ -127,7 +127,10 @@ bool UIUtils::sliderFloatInput(const char* id, float* value, float minValue, flo
             ImGui::SetKeyboardFocusHere();
             focusPending = false;
         }
-        changed = ImGui::InputFloat(id, value, 0.0f, 0.0f, format);
+        // Strip any decorations (icons/labels) from the slider's display format so the text field
+        // shows just the number, matching how ImGui's own Ctrl+Click temp-input behaves.
+        char inputFormat[32];
+        changed = ImGui::InputFloat(id, value, 0.0f, 0.0f, ImParseFormatTrimDecorations(format, inputFormat, IM_ARRAYSIZE(inputFormat)));
         if (ImGui::IsItemDeactivated()) {
             editingId = 0;
         }

@@ -7,6 +7,7 @@
 #include "external/IconsFontAwesome6.h"
 #include "subsystem/MeshSystem.h"
 #include "util/PngWriter.h"
+#include "util/UIUtils.h"
 #include "stb_image_write.h"
 
 #include <algorithm>
@@ -1489,16 +1490,16 @@ void editor::TerrainEditWindow::show(){
     const float maxBrushSize = 50.0f;
     brushSize = std::clamp(brushSize, 0.1f, maxBrushSize);
     ImGui::SetNextItemWidth(-1.0f);
-    ImGui::SliderFloat("##brush_size", &brushSize, 0.1f, maxBrushSize, ICON_FA_CIRCLE "  %.2f");
+    UIUtils::sliderFloatInput("##brush_size", &brushSize, 0.1f, maxBrushSize, ICON_FA_CIRCLE "  %.2f");
     showTooltip("Brush size");
 
     ImGui::SetNextItemWidth(-1.0f);
-    ImGui::SliderFloat("##brush_strength", &brushStrength, 0.001f, 0.25f, ICON_FA_GAUGE_HIGH "  %.3f");
+    UIUtils::sliderFloatInput("##brush_strength", &brushStrength, 0.001f, 0.25f, ICON_FA_GAUGE_HIGH "  %.3f");
     showTooltip("Brush strength");
 
     if (brushMode == TerrainBrushMode::Flatten){
         ImGui::SetNextItemWidth(-1.0f);
-        ImGui::SliderFloat("##flatten_height", &flattenHeight, 0.0f, 1.0f, ICON_FA_GRIP_LINES "  %.3f");
+        UIUtils::sliderFloatInput("##flatten_height", &flattenHeight, 0.0f, 1.0f, ICON_FA_GRIP_LINES "  %.3f");
         showTooltip("Flatten height");
     }
 
