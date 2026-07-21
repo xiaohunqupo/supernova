@@ -121,8 +121,12 @@ PhysicsSystem::PhysicsSystem(Scene* scene): SubSystem(scene){
 
 	this->scene = scene;
 
-    this->gravity2D = Vector2(0, -9.81f);
-    this->gravity3D = Vector3(0, -9.81f, 0);
+    // Default gravity comes from SceneSettings, the single source of truth for scene-setting
+    // defaults. The live gravity value is then owned/mutated here (pushed to the Box2D/Jolt
+    // worlds); serialization and the editor overwrite it via setGravity2D/3D.
+    SceneSettings settingsDefaults;
+    this->gravity2D = settingsDefaults.gravity2D;
+    this->gravity3D = settingsDefaults.gravity3D;
     this->pointsToMeterScale2D = 64.0;
 
     // The Box2D world is created lazily (see ensureWorld2D): Box2D's global b2_worlds[] pool is

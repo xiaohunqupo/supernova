@@ -38,44 +38,9 @@ void Scene::init(){
     camera = NULL_ENTITY;
     defaultCamera = NULL_ENTITY;
 
-    backgroundColor = Vector4(0.0, 0.0, 0.0, 1.0); //sRGB
-    shadowQuality = ShadowQuality::LOW;
-
-    lightState = LightState::AUTO;
-    globalIllumColor = Vector3(1.0, 1.0, 1.0);
-    globalIllumIntensity = 0.1;
-
-    // default 1.0 keeps 2D scenes visually unchanged until the user dims it
-    ambientLight2DColor = Vector3(1.0, 1.0, 1.0);
-    ambientLight2DIntensity = 1.0;
-    shadow2DQuality = ShadowQuality::LOW;
-
-    ssaoEnabled = false;
-    ssaoRadius = 0.5;
-    ssaoIntensity = 1.0;
-    ssaoBias = 0.025;
-    ssaoDebug = false;
-
-    ssrEnabled = false;
-    ssrMaxDistance = 8.0;
-    ssrThickness = 0.5;
-    ssrMaxSteps = 48;
-    ssrIntensity = 1.0;
-    ssrBlur = 0.0;
-    ssrDebugMode = 0;
-
-    fixedResolutionEnabled = false;
-    fixedResolutionWidth = 640;
-    fixedResolutionHeight = 360;
-    fixedResolutionFilter = TextureFilter::NEAREST;
-
+    // All persistent scene configuration (background, SSAO/SSR, gravity, default shaders, ...)
+    // defaults through the SceneSettings member; see SceneSettings.h.
     uiEventState = UIEventState::NOT_SET;
-
-    defaultMeshShader = "";
-    defaultUIShader = "";
-    defaultSkyShader = "";
-    defaultPointsShader = "";
-    defaultLinesShader = "";
 }
 
 Scene::~Scene(){
@@ -175,7 +140,7 @@ Entity Scene::createDefaultCamera(){
 }
 
 void Scene::setBackgroundColor(Vector4 color){
-    this->backgroundColor = color;
+    settings.backgroundColor = color;
 }
 
 void Scene::setBackgroundColor(float red, float green, float blue){
@@ -187,125 +152,125 @@ void Scene::setBackgroundColor(float red, float green, float blue, float alpha){
 }
 
 Vector4 Scene::getBackgroundColor() const{
-    return backgroundColor;
+    return settings.backgroundColor;
 }
 
 void Scene::setShadowQuality(ShadowQuality quality){
     // uniform-driven (no shader variant), so no mesh reload is needed
-    this->shadowQuality = quality;
+    settings.shadowQuality = quality;
 }
 
 ShadowQuality Scene::getShadowQuality() const{
-    return this->shadowQuality;
+    return settings.shadowQuality;
 }
 
 void Scene::setSSAOEnabled(bool ssaoEnabled){
-    if (this->ssaoEnabled != ssaoEnabled){
-        this->ssaoEnabled = ssaoEnabled;
+    if (settings.ssaoEnabled != ssaoEnabled){
+        settings.ssaoEnabled = ssaoEnabled;
         // toggling SSAO changes the mesh shader variant (USE_SSAO), so recompile
         getSystem<RenderSystem>()->needReloadMeshes();
     }
 }
 
 bool Scene::isSSAOEnabled() const{
-    return this->ssaoEnabled;
+    return settings.ssaoEnabled;
 }
 
 void Scene::setSSAORadius(float radius){
-    this->ssaoRadius = radius;
+    settings.ssaoRadius = radius;
 }
 
 float Scene::getSSAORadius() const{
-    return this->ssaoRadius;
+    return settings.ssaoRadius;
 }
 
 void Scene::setSSAOIntensity(float intensity){
-    this->ssaoIntensity = intensity;
+    settings.ssaoIntensity = intensity;
 }
 
 float Scene::getSSAOIntensity() const{
-    return this->ssaoIntensity;
+    return settings.ssaoIntensity;
 }
 
 void Scene::setSSAOBias(float bias){
-    this->ssaoBias = bias;
+    settings.ssaoBias = bias;
 }
 
 float Scene::getSSAOBias() const{
-    return this->ssaoBias;
+    return settings.ssaoBias;
 }
 
 void Scene::setSSAODebug(bool debug){
-    this->ssaoDebug = debug;
+    settings.ssaoDebug = debug;
 }
 
 bool Scene::isSSAODebug() const{
-    return this->ssaoDebug;
+    return settings.ssaoDebug;
 }
 
 void Scene::setSSREnabled(bool ssrEnabled){
-    if (this->ssrEnabled != ssrEnabled){
-        this->ssrEnabled = ssrEnabled;
+    if (settings.ssrEnabled != ssrEnabled){
+        settings.ssrEnabled = ssrEnabled;
         // SSR requires the depth pre-pass, so meshes must (re)build their depth shader
         getSystem<RenderSystem>()->needReloadMeshes();
     }
 }
 
 bool Scene::isSSREnabled() const{
-    return this->ssrEnabled;
+    return settings.ssrEnabled;
 }
 
 void Scene::setSSRMaxDistance(float maxDistance){
-    this->ssrMaxDistance = maxDistance;
+    settings.ssrMaxDistance = maxDistance;
 }
 
 float Scene::getSSRMaxDistance() const{
-    return this->ssrMaxDistance;
+    return settings.ssrMaxDistance;
 }
 
 void Scene::setSSRThickness(float thickness){
-    this->ssrThickness = thickness;
+    settings.ssrThickness = thickness;
 }
 
 float Scene::getSSRThickness() const{
-    return this->ssrThickness;
+    return settings.ssrThickness;
 }
 
 void Scene::setSSRMaxSteps(int maxSteps){
-    this->ssrMaxSteps = maxSteps;
+    settings.ssrMaxSteps = maxSteps;
 }
 
 int Scene::getSSRMaxSteps() const{
-    return this->ssrMaxSteps;
+    return settings.ssrMaxSteps;
 }
 
 void Scene::setSSRIntensity(float intensity){
-    this->ssrIntensity = intensity;
+    settings.ssrIntensity = intensity;
 }
 
 float Scene::getSSRIntensity() const{
-    return this->ssrIntensity;
+    return settings.ssrIntensity;
 }
 
 void Scene::setSSRBlur(float blur){
-    this->ssrBlur = blur;
+    settings.ssrBlur = blur;
 }
 
 float Scene::getSSRBlur() const{
-    return this->ssrBlur;
+    return settings.ssrBlur;
 }
 
 void Scene::setSSRDebugMode(int mode){
-    this->ssrDebugMode = mode;
+    settings.ssrDebugMode = mode;
 }
 
 int Scene::getSSRDebugMode() const{
-    return this->ssrDebugMode;
+    return settings.ssrDebugMode;
 }
 
 void Scene::setFixedResolutionEnabled(bool fixedResolutionEnabled){
-    if (this->fixedResolutionEnabled != fixedResolutionEnabled){
-        this->fixedResolutionEnabled = fixedResolutionEnabled;
+    if (settings.fixedResolutionEnabled != fixedResolutionEnabled){
+        settings.fixedResolutionEnabled = fixedResolutionEnabled;
         // the offscreen target renders with PIP_RTT; (re)bake it on all
         // renderables so a runtime toggle works in exported builds too
         getSystem<RenderSystem>()->needReloadMeshes();
@@ -317,105 +282,105 @@ void Scene::setFixedResolutionEnabled(bool fixedResolutionEnabled){
 }
 
 bool Scene::isFixedResolutionEnabled() const{
-    return this->fixedResolutionEnabled;
+    return settings.fixedResolutionEnabled;
 }
 
 void Scene::setFixedResolutionWidth(unsigned int width){
-    this->fixedResolutionWidth = width;
+    settings.fixedResolutionWidth = width;
 }
 
 unsigned int Scene::getFixedResolutionWidth() const{
-    return this->fixedResolutionWidth;
+    return settings.fixedResolutionWidth;
 }
 
 void Scene::setFixedResolutionHeight(unsigned int height){
-    this->fixedResolutionHeight = height;
+    settings.fixedResolutionHeight = height;
 }
 
 unsigned int Scene::getFixedResolutionHeight() const{
-    return this->fixedResolutionHeight;
+    return settings.fixedResolutionHeight;
 }
 
 void Scene::setFixedResolutionSize(unsigned int width, unsigned int height){
-    this->fixedResolutionWidth = width;
-    this->fixedResolutionHeight = height;
+    settings.fixedResolutionWidth = width;
+    settings.fixedResolutionHeight = height;
 }
 
 void Scene::setFixedResolutionFilter(TextureFilter filter){
-    this->fixedResolutionFilter = filter;
+    settings.fixedResolutionFilter = filter;
 }
 
 TextureFilter Scene::getFixedResolutionFilter() const{
-    return this->fixedResolutionFilter;
+    return settings.fixedResolutionFilter;
 }
 
 void Scene::setLightState(LightState state){
-    if (this->lightState != state){
-        this->lightState = state;
+    if (settings.lightState != state){
+        settings.lightState = state;
         getSystem<RenderSystem>()->needReloadMeshes();
     }
 }
 
 LightState Scene::getLightState() const{
-    return this->lightState;
+    return settings.lightState;
 }
 
 void Scene::setGlobalIllumination(float intensity, Vector3 color){
-    this->globalIllumIntensity = intensity;
-    this->globalIllumColor = Color::sRGBToLinear(color);
+    settings.globalIllumIntensity = intensity;
+    settings.globalIllumColor = Color::sRGBToLinear(color);
 }
 
 void Scene::setGlobalIllumination(float intensity){
-    this->globalIllumIntensity = intensity;
+    settings.globalIllumIntensity = intensity;
 }
 
 void Scene::setGlobalIllumination(Vector3 color){
-    this->globalIllumColor = Color::sRGBToLinear(color);
+    settings.globalIllumColor = Color::sRGBToLinear(color);
 }
 
 float Scene::getGlobalIlluminationIntensity() const{
-    return this->globalIllumIntensity;
+    return settings.globalIllumIntensity;
 }
 
 Vector3 Scene::getGlobalIlluminationColor() const{
-    return Color::linearTosRGB(this->globalIllumColor);
+    return Color::linearTosRGB(settings.globalIllumColor);
 }
 
 Vector3 Scene::getGlobalIlluminationColorLinear() const{
-    return this->globalIllumColor;
+    return settings.globalIllumColor;
 }
 
 void Scene::setAmbientLight2D(float intensity, Vector3 color){
-    this->ambientLight2DIntensity = intensity;
-    this->ambientLight2DColor = Color::sRGBToLinear(color);
+    settings.ambientLight2DIntensity = intensity;
+    settings.ambientLight2DColor = Color::sRGBToLinear(color);
 }
 
 void Scene::setAmbientLight2D(float intensity){
-    this->ambientLight2DIntensity = intensity;
+    settings.ambientLight2DIntensity = intensity;
 }
 
 void Scene::setAmbientLight2D(Vector3 color){
-    this->ambientLight2DColor = Color::sRGBToLinear(color);
+    settings.ambientLight2DColor = Color::sRGBToLinear(color);
 }
 
 float Scene::getAmbientLight2DIntensity() const{
-    return this->ambientLight2DIntensity;
+    return settings.ambientLight2DIntensity;
 }
 
 Vector3 Scene::getAmbientLight2DColor() const{
-    return Color::linearTosRGB(this->ambientLight2DColor);
+    return Color::linearTosRGB(settings.ambientLight2DColor);
 }
 
 Vector3 Scene::getAmbientLight2DColorLinear() const{
-    return this->ambientLight2DColor;
+    return settings.ambientLight2DColor;
 }
 
 void Scene::setShadow2DQuality(ShadowQuality quality){
-    this->shadow2DQuality = quality;
+    settings.shadow2DQuality = quality;
 }
 
 ShadowQuality Scene::getShadow2DQuality() const{
-    return this->shadow2DQuality;
+    return settings.shadow2DQuality;
 }
 
 Vector2 Scene::getGravity2D() const{
@@ -444,58 +409,58 @@ void Scene::setGravity3D(float x, float y, float z){
 }
 
 void Scene::setDefaultMeshShader(const std::string& path){
-    if (this->defaultMeshShader != path){
-        this->defaultMeshShader = path;
+    if (settings.defaultMeshShader != path){
+        settings.defaultMeshShader = path;
         getSystem<RenderSystem>()->needReloadMeshes();
     }
 }
 
 const std::string& Scene::getDefaultMeshShader() const{
-    return this->defaultMeshShader;
+    return settings.defaultMeshShader;
 }
 
 void Scene::setDefaultUIShader(const std::string& path){
-    if (this->defaultUIShader != path){
-        this->defaultUIShader = path;
+    if (settings.defaultUIShader != path){
+        settings.defaultUIShader = path;
         getSystem<RenderSystem>()->needReloadUIs();
     }
 }
 
 const std::string& Scene::getDefaultUIShader() const{
-    return this->defaultUIShader;
+    return settings.defaultUIShader;
 }
 
 void Scene::setDefaultSkyShader(const std::string& path){
-    if (this->defaultSkyShader != path){
-        this->defaultSkyShader = path;
+    if (settings.defaultSkyShader != path){
+        settings.defaultSkyShader = path;
         getSystem<RenderSystem>()->needReloadSky();
     }
 }
 
 const std::string& Scene::getDefaultSkyShader() const{
-    return this->defaultSkyShader;
+    return settings.defaultSkyShader;
 }
 
 void Scene::setDefaultPointsShader(const std::string& path){
-    if (this->defaultPointsShader != path){
-        this->defaultPointsShader = path;
+    if (settings.defaultPointsShader != path){
+        settings.defaultPointsShader = path;
         getSystem<RenderSystem>()->needReloadPoints();
     }
 }
 
 const std::string& Scene::getDefaultPointsShader() const{
-    return this->defaultPointsShader;
+    return settings.defaultPointsShader;
 }
 
 void Scene::setDefaultLinesShader(const std::string& path){
-    if (this->defaultLinesShader != path){
-        this->defaultLinesShader = path;
+    if (settings.defaultLinesShader != path){
+        settings.defaultLinesShader = path;
         getSystem<RenderSystem>()->needReloadLines();
     }
 }
 
 const std::string& Scene::getDefaultLinesShader() const{
-    return this->defaultLinesShader;
+    return settings.defaultLinesShader;
 }
 
 void Scene::setDefaultCustomShader(ShaderType type, const std::string& path){
@@ -512,11 +477,11 @@ void Scene::setDefaultCustomShader(ShaderType type, const std::string& path){
 const std::string& Scene::getDefaultCustomShader(ShaderType type) const{
     static const std::string empty;
     switch (type){
-        case ShaderType::MESH:   return this->defaultMeshShader;
-        case ShaderType::UI:     return this->defaultUIShader;
-        case ShaderType::SKYBOX: return this->defaultSkyShader;
-        case ShaderType::POINTS: return this->defaultPointsShader;
-        case ShaderType::LINES:  return this->defaultLinesShader;
+        case ShaderType::MESH:   return settings.defaultMeshShader;
+        case ShaderType::UI:     return settings.defaultUIShader;
+        case ShaderType::SKYBOX: return settings.defaultSkyShader;
+        case ShaderType::POINTS: return settings.defaultPointsShader;
+        case ShaderType::LINES:  return settings.defaultLinesShader;
         default: return empty;
     }
 }

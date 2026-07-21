@@ -9,6 +9,7 @@
 #include "SubSystem.h"
 #include "EntityRegistry.h"
 #include "Export.h"
+#include "SceneSettings.h"
 #include "render/Render.h"
 #include "math/Vector2.h"
 #include <string>
@@ -19,22 +20,7 @@ namespace doriax{
 
     class Camera;
 
-    enum class LightState {
-        OFF,
-        ON,
-        AUTO
-    };
-
-    // PCF filter quality of shadow edges, uniform-driven (no shader rebuild).
-    // 3D shadows (shadowQuality): NONE = 1 tap, LOW = 3x3, MEDIUM = 5x5, HIGH = 7x7.
-    // 2D shadows (shadow2DQuality): NONE = 1 tap, LOW = 5, MEDIUM = 9, HIGH = 13 taps
-    // along the 1D polar map, smoothing the penumbra set by Light2D shadowSoftness.
-    enum class ShadowQuality {
-        NONE,   // 1 tap, no filtering (hard edges)
-        LOW,
-        MEDIUM,
-        HIGH
-    };
+    // LightState and ShadowQuality live in SceneSettings.h (they are scene-setting types).
 
     enum class UIEventState {
         NOT_SET,
@@ -48,48 +34,13 @@ namespace doriax{
         Entity camera;
         Entity defaultCamera;
 
-        Vector4 backgroundColor;
-        ShadowQuality shadowQuality;
-
-        LightState lightState;
-        Vector3 globalIllumColor;
-        float globalIllumIntensity;
-
-        Vector3 ambientLight2DColor;
-        float ambientLight2DIntensity;
-        ShadowQuality shadow2DQuality;
-
-        bool ssaoEnabled;
-        float ssaoRadius;
-        float ssaoIntensity;
-        float ssaoBias;
-        bool ssaoDebug;
-
-        bool ssrEnabled;
-        float ssrMaxDistance;   // max ray length in view-space units
-        float ssrThickness;     // depth-compare tolerance (view-space units)
-        int ssrMaxSteps;        // linear march sample count
-        float ssrIntensity;     // reflection strength multiplier
-        float ssrBlur;          // glossy blur amount [0..1] (0 = sharp/mirror)
-        int ssrDebugMode;       // 0=off,1=reflection,2=normal,3=roughness,4=metallic,5=albedo,6=IBL specular
-
-        // fixed game resolution: when enabled and this scene is the Engine main
-        // scene, the main camera renders into an offscreen framebuffer of this
-        // size, upscaled to the view rect by RenderSystem
-        bool fixedResolutionEnabled;
-        unsigned int fixedResolutionWidth;
-        unsigned int fixedResolutionHeight;
-        TextureFilter fixedResolutionFilter;
+        // All persistent scene configuration lives here (defaults from SceneSettings). The
+        // public getters/setters below delegate to it, keeping the side effects (shader
+        // reloads) and color-space conversions that can't live in a plain-data struct.
+        // Gravity's live value stays in PhysicsSystem; settings.gravity* is only the default.
+        SceneSettings settings;
 
         UIEventState uiEventState;
-
-        // scene-wide custom shaders, used when a component's customShader is empty
-        // (project-relative base or "a.vert|b.frag"; empty = engine built-in)
-        std::string defaultMeshShader;
-        std::string defaultUIShader;
-        std::string defaultSkyShader;
-        std::string defaultPointsShader;
-        std::string defaultLinesShader;
 
         std::vector<std::pair<std::string, std::shared_ptr<SubSystem>>> systems;
 

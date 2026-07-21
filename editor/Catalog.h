@@ -6,6 +6,8 @@
 #include <vector>
 #include <algorithm>
 #include "Scene.h"
+#include "SceneSettings.h"
+#include "util/Color.h"
 
 namespace doriax::editor{
     enum UpdateFlags : uint64_t {
@@ -363,6 +365,114 @@ namespace doriax::editor{
             if constexpr (std::is_same_v<T, TextureFilter>) return TextureFilter::NEAREST;
             if constexpr (std::is_same_v<T, std::string>) return std::string();
             // Add other types as needed
+        }
+
+        // Factory default for a scene property, used by the Properties panel's "reset to
+        // default" arrow. Values come straight from a default-constructed SceneSettings — the
+        // engine's single source of truth for scene defaults (Scene embeds one) — so they can
+        // never drift from what a new scene gets. SceneSettings is plain data (no physics
+        // runtime), so this is cheap; no caching needed. Values are returned in the same space
+        // getSceneProperty exposes (GI/ambient colors are converted from stored linear to sRGB).
+        template<typename T>
+        static T getScenePropertyDefault(const std::string& propertyName) {
+            static const SceneSettings d;
+
+            if (propertyName == "background_color") {
+                if constexpr (std::is_same_v<T, Vector4>) return d.backgroundColor;
+            }
+            else if (propertyName == "shadows_quality") {
+                if constexpr (std::is_same_v<T, ShadowQuality>) return d.shadowQuality;
+            }
+            else if (propertyName == "global_illumination_color") {
+                if constexpr (std::is_same_v<T, Vector3>) return Color::linearTosRGB(d.globalIllumColor);
+            }
+            else if (propertyName == "global_illumination_intensity") {
+                if constexpr (std::is_same_v<T, float>) return d.globalIllumIntensity;
+            }
+            else if (propertyName == "ambient_light_2d_color") {
+                if constexpr (std::is_same_v<T, Vector3>) return Color::linearTosRGB(d.ambientLight2DColor);
+            }
+            else if (propertyName == "ambient_light_2d_intensity") {
+                if constexpr (std::is_same_v<T, float>) return d.ambientLight2DIntensity;
+            }
+            else if (propertyName == "shadows_2d_quality") {
+                if constexpr (std::is_same_v<T, ShadowQuality>) return d.shadow2DQuality;
+            }
+            else if (propertyName == "physics_gravity_2d") {
+                if constexpr (std::is_same_v<T, Vector2>) return d.gravity2D;
+            }
+            else if (propertyName == "physics_gravity_3d") {
+                if constexpr (std::is_same_v<T, Vector3>) return d.gravity3D;
+            }
+            else if (propertyName == "light_state") {
+                if constexpr (std::is_same_v<T, LightState>) return d.lightState;
+            }
+            else if (propertyName == "ssao_enabled") {
+                if constexpr (std::is_same_v<T, bool>) return d.ssaoEnabled;
+            }
+            else if (propertyName == "ssao_radius") {
+                if constexpr (std::is_same_v<T, float>) return d.ssaoRadius;
+            }
+            else if (propertyName == "ssao_intensity") {
+                if constexpr (std::is_same_v<T, float>) return d.ssaoIntensity;
+            }
+            else if (propertyName == "ssao_bias") {
+                if constexpr (std::is_same_v<T, float>) return d.ssaoBias;
+            }
+            else if (propertyName == "ssao_debug") {
+                if constexpr (std::is_same_v<T, bool>) return d.ssaoDebug;
+            }
+            else if (propertyName == "ssr_enabled") {
+                if constexpr (std::is_same_v<T, bool>) return d.ssrEnabled;
+            }
+            else if (propertyName == "ssr_max_distance") {
+                if constexpr (std::is_same_v<T, float>) return d.ssrMaxDistance;
+            }
+            else if (propertyName == "ssr_thickness") {
+                if constexpr (std::is_same_v<T, float>) return d.ssrThickness;
+            }
+            else if (propertyName == "ssr_intensity") {
+                if constexpr (std::is_same_v<T, float>) return d.ssrIntensity;
+            }
+            else if (propertyName == "ssr_blur") {
+                if constexpr (std::is_same_v<T, float>) return d.ssrBlur;
+            }
+            else if (propertyName == "ssr_max_steps") {
+                if constexpr (std::is_same_v<T, int>) return d.ssrMaxSteps;
+            }
+            else if (propertyName == "ssr_debug_mode") {
+                if constexpr (std::is_same_v<T, int>) return d.ssrDebugMode;
+            }
+            else if (propertyName == "fixed_resolution_enabled") {
+                if constexpr (std::is_same_v<T, bool>) return d.fixedResolutionEnabled;
+            }
+            else if (propertyName == "fixed_resolution_width") {
+                if constexpr (std::is_same_v<T, int>) return (int)d.fixedResolutionWidth;
+            }
+            else if (propertyName == "fixed_resolution_height") {
+                if constexpr (std::is_same_v<T, int>) return (int)d.fixedResolutionHeight;
+            }
+            else if (propertyName == "fixed_resolution_filter") {
+                if constexpr (std::is_same_v<T, TextureFilter>) return d.fixedResolutionFilter;
+            }
+            else if (propertyName == "default_mesh_shader") {
+                if constexpr (std::is_same_v<T, std::string>) return d.defaultMeshShader;
+            }
+            else if (propertyName == "default_ui_shader") {
+                if constexpr (std::is_same_v<T, std::string>) return d.defaultUIShader;
+            }
+            else if (propertyName == "default_sky_shader") {
+                if constexpr (std::is_same_v<T, std::string>) return d.defaultSkyShader;
+            }
+            else if (propertyName == "default_points_shader") {
+                if constexpr (std::is_same_v<T, std::string>) return d.defaultPointsShader;
+            }
+            else if (propertyName == "default_lines_shader") {
+                if constexpr (std::is_same_v<T, std::string>) return d.defaultLinesShader;
+            }
+
+            // Unknown property (or type mismatch): fall back to the type-generic default.
+            return getSceneProperty<T>(nullptr, propertyName);
         }
 
         template<typename T>

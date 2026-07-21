@@ -388,9 +388,44 @@ void editor::Properties::drawScenePropertyRow(SceneProject* sceneProject, const 
 
     Command* cmd = nullptr;
 
+    // Detect whether the value differs from the factory default so we can show the
+    // "reset to default" arrow next to the label (like component property rows).
+    T defaultValue = Catalog::getScenePropertyDefault<T>(propertyName);
+    bool defChanged = false;
+    if constexpr (std::is_same_v<T, float>) {
+        defChanged = std::fabs(value - defaultValue) > 1e-4f;
+    } else if constexpr (std::is_same_v<T, Vector2>) {
+        defChanged = std::fabs(value.x - defaultValue.x) > 1e-4f || std::fabs(value.y - defaultValue.y) > 1e-4f;
+    } else if constexpr (std::is_same_v<T, Vector3>) {
+        defChanged = std::fabs(value.x - defaultValue.x) > 1e-4f || std::fabs(value.y - defaultValue.y) > 1e-4f
+            || std::fabs(value.z - defaultValue.z) > 1e-4f;
+    } else if constexpr (std::is_same_v<T, Vector4>) {
+        defChanged = std::fabs(value.x - defaultValue.x) > 1e-4f || std::fabs(value.y - defaultValue.y) > 1e-4f
+            || std::fabs(value.z - defaultValue.z) > 1e-4f || std::fabs(value.w - defaultValue.w) > 1e-4f;
+    } else {
+        defChanged = (value != defaultValue);
+    }
+
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
     ImGui::Text("%s", label);
+
+    // Reset-to-default arrow, only shown when the value differs from the default.
+    if (defChanged) {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, ImGui::GetStyle().ItemSpacing.y));
+        ImGui::SameLine();
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, ImGui::GetStyle().FramePadding.y));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        if (ImGui::Button((ICON_FA_ROTATE_LEFT"##reset_" + propertyName).c_str())) {
+            Command* resetCmd = new ScenePropertyCmd<T>(project, sceneProject->id, propertyName, defaultValue);
+            CommandHandle::get(sceneProject->id)->addCommandNoMerge(resetCmd);
+        }
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(3);
+    }
+
     ImGui::TableSetColumnIndex(1);
 
     if (inputWidth > 0.0f) {
@@ -12692,11 +12727,11 @@ void editor::Properties::show(){
 
         if (sceneProject->scene) {
             ImGuiTableFlags tableFlags = ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchSame;
-            const float shadowQualityLabelColWidth = ImGui::CalcTextSize("Filter Quality").x + ImGui::GetStyle().CellPadding.x * 2.0f;
+            const float shadowQualityLabelColWidth = getLabelSize("Filter Quality") + ImGui::GetStyle().CellPadding.x * 2.0f;
             const float shadowQualityComboWidth = ImGui::CalcTextSize("Medium").x + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f;
 
             if (ImGui::BeginTable("scene_settings_table", 2, tableFlags)) {
-                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Background").x);
+                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Background"));
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                 drawScenePropertyRow<Vector4>(sceneProject, "background_color", "Background", ScenePropertyInputType::ColorRGBA);
@@ -12709,7 +12744,7 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("Ambient Light (2D)");
 
                 if (ImGui::BeginTable("scene_ambient2d_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Intensity").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Intensity"));
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<Vector3>(sceneProject, "ambient_light_2d_color", "Color", ScenePropertyInputType::ColorRGB);
@@ -12741,7 +12776,7 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("Global Illumination");
 
                 if (ImGui::BeginTable("scene_globalillum_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Intensity").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Intensity"));
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<Vector3>(sceneProject, "global_illumination_color", "Color", ScenePropertyInputType::ColorRGB);
@@ -12770,7 +12805,7 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("Ambient Occlusion (SSAO)");
 
                 if (ImGui::BeginTable("scene_ssao_settings_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Intensity").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Intensity"));
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<bool>(sceneProject, "ssao_enabled", "Enabled", ScenePropertyInputType::Checkbox);
@@ -12788,7 +12823,7 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("Reflections (SSR)");
 
                 if (ImGui::BeginTable("scene_ssr_settings_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Max Distance").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Max Distance"));
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     drawScenePropertyRow<bool>(sceneProject, "ssr_enabled", "Enabled", ScenePropertyInputType::Checkbox);
@@ -12803,9 +12838,24 @@ void editor::Properties::show(){
                         {
                             const char* ssrDebugNames[] = { "Off", "Reflection", "Normal", "Roughness", "Metallic", "Albedo", "IBL Specular" };
                             int debugMode = doriax::editor::Catalog::getSceneProperty<int>(sceneProject->scene, "ssr_debug_mode");
+                            int debugModeDefault = doriax::editor::Catalog::getScenePropertyDefault<int>("ssr_debug_mode");
                             ImGui::TableNextRow();
                             ImGui::TableSetColumnIndex(0);
                             ImGui::Text("Debug View");
+                            if (debugMode != debugModeDefault) {
+                                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, ImGui::GetStyle().ItemSpacing.y));
+                                ImGui::SameLine();
+                                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+                                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, ImGui::GetStyle().FramePadding.y));
+                                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+                                if (ImGui::Button(ICON_FA_ROTATE_LEFT"##reset_ssr_debug_mode")) {
+                                    Command* resetCmd = new ScenePropertyCmd<int>(project, sceneProject->id, "ssr_debug_mode", debugModeDefault);
+                                    CommandHandle::get(sceneProject->id)->addCommandNoMerge(resetCmd);
+                                }
+                                ImGui::PopStyleColor(2);
+                                ImGui::PopStyleVar(3);
+                            }
                             ImGui::TableSetColumnIndex(1);
                             ImGui::SetNextItemWidth(8 * ImGui::GetFontSize());
                             if (ImGui::Combo("##ssr_debug_mode", &debugMode, ssrDebugNames, IM_ARRAYSIZE(ssrDebugNames))) {
@@ -12823,7 +12873,7 @@ void editor::Properties::show(){
                 ImGui::SeparatorText("Physics");
 
                 if (ImGui::BeginTable("scene_physics_table", 2, tableFlags)) {
-                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Gravity").x);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Gravity"));
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                     if (sceneProject->sceneType == SceneType::SCENE_3D) {
@@ -12841,7 +12891,7 @@ void editor::Properties::show(){
             ImGui::SeparatorText("Fixed Resolution");
 
             if (ImGui::BeginTable("scene_fixed_resolution_table", 2, tableFlags)) {
-                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Enabled").x);
+                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, getLabelSize("Enabled"));
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
                 drawScenePropertyRow<bool>(sceneProject, "fixed_resolution_enabled", "Enabled", ScenePropertyInputType::Checkbox, -1.0f, 0.0f, 1.0f,
