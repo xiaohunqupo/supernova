@@ -435,6 +435,7 @@ std::string editor::Factory::formatAttributeType(AttributeType type) {
         case AttributeType::INDEX: return "AttributeType::INDEX";
         case AttributeType::POSITION: return "AttributeType::POSITION";
         case AttributeType::TEXCOORD1: return "AttributeType::TEXCOORD1";
+        case AttributeType::TEXCOORD2: return "AttributeType::TEXCOORD2";
         case AttributeType::NORMAL: return "AttributeType::NORMAL";
         case AttributeType::TANGENT: return "AttributeType::TANGENT";
         case AttributeType::COLOR: return "AttributeType::COLOR";

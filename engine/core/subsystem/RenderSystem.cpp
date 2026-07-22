@@ -1829,6 +1829,12 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         ObjectRender& render = mesh.submeshes[i].render;
 
+        // These flags are derived from the current buffers/attributes below. Reset all
+        // of them before rescanning: model reloads can replace and reorder submeshes,
+        // so retaining a flag from the previous slot may select a shader attribute
+        // that the rebuilt submesh does not provide.
+        mesh.submeshes[i].hasTexCoord1 = false;
+        mesh.submeshes[i].hasTexCoord2 = false;
         mesh.submeshes[i].hasNormal = false;
         mesh.submeshes[i].hasNormalMap = false;
         mesh.submeshes[i].hasTangent = false;
@@ -1836,6 +1842,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         mesh.submeshes[i].hasSkinning = false;
         mesh.submeshes[i].hasMorphTarget = false;
         mesh.submeshes[i].hasMorphNormal = false;
+        mesh.submeshes[i].hasMorphTangent = false;
 
         render.beginLoad(mesh.submeshes[i].primitiveType);
 
