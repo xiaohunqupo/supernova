@@ -40,10 +40,14 @@ public:
 
     static void addEntityComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, std::vector<Entity>& entities, YAML::Node componentNode = YAML::Node());
     static YAML::Node removeEntityComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, std::vector<Entity>& entities, bool encodeComponent = false);
+    static void reconcileTrackedEntities(EntityRegistry* registry, std::vector<Entity>& entities, Project* project = nullptr, uint32_t sceneId = NULL_PROJECT_SCENE);
 
     // --- Virtual children utilities ---
     static Entity getVirtualParent(Scene* scene, Entity entity);
-    static std::vector<Entity> getVirtualChildren(Scene* scene, const std::vector<Entity>& parentEntities);
+    static std::vector<Entity> getVirtualChildren(Scene* scene, const std::vector<Entity>& parentEntities, const std::unordered_set<Entity>& excludedEntities = {});
+
+    // --- Ownership cascade utilities ---
+    static std::vector<Entity> getOwnedCascadeEntities(EntityRegistry* registry, Entity owner, ComponentType componentType);
 
     // --- Lua script utilities ---
     static ScriptPropertyValue luaValueToScriptPropertyValue(lua_State* L, int idx, ScriptPropertyType type);

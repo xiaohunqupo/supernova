@@ -921,7 +921,7 @@ Entity editor::ProjectUtils::getVirtualParent(Scene* scene, Entity entity) {
     return NULL_ENTITY;
 }
 
-std::vector<Entity> editor::ProjectUtils::getVirtualChildren(Scene* scene, const std::vector<Entity>& parentEntities) {
+std::vector<Entity> editor::ProjectUtils::getVirtualChildren(Scene* scene, const std::vector<Entity>& parentEntities, const std::unordered_set<Entity>& excludedEntities) {
     std::vector<Entity> result;
     auto actionArr = scene->getComponentArray<ActionComponent>();
     if (!actionArr) {
@@ -952,6 +952,9 @@ std::vector<Entity> editor::ProjectUtils::getVirtualChildren(Scene* scene, const
         foundNew = false;
         for (size_t i = 0; i < actionArr->size(); ++i) {
             Entity entity = actionArr->getEntity(i);
+            if (excludedEntities.count(entity)) {
+                continue;
+            }
             Entity vParent = getVirtualParent(scene, entity);
             if (vParent != NULL_ENTITY
                 && std::find(allEntities.begin(), allEntities.end(), vParent) != allEntities.end()
@@ -966,9 +969,38 @@ std::vector<Entity> editor::ProjectUtils::getVirtualChildren(Scene* scene, const
     return result;
 }
 
+std::vector<Entity> editor::ProjectUtils::getOwnedCascadeEntities(EntityRegistry* registry,
+        Entity owner, ComponentType componentType) {
+    std::vector<Entity> result;
+    auto append = [&](Entity entity) {
+        if (entity != NULL_ENTITY && entity != owner &&
+            std::find(result.begin(), result.end(), entity) == result.end()) {
+            result.push_back(entity);
+        }
+    };
+
+    if (componentType == ComponentType::ActionComponent) {
+        const ActionComponent* action = registry->findComponent<ActionComponent>(owner);
+        if (action && action->ownedTarget) {
+            append(action->target);
+        }
+    } else if (componentType == ComponentType::AnimationComponent) {
+        const AnimationComponent* animation = registry->findComponent<AnimationComponent>(owner);
+        if (animation && animation->ownedActions) {
+            for (const ActionFrame& frame : animation->actions) {
+                append(frame.action);
+            }
+        }
+    }
+
+    return result;
+}
+
 YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, std::vector<Entity>& entities, bool encodeComponent){
     YAML::Node oldComponent;
 
+    // Editor commands own the undo policy for owned targets/actions. Suppress those two
+    // callbacks here so component removal never destroys entities outside its recovery data.
     switch (componentType) {
         case ComponentType::Transform:
             if (encodeComponent){
@@ -999,6 +1031,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             if (encodeComponent){
                 oldComponent = Stream::encodeActionComponent(registry->getComponent<ActionComponent>(entity));
             }
+            registry->getComponent<ActionComponent>(entity).ownedTarget = false;
             registry->removeComponent<ActionComponent>(entity);
             break;
         case ComponentType::AlphaActionComponent:
@@ -1011,6 +1044,7 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
             if (encodeComponent){
                 oldComponent = Stream::encodeAnimationComponent(registry->getComponent<AnimationComponent>(entity));
             }
+            registry->getComponent<AnimationComponent>(entity).ownedActions = false;
             registry->removeComponent<AnimationComponent>(entity);
             break;
         case ComponentType::SoundComponent:
@@ -1290,6 +1324,29 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
     Catalog::updateEntity(registry, entity, Catalog::getComponentStructuralUpdateFlags(componentType));
 
     return oldComponent;
+}
+
+void editor::ProjectUtils::reconcileTrackedEntities(EntityRegistry* registry, std::vector<Entity>& entities, Project* project, uint32_t sceneId){
+    bool clearSelection = false;
+    SceneProject* sceneProject = project ? project->getScene(sceneId) : nullptr;
+
+    auto firstRemoved = std::remove_if(entities.begin(), entities.end(), [&](Entity entity) {
+        if (registry->isEntityCreated(entity)) {
+            return false;
+        }
+        if (project && project->isSelectedEntity(sceneId, entity)) {
+            clearSelection = true;
+        }
+        if (sceneProject && sceneProject->mainCamera == entity) {
+            sceneProject->mainCamera = NULL_ENTITY;
+        }
+        return true;
+    });
+    entities.erase(firstRemoved, entities.end());
+
+    if (clearSelection) {
+        project->clearSelectedEntities(sceneId);
+    }
 }
 
 ScriptPropertyValue editor::ProjectUtils::luaValueToScriptPropertyValue(lua_State* L, int idx, ScriptPropertyType type) {

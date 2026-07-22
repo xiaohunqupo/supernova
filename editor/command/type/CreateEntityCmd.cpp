@@ -701,10 +701,14 @@ void editor::CreateEntityCmd::undo(){
             sceneProject->mainCamera = NULL_ENTITY;
         }
 
-        for (auto it = childEntities.rbegin(); it != childEntities.rend(); ++it){
-            DeleteEntityCmd::destroyEntity(sceneProject->scene, it->entity, sceneProject->entities, project, sceneId);
+        std::vector<Entity> entitiesToDestroy;
+        entitiesToDestroy.reserve(childEntities.size() + 1);
+        for (auto it = childEntities.rbegin(); it != childEntities.rend(); ++it) {
+            entitiesToDestroy.push_back(it->entity);
         }
-        DeleteEntityCmd::destroyEntity(sceneProject->scene, entity, sceneProject->entities, project, sceneId);
+        entitiesToDestroy.push_back(entity);
+        DeleteEntityCmd::destroyEntities(sceneProject->scene, entitiesToDestroy,
+            sceneProject->entities, project, sceneId);
 
         sceneProject->isModified = wasModified;
     }

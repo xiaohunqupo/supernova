@@ -9,6 +9,7 @@
 #include "math/Quaternion.h"
 #include "math/Matrix4.h"
 
+#include <filesystem>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -156,7 +157,9 @@ namespace doriax::editor {
         static YAML::Node encodeTileData(const TileData& tile);
         static TileData decodeTileData(const YAML::Node& node);
 
-        static YAML::Node encodeEntityAux(const Entity entity, const EntityRegistry* registry, const Project* project = nullptr, const SceneProject* sceneProject = nullptr);
+        static YAML::Node encodeEntityAux(const Entity entity, const EntityRegistry* registry,
+            const Project* project = nullptr, const SceneProject* sceneProject = nullptr,
+            const std::filesystem::path& bundlePathOverride = {});
 
         static YAML::Node encodeScriptProperty(const ScriptProperty& prop);
         static ScriptProperty decodeScriptProperty(const YAML::Node& node);
@@ -197,7 +200,11 @@ namespace doriax::editor {
         static YAML::Node encodeEntitySelection(const std::vector<Entity>& entities, const EntityRegistry* registry, const Project* project = nullptr, const SceneProject* sceneProject = nullptr);
         static std::vector<Entity> decodeEntitySelection(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities = nullptr, Project* project = nullptr, SceneProject* sceneProject = nullptr, Entity parent = NULL_ENTITY, bool createNewIfExists = true);
         static YAML::Node encodeEntity(const Entity entity, const EntityRegistry* registry, const Project* project = nullptr, const SceneProject* sceneProject = nullptr);
-        static std::vector<Entity> decodeEntity(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities = nullptr, Project* project = nullptr, SceneProject* sceneProject = nullptr, Entity parent = NULL_ENTITY, bool createNewIfExists = true);
+        // Recovery can encode a member subtree independently of its containing bundle while
+        // still keeping active imported bundle descendants opaque.
+        static YAML::Node encodeEntity(const Entity entity, const EntityRegistry* registry,
+            const Project* project, const SceneProject* sceneProject, bool ignoreContainingBundle);
+        static std::vector<Entity> decodeEntity(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities = nullptr, Project* project = nullptr, SceneProject* sceneProject = nullptr, Entity parent = NULL_ENTITY, bool createNewIfExists = true, std::unordered_map<Entity, Entity>* entityRemap = nullptr);
 
         static YAML::Node encodeMaterial(const Material& material, bool embedTextureData = true);
         static Material decodeMaterial(const YAML::Node& node);

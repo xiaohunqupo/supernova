@@ -64,14 +64,16 @@ std::vector<Entity> editor::Project::getTopLevelEntities(const EntityRegistry* r
     return topLevelEntities;
 }
 
-// Translates one scene-local entity value through the mapping, returning true if it
-// changed. A mapped entity crosses the bundle boundary; anything else has no meaning
-// on the far side and is cleared to None rather than leaking a raw ID.
-static bool remapLocalEntity(Entity& value, const std::unordered_map<Entity, Entity>& entityMap) {
+// Translate a local entity through the supplied map. Bundle-boundary remaps clear values
+// outside the map; recovery remaps leave those unrelated values untouched.
+static bool remapLocalEntity(Entity& value, const std::unordered_map<Entity, Entity>& entityMap, bool clearUnmapped) {
     if (value == NULL_ENTITY) {
         return false;
     }
     auto it = entityMap.find(value);
+    if (it == entityMap.end() && !clearUnmapped) {
+        return false;
+    }
     Entity remapped = (it != entityMap.end()) ? it->second : NULL_ENTITY;
     if (remapped == value) {
         return false;
@@ -80,17 +82,18 @@ static bool remapLocalEntity(Entity& value, const std::unordered_map<Entity, Ent
     return true;
 }
 
-// Remaps one entity-typed property in place, returning true if it changed. A
-// cross-scene reference (sceneId != 0) is never valid on the far side of a bundle
-// mapping, so it is cleared (both entity and sceneId); a same-scene reference is
-// translated through entityMap.
-static bool remapEntityRef(const editor::PropertyData& property, const std::unordered_map<Entity, Entity>& entityMap) {
+// Remap one entity-typed property in place. Cross-scene references are cleared only when
+// crossing a bundle boundary; recovery leaves them untouched.
+static bool remapEntityRef(const editor::PropertyData& property, const std::unordered_map<Entity, Entity>& entityMap, bool clearUnmapped) {
     if (!property.ref) {
         return false;
     }
     if (property.type == editor::PropertyType::EntityReference) {
         EntityReference* ref = static_cast<EntityReference*>(property.ref);
         if (ref->sceneId != 0) {
+            if (!clearUnmapped) {
+                return false;
+            }
             if (ref->entity == NULL_ENTITY) {
                 ref->sceneId = 0;
                 return false;
@@ -99,10 +102,10 @@ static bool remapEntityRef(const editor::PropertyData& property, const std::unor
             ref->sceneId = 0;
             return true;
         }
-        return remapLocalEntity(ref->entity, entityMap);
+        return remapLocalEntity(ref->entity, entityMap, clearUnmapped);
     }
     if (property.type == editor::PropertyType::Entity) {
-        return remapLocalEntity(*static_cast<Entity*>(property.ref), entityMap);
+        return remapLocalEntity(*static_cast<Entity*>(property.ref), entityMap, clearUnmapped);
     }
     return false;
 }
@@ -152,13 +155,16 @@ static bool componentHasExternalEntityRef(EntityRegistry* registry, Entity entit
     return false;
 }
 
-void editor::Project::remapEntityProperties(EntityRegistry* registry, const std::vector<Entity>& entities, const std::unordered_map<Entity, Entity>& entityMap) {
+void editor::Project::remapEntityProperties(EntityRegistry* registry, const std::vector<Entity>& entities, const std::unordered_map<Entity, Entity>& entityMap, bool clearUnmapped) {
+    if (!clearUnmapped && entityMap.empty()) {
+        return;
+    }
     for (Entity entity : entities) {
         for (ComponentType componentType : Catalog::findComponents(registry, entity)) {
             uint64_t updateFlags = 0;
 
             for (auto& [propertyName, property] : Catalog::findEntityProperties(registry, entity, componentType)) {
-                if (remapEntityRef(property, entityMap)) {
+                if (remapEntityRef(property, entityMap, clearUnmapped)) {
                     updateFlags |= property.updateFlags;
                 }
             }
@@ -177,7 +183,7 @@ void editor::Project::remapEntityPropertiesInComponent(EntityRegistry* registry,
             continue;
         }
 
-        remapEntityRef(property, entityMap);
+        remapEntityRef(property, entityMap, true);
     }
 }
 
@@ -4580,6 +4586,7 @@ editor::ComponentRecovery editor::Project::removeComponentFromBundle(uint32_t sc
                 }
             }
         }
+        ProjectUtils::reconcileTrackedEntities(otherScene->scene, otherScene->entities, this, otherSceneId);
     }
     for (uint32_t staleId : staleBundleScenes) {
         cleanupEntityBundlesForScene(staleId);
@@ -4728,7 +4735,7 @@ YAML::Node editor::Project::encodeEntityBundleNode(const std::filesystem::path& 
     return Stream::encodeEntitySelection(topLevelEntities, bundle->registry.get(), this);
 }
 
-std::vector<Entity> editor::Project::importEntityBundle(SceneProject* sceneProject, std::vector<Entity>* entities, const std::filesystem::path& filepath, Entity rootEntity, bool needSaveScene, const YAML::Node& bundleOverrides, const YAML::Node& bundleLocalEntities) {
+std::vector<Entity> editor::Project::importEntityBundle(SceneProject* sceneProject, std::vector<Entity>* entities, const std::filesystem::path& filepath, Entity rootEntity, bool needSaveScene, const YAML::Node& bundleOverrides, const YAML::Node& bundleLocalEntities, std::unordered_map<Entity, Entity>* entityRemap) {
     if (!filepath.is_relative()) {
         Out::error("EntityBundle filepath must be relative: %s", filepath.string().c_str());
         return {};
@@ -4954,7 +4961,7 @@ std::vector<Entity> editor::Project::importEntityBundle(SceneProject* sceneProje
             if (ovrIt != nestedOverridesMap.end()) nestedOvr = ovrIt->second;
             auto locIt = nestedLocalEntitiesMap.find(nestedKey);
             if (locIt != nestedLocalEntitiesMap.end()) nestedLoc = locIt->second;
-            std::vector<Entity> nestedEntities = importEntityBundle(sceneProject, entities, bundleComp->path, ent, false, nestedOvr, nestedLoc);
+            std::vector<Entity> nestedEntities = importEntityBundle(sceneProject, entities, bundleComp->path, ent, false, nestedOvr, nestedLoc, entityRemap);
             allResult.insert(allResult.end(), nestedEntities.begin(), nestedEntities.end());
         }
     }
@@ -4983,7 +4990,8 @@ std::vector<Entity> editor::Project::importEntityBundle(SceneProject* sceneProje
                 }
             }
 
-            std::vector<Entity> decoded = Stream::decodeEntity(localEntNode, scene, entities, this, sceneProject, parentEntity);
+            std::vector<Entity> decoded = Stream::decodeEntity(localEntNode, scene, entities, this, sceneProject,
+                parentEntity, true, entityRemap);
             if (!decoded.empty()) {
                 Entity localEntity = decoded[0];
                 scene->addEntityChild(parentEntity, localEntity, true);
@@ -5010,6 +5018,61 @@ std::vector<Entity> editor::Project::importEntityBundle(SceneProject* sceneProje
     return allResult;
 }
 
+void editor::Project::removeBundleInstanceTracking(uint32_t sceneId, Entity rootEntity) {
+    SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) {
+        return;
+    }
+
+    Scene* scene = sceneProject->scene;
+    std::unordered_set<Entity> visitedEntities;
+    auto removeBundleInstance = [&](auto&& self, Entity entity) -> void {
+        if (entity == NULL_ENTITY || !scene->isEntityCreated(entity) ||
+            !visitedEntities.insert(entity).second) {
+            return;
+        }
+
+        const BundleComponent* component = scene->findComponent<BundleComponent>(entity);
+        EntityBundle* nestedBundle = component ? getEntityBundle(component->path) : nullptr;
+        if (!nestedBundle) {
+            return;
+        }
+
+        std::vector<Entity> nestedMembers;
+        auto sceneIt = nestedBundle->instances.find(sceneId);
+        if (sceneIt != nestedBundle->instances.end()) {
+            auto instance = std::find_if(sceneIt->second.begin(), sceneIt->second.end(),
+                [entity](const EntityBundle::Instance& candidate) {
+                    return candidate.rootEntity == entity;
+                });
+            if (instance != sceneIt->second.end()) {
+                nestedMembers.reserve(instance->members.size());
+                for (const EntityBundle::EntityMember& member : instance->members) {
+                    nestedMembers.push_back(member.localEntity);
+                }
+            }
+        }
+
+        for (Entity member : nestedMembers) {
+            self(self, member);
+        }
+
+        sceneIt = nestedBundle->instances.find(sceneId);
+        if (sceneIt != nestedBundle->instances.end()) {
+            auto& instances = sceneIt->second;
+            instances.erase(std::remove_if(instances.begin(), instances.end(),
+                [entity](const EntityBundle::Instance& candidate) {
+                    return candidate.rootEntity == entity;
+                }), instances.end());
+            if (instances.empty()) {
+                nestedBundle->instances.erase(sceneIt);
+            }
+        }
+    };
+
+    removeBundleInstance(removeBundleInstance, rootEntity);
+}
+
 bool editor::Project::unimportEntityBundle(uint32_t sceneId, const std::filesystem::path& filepath, Entity rootEntity, const std::vector<Entity>& memberEntities) {
     SceneProject* sceneProject = getScene(sceneId);
     if (!sceneProject) {
@@ -5017,50 +5080,6 @@ bool editor::Project::unimportEntityBundle(uint32_t sceneId, const std::filesyst
     }
 
     Scene* scene = sceneProject->scene;
-
-    // Remove the instance from the bundle
-    EntityBundle* bundle = getEntityBundle(filepath);
-    if (bundle) {
-        uint32_t instanceId = bundle->getInstanceId(sceneId, rootEntity);
-        if (instanceId != 0) {
-            auto sceneIt = bundle->instances.find(sceneId);
-            if (sceneIt != bundle->instances.end()) {
-                auto& sceneInstances = sceneIt->second;
-                sceneInstances.erase(
-                    std::remove_if(sceneInstances.begin(), sceneInstances.end(),
-                        [instanceId](const EntityBundle::Instance& inst) { return inst.instanceId == instanceId; }),
-                    sceneInstances.end()
-                );
-                if (sceneInstances.empty()) {
-                    bundle->instances.erase(sceneIt);
-                }
-            }
-        }
-    }
-
-    // Clean up nested bundle instance tracking before destroying entities
-    for (Entity memberEntity : memberEntities) {
-        if (scene->isEntityCreated(memberEntity)) {
-            BundleComponent* bc = scene->findComponent<BundleComponent>(memberEntity);
-            if (bc && !bc->path.empty()) {
-                EntityBundle* nestedBundle = getEntityBundle(bc->path);
-                if (nestedBundle) {
-                    auto nestedSceneIt = nestedBundle->instances.find(sceneId);
-                    if (nestedSceneIt != nestedBundle->instances.end()) {
-                        auto& nestedInstances = nestedSceneIt->second;
-                        nestedInstances.erase(
-                            std::remove_if(nestedInstances.begin(), nestedInstances.end(),
-                                [memberEntity](const EntityBundle::Instance& inst) { return inst.rootEntity == memberEntity; }),
-                            nestedInstances.end()
-                        );
-                        if (nestedInstances.empty()) {
-                            nestedBundle->instances.erase(nestedSceneIt);
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     // Collect all entities to destroy (members + local entities that are children of root/members)
     std::unordered_set<Entity> memberSet(memberEntities.begin(), memberEntities.end());
@@ -5085,19 +5104,37 @@ bool editor::Project::unimportEntityBundle(uint32_t sceneId, const std::filesyst
         }
     }
 
-    // Destroy local entities first (they may reference members as parents)
-    for (Entity entity : allEntitiesToDestroy) {
-        if (scene->isEntityCreated(entity)) {
-            DeleteEntityCmd::destroyEntity(scene, entity, sceneProject->entities, this, sceneId);
+    // Drop bundle metadata recursively before any corresponding scene entity disappears.
+    // The additional flat pass covers nested bundle roots stored as scene-local children
+    // rather than members of their containing bundle.
+    removeBundleInstanceTracking(sceneId, rootEntity);
+    if (EntityBundle* rootBundle = getEntityBundle(filepath)) {
+        auto sceneIt = rootBundle->instances.find(sceneId);
+        if (sceneIt != rootBundle->instances.end()) {
+            auto& instances = sceneIt->second;
+            instances.erase(std::remove_if(instances.begin(), instances.end(),
+                [rootEntity](const EntityBundle::Instance& instance) {
+                    return instance.rootEntity == rootEntity;
+                }), instances.end());
+            if (instances.empty()) {
+                rootBundle->instances.erase(sceneIt);
+            }
         }
+    }
+    for (Entity entity : memberEntities) {
+        removeBundleInstanceTracking(sceneId, entity);
+    }
+    for (Entity entity : allEntitiesToDestroy) {
+        removeBundleInstanceTracking(sceneId, entity);
     }
 
+    // Destroy local entities first (they may reference members as parents)
+    DeleteEntityCmd::destroyEntities(scene, allEntitiesToDestroy,
+        sceneProject->entities, this, sceneId);
+
     // Destroy all imported member entities
-    for (Entity entity : memberEntities) {
-        if (scene->isEntityCreated(entity)) {
-            DeleteEntityCmd::destroyEntity(scene, entity, sceneProject->entities, this, sceneId);
-        }
-    }
+    DeleteEntityCmd::destroyEntities(scene, memberEntities,
+        sceneProject->entities, this, sceneId);
 
     // Destroy root entity
     if (rootEntity != NULL_ENTITY && scene->isEntityCreated(rootEntity)) {
@@ -5144,7 +5181,6 @@ bool editor::Project::addEntityToBundle(uint32_t sceneId, Entity entity, Entity 
     if (!bundle) {
         return false;
     }
-
     uint32_t instanceId = bundle->getInstanceId(sceneId, parent);
     if (instanceId == 0) {
         Out::error("Failed to find instance for parent entity %u in scene %u", parent, sceneId);
@@ -5300,7 +5336,8 @@ bool editor::Project::addEntityToBundle(uint32_t sceneId, Entity entity, Entity 
     return true;
 }
 
-bool editor::Project::addEntityToBundle(uint32_t sceneId, const NodeRecovery& recoveryData, Entity parent, bool createItself){
+bool editor::Project::addEntityToBundle(uint32_t sceneId, const NodeRecovery& recoveryData, Entity parent,
+        bool createItself, std::unordered_map<Entity, Entity>* entityRemap, std::vector<Entity>* restoredEntities){
     fs::path filepath = findEntityBundlePathFor(sceneId, parent);
     if (filepath.empty()) {
         Out::error("Entity parent %u in scene %u is not part of any entity bundle", parent, sceneId);
@@ -5311,6 +5348,8 @@ bool editor::Project::addEntityToBundle(uint32_t sceneId, const NodeRecovery& re
     if (!bundle) {
         return false;
     }
+    bool wasBundleModified = bundle->isModified;
+    bool deferSourceRemap = entityRemap && restoredEntities;
 
     Entity registryParent = bundle->getRegistryEntity(sceneId, parent);
 
@@ -5318,11 +5357,9 @@ bool editor::Project::addEntityToBundle(uint32_t sceneId, const NodeRecovery& re
     std::string recoveryDefKey = std::to_string(NULL_PROJECT_SCENE);
     YAML::Node nodeRegData;
     size_t regTransformIndex = 0;
-    bool hasRegRecoveryData = false;
-    if (recoveryData.find(recoveryDefKey) != recoveryData.end()) {
-        hasRegRecoveryData = true;
-        nodeRegData = recoveryData.at(recoveryDefKey).node;
-        regTransformIndex = recoveryData.at(recoveryDefKey).transformIndex;
+    if (auto recoveryIt = recoveryData.find(recoveryDefKey); recoveryIt != recoveryData.end()) {
+        nodeRegData = recoveryIt->second.node;
+        regTransformIndex = recoveryIt->second.transformIndex;
     }
 
     if (!nodeRegData) {
@@ -5330,82 +5367,327 @@ bool editor::Project::addEntityToBundle(uint32_t sceneId, const NodeRecovery& re
         return false;
     }
 
-    std::vector<Entity> regEntities = Stream::decodeEntity(nodeRegData, bundle->registry.get(), &bundle->registryEntities);
-    if (!regEntities.empty()) {
-        bool regHasTransform = bundle->registry->getSignature(regEntities[0]).test(bundle->registry->getComponentId<Transform>());
-        ProjectUtils::moveEntityOrderByIndex(bundle->registry.get(), bundle->registryEntities, regEntities[0], registryParent, regTransformIndex, regHasTransform);
+    std::unordered_map<Entity, Entity> recoveredRegistryIds;
+    std::vector<Entity> regEntities = Stream::decodeEntity(nodeRegData, bundle->registry.get(),
+        &bundle->registryEntities, nullptr, nullptr, NULL_ENTITY, true, &recoveredRegistryIds);
+    if (regEntities.empty()) {
+        Out::error("Could not recover registry data for entity bundle");
+        return false;
+    }
+    remapEntityProperties(bundle->registry.get(), bundle->registryEntities, recoveredRegistryIds, false);
+    bool regHasTransform = bundle->registry->getSignature(regEntities[0]).test(bundle->registry->getComponentId<Transform>());
+    ProjectUtils::moveEntityOrderByIndex(bundle->registry.get(), bundle->registryEntities, regEntities[0], registryParent, regTransformIndex, regHasTransform);
+    uint32_t sourceInstanceId = bundle->getInstanceId(sceneId, parent);
+
+    struct InstanceRecoveryTarget {
+        uint32_t sceneId = NULL_PROJECT_SCENE;
+        uint32_t instanceId = 0;
+        Entity rootEntity = NULL_ENTITY;
+    };
+
+    std::vector<InstanceRecoveryTarget> recoveryTargets;
+    for (const auto& [otherSceneId, sceneInstances] : bundle->instances) {
+        for (const EntityBundle::Instance& instance : sceneInstances) {
+            recoveryTargets.push_back({otherSceneId, instance.instanceId, instance.rootEntity});
+        }
     }
 
-    // For each instance, recreate entities from recovery
-    for (auto& [otherSceneId, sceneInstances] : bundle->instances) {
-        SceneProject* otherScene = getScene(otherSceneId);
+    struct PendingInstanceRecovery {
+        uint32_t sceneId = NULL_PROJECT_SCENE;
+        uint32_t instanceId = 0;
+        const NodeRecoveryEntry* recoveredEntry = nullptr;
+        std::vector<Entity> entities;
+        std::vector<EntityBundle::EntityMember> members;
+        std::unordered_map<Entity, Entity> localRemap;
+        Entity parent = NULL_ENTITY;
+        size_t transformIndex = 0;
+        bool decodeBranch = false;
+    };
+
+    std::vector<PendingInstanceRecovery> pendingRecoveries;
+    std::map<uint32_t, bool> sceneModifiedStates;
+    std::map<uint32_t, std::vector<Entity>> referenceEntitiesByScene;
+    bool validRecovery = true;
+
+    // Decode every instance first. Membership and override metadata are committed only after
+    // all exact saved pairs have resolved, so a failed nested import can be rolled back cleanly.
+    const std::unordered_set<Entity> recoveredRegistryEntities(regEntities.begin(), regEntities.end());
+    for (const InstanceRecoveryTarget& target : recoveryTargets) {
+        SceneProject* otherScene = getScene(target.sceneId);
         if (!otherScene || !otherScene->scene) {
             continue;
         }
+        sceneModifiedStates.emplace(target.sceneId, otherScene->isModified);
+        if (!deferSourceRemap || target.sceneId != sceneId) {
+            referenceEntitiesByScene.try_emplace(target.sceneId, otherScene->entities);
+        }
 
-        for (auto& instance : sceneInstances) {
-            std::string recoveryKey = std::to_string(otherSceneId) + "_" + std::to_string(instance.rootEntity);
-            YAML::Node nodeData;
-            size_t transformIndex = 0;
-            bool hasRecoveryData = false;
+        EntityBundle::Instance* instance = bundle->getInstanceById(target.sceneId, target.instanceId);
+        if (!instance) {
+            validRecovery = false;
+            break;
+        }
 
-            if (recoveryData.find(recoveryKey) != recoveryData.end()) {
-                hasRecoveryData = true;
-                nodeData = recoveryData.at(recoveryKey).node;
-                transformIndex = recoveryData.at(recoveryKey).transformIndex;
-            } else {
-                nodeData = Stream::encodeEntity(regEntities[0], bundle->registry.get());
+        std::string recoveryKey = std::to_string(target.sceneId) + "_" + std::to_string(target.rootEntity);
+        YAML::Node nodeData;
+        size_t transformIndex = 0;
+        const NodeRecoveryEntry* recoveredEntry = nullptr;
+
+        auto recoveryIt = recoveryData.find(recoveryKey);
+        if (recoveryIt != recoveryData.end()) {
+            recoveredEntry = &recoveryIt->second;
+            nodeData = recoveredEntry->node;
+            transformIndex = recoveredEntry->transformIndex;
+        } else {
+            nodeData = Stream::encodeEntity(regEntities[0], bundle->registry.get());
+        }
+
+        // Resolve everything needed from the instance before decoding. A malformed circular
+        // bundle can recursively append another instance of this bundle and reallocate its
+        // instance vector, so no iterator, reference, or pointer may survive the decode.
+        Entity otherParent = instance->rootEntity;
+        if (registryParent != NULL_ENTITY) {
+            for (const auto& member : instance->members) {
+                if (member.registryEntity == registryParent) {
+                    otherParent = member.localEntity;
+                    break;
+                }
             }
+        }
 
-            // Find the parent in this instance
-            Entity otherParent = instance.rootEntity;
-            if (registryParent != NULL_ENTITY) {
-                for (const auto& member : instance.members) {
-                    if (member.registryEntity == registryParent) {
-                        otherParent = member.localEntity;
+        std::vector<Entity> newOtherEntities;
+        bool isSourceInstance = target.sceneId == sceneId && target.instanceId == sourceInstanceId;
+
+        bool decodeBranch = !isSourceInstance || createItself;
+        std::unordered_map<Entity, Entity> recoveredLocalIds;
+        if (decodeBranch) {
+            newOtherEntities = Stream::decodeEntity(nodeData, otherScene->scene,
+                &otherScene->entities, this, otherScene, NULL_ENTITY, true, &recoveredLocalIds);
+        } else {
+            ProjectUtils::collectEntities(nodeData, newOtherEntities);
+        }
+
+        const std::unordered_set<Entity> branchEntities(newOtherEntities.begin(), newOtherEntities.end());
+        bool nestedBundlesMapped = true;
+        if (recoveredEntry) {
+            for (const NestedBundleRecovery& savedBundle : recoveredEntry->nestedBundles) {
+                Entity nestedRoot = savedBundle.rootEntity;
+                if (auto rootRemap = recoveredLocalIds.find(nestedRoot); rootRemap != recoveredLocalIds.end()) {
+                    nestedRoot = rootRemap->second;
+                }
+
+                EntityBundle* nestedBundle = getEntityBundle(savedBundle.path);
+                const EntityBundle::Instance* nestedInstance = nestedBundle ?
+                    nestedBundle->getInstance(target.sceneId, nestedRoot) : nullptr;
+                if (!nestedInstance || nestedInstance->rootEntity != nestedRoot ||
+                    !otherScene->scene->isEntityCreated(nestedRoot) ||
+                    (decodeBranch && !branchEntities.count(nestedRoot))) {
+                    nestedBundlesMapped = false;
+                    break;
+                }
+
+                for (const EntityBundle::EntityMember& savedMember : savedBundle.members) {
+                    Entity registryEntity = savedMember.registryEntity;
+                    if (nestedBundle == bundle) {
+                        if (auto registryRemap = recoveredRegistryIds.find(registryEntity);
+                            registryRemap != recoveredRegistryIds.end()) {
+                            registryEntity = registryRemap->second;
+                        }
+                    }
+
+                    auto restoredMember = std::find_if(nestedInstance->members.begin(), nestedInstance->members.end(),
+                        [&](const EntityBundle::EntityMember& member) {
+                            return member.registryEntity == registryEntity;
+                        });
+                    if (restoredMember == nestedInstance->members.end() ||
+                        !otherScene->scene->isEntityCreated(restoredMember->localEntity) ||
+                        (decodeBranch && !branchEntities.count(restoredMember->localEntity))) {
+                        nestedBundlesMapped = false;
                         break;
                     }
-                }
-            }
-
-            std::vector<Entity> newOtherEntities;
-            uint32_t currentInstanceId = bundle->getInstanceId(otherSceneId, instance.rootEntity);
-
-            bool decodeBranch = (otherSceneId != sceneId) || (currentInstanceId != bundle->getInstanceId(sceneId, parent)) || createItself;
-            if (decodeBranch) {
-                newOtherEntities = Stream::decodeEntity(nodeData, otherScene->scene, &otherScene->entities);
-            } else {
-                ProjectUtils::collectEntities(nodeData, newOtherEntities);
-            }
-
-            if (!newOtherEntities.empty()) {
-                bool otherHasTransform = otherScene->scene->getSignature(newOtherEntities[0]).test(otherScene->scene->getComponentId<Transform>());
-                ProjectUtils::moveEntityOrderByIndex(otherScene->scene, otherScene->entities, newOtherEntities[0], otherParent, transformIndex, otherHasTransform);
-            }
-
-            // Add members mapping
-            if (regEntities.size() == newOtherEntities.size()) {
-                for (size_t e = 0; e < newOtherEntities.size(); e++) {
-                    instance.members.push_back({newOtherEntities[e], regEntities[e]});
-                }
-
-                if (decodeBranch && !hasRecoveryData) {
-                    // Freshly decoded from the registry: translate registry IDs to this
-                    // instance's local IDs (references outside the bundle stay None).
-                    std::unordered_map<Entity, Entity> registryToLocal;
-                    for (const auto& member : instance.members) {
-                        registryToLocal[member.registryEntity] = member.localEntity;
+                    if (restoredMember->localEntity != savedMember.localEntity) {
+                        recoveredLocalIds[savedMember.localEntity] = restoredMember->localEntity;
                     }
-                    remapEntityProperties(otherScene->scene, newOtherEntities, registryToLocal);
-                } else {
-                    // Recovered or reused data keeps this instance's own references;
-                    // restore the override on components that point outside the bundle.
-                    overrideExternalRefComponents(otherScene->scene, instance);
+                }
+                if (!nestedBundlesMapped) {
+                    break;
                 }
             }
-
-            otherScene->isModified = true;
         }
+
+        std::vector<EntityBundle::EntityMember> membersToRestore;
+        if (recoveredEntry && !recoveredEntry->members.empty()) {
+            membersToRestore.reserve(recoveredEntry->members.size());
+            for (const EntityBundle::EntityMember& saved : recoveredEntry->members) {
+                Entity localEntity = saved.localEntity;
+                auto localRemap = recoveredLocalIds.find(localEntity);
+                if (localRemap != recoveredLocalIds.end()) {
+                    localEntity = localRemap->second;
+                }
+
+                Entity registryEntity = saved.registryEntity;
+                auto registryRemap = recoveredRegistryIds.find(registryEntity);
+                if (registryRemap != recoveredRegistryIds.end()) {
+                    registryEntity = registryRemap->second;
+                }
+
+                if (branchEntities.count(localEntity) && recoveredRegistryEntities.count(registryEntity) &&
+                    otherScene->scene->isEntityCreated(localEntity) &&
+                    bundle->registry->isEntityCreated(registryEntity)) {
+                    membersToRestore.push_back({localEntity, registryEntity});
+                }
+            }
+        } else if (regEntities.size() == newOtherEntities.size()) {
+            for (size_t i = 0; i < regEntities.size(); ++i) {
+                membersToRestore.push_back({newOtherEntities[i], regEntities[i]});
+            }
+        }
+
+        bool canPairMembers = nestedBundlesMapped && (recoveredEntry && !recoveredEntry->members.empty() ?
+            membersToRestore.size() == recoveredEntry->members.size() :
+            membersToRestore.size() == regEntities.size());
+        pendingRecoveries.push_back({target.sceneId, target.instanceId, recoveredEntry,
+            std::move(newOtherEntities), std::move(membersToRestore),
+            std::move(recoveredLocalIds), otherParent, transformIndex,
+            decodeBranch});
+        if (!canPairMembers) {
+            validRecovery = false;
+            break;
+        }
+    }
+
+    if (validRecovery) {
+        validRecovery = std::all_of(pendingRecoveries.begin(), pendingRecoveries.end(),
+            [&](const PendingInstanceRecovery& pending) {
+                return bundle->getInstanceById(pending.sceneId, pending.instanceId) != nullptr;
+            });
+    }
+
+    if (!validRecovery) {
+        for (PendingInstanceRecovery& pending : pendingRecoveries) {
+            if (!pending.decodeBranch) {
+                continue;
+            }
+            SceneProject* pendingScene = getScene(pending.sceneId);
+            if (!pendingScene || !pendingScene->scene) {
+                continue;
+            }
+            for (Entity entity : pending.entities) {
+                removeBundleInstanceTracking(pending.sceneId, entity);
+                if (!pendingScene->scene->isEntityCreated(entity)) {
+                    continue;
+                }
+                if (ActionComponent* action = pendingScene->scene->findComponent<ActionComponent>(entity)) {
+                    action->ownedTarget = false;
+                }
+                if (AnimationComponent* animation = pendingScene->scene->findComponent<AnimationComponent>(entity)) {
+                    animation->ownedActions = false;
+                }
+            }
+            DeleteEntityCmd::destroyEntities(pendingScene->scene, pending.entities,
+                pendingScene->entities, this, pending.sceneId);
+        }
+
+        std::unordered_map<Entity, Entity> reverseRegistryRemap;
+        for (const auto& [oldEntity, newEntity] : recoveredRegistryIds) {
+            reverseRegistryRemap[newEntity] = oldEntity;
+        }
+        remapEntityProperties(bundle->registry.get(), bundle->registryEntities,
+            reverseRegistryRemap, false);
+        DeleteEntityCmd::destroyEntities(bundle->registry.get(), regEntities, bundle->registryEntities);
+        for (const auto& [otherSceneId, modified] : sceneModifiedStates) {
+            if (SceneProject* otherScene = getScene(otherSceneId)) {
+                otherScene->isModified = modified;
+            }
+        }
+        bundle->isModified = wasBundleModified;
+        Out::error("Could not pair recovered entity bundle members");
+        return false;
+    }
+
+    std::map<uint32_t, std::unordered_map<Entity, Entity>> sceneEntityRemaps;
+    for (PendingInstanceRecovery& pending : pendingRecoveries) {
+        SceneProject* pendingScene = getScene(pending.sceneId);
+        EntityBundle::Instance* instance = bundle->getInstanceById(pending.sceneId, pending.instanceId);
+        if (!pendingScene || !pendingScene->scene || !instance) {
+            continue;
+        }
+        Scene* otherScene = pendingScene->scene;
+
+        if (!pending.entities.empty()) {
+            bool hasTransform = otherScene->getSignature(pending.entities[0]).test(
+                otherScene->getComponentId<Transform>());
+            ProjectUtils::moveEntityOrderByIndex(otherScene, pendingScene->entities,
+                pending.entities[0], pending.parent, pending.transformIndex, hasTransform);
+        }
+
+        instance->members.insert(instance->members.end(),
+            pending.members.begin(), pending.members.end());
+
+        if (entityRemap && pending.recoveredEntry && pending.sceneId == sceneId) {
+            for (const auto& [oldEntity, newEntity] : pending.localRemap) {
+                (*entityRemap)[oldEntity] = newEntity;
+            }
+        }
+        if (pending.recoveredEntry) {
+            for (const auto& [oldEntity, overrideMask] : pending.recoveredEntry->overrides) {
+                Entity localEntity = oldEntity;
+                auto localRemap = pending.localRemap.find(oldEntity);
+                if (localRemap != pending.localRemap.end()) {
+                    localEntity = localRemap->second;
+                }
+                if (otherScene->isEntityCreated(localEntity)) {
+                    instance->overrides[localEntity] = overrideMask;
+                }
+            }
+        }
+        if (restoredEntities && pending.sceneId == sceneId) {
+            restoredEntities->insert(restoredEntities->end(),
+                pending.entities.begin(), pending.entities.end());
+        }
+        if (!deferSourceRemap || pending.sceneId != sceneId) {
+            auto& referenceEntities = referenceEntitiesByScene[pending.sceneId];
+            referenceEntities.insert(referenceEntities.end(), pending.entities.begin(), pending.entities.end());
+        }
+
+        if (pending.decodeBranch && !pending.recoveredEntry) {
+            std::unordered_map<Entity, Entity> registryToLocal;
+            for (const EntityBundle::EntityMember& member : instance->members) {
+                registryToLocal[member.registryEntity] = member.localEntity;
+            }
+            remapEntityProperties(otherScene, pending.entities, registryToLocal);
+        } else {
+            if (pending.decodeBranch && !pending.localRemap.empty()) {
+                auto& sceneRemap = sceneEntityRemaps[pending.sceneId];
+                for (const auto& [oldEntity, newEntity] : pending.localRemap) {
+                    sceneRemap[oldEntity] = newEntity;
+                }
+            }
+            if (!pending.recoveredEntry) {
+                overrideExternalRefComponents(otherScene, *instance);
+            }
+        }
+
+        pendingScene->isModified = true;
+    }
+
+    for (const auto& [otherSceneId, entityMap] : sceneEntityRemaps) {
+        if (deferSourceRemap && otherSceneId == sceneId) {
+            continue;
+        }
+        SceneProject* otherScene = getScene(otherSceneId);
+        auto references = referenceEntitiesByScene.find(otherSceneId);
+        if (!otherScene || !otherScene->scene || references == referenceEntitiesByScene.end()) {
+            continue;
+        }
+        std::vector<Entity> liveReferences;
+        std::unordered_set<Entity> seenReferences;
+        for (Entity entity : references->second) {
+            if (otherScene->scene->isEntityCreated(entity) && seenReferences.insert(entity).second) {
+                liveReferences.push_back(entity);
+            }
+        }
+        remapEntityProperties(otherScene->scene, liveReferences, entityMap, false);
     }
 
     bundle->isModified = true;
@@ -5479,10 +5761,50 @@ editor::NodeRecovery editor::Project::removeEntityFromBundle(uint32_t sceneId, E
                 continue;
             }
 
-            YAML::Node nodeExtend = Stream::encodeEntity(otherEntity, otherScene->scene, nullptr, nullptr);
+            const BundleComponent* nestedComponent = otherScene->scene->findComponent<BundleComponent>(otherEntity);
+            const EntityBundle* nestedBundle = nestedComponent ? getEntityBundle(nestedComponent->path) : nullptr;
+            const EntityBundle::Instance* nestedInstance = nestedBundle ?
+                nestedBundle->getInstance(otherSceneId, otherEntity) : nullptr;
+            bool isNestedBundleRoot = nestedInstance && nestedInstance->rootEntity == otherEntity;
+            YAML::Node nodeExtend = Stream::encodeEntity(otherEntity, otherScene->scene,
+                this, otherScene, !isNestedBundleRoot);
 
             std::vector<Entity> allEntities;
             ProjectUtils::collectEntities(nodeExtend, allEntities);
+
+            // Project-aware snapshots keep nested bundle branches opaque. Expand their live
+            // instance members and hierarchy here so the scene-side removal still destroys
+            // the complete branch while recovery remains bundle-aware.
+            std::unordered_set<Entity> collectedEntities(allEntities.begin(), allEntities.end());
+            // Expansion records each imported root before appending its members, preserving
+            // the parent-before-child order used to resolve deeper roots during recovery.
+            std::vector<NestedBundleRecovery> nestedBundles;
+            auto appendEntity = [&](Entity candidate) {
+                if (candidate != NULL_ENTITY && otherScene->scene->isEntityCreated(candidate) &&
+                    collectedEntities.insert(candidate).second) {
+                    allEntities.push_back(candidate);
+                }
+            };
+            auto transforms = otherScene->scene->getComponentArray<Transform>();
+            for (size_t entityIndex = 0; entityIndex < allEntities.size(); ++entityIndex) {
+                Entity branchEntity = allEntities[entityIndex];
+                const BundleComponent* component = otherScene->scene->findComponent<BundleComponent>(branchEntity);
+                const EntityBundle* childBundle = component ? getEntityBundle(component->path) : nullptr;
+                const EntityBundle::Instance* childInstance = childBundle ?
+                    childBundle->getInstance(otherSceneId, branchEntity) : nullptr;
+                if (childInstance && childInstance->rootEntity == branchEntity) {
+                    nestedBundles.push_back({component->path, branchEntity, childInstance->members});
+                    for (const EntityBundle::EntityMember& member : childInstance->members) {
+                        appendEntity(member.localEntity);
+                    }
+                }
+
+                for (size_t transformIndex = 0; transformIndex < transforms->size(); ++transformIndex) {
+                    if (transforms->getComponentFromIndex(transformIndex).parent == branchEntity) {
+                        appendEntity(transforms->getEntity(transformIndex));
+                    }
+                }
+            }
 
             if (otherScene->scene->findComponent<Transform>(otherEntity)) {
                 transformIndex = ProjectUtils::getTransformIndex(otherScene->scene, otherEntity);
@@ -5492,7 +5814,9 @@ editor::NodeRecovery editor::Project::removeEntityFromBundle(uint32_t sceneId, E
             }
 
             std::string recoveryKey = std::to_string(otherSceneId) + "_" + std::to_string(instance.rootEntity);
-            recovery[recoveryKey] = {nodeExtend, transformIndex};
+            NodeRecoveryEntry& recoveryEntry = recovery[recoveryKey];
+            recoveryEntry = {nodeExtend, transformIndex};
+            recoveryEntry.nestedBundles = std::move(nestedBundles);
 
             // Remove members from this instance
             for (const Entity& e : allEntities) {
@@ -5501,27 +5825,42 @@ editor::NodeRecovery editor::Project::removeEntityFromBundle(uint32_t sceneId, E
                         return member.localEntity == e;
                     });
                 if (itRem != instance.members.end()) {
+                    recoveryEntry.members.push_back(*itRem);
                     instance.members.erase(itRem);
                 }
 
+                auto override = instance.overrides.find(e);
+                if (override != instance.overrides.end()) {
+                    recoveryEntry.overrides[e] = override->second;
+                }
                 instance.overrides.erase(e);
             }
 
             // Destroy entities in other instances (or in this one if destroyItself)
             if ((otherSceneId != sceneId) || (instance.instanceId != instanceId) || destroyItself) {
+                // Remove nested-instance metadata and suppress authored ownership callbacks
+                // before any component removal can cascade into a later entity in the branch.
                 for (const Entity& entityToDestroy : allEntities) {
-                    DeleteEntityCmd::destroyEntity(otherScene->scene, entityToDestroy, otherScene->entities, this, otherSceneId);
+                    removeBundleInstanceTracking(otherSceneId, entityToDestroy);
+                    if (ActionComponent* action = otherScene->scene->findComponent<ActionComponent>(entityToDestroy)) {
+                        action->ownedTarget = false;
+                    }
+                    if (AnimationComponent* animation = otherScene->scene->findComponent<AnimationComponent>(entityToDestroy)) {
+                        animation->ownedActions = false;
+                    }
                 }
+                // DeleteEntityCmd captures ownership dependencies explicitly in the source
+                // scene. Other instance overrides must not broaden that shared deletion.
+                DeleteEntityCmd::destroyEntities(otherScene->scene, allEntities,
+                    otherScene->entities, this, otherSceneId);
             }
 
-            // A destroy above can cascade inside the engine (onComponentRemoved) and take
-            // OTHER members of this instance with it — e.g. an action/particle with
-            // ownedTarget destroys its target. Those are gone from the scene but were not in
-            // the collected set, so drop any member whose local entity no longer exists (and
-            // its override entry) to keep the bundle instance metadata in sync with the scene.
+            // A destroy above can cascade inside the engine and take other members of this
+            // instance with it. Drop any such missing member (and its override entry) to keep
+            // the bundle instance metadata in sync with the scene.
             for (auto memberIt = instance.members.begin(); memberIt != instance.members.end(); ) {
                 if (!otherScene->scene->isEntityCreated(memberIt->localEntity)) {
-                    if (memberIt->registryEntity != NULL_ENTITY) {
+                    if (destroyItself && memberIt->registryEntity != NULL_ENTITY) {
                         cascadedRegistryEntities.insert(memberIt->registryEntity);
                     }
                     instance.overrides.erase(memberIt->localEntity);
@@ -5555,16 +5894,14 @@ editor::NodeRecovery editor::Project::removeEntityFromBundle(uint32_t sceneId, E
     std::vector<Entity> registryEntitiesToRemove;
     ProjectUtils::collectEntities(regData, registryEntitiesToRemove);
 
-    // Mirror the scene-side cascade into the shared definition: the registry never cascades
-    // on its own, so without this the owned target would linger in the saved bundle and be
-    // recreated by future imports. destroyEntity is idempotent (guards isEntityCreated).
+    // Mirror scene-side system cascades into the shared definition. The registry has no
+    // systems and therefore does not perform the equivalent cleanup on its own.
     for (Entity regEntity : cascadedRegistryEntities) {
         registryEntitiesToRemove.push_back(regEntity);
     }
 
-    for (Entity regEntity : registryEntitiesToRemove) {
-        DeleteEntityCmd::destroyEntity(bundle->registry.get(), regEntity, bundle->registryEntities);
-    }
+    DeleteEntityCmd::destroyEntities(bundle->registry.get(), registryEntitiesToRemove,
+        bundle->registryEntities);
 
     bundle->isModified = true;
 

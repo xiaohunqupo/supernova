@@ -39,12 +39,16 @@ void editor::AddComponentCmd::undo() {
         Scene* scene = sceneProject->scene;
 
         for (Entity& entity : entities){
+            // Undoing an add removes only the component introduced by this command. Any
+            // ownership configured later belongs to later commands and must not broaden undo.
             ProjectUtils::removeEntityComponent(scene, entity, componentType, sceneProject->entities);
 
             if (project->isEntityInBundle(sceneId, entity)){
                 project->removeComponentFromBundle(sceneId, entity, componentType, false, false);
             }
         }
+
+        ProjectUtils::reconcileTrackedEntities(scene, sceneProject->entities, project, sceneId);
 
         if (componentType == ComponentType::CameraComponent){
             CameraTextureLink::resolve(scene);
@@ -57,7 +61,7 @@ void editor::AddComponentCmd::undo() {
 bool editor::AddComponentCmd::mergeWith(Command* otherCommand){
     AddComponentCmd* otherCmd = dynamic_cast<AddComponentCmd*>(otherCommand);
     if (otherCmd != nullptr){
-        if (sceneId == otherCmd->sceneId){
+        if (project == otherCmd->project && sceneId == otherCmd->sceneId && componentType == otherCmd->componentType){
 
             for (Entity& otherEntity :  otherCmd->entities){
                 entities.push_back(otherEntity);

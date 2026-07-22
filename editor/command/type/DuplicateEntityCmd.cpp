@@ -154,9 +154,9 @@ void editor::DuplicateEntityCmd::undo(){
 
     if (sceneProject){
         // Delete created entities in reverse order
-        for (auto it = createdEntities.rbegin(); it != createdEntities.rend(); ++it){
-            DeleteEntityCmd::destroyEntity(sceneProject->scene, *it, sceneProject->entities, project, sceneId);
-        }
+        std::vector<Entity> entitiesToDestroy(createdEntities.rbegin(), createdEntities.rend());
+        DeleteEntityCmd::destroyEntities(sceneProject->scene, entitiesToDestroy,
+            sceneProject->entities, project, sceneId);
 
         if (!lastSelected.empty()){
             project->clearSelectedEntities(sceneId);

@@ -2080,22 +2080,46 @@ std::vector<Entity> editor::Stream::decodeEntitySelection(const YAML::Node& enti
     return decodeEntity(entityNode, registry, entities, project, sceneProject, parent, createNewIfExists);
 }
 
-YAML::Node editor::Stream::encodeEntity(const Entity entity, const EntityRegistry* registry, const Project* project, const SceneProject* sceneProject) {
+YAML::Node editor::Stream::encodeEntity(const Entity entity, const EntityRegistry* registry,
+        const Project* project, const SceneProject* sceneProject) {
+    return encodeEntity(entity, registry, project, sceneProject, false);
+}
+
+YAML::Node editor::Stream::encodeEntity(const Entity entity, const EntityRegistry* registry,
+        const Project* project, const SceneProject* sceneProject, bool ignoreContainingBundle) {
     std::map<Entity, YAML::Node> entityNodes;
 
-    bool hasCurrentEntity = true;
-    if (sceneProject){
-        std::vector<Entity> entities = sceneProject->entities;
-        hasCurrentEntity = std::find(entities.begin(), entities.end(), entity) != entities.end();
-    }
+    auto importedBundlePath = [&](Entity candidate) {
+        fs::path path;
+        if (!project || !sceneProject) {
+            return path;
+        }
+        Signature signature = registry->getSignature(candidate);
+        if (!signature.test(registry->getComponentId<BundleComponent>())) {
+            return path;
+        }
+        const BundleComponent& component = registry->getComponent<BundleComponent>(candidate);
+        const EntityBundle* bundle = project->getEntityBundle(component.path);
+        const EntityBundle::Instance* instance = bundle ?
+            bundle->getInstance(sceneProject->id, candidate) : nullptr;
+        if (instance && instance->rootEntity == candidate) {
+            path = component.path;
+        }
+        return path;
+    };
+
+    bool hasCurrentEntity = !sceneProject ||
+        std::find(sceneProject->entities.begin(), sceneProject->entities.end(), entity) != sceneProject->entities.end();
 
     if (hasCurrentEntity) {
+        fs::path currentBundlePath = ignoreContainingBundle ? fs::path{} : importedBundlePath(entity);
         YAML::Node& currentNode = entityNodes[entity];
-        currentNode = encodeEntityAux(entity, registry, project, sceneProject);
+        currentNode = ignoreContainingBundle ? encodeEntityAux(entity, registry) :
+            encodeEntityAux(entity, registry, project, sceneProject, currentBundlePath);
 
-        // Bundle root: children are part of the bundle file, skip hierarchy walk
-        // Only skip when saving to file (project != nullptr); snapshots need all entities
-        if (project && registry->getSignature(entity).test(registry->getComponentId<BundleComponent>())) {
+        // Imported children are represented by the bundle root and its overrides.
+        if (!ignoreContainingBundle && project && registry->getSignature(entity).test(registry->getComponentId<BundleComponent>()) &&
+            (!sceneProject || !currentBundlePath.empty())) {
             return entityNodes[entity];
         }
 
@@ -2104,20 +2128,25 @@ YAML::Node editor::Stream::encodeEntity(const Entity entity, const EntityRegistr
         if (signature.test(registry->getComponentId<Transform>())) {
             auto transforms = registry->getComponentArray<Transform>();
             size_t firstIndex = transforms->getIndex(entity);
+            std::unordered_set<Entity> skippedBundleBranch;
 
             for (size_t i = firstIndex + 1; i < transforms->size(); ++i) {
                 Entity currentEntity = transforms->getEntity(i);
+                const Transform& transform = transforms->getComponentFromIndex(i);
 
-                if (sceneProject){
-                    std::vector<Entity> entities = sceneProject->entities;
-                    hasCurrentEntity = std::find(entities.begin(), entities.end(), currentEntity) != entities.end();
+                if (skippedBundleBranch.count(transform.parent)) {
+                    skippedBundleBranch.insert(currentEntity);
+                    continue;
                 }
 
+                hasCurrentEntity = !sceneProject ||
+                    std::find(sceneProject->entities.begin(), sceneProject->entities.end(), currentEntity) != sceneProject->entities.end();
                 if (hasCurrentEntity) {
+                    fs::path currentBundlePath = importedBundlePath(currentEntity);
                     YAML::Node& currentNode = entityNodes[currentEntity];
-                    currentNode = encodeEntityAux(currentEntity, registry, project, sceneProject);
-
-                    Transform& transform = transforms->getComponentFromIndex(i);
+                    currentNode = ignoreContainingBundle && currentBundlePath.empty() ?
+                        encodeEntityAux(currentEntity, registry) :
+                        encodeEntityAux(currentEntity, registry, project, sceneProject, currentBundlePath);
 
                     if (entityNodes.find(transform.parent) != entityNodes.end()) {
                         YAML::Node& parentNode = entityNodes[transform.parent];
@@ -2125,6 +2154,10 @@ YAML::Node editor::Stream::encodeEntity(const Entity entity, const EntityRegistr
                             parentNode["children"] = YAML::Node();
                         }
                         parentNode["children"].push_back(currentNode);
+                        if (project && registry->getSignature(currentEntity).test(registry->getComponentId<BundleComponent>()) &&
+                            (!sceneProject || !currentBundlePath.empty())) {
+                            skippedBundleBranch.insert(currentEntity);
+                        }
                     } else {
                         break; // No more childs
                     }
@@ -2136,11 +2169,12 @@ YAML::Node editor::Stream::encodeEntity(const Entity entity, const EntityRegistr
     return entityNodes[entity];
 }
 
-YAML::Node editor::Stream::encodeEntityAux(const Entity entity, const EntityRegistry* registry, const Project* project, const SceneProject* sceneProject) {
+YAML::Node editor::Stream::encodeEntityAux(const Entity entity, const EntityRegistry* registry,
+        const Project* project, const SceneProject* sceneProject, const std::filesystem::path& bundlePathOverride) {
     YAML::Node entityNode;
 
-    fs::path bundlePath = "";
-    if (project && sceneProject) {
+    fs::path bundlePath = bundlePathOverride;
+    if (bundlePath.empty() && project && sceneProject) {
         bundlePath = project->findEntityBundlePathFor(sceneProject->id, entity);
     }
 
@@ -2491,8 +2525,12 @@ ScriptProperty editor::Stream::decodeScriptProperty(const YAML::Node& node) {
     return prop;
 }
 
-std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities, Project* project, SceneProject* sceneProject, Entity parent, bool createNewIfExists) {
+std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities, Project* project, SceneProject* sceneProject, Entity parent, bool createNewIfExists, std::unordered_map<Entity, Entity>* entityRemap) {
     std::vector<Entity> allEntities;
+
+    if (!entityNode || !entityNode.IsMap() || !entityNode["type"]) {
+        return allEntities;
+    }
 
     std::string entityType = entityNode["type"].as<std::string>();
 
@@ -2500,11 +2538,15 @@ std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, E
 
         Entity entity = NULL_ENTITY;
         if (entityNode["entity"]){
-            entity = entityNode["entity"].as<Entity>();
+            Entity serializedEntity = entityNode["entity"].as<Entity>();
+            entity = serializedEntity;
             if (!registry->recreateEntity(entity)){
                 if (createNewIfExists){
                     entity = registry->createUserEntity();
                 }
+            }
+            if (entityRemap && entity != serializedEntity) {
+                (*entityRemap)[serializedEntity] = entity;
             }
         }else{
             entity = registry->createUserEntity();
@@ -2529,7 +2571,7 @@ std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, E
             if (bundleComp && !bundleComp->path.empty()) {
                 std::vector<Entity> bundleEntities = project->importEntityBundle(
                     sceneProject, entities, bundleComp->path, entity, false,
-                    entityNode["bundleOverrides"], entityNode["bundleLocalEntities"]);
+                    entityNode["bundleOverrides"], entityNode["bundleLocalEntities"], entityRemap);
                 allEntities.insert(allEntities.end(), bundleEntities.begin(), bundleEntities.end());
             }
         }
@@ -2537,7 +2579,7 @@ std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, E
         // Decode children from actualNode
         if (entityNode["children"]) {
             for (const auto& childNode : entityNode["children"]) {
-                std::vector<Entity> childEntities = decodeEntity(childNode, registry, entities, project, sceneProject, entity, createNewIfExists);
+                std::vector<Entity> childEntities = decodeEntity(childNode, registry, entities, project, sceneProject, entity, createNewIfExists, entityRemap);
                 std::copy(childEntities.begin(), childEntities.end(), std::back_inserter(allEntities));
             }
         }

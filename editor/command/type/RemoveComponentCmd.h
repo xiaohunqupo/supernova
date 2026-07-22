@@ -5,12 +5,18 @@
 #include "Catalog.h"
 #include "yaml-cpp/yaml.h"
 
+#include <cstddef>
+#include <memory>
+#include <vector>
+
 namespace doriax::editor {
 
+    class DeleteEntityCmd;
+
     struct RemoveComponentData {
-        Entity entity;
+        Entity entity = NULL_ENTITY;
         YAML::Node oldComponent; // For no shared entities and no override components
-        bool hasOverride;
+        bool hasOverride = false;
         ComponentRecovery recovery; // For shared entities
     };
 
@@ -21,11 +27,14 @@ namespace doriax::editor {
         ComponentType componentType;
 
         std::vector<RemoveComponentData> entities;
+        std::vector<std::unique_ptr<DeleteEntityCmd>> ownedEntityDeletes;
+        bool ownedEntitiesCaptured = false;
 
         bool wasModified;
 
     public:
         RemoveComponentCmd(Project* project, size_t sceneId, Entity entity, ComponentType componentType);
+        ~RemoveComponentCmd() override;
 
         bool execute() override;
         void undo() override;

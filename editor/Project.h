@@ -18,6 +18,7 @@
 #include <chrono>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 #include <tuple>
 #include <atomic>
@@ -96,9 +97,18 @@ namespace doriax::editor{
         YAML::Node editorCameraState;
     };
 
+    struct NestedBundleRecovery {
+        std::filesystem::path path;
+        Entity rootEntity = NULL_ENTITY;
+        std::vector<EntityBundle::EntityMember> members;
+    };
+
     struct NodeRecoveryEntry {
         YAML::Node node;
-        size_t transformIndex;
+        size_t transformIndex = 0;
+        std::vector<EntityBundle::EntityMember> members;
+        std::map<Entity, uint64_t> overrides;
+        std::vector<NestedBundleRecovery> nestedBundles;
     };
 
     using NodeRecovery = std::map<std::string, NodeRecoveryEntry>;
@@ -231,6 +241,7 @@ namespace doriax::editor{
 
         void updateSceneCppScripts(SceneProject* sceneProject);
         void updateSceneBundles(SceneProject* sceneProject);
+        void removeBundleInstanceTracking(uint32_t sceneId, Entity rootEntity);
 
         std::vector<SceneScriptSource> collectAllSceneCppScripts() const;
         std::vector<BundleSceneInfo> collectAllBundles() const;
@@ -494,10 +505,10 @@ namespace doriax::editor{
 
         static std::vector<Entity> getTopLevelEntities(const EntityRegistry* registry, const std::vector<Entity>& orderedEntities);
         // Remaps every entity reference across a set of entities. References to a mapped
-        // member are translated; references to anything outside the map (entities outside
-        // the bundle, per-scene children) are cleared to NULL_ENTITY so a raw scene-local
-        // or registry ID never leaks across the bundle boundary.
-        static void remapEntityProperties(EntityRegistry* registry, const std::vector<Entity>& entities, const std::unordered_map<Entity, Entity>& entityMap);
+        // member are translated. By default references outside the map are cleared so raw
+        // IDs cannot leak across a bundle boundary; recovery paths pass clearUnmapped=false
+        // to preserve external references while repairing replacement IDs.
+        static void remapEntityProperties(EntityRegistry* registry, const std::vector<Entity>& entities, const std::unordered_map<Entity, Entity>& entityMap, bool clearUnmapped = true);
         // Same rule as remapEntityProperties, scoped to one component. When `properties`
         // is non-empty only those are remapped; a request for an aggregate property (e.g.
         // "scripts") also covers the indexed references expanded from it.
@@ -521,11 +532,13 @@ namespace doriax::editor{
 
         YAML::Node encodeEntityBundleNode(const std::filesystem::path& filepath) const;
 
-        std::vector<Entity> importEntityBundle(SceneProject* sceneProject, std::vector<Entity>* entities, const std::filesystem::path& filepath, Entity rootEntity, bool needSaveScene = true, const YAML::Node& bundleOverrides = YAML::Node(), const YAML::Node& bundleLocalEntities = YAML::Node());
+        std::vector<Entity> importEntityBundle(SceneProject* sceneProject, std::vector<Entity>* entities, const std::filesystem::path& filepath, Entity rootEntity, bool needSaveScene = true, const YAML::Node& bundleOverrides = YAML::Node(), const YAML::Node& bundleLocalEntities = YAML::Node(), std::unordered_map<Entity, Entity>* entityRemap = nullptr);
         bool unimportEntityBundle(uint32_t sceneId, const std::filesystem::path& filepath, Entity rootEntity, const std::vector<Entity>& memberEntities);
 
         bool addEntityToBundle(uint32_t sceneId, Entity entity, Entity parent, bool createItself = true);
-        bool addEntityToBundle(uint32_t sceneId, const NodeRecovery& recoveryData, Entity parent, bool createItself = true);
+        bool addEntityToBundle(uint32_t sceneId, const NodeRecovery& recoveryData, Entity parent,
+            bool createItself = true, std::unordered_map<Entity, Entity>* entityRemap = nullptr,
+            std::vector<Entity>* restoredEntities = nullptr);
         NodeRecovery removeEntityFromBundle(uint32_t sceneId, Entity entity, bool destroyItself = true);
 
         bool bundlePropertyChanged(uint32_t sceneId, Entity entity, ComponentType componentType, std::vector<std::string> properties, bool changeItself = false);
