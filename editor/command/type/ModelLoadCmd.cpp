@@ -18,6 +18,12 @@ editor::ModelLoadCmd::ModelLoadCmd(Project* project, uint32_t sceneId, Entity en
     this->wasModified = project->getScene(sceneId)->isModified;
 }
 
+editor::ModelLoadCmd::ModelLoadCmd(Project* project, uint32_t sceneId, Entity entity, const std::string& modelPath, bool mergeStaticMeshes)
+    : ModelLoadCmd(project, sceneId, entity, modelPath) {
+    hasMergeStaticMeshesOverride = true;
+    mergeStaticMeshesOverride = mergeStaticMeshes;
+}
+
 editor::ModelLoadCmd::ModelLoadCmd(Project* project, uint32_t sceneId, const std::string& entityName, const Vector3& position, const std::string& modelPath){
     this->project = project;
     this->sceneId = sceneId;
@@ -88,7 +94,9 @@ void editor::ModelLoadCmd::finalizeLoad(){
     sceneProject->isModified = true;
 
     if (project->isEntityInBundle(sceneId, entity)){
-        project->bundlePropertyChanged(sceneId, entity, ComponentType::ModelComponent, {"filename"});
+        std::vector<std::string> properties = {"filename"};
+        if (mergeStaticMeshesChanged) properties.push_back("mergeStaticMeshes");
+        project->bundlePropertyChanged(sceneId, entity, ComponentType::ModelComponent, properties);
     }
 }
 
@@ -140,12 +148,28 @@ bool editor::ModelLoadCmd::execute(){
     MeshComponent& mesh = scene->getComponent<MeshComponent>(entity);
     ModelComponent& model = scene->getComponent<ModelComponent>(entity);
 
+    if (hasMergeStaticMeshesOverride && mergeStaticMeshesOverride) {
+        std::string reason;
+        if (!scene->getSystem<MeshSystem>()->canMergeStaticModel(model, &reason)) {
+            Log::warn("Cannot merge static model '%s': %s", model.filename.c_str(), reason.c_str());
+            return false;
+        }
+    }
+
     isNewModel = model.filename.empty();
 
     // Save old component state
     oldTransform = Stream::encodeTransform(transform);
     oldMesh = Stream::encodeMeshComponent(mesh, false, false);
     oldModel = Stream::encodeModelComponent(model);
+
+    // This is an import option for the current model asset, not an entity-wide preference.
+    // A regular file assignment therefore returns to the default hierarchy behavior; the
+    // explicit Structure action is the only path that opts a model into static merging.
+    const bool requestedMergeStaticMeshes = hasMergeStaticMeshesOverride
+        ? mergeStaticMeshesOverride
+        : false;
+    mergeStaticMeshesChanged = model.mergeStaticMeshes != requestedMergeStaticMeshes;
 
     std::vector<Entity> oldSubEntityRoots = collectModelDeleteRoots(model);
     if (!oldSubEntityRoots.empty()) {
@@ -163,6 +187,7 @@ bool editor::ModelLoadCmd::execute(){
     model.bonesNameMapping.clear();
     model.animations.clear();
     model.meshNodesMapping.clear();
+    model.mergeStaticMeshes = requestedMergeStaticMeshes;
 
     if (tryLoad()){
         finalizeLoad();
@@ -224,7 +249,9 @@ void editor::ModelLoadCmd::undo(){
     sceneProject->isModified = wasModified;
 
     if (project->isEntityInBundle(sceneId, entity)){
-        project->bundlePropertyChanged(sceneId, entity, ComponentType::ModelComponent, {"filename"});
+        std::vector<std::string> properties = {"filename"};
+        if (mergeStaticMeshesChanged) properties.push_back("mergeStaticMeshes");
+        project->bundlePropertyChanged(sceneId, entity, ComponentType::ModelComponent, properties);
     }
 
     if (createEntityCmd) {

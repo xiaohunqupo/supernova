@@ -1860,6 +1860,7 @@ std::string editor::Factory::createModelComponent(int indentSpaces, EntityRegist
     const std::string ind = indentation(indentSpaces);
     code << ind << "ModelComponent modelcomp;\n";
     code << ind << "modelcomp.filename = \"" << model.filename << "\";\n";
+    code << ind << "modelcomp.mergeStaticMeshes = " << formatBool(model.mergeStaticMeshes) << ";\n";
     code << ind << "modelcomp.skeleton = " << formatEntity(model.skeleton, entityVarNames) << ";\n";
     if (!model.animations.empty()) {
         code << ind << "modelcomp.animations.clear();\n";

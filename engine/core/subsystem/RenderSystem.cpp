@@ -3316,9 +3316,10 @@ void RenderSystem::renderFixedResolutionBlit(){
     fixedResPassRender.endRenderPass();
 }
 
-void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
+void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh, bool clearAssets){
     InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(entity);
     TerrainComponent* terrain = scene->findComponent<TerrainComponent>(entity);
+    const bool preserveAssets = mesh.needReload && !clearAssets;
 
     if (!mesh.loaded)
         return;
@@ -3326,7 +3327,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
     for (int i = 0; i < mesh.numSubmeshes; i++){
 
         Submesh& submesh = mesh.submeshes[i];
-        if (!mesh.needReload){
+        if (!preserveAssets){
             //Destroy shader
             if (submesh.shader){
                 submesh.shader.reset();
@@ -3353,7 +3354,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
 
         if (terrain){
             //Destroy terrain texture
-            if (!mesh.needReload){
+            if (!preserveAssets){
                 terrain->heightMap.destroy();
                 terrain->blendMap.destroy();
                 terrain->textureDetailRed.destroy();
@@ -3371,7 +3372,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
 
         if (instmesh){
             //Destroy instmesh buffer
-            if (!mesh.needReload){
+            if (!preserveAssets){
                 instmesh->buffer.clearAll();
             }
             instmesh->buffer.getRender()->destroyBuffer();
@@ -3409,22 +3410,22 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
     }
 
     //Destroy buffer
-    if (!mesh.needReload){
+    if (!preserveAssets){
         mesh.buffer.clearAll();
         mesh.indices.clearAll();
     }
     mesh.buffer.getRender()->destroyBuffer();
     mesh.indices.getRender()->destroyBuffer();
     for (int i = 0; i < mesh.numExternalBuffers; i++){
-        if (!mesh.needReload){
+        if (!preserveAssets){
             mesh.eBuffers[i].clearAll();
         }
         mesh.eBuffers[i].getRender()->destroyBuffer();
     }
 
     if (mesh.needReload){
-        // Reload destroys GPU objects immediately but keeps CPU-side assets; reset
-        // load state synchronously so update() can call loadMesh in the same frame.
+        // Reload destroys GPU objects immediately; reset load state synchronously so
+        // update() can call loadMesh in the same frame.
         // Queuing changeDestroy would leave mesh.loaded true until later, so draw()
         // could run with stale bindings and trip Sokol validation.
         mesh.loaded = false;
@@ -3432,6 +3433,16 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh){
     }else{
         SystemRender::addQueueCommand(&changeDestroy, new check_load_t{scene, entity});
     }
+}
+
+void RenderSystem::prepareMeshForDataReload(Entity entity, MeshComponent& mesh){
+    if (!mesh.loaded)
+        return;
+
+    // A structural model reload replaces submesh and external-buffer counts. Tear down using
+    // the old counts before MeshSystem mutates them, while retaining the synchronous reload state.
+    mesh.needReload = true;
+    destroyMesh(entity, mesh, true);
 }
 
 bool RenderSystem::loadUI(Entity entity, UIComponent& ui, uint8_t pipelines, bool isText){

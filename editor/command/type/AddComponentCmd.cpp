@@ -26,7 +26,8 @@ bool editor::AddComponentCmd::execute() {
             if (componentType == ComponentType::InstancedMeshComponent &&
                 ProjectUtils::hasModelMeshChildrenWithoutRootGeometry(scene, entity)){
                 Out::warning(
-                    "Instanced Mesh on '%s' will not render: this model stores its geometry in child mesh entities.",
+                    "Instanced Mesh on '%s' will not render: this model stores its geometry in child mesh entities. "
+                    "Right-click the model in Structure and choose 'Merge static model'.",
                     scene->getEntityName(entity).c_str());
             }
 

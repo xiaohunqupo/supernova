@@ -26,6 +26,9 @@ namespace doriax::editor{
         Entity entity;
 
         std::string modelPath;
+        bool hasMergeStaticMeshesOverride = false;
+        bool mergeStaticMeshesOverride = false;
+        bool mergeStaticMeshesChanged = false;
 
         bool wasModified;
         bool isNewModel = false;
@@ -40,6 +43,7 @@ namespace doriax::editor{
 
     public:
         ModelLoadCmd(Project* project, uint32_t sceneId, Entity entity, const std::string& modelPath);
+        ModelLoadCmd(Project* project, uint32_t sceneId, Entity entity, const std::string& modelPath, bool mergeStaticMeshes);
         ModelLoadCmd(Project* project, uint32_t sceneId, const std::string& entityName, const Vector3& position, const std::string& modelPath);
         ~ModelLoadCmd() override;
 

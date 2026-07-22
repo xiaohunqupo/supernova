@@ -397,7 +397,7 @@ namespace doriax{
 
 		bool drawMesh(MeshComponent& mesh, Transform& transform, CameraComponent& camera, Transform& camTransform, bool renderToTexture, InstancedMeshComponent* instmesh, TerrainComponent* terrain, int terrainView = 0);
 		bool drawMeshDepth(MeshComponent& mesh, const float cameraFar, const Plane frustumPlanes[6], vs_depth_t vsDepthParams, InstancedMeshComponent* instmesh, TerrainComponent* terrain, bool forSSAO = false);
-		void destroyMesh(Entity entity, MeshComponent& mesh);
+		void destroyMesh(Entity entity, MeshComponent& mesh, bool clearAssets = false);
 
 		// SSAO
 		void loadSSAO();
@@ -492,6 +492,7 @@ namespace doriax{
 		void needReloadMeshes();
 		void needReloadUIs();
 		void needReloadSky();
+		void prepareMeshForDataReload(Entity entity, MeshComponent& mesh);
 
 		bool isAllLoaded() const;
 	

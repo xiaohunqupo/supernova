@@ -4509,6 +4509,10 @@ YAML::Node editor::Stream::encodeModelComponent(const ModelComponent& model) {
         node["filename"] = model.filename;
     }
 
+    if (model.mergeStaticMeshes) {
+        node["mergeStaticMeshes"] = true;
+    }
+
     node["skeleton"] = static_cast<uint32_t>(model.skeleton);
 
     if (!model.animations.empty()) {
@@ -4564,6 +4568,7 @@ ModelComponent editor::Stream::decodeModelComponent(const YAML::Node& node, cons
 
     // Also check for the old modelPath for exact backward compatibility with old save files
     if (node["filename"]) model.filename = node["filename"].as<std::string>();
+    if (node["mergeStaticMeshes"]) model.mergeStaticMeshes = node["mergeStaticMeshes"].as<bool>();
     if (node["skeleton"]) model.skeleton = static_cast<Entity>(node["skeleton"].as<uint32_t>());
 
     if (node["animations"]) {

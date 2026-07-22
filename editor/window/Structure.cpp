@@ -15,7 +15,9 @@
 #include "command/type/AddComponentCmd.h"
 #include "command/type/MultiPropertyCmd.h"
 #include "command/type/ObjectTransformCmd.h"
+#include "command/type/ModelLoadCmd.h"
 #include "component/InstancedMeshComponent.h"
+#include "subsystem/MeshSystem.h"
 #include "command/type/ImportEntityBundleCmd.h"
 #include "command/type/RemoveEntityFromBundleCmd.h"
 #include "command/type/AddEntityToBundleCmd.h"
@@ -1557,6 +1559,31 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
             }
             if (!entityDeleted && !node.isScene && node.hasTransform) {
                 SceneProject* selectedScene = project->getSelectedScene();
+
+                if (selectedScene && selectedScene->scene) {
+                    ModelComponent* model = selectedScene->scene->findComponent<ModelComponent>(node.id);
+                    if (model && !model->filename.empty()) {
+                        ImGui::Separator();
+
+                        const bool restoreHierarchy = model->mergeStaticMeshes;
+                        std::string mergeReason;
+                        bool canChangeMerge = restoreHierarchy ||
+                            selectedScene->scene->getSystem<MeshSystem>()->canMergeStaticModel(*model, &mergeReason);
+                        bool mergeEnabled = !node.isLocked && canChangeMerge;
+                        const char* mergeLabel = restoreHierarchy
+                            ? ICON_FA_OBJECT_GROUP "  Restore model mesh children"
+                            : ICON_FA_COMPRESS "  Merge static model";
+
+                        if (ImGui::MenuItem(mergeLabel, nullptr, false, mergeEnabled)) {
+                            CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(
+                                new ModelLoadCmd(project, selectedScene->id, node.id, model->filename, !restoreHierarchy));
+                        }
+                        if (!mergeEnabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetItemTooltip("%s", node.isLocked ? "Entity is locked" : mergeReason.c_str());
+                        }
+                    }
+                }
+
                 bool allowPhysicsBody = selectedScene &&
                     (selectedScene->sceneType == SceneType::SCENE_2D || selectedScene->sceneType == SceneType::SCENE_3D);
 

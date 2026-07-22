@@ -8305,7 +8305,7 @@ void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneP
         ImGui::TextWrapped(
             ICON_FA_TRIANGLE_EXCLAMATION
             " Instances will not render: this model stores its geometry in child mesh entities. "
-            "Instanced Mesh currently renders only geometry on the same entity.");
+            "Right-click the model in Structure and choose 'Merge static model'.");
         ImGui::PopStyleColor();
     }
 

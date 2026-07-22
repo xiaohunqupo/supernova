@@ -39,7 +39,13 @@ namespace doriax{
 
         std::string filename;
 
+        // Bake static multi-node GLTF meshes into this entity's MeshComponent instead of
+        // generating one child entity per mesh node. This makes the model compatible with
+        // same-entity features such as InstancedMeshComponent.
+        bool mergeStaticMeshes = false;
+
         std::string loadedFilename;
+        bool loadedMergeStaticMeshes = false;
         bool needUpdateModel = true;
     };
 

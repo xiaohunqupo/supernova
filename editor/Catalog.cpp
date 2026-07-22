@@ -1629,6 +1629,10 @@ namespace {
             return {PropertyType::String, UpdateFlags_None, (void*)&def.filename, (void*)&comp->filename};
         }
 
+        if (propertyName == "mergeStaticMeshes") {
+            return {PropertyType::Bool, UpdateFlags_Model, (void*)&def.mergeStaticMeshes, (void*)&comp->mergeStaticMeshes};
+        }
+
         if (propertyName == "skeleton") {
             return {PropertyType::Entity, UpdateFlags_Mesh_Reload, (void*)&def.skeleton, (void*)&comp->skeleton};
         }
@@ -1890,6 +1894,7 @@ namespace {
         ModelComponent& def = getDefaultComponent<ModelComponent>();
 
         ps["filename"] = {PropertyType::String, UpdateFlags_Model, (void*)&def.filename, compRef ? (void*)&comp->filename : nullptr};
+        ps["mergeStaticMeshes"] = {PropertyType::Bool, UpdateFlags_Model, (void*)&def.mergeStaticMeshes, compRef ? (void*)&comp->mergeStaticMeshes : nullptr};
         ps["skeleton"] = {PropertyType::Entity, UpdateFlags_Mesh_Reload, (void*)&def.skeleton, compRef ? (void*)&comp->skeleton : nullptr};
         ps["animations"] = {PropertyType::Custom, UpdateFlags_None, (void*)&def.animations, compRef ? (void*)&comp->animations : nullptr};
 
