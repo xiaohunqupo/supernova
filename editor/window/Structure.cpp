@@ -1042,11 +1042,20 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
 
+    SceneProject* nodeSceneProject = (!node.isScene && !node.isChildScene)
+        ? project->getScene(getNodeSceneId(node))
+        : nullptr;
+    bool isModelWithChildren = !node.children.empty() && nodeSceneProject && nodeSceneProject->scene
+        && nodeSceneProject->scene->findComponent<ModelComponent>(node.id);
+
     // Auto-expand nodes when searching to show matches
     if (hasSearch && node.hasMatchingDescendant) {
         ImGui::SetNextItemOpen(true);
-    } else if (!hasSearch) {
-        ImGui::SetNextItemOpen(!node.isBone, ImGuiCond_Once);
+    } else if (!hasSearch && !node.children.empty()) {
+        // Model entities can exist for a few frames as leaves while their children load
+        // asynchronously. Initialize tree state only once children exist so imported
+        // model hierarchies start collapsed instead of inheriting an earlier leaf state.
+        ImGui::SetNextItemOpen(!node.isBone && !isModelWithChildren, ImGuiCond_Once);
     }
 
     if(!node.isScene && openParent == node.id) {
@@ -1060,10 +1069,9 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
     // Is this camera entity currently being viewed through (preview mode)? Resolved via
     // the node's owning scene render. getPreviewCameraEntity() is a cheap member read, so
     // it short-circuits for every other node before the heavier isPreviewCameraActive().
-    SceneProject* previewNodeScene = (!node.isScene && !node.isChildScene) ? project->getScene(getNodeSceneId(node)) : nullptr;
-    bool previewingThisCamera = previewNodeScene && previewNodeScene->sceneRender
-        && previewNodeScene->sceneRender->getPreviewCameraEntity() == node.id
-        && previewNodeScene->sceneRender->isPreviewCameraActive();
+    bool previewingThisCamera = nodeSceneProject && nodeSceneProject->sceneRender
+        && nodeSceneProject->sceneRender->getPreviewCameraEntity() == node.id
+        && nodeSceneProject->sceneRender->isPreviewCameraActive();
 
     // Highlight matching nodes when searching
     if (previewingThisCamera) {
