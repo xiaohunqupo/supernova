@@ -47,8 +47,7 @@ ImVec4 editor::App::ThemeColors::NestedHeader;
 ImVec4 editor::App::ThemeColors::NestedHeaderHovered;
 ImVec4 editor::App::ThemeColors::NestedHeaderActive;
 ImVec4 editor::App::ThemeColors::DisabledGreenText;
-ImVec4 editor::App::ThemeColors::ChildSceneActiveText;
-ImVec4 editor::App::ThemeColors::ChildSceneInactiveText;
+ImVec4 editor::App::ThemeColors::ChildSceneText;
 ImVec4 editor::App::ThemeColors::SubSelectionText;
 ImVec4 editor::App::ThemeColors::WarningText;
 
@@ -1540,13 +1539,7 @@ void editor::App::kewtStyleTheme(){
     ThemeColors::DisabledGreenText = ImLerp(colors[ImGuiCol_TextDisabled],
                                             ImVec4(0.38f, 0.72f, 0.46f, 1.00f),
                                             0.58f);
-    ThemeColors::ChildSceneActiveText = ImLerp(colors[ImGuiCol_TextDisabled],
-                                               ImVec4(0.38f, 0.72f, 0.46f, 1.00f),
-                                               0.38f);
-    ThemeColors::ChildSceneInactiveText = ImVec4(colors[ImGuiCol_TextDisabled].x,
-                                                 colors[ImGuiCol_TextDisabled].y,
-                                                 colors[ImGuiCol_TextDisabled].z,
-                                                 0.65f);
+    ThemeColors::ChildSceneText = ImVec4(0.55f, 0.80f, 0.85f, 1.0f); // Soft teal for child scenes
     ThemeColors::SubSelectionText = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
     ThemeColors::WarningText = ImVec4(1.00f, 0.85f, 0.40f, 1.00f);
 

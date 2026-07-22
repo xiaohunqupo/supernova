@@ -1094,7 +1094,7 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]); // Use theme's disabled color
         pushedHighlightColor = true;
     } else if (node.isChildScene) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.80f, 0.85f, 1.0f)); // Soft teal for child scenes
+        ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::ChildSceneText);
         pushedHighlightColor = true;
     } else if (node.isBundle && !node.isParentBundle) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.9f, 0.8f, 1.0f)); // Pale gold for bundle root
@@ -1761,9 +1761,7 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
     if (node.isChildScene) {
         bool startActive = project->isChildSceneStartActive(node.ownerSceneId, node.childSceneId);
         ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::PushStyleColor(ImGuiCol_Text, startActive
-            ? App::ThemeColors::ChildSceneActiveText
-            : App::ThemeColors::ChildSceneInactiveText);
+        ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::ChildSceneText);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y * 0.5f);
         ImGui::SetWindowFontScale(0.7f);
         ImGui::TextUnformatted(startActive ? ICON_FA_PLAY : ICON_FA_PAUSE);
