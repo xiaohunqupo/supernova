@@ -86,6 +86,7 @@ void editor::SceneWindow::resetProjectState() {
     width.clear();
     height.clear();
     hasNotification.clear();
+    structureSelectionParents.clear();
     closeSceneQueue.clear();
 }
 
@@ -104,10 +105,78 @@ void editor::SceneWindow::clearSceneState(uint32_t sceneId) {
     width.erase(sceneId);
     height.erase(sceneId);
     hasNotification.erase(sceneId);
+    structureSelectionParents.erase(sceneId);
 
     closeSceneQueue.erase(
         std::remove(closeSceneQueue.begin(), closeSceneQueue.end(), sceneId),
         closeSceneQueue.end());
+}
+
+void editor::SceneWindow::beginStructureVisibilityUpdate(uint32_t sceneId) {
+    structureSelectionParents.erase(sceneId);
+}
+
+void editor::SceneWindow::setStructureSelectionParent(uint32_t sceneId, Entity entity, Entity selectionParent) {
+    if (entity == NULL_ENTITY || selectionParent == NULL_ENTITY || entity == selectionParent) {
+        return;
+    }
+    structureSelectionParents[sceneId][entity] = selectionParent;
+}
+
+Entity editor::SceneWindow::resolveStructureSelection(uint32_t sceneId, Entity entity) const {
+    auto sceneIt = structureSelectionParents.find(sceneId);
+    if (sceneIt == structureSelectionParents.end()) {
+        return entity;
+    }
+
+    auto entityIt = sceneIt->second.find(entity);
+    if (entityIt == sceneIt->second.end()) {
+        return entity;
+    }
+
+    const SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene || !sceneProject->scene->isEntityCreated(entityIt->second)) {
+        return entity;
+    }
+    return entityIt->second;
+}
+
+Entity editor::SceneWindow::findSelectableObjectByRay(uint32_t sceneId, float x, float y, uint32_t* outSceneId) {
+    uint32_t hitSceneId = sceneId;
+    Entity hitEntity = project->findObjectByRay(sceneId, x, y, outSceneId ? &hitSceneId : nullptr);
+    if (outSceneId) {
+        *outSceneId = hitSceneId;
+    }
+    return resolveStructureSelection(hitSceneId, hitEntity);
+}
+
+bool editor::SceneWindow::selectObjectByRay(uint32_t sceneId, float x, float y, bool shiftPressed) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->sceneRender) {
+        return false;
+    }
+
+    project->setSelectedSceneForProperties(sceneId);
+
+    uint32_t hitSceneId = sceneId;
+    Entity hitEntity = findSelectableObjectByRay(sceneId, x, y, &hitSceneId);
+
+    if (!sceneProject->sceneRender->isAnyGizmoSideSelected()) {
+        if (hitEntity != NULL_ENTITY) {
+            if (hitSceneId != sceneId) {
+                project->setSelectedSceneForProperties(hitSceneId);
+            }
+            if (!shiftPressed) {
+                project->clearAllSelections(sceneId);
+            }
+            project->addSelectedEntity(hitSceneId, hitEntity);
+            return true;
+        }
+
+        project->clearAllSelections(sceneId);
+    }
+
+    return false;
 }
 
 void editor::SceneWindow::requestPlayFocus(uint32_t sceneId) {
@@ -787,7 +856,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
 
             // Selecting and dragging an unselected object at same time (just for 2D object mode)
             if (!disableSelection && gizmoSelected == GizmoSelected::OBJECT2D) {
-                Entity hitEntity = project->findObjectByRay(sceneId, x, y);
+                Entity hitEntity = findSelectableObjectByRay(sceneId, x, y);
                 if (hitEntity != NULL_ENTITY) {
                     bool alreadySelected = project->isSelectedEntity(sceneId, hitEntity);
                     if (!alreadySelected || (io.KeyShift && !gizmoSideActive)) {
@@ -797,7 +866,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         sceneProject->sceneRender->clearLinePointSelection();
                         sceneProject->sceneRender->clearPolygonPointSelection();
                         sceneProject->sceneRender->clearTrackPointSelection();
-                        bool changed = project->selectObjectByRay(sceneId, x, y, io.KeyShift);
+                        bool changed = selectObjectByRay(sceneId, x, y, io.KeyShift);
                         if (changed) {
                             sceneProject->sceneRender->update(project->getSelectedEntities(sceneId), project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                             sceneProject->sceneRender->mouseHoverEvent(x, y);
@@ -824,7 +893,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         } else if (sceneProject->sceneRender->getSelectedOccluderPointIndex() >= 0 && gizmo2DSide == Gizmo2DSideSelected::NONE) {
                             // Only clear eagerly when clicking the entity body itself; clicking
                             // empty space clears point + entity together on click-up.
-                            Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                            Entity bodyHit = findSelectableObjectByRay(sceneId, x, y);
                             if (bodyHit == selEntity) {
                                 sceneProject->sceneRender->clearOccluderPointSelection();
                                 sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -859,7 +928,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                         } else if (sceneProject->sceneRender->getSelectedLinePointIndex() >= 0 && !sceneProject->sceneRender->isAnyGizmoSideSelected()) {
                             // Only clear eagerly when clicking the entity body itself; clicking
                             // empty space clears point + entity together on click-up.
-                            Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                            Entity bodyHit = findSelectableObjectByRay(sceneId, x, y);
                             if (bodyHit == selEntity) {
                                 sceneProject->sceneRender->clearLinePointSelection();
                                 sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -895,7 +964,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                                 sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
                                 sceneProject->sceneRender->mouseHoverEvent(x, y);
                             } else if (sceneProject->sceneRender->getSelectedPolygonPointIndex() >= 0 && !sceneProject->sceneRender->isAnyGizmoSideSelected()) {
-                                Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                                Entity bodyHit = findSelectableObjectByRay(sceneId, x, y);
                                 if (bodyHit == selEntity) {
                                     sceneProject->sceneRender->clearPolygonPointSelection();
                                     sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -954,7 +1023,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                             // Only clear eagerly when clicking the entity body itself. When
                             // clicking empty space the click-up handler clears both the tile
                             // and the entity together, avoiding a two-step gizmo jump.
-                            Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                            Entity bodyHit = findSelectableObjectByRay(sceneId, x, y);
                             if (bodyHit == selEntity) {
                                 sceneProject->sceneRender->clearTileSelection();
                                 sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -993,7 +1062,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                             // space the click-up selectObjectByRay handler will clear both the
                             // instance and the entity at once, avoiding a two-step visual where
                             // the gizmo briefly jumps to entity position before disappearing.
-                            Entity bodyHit = project->findObjectByRay(sceneId, x, y);
+                            Entity bodyHit = findSelectableObjectByRay(sceneId, x, y);
                             if (bodyHit == selEntity) {
                                 sceneProject->sceneRender->clearInstanceSelection();
                                 sceneProject->sceneRender->update(selEntities, project->getEntities(sceneId), sceneProject->mainCamera, sceneProject->displaySettings);
@@ -1086,7 +1155,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
                 int prevTrackPointIndex = sceneProject->sceneRender->getSelectedTrackPointIndex();
                 Entity prevTrackPointEntity = sceneProject->sceneRender->getSelectedTrackPointEntity();
 
-                project->selectObjectByRay(sceneId, x, y, io.KeyShift);
+                selectObjectByRay(sceneId, x, y, io.KeyShift);
 
                 // Sub-selection is only meaningful while its host entity is the sole
                 // selected entity. Clear it whenever that invariant no longer holds

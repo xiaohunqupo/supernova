@@ -1093,6 +1093,14 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
     }
 
     bool nodeOpen = ImGui::TreeNodeEx("##node", flags, "%s  %s", node.icon.c_str(), node.name.c_str());
+    if (!node.isScene && !node.isChildScene) {
+        auto& sceneCollapsedEntities = collapsedEntities[getNodeSceneId(node)];
+        if (!node.children.empty() && !nodeOpen) {
+            sceneCollapsedEntities.insert(node.id);
+        } else {
+            sceneCollapsedEntities.erase(node.id);
+        }
+    }
     bool nodeHovered = ImGui::IsItemHovered();
     bool nodeActive = ImGui::IsItemActive();
     bool nodeRightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
@@ -1755,6 +1763,37 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
     popNodeImGuiId(node);
 }
 
+void editor::Structure::syncSceneWindowSelectionHierarchy(const TreeNode& node, uint32_t collapsedSceneId, Entity collapsedAncestor) {
+    if (node.isScene) {
+        sceneWindow->beginStructureVisibilityUpdate(node.id);
+        collapsedSceneId = NULL_PROJECT_SCENE;
+        collapsedAncestor = NULL_ENTITY;
+    } else if (node.isChildScene) {
+        sceneWindow->beginStructureVisibilityUpdate(node.childSceneId);
+        collapsedSceneId = NULL_PROJECT_SCENE;
+        collapsedAncestor = NULL_ENTITY;
+    } else {
+        uint32_t sceneId = getNodeSceneId(node);
+        if (collapsedAncestor != NULL_ENTITY && collapsedSceneId == sceneId) {
+            sceneWindow->setStructureSelectionParent(sceneId, node.id, collapsedAncestor);
+        } else {
+            collapsedSceneId = NULL_PROJECT_SCENE;
+            collapsedAncestor = NULL_ENTITY;
+        }
+
+        auto sceneIt = collapsedEntities.find(sceneId);
+        if (collapsedAncestor == NULL_ENTITY && !node.children.empty()
+            && sceneIt != collapsedEntities.end() && sceneIt->second.find(node.id) != sceneIt->second.end()) {
+            collapsedSceneId = sceneId;
+            collapsedAncestor = node.id;
+        }
+    }
+
+    for (const auto& child : node.children) {
+        syncSceneWindowSelectionHierarchy(child, collapsedSceneId, collapsedAncestor);
+    }
+}
+
 void editor::Structure::pushNodeImGuiId(const TreeNode& node){
     if (node.isScene){
         ImGui::PushID("SceneNode");
@@ -2123,6 +2162,7 @@ void editor::Structure::show(){
     visibleEntitySelectionOrder.clear();
     collectVisibleEntitySelectionOrder(root, strlen(searchBuffer) > 0);
     showTreeNode(root);
+    syncSceneWindowSelectionHierarchy(root);
     float treeLastCursorY = ImGui::GetCursorScreenPos().y;
 
     // Handle right-click in empty space

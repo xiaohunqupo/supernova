@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace doriax::editor{
@@ -56,6 +57,7 @@ namespace doriax::editor{
 
         std::vector<uint32_t> selectedScenes;
         std::vector<EntitySelectionEntry> visibleEntitySelectionOrder;
+        std::unordered_map<uint32_t, std::unordered_set<Entity>> collapsedEntities;
 
         bool windowOpen;
         bool focusRequested;
@@ -80,6 +82,7 @@ namespace doriax::editor{
         void showNewEntityMenu(bool isScene, Entity parent, bool addToBundle);
         void showIconMenu();
         void showTreeNode(TreeNode& node);
+        void syncSceneWindowSelectionHierarchy(const TreeNode& node, uint32_t collapsedSceneId = NULL_PROJECT_SCENE, Entity collapsedAncestor = NULL_ENTITY);
         void pushNodeImGuiId(const TreeNode& node);
         void popNodeImGuiId(const TreeNode& node);
         void drawInsertionMarker(const ImVec2& p1, const ImVec2& p2);
