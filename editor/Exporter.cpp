@@ -304,6 +304,16 @@ bool editor::Exporter::shouldSkipExportSupportFile(const fs::path& relativePath)
     return relativePath == "CMakeLists.txt" || relativePath.filename() == "AGENTS.md";
 }
 
+bool editor::Exporter::isCppHeaderFile(const fs::path& path) {
+    std::string ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    static const std::set<std::string> headerExtensions = {
+        ".h", ".hpp", ".hh", ".hxx", ".h++", ".inl", ".ipp", ".tpp"
+    };
+    return headerExtensions.count(ext) > 0;
+}
+
 bool editor::Exporter::isCppSourceFile(const fs::path& path) {
     // C++ scripts are exported to project/scripts by copyCppScripts(); they must
     // never be duplicated into the assets or lua trees. The exported build globs
@@ -314,11 +324,10 @@ bool editor::Exporter::isCppSourceFile(const fs::path& path) {
     std::string ext = path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return std::tolower(c); });
-    static const std::set<std::string> cppExtensions = {
-        ".cpp", ".cc", ".cxx", ".c++", ".c",
-        ".h", ".hpp", ".hh", ".hxx", ".h++", ".inl"
+    static const std::set<std::string> sourceExtensions = {
+        ".cpp", ".cc", ".cxx", ".c++", ".c"
     };
-    return cppExtensions.count(ext) > 0;
+    return sourceExtensions.count(ext) > 0 || isCppHeaderFile(path);
 }
 
 bool editor::Exporter::checkTargetDir() {
@@ -1009,9 +1018,19 @@ bool editor::Exporter::copyCppScripts() {
     setProgress("Copying C++ scripts...", 0.4f);
 
     fs::path scriptsDst = getExportProjectRoot() / "scripts";
+    const fs::path projectRoot = project->getProjectPath();
 
     std::error_code ec;
     std::set<std::string> copiedPaths;
+    const fs::path normalizedProjectRoot = projectRoot.lexically_normal();
+    const auto projectRelativePath = [&](const fs::path& path) {
+        const fs::path relPath = path.lexically_normal().lexically_relative(normalizedProjectRoot);
+        if (relPath.empty() || relPath.is_absolute()
+            || (relPath.begin() != relPath.end() && *relPath.begin() == "..")) {
+            return fs::path();
+        }
+        return relPath;
+    };
 
     for (const auto& sceneProject : project->getScenes()) {
         for (const auto& script : sceneProject.cppScripts) {
@@ -1026,10 +1045,12 @@ bool editor::Exporter::copyCppScripts() {
                 copiedPaths.insert(pathKey);
 
                 if (fs::exists(srcPath, ec)) {
-                    fs::path relPath = fs::relative(srcPath, project->getProjectPath(), ec);
-                    fs::path dstPath = scriptsDst / relPath;
-                    fs::create_directories(dstPath.parent_path(), ec);
-                    fs::copy_file(srcPath, dstPath, fs::copy_options::overwrite_existing, ec);
+                    const fs::path relPath = projectRelativePath(srcPath);
+                    if (!relPath.empty()) {
+                        fs::path dstPath = scriptsDst / relPath;
+                        fs::create_directories(dstPath.parent_path(), ec);
+                        fs::copy_file(srcPath, dstPath, fs::copy_options::overwrite_existing, ec);
+                    }
                 }
             }
 
@@ -1044,13 +1065,46 @@ bool editor::Exporter::copyCppScripts() {
                 copiedPaths.insert(pathKey);
 
                 if (fs::exists(hdrPath, ec)) {
-                    fs::path relPath = fs::relative(hdrPath, project->getProjectPath(), ec);
-                    fs::path dstPath = scriptsDst / relPath;
-                    fs::create_directories(dstPath.parent_path(), ec);
-                    fs::copy_file(hdrPath, dstPath, fs::copy_options::overwrite_existing, ec);
+                    const fs::path relPath = projectRelativePath(hdrPath);
+                    if (!relPath.empty()) {
+                        fs::path dstPath = scriptsDst / relPath;
+                        fs::create_directories(dstPath.parent_path(), ec);
+                        fs::copy_file(hdrPath, dstPath, fs::copy_options::overwrite_existing, ec);
+                    }
                 }
             }
         }
+    }
+
+    // Preserve unregistered support headers for project-root-relative includes.
+    try {
+        for (auto it = fs::recursive_directory_iterator(projectRoot, fs::directory_options::skip_permission_denied);
+             it != fs::recursive_directory_iterator(); ++it) {
+            const auto& entry = *it;
+            const fs::path relPath = projectRelativePath(entry.path());
+            if (relPath.empty()) {
+                if (entry.is_directory()) it.disable_recursion_pending();
+                continue;
+            }
+            const std::string firstComponent = relPath.begin()->string();
+
+            if (entry.is_directory() && !firstComponent.empty()
+                && (firstComponent[0] == '.' || firstComponent == "build")) {
+                it.disable_recursion_pending();
+                continue;
+            }
+            if (!entry.is_regular_file() || !isCppHeaderFile(entry.path())
+                || !copiedPaths.insert(entry.path().string()).second) {
+                continue;
+            }
+
+            const fs::path dstPath = scriptsDst / relPath;
+            fs::create_directories(dstPath.parent_path());
+            fs::copy_file(entry.path(), dstPath, fs::copy_options::overwrite_existing);
+        }
+    } catch (const fs::filesystem_error& e) {
+        setError("Failed to copy project headers: " + std::string(e.what()));
+        return false;
     }
 
     return true;
