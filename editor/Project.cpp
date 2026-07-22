@@ -5452,6 +5452,11 @@ editor::NodeRecovery editor::Project::removeEntityFromBundle(uint32_t sceneId, E
     std::string recoveryDefKey = std::to_string(NULL_PROJECT_SCENE);
     recovery[recoveryDefKey] = {YAML::Clone(regData), transformIndex};
 
+    // Registry entities behind members the engine cascade orphaned in the scene instances.
+    // The shared registry has no systems and never cascades, so these are mirrored into the
+    // registry removal below to keep the saved bundle definition consistent with the instances.
+    std::unordered_set<Entity> cascadedRegistryEntities;
+
     // Process each scene that has instances
     for (auto& [otherSceneId, sceneInstances] : bundle->instances) {
         SceneProject* otherScene = getScene(otherSceneId);
@@ -5509,6 +5514,23 @@ editor::NodeRecovery editor::Project::removeEntityFromBundle(uint32_t sceneId, E
                 }
             }
 
+            // A destroy above can cascade inside the engine (onComponentRemoved) and take
+            // OTHER members of this instance with it — e.g. an action/particle with
+            // ownedTarget destroys its target. Those are gone from the scene but were not in
+            // the collected set, so drop any member whose local entity no longer exists (and
+            // its override entry) to keep the bundle instance metadata in sync with the scene.
+            for (auto memberIt = instance.members.begin(); memberIt != instance.members.end(); ) {
+                if (!otherScene->scene->isEntityCreated(memberIt->localEntity)) {
+                    if (memberIt->registryEntity != NULL_ENTITY) {
+                        cascadedRegistryEntities.insert(memberIt->registryEntity);
+                    }
+                    instance.overrides.erase(memberIt->localEntity);
+                    memberIt = instance.members.erase(memberIt);
+                } else {
+                    ++memberIt;
+                }
+            }
+
             otherScene->isModified = true;
         }
 
@@ -5532,6 +5554,13 @@ editor::NodeRecovery editor::Project::removeEntityFromBundle(uint32_t sceneId, E
     // Destroy from registry
     std::vector<Entity> registryEntitiesToRemove;
     ProjectUtils::collectEntities(regData, registryEntitiesToRemove);
+
+    // Mirror the scene-side cascade into the shared definition: the registry never cascades
+    // on its own, so without this the owned target would linger in the saved bundle and be
+    // recreated by future imports. destroyEntity is idempotent (guards isEntityCreated).
+    for (Entity regEntity : cascadedRegistryEntities) {
+        registryEntitiesToRemove.push_back(regEntity);
+    }
 
     for (Entity regEntity : registryEntitiesToRemove) {
         DeleteEntityCmd::destroyEntity(bundle->registry.get(), regEntity, bundle->registryEntities);

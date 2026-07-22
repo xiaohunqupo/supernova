@@ -77,6 +77,29 @@ void editor::DeleteEntityCmd::destroyEntity(EntityRegistry* registry, Entity ent
             sceneProject->mainCamera = NULL_ENTITY;
         }
     }
+
+    // Destroying an entity can cascade inside the engine (onComponentRemoved) and take
+    // OTHER entities with it that are not part of this command's collected set — e.g. an
+    // action/particle with ownedTarget destroys its target, a model destroys its bones and
+    // mesh-node children, a mirror destroys its reflection camera. The engine removes those
+    // from the scene but has no knowledge of the editor's tracked list, so prune any tracked
+    // id that no longer exists. Without this, sceneProject->entities keeps a "ghost" entity
+    // and every per-frame editor pass (Structure tree, 2D/3D overlays) queries a signature
+    // for an entity that is gone.
+    SceneProject* sceneProject = project ? project->getScene(sceneId) : nullptr;
+    for (auto it = entities.begin(); it != entities.end(); ){
+        if (!registry->isEntityCreated(*it)){
+            if (project && project->isSelectedEntity(sceneId, *it)){
+                project->clearSelectedEntities(sceneId);
+            }
+            if (sceneProject && sceneProject->mainCamera == *it){
+                sceneProject->mainCamera = NULL_ENTITY;
+            }
+            it = entities.erase(it);
+        }else{
+            ++it;
+        }
+    }
 }
 
 bool editor::DeleteEntityCmd::execute(){
