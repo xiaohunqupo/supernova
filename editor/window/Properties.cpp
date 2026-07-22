@@ -8299,6 +8299,16 @@ void editor::Properties::drawInstancedMeshComponent(ComponentType cpType, SceneP
     Entity entity = entities[0];
     InstancedMeshComponent& instmesh = sceneProject->scene->getComponent<InstancedMeshComponent>(entity);
 
+    if (ProjectUtils::hasModelMeshChildrenWithoutRootGeometry(sceneProject->scene, entity)){
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, App::ThemeColors::WarningText);
+        ImGui::TextWrapped(
+            ICON_FA_TRIANGLE_EXCLAMATION
+            " Instances will not render: this model stores its geometry in child mesh entities. "
+            "Instanced Mesh currently renders only geometry on the same entity.");
+        ImGui::PopStyleColor();
+    }
+
     ImGui::SeparatorText("Instances");
 
     beginTable(cpType, getLabelSize("Instances"), "instanced_mesh_instances_header");

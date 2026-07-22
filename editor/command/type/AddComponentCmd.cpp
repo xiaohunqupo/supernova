@@ -1,5 +1,6 @@
 #include "AddComponentCmd.h"
 
+#include "Out.h"
 #include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 
@@ -21,6 +22,13 @@ bool editor::AddComponentCmd::execute() {
 
         for (Entity& entity : entities){
             ProjectUtils::addEntityComponent(scene, entity, componentType, sceneProject->entities);
+
+            if (componentType == ComponentType::InstancedMeshComponent &&
+                ProjectUtils::hasModelMeshChildrenWithoutRootGeometry(scene, entity)){
+                Out::warning(
+                    "Instanced Mesh on '%s' will not render: this model stores its geometry in child mesh entities.",
+                    scene->getEntityName(entity).c_str());
+            }
 
             if (project->isEntityInBundle(sceneId, entity)){
                 project->addComponentToBundle(sceneId, entity, componentType, false);

@@ -226,6 +226,24 @@ void editor::ProjectUtils::collectModelEntities(Scene* scene, const ModelCompone
     }
 }
 
+bool editor::ProjectUtils::hasModelMeshChildrenWithoutRootGeometry(EntityRegistry* registry, Entity entity){
+    if (!registry)
+        return false;
+
+    MeshComponent* rootMesh = registry->findComponent<MeshComponent>(entity);
+    ModelComponent* model = registry->findComponent<ModelComponent>(entity);
+    if (!rootMesh || !model || rootMesh->numSubmeshes != 0 || model->meshNodesMapping.empty())
+        return false;
+
+    for (const auto& node : model->meshNodesMapping){
+        MeshComponent* childMesh = registry->findComponent<MeshComponent>(node.second);
+        if (childMesh && childMesh->numSubmeshes > 0)
+            return true;
+    }
+
+    return false;
+}
+
 Entity editor::ProjectUtils::getLockedEntityParent(Scene* scene, Entity entity){
     if (entity == NULL_ENTITY)
         return NULL_ENTITY;

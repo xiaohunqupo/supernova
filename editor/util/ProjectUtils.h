@@ -56,6 +56,11 @@ public:
 
     static void collectModelEntities(Scene* scene, const ModelComponent& model, std::vector<Entity>& out);
 
+    // True when a model root has no renderable submeshes of its own while its
+    // generated model children do. Components that only render same-entity mesh
+    // data (such as InstancedMeshComponent) cannot render that root directly.
+    static bool hasModelMeshChildrenWithoutRootGeometry(EntityRegistry* registry, Entity entity);
+
     static void collectEntities(const YAML::Node& entityNode, std::vector<Entity>& allEntities);
 
     // Returns entity type name (e.g. "Mesh", "Camera", "Light") based on its components
