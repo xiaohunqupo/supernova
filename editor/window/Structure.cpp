@@ -1,5 +1,6 @@
 #include "Structure.h"
 
+#include "App.h"
 #include "external/IconsFontAwesome6.h"
 #include "command/CommandHandle.h"
 #include "command/type/MoveEntityOrderCmd.h"
@@ -1047,6 +1048,10 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
         : nullptr;
     bool isModelWithChildren = !node.children.empty() && nodeSceneProject && nodeSceneProject->scene
         && nodeSceneProject->scene->findComponent<ModelComponent>(node.id);
+    InstancedMeshComponent* instancedMesh = nodeSceneProject && nodeSceneProject->scene
+        ? nodeSceneProject->scene->findComponent<InstancedMeshComponent>(node.id)
+        : nullptr;
+    size_t instanceCount = instancedMesh ? instancedMesh->instances.size() : 0;
 
     // Auto-expand nodes when searching to show matches
     if (hasSearch && node.hasMatchingDescendant) {
@@ -1711,6 +1716,33 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
         ImGui::TextUnformatted(ICON_FA_EYE);
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
+    }
+
+    if (instanceCount > 0) {
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.70f, 0.70f, 1.0f));
+        if (!node.isMainCamera) {
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y * 0.5f);
+        }
+        ImGui::SetWindowFontScale(0.7f);
+        ImGui::TextUnformatted(ICON_FA_CLONE);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::SetItemTooltip("%zu instance%s", instanceCount, instanceCount == 1 ? "" : "s");
+    }
+
+    if (node.isChildScene) {
+        bool startActive = project->isChildSceneStartActive(node.ownerSceneId, node.childSceneId);
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::PushStyleColor(ImGuiCol_Text, startActive
+            ? App::ThemeColors::ChildSceneActiveText
+            : App::ThemeColors::ChildSceneInactiveText);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y * 0.5f);
+        ImGui::SetWindowFontScale(0.7f);
+        ImGui::TextUnformatted(startActive ? ICON_FA_PLAY : ICON_FA_PAUSE);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::SetItemTooltip(startActive ? "Starts active" : "Starts inactive");
     }
 
     // Eye icon toggle for child scene inline loading

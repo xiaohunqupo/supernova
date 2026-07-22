@@ -165,6 +165,8 @@ namespace doriax::editor{
             static ImVec4 NestedHeaderHovered;
             static ImVec4 NestedHeaderActive;
             static ImVec4 DisabledGreenText;
+            static ImVec4 ChildSceneActiveText;
+            static ImVec4 ChildSceneInactiveText;
             // marks the viewport sub-selection (tiles, instances, occluder points)
             // in Properties lists; same orange as the viewport selection outline
             static ImVec4 SubSelectionText;
