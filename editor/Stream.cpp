@@ -8,6 +8,7 @@
 #include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 #include "render/SceneRender2D.h"
+#include "window/TerrainEditWindow.h"
 
 #include <algorithm>
 #include <cctype>
@@ -528,6 +529,176 @@ TextureWrap editor::Stream::stringToTextureWrap(const std::string& str) {
     if (str == "clamp_to_border") return TextureWrap::CLAMP_TO_BORDER;
     return TextureWrap::REPEAT;
 }
+
+std::string editor::Stream::anchorPresetToString(AnchorPreset preset) {
+    switch (preset) {
+        case AnchorPreset::NONE: return "NONE";
+        case AnchorPreset::TOP_LEFT: return "TOP_LEFT";
+        case AnchorPreset::TOP_RIGHT: return "TOP_RIGHT";
+        case AnchorPreset::BOTTOM_LEFT: return "BOTTOM_LEFT";
+        case AnchorPreset::BOTTOM_RIGHT: return "BOTTOM_RIGHT";
+        case AnchorPreset::CENTER_LEFT: return "CENTER_LEFT";
+        case AnchorPreset::CENTER_TOP: return "CENTER_TOP";
+        case AnchorPreset::CENTER_RIGHT: return "CENTER_RIGHT";
+        case AnchorPreset::CENTER_BOTTOM: return "CENTER_BOTTOM";
+        case AnchorPreset::CENTER: return "CENTER";
+        case AnchorPreset::LEFT_WIDE: return "LEFT_WIDE";
+        case AnchorPreset::TOP_WIDE: return "TOP_WIDE";
+        case AnchorPreset::RIGHT_WIDE: return "RIGHT_WIDE";
+        case AnchorPreset::BOTTOM_WIDE: return "BOTTOM_WIDE";
+        case AnchorPreset::VERTICAL_CENTER_WIDE: return "VERTICAL_CENTER_WIDE";
+        case AnchorPreset::HORIZONTAL_CENTER_WIDE: return "HORIZONTAL_CENTER_WIDE";
+        case AnchorPreset::FULL_LAYOUT: return "FULL_LAYOUT";
+        default: return "NONE";
+    }
+}
+
+AnchorPreset editor::Stream::stringToAnchorPreset(const std::string& str) {
+    if (str == "NONE") return AnchorPreset::NONE;
+    if (str == "TOP_LEFT") return AnchorPreset::TOP_LEFT;
+    if (str == "TOP_RIGHT") return AnchorPreset::TOP_RIGHT;
+    if (str == "BOTTOM_LEFT") return AnchorPreset::BOTTOM_LEFT;
+    if (str == "BOTTOM_RIGHT") return AnchorPreset::BOTTOM_RIGHT;
+    if (str == "CENTER_LEFT") return AnchorPreset::CENTER_LEFT;
+    if (str == "CENTER_TOP") return AnchorPreset::CENTER_TOP;
+    if (str == "CENTER_RIGHT") return AnchorPreset::CENTER_RIGHT;
+    if (str == "CENTER_BOTTOM") return AnchorPreset::CENTER_BOTTOM;
+    if (str == "CENTER") return AnchorPreset::CENTER;
+    if (str == "LEFT_WIDE") return AnchorPreset::LEFT_WIDE;
+    if (str == "TOP_WIDE") return AnchorPreset::TOP_WIDE;
+    if (str == "RIGHT_WIDE") return AnchorPreset::RIGHT_WIDE;
+    if (str == "BOTTOM_WIDE") return AnchorPreset::BOTTOM_WIDE;
+    if (str == "VERTICAL_CENTER_WIDE") return AnchorPreset::VERTICAL_CENTER_WIDE;
+    if (str == "HORIZONTAL_CENTER_WIDE") return AnchorPreset::HORIZONTAL_CENTER_WIDE;
+    if (str == "FULL_LAYOUT") return AnchorPreset::FULL_LAYOUT;
+    return AnchorPreset::NONE;
+}
+
+std::string editor::Stream::materialAlphaModeToString(MaterialAlphaMode mode) {
+    switch (mode) {
+        case MaterialAlphaMode::AUTO: return "AUTO";
+        case MaterialAlphaMode::ALPHA_OPAQUE: return "ALPHA_OPAQUE";
+        case MaterialAlphaMode::MASK: return "MASK";
+        case MaterialAlphaMode::BLEND: return "BLEND";
+        default: return "AUTO";
+    }
+}
+
+MaterialAlphaMode editor::Stream::stringToMaterialAlphaMode(const std::string& str) {
+    if (str == "AUTO") return MaterialAlphaMode::AUTO;
+    if (str == "ALPHA_OPAQUE") return MaterialAlphaMode::ALPHA_OPAQUE;
+    if (str == "MASK") return MaterialAlphaMode::MASK;
+    if (str == "BLEND") return MaterialAlphaMode::BLEND;
+    return MaterialAlphaMode::AUTO;
+}
+
+std::string editor::Stream::scriptPropertyTypeToString(ScriptPropertyType type) {
+    switch (type) {
+        case ScriptPropertyType::Bool: return "Bool";
+        case ScriptPropertyType::Int: return "Int";
+        case ScriptPropertyType::Float: return "Float";
+        case ScriptPropertyType::String: return "String";
+        case ScriptPropertyType::Vector2: return "Vector2";
+        case ScriptPropertyType::Vector3: return "Vector3";
+        case ScriptPropertyType::Vector4: return "Vector4";
+        case ScriptPropertyType::Color3: return "Color3";
+        case ScriptPropertyType::Color4: return "Color4";
+        case ScriptPropertyType::EntityReference: return "EntityReference";
+        default: return "Bool";
+    }
+}
+
+ScriptPropertyType editor::Stream::stringToScriptPropertyType(const std::string& str) {
+    if (str == "Bool") return ScriptPropertyType::Bool;
+    if (str == "Int") return ScriptPropertyType::Int;
+    if (str == "Float") return ScriptPropertyType::Float;
+    if (str == "String") return ScriptPropertyType::String;
+    if (str == "Vector2") return ScriptPropertyType::Vector2;
+    if (str == "Vector3") return ScriptPropertyType::Vector3;
+    if (str == "Vector4") return ScriptPropertyType::Vector4;
+    if (str == "Color3") return ScriptPropertyType::Color3;
+    if (str == "Color4") return ScriptPropertyType::Color4;
+    if (str == "EntityReference") return ScriptPropertyType::EntityReference;
+    return ScriptPropertyType::Bool;
+}
+
+std::string editor::Stream::particleEmitterShapeToString(ParticleEmitterShape shape) {
+    switch (shape) {
+        case ParticleEmitterShape::Box: return "Box";
+        case ParticleEmitterShape::Sphere: return "Sphere";
+        case ParticleEmitterShape::Hemisphere: return "Hemisphere";
+        case ParticleEmitterShape::Circle: return "Circle";
+        case ParticleEmitterShape::Cone: return "Cone";
+        default: return "Box";
+    }
+}
+
+ParticleEmitterShape editor::Stream::stringToParticleEmitterShape(const std::string& str) {
+    if (str == "Box") return ParticleEmitterShape::Box;
+    if (str == "Sphere") return ParticleEmitterShape::Sphere;
+    if (str == "Hemisphere") return ParticleEmitterShape::Hemisphere;
+    if (str == "Circle") return ParticleEmitterShape::Circle;
+    if (str == "Cone") return ParticleEmitterShape::Cone;
+    return ParticleEmitterShape::Box;
+}
+
+namespace {
+
+std::string terrainBrushModeToString(editor::TerrainBrushMode mode) {
+    switch (mode) {
+        case editor::TerrainBrushMode::Raise: return "Raise";
+        case editor::TerrainBrushMode::Lower: return "Lower";
+        case editor::TerrainBrushMode::Smooth: return "Smooth";
+        case editor::TerrainBrushMode::Flatten: return "Flatten";
+        case editor::TerrainBrushMode::PaintRed: return "PaintRed";
+        case editor::TerrainBrushMode::PaintGreen: return "PaintGreen";
+        case editor::TerrainBrushMode::PaintBlue: return "PaintBlue";
+        default: return "Raise";
+    }
+}
+
+editor::TerrainBrushMode stringToTerrainBrushMode(const std::string& str) {
+    if (str == "Raise") return editor::TerrainBrushMode::Raise;
+    if (str == "Lower") return editor::TerrainBrushMode::Lower;
+    if (str == "Smooth") return editor::TerrainBrushMode::Smooth;
+    if (str == "Flatten") return editor::TerrainBrushMode::Flatten;
+    if (str == "PaintRed") return editor::TerrainBrushMode::PaintRed;
+    if (str == "PaintGreen") return editor::TerrainBrushMode::PaintGreen;
+    if (str == "PaintBlue") return editor::TerrainBrushMode::PaintBlue;
+    return editor::TerrainBrushMode::Raise;
+}
+
+std::string terrainBrushShapeToString(editor::TerrainBrushShape shape) {
+    switch (shape) {
+        case editor::TerrainBrushShape::Circle: return "Circle";
+        case editor::TerrainBrushShape::Square: return "Square";
+        default: return "Circle";
+    }
+}
+
+editor::TerrainBrushShape stringToTerrainBrushShape(const std::string& str) {
+    if (str == "Circle") return editor::TerrainBrushShape::Circle;
+    if (str == "Square") return editor::TerrainBrushShape::Square;
+    return editor::TerrainBrushShape::Circle;
+}
+
+std::string terrainBrushFalloffToString(editor::TerrainBrushFalloff falloff) {
+    switch (falloff) {
+        case editor::TerrainBrushFalloff::Smooth: return "Smooth";
+        case editor::TerrainBrushFalloff::Linear: return "Linear";
+        case editor::TerrainBrushFalloff::Constant: return "Constant";
+        default: return "Smooth";
+    }
+}
+
+editor::TerrainBrushFalloff stringToTerrainBrushFalloff(const std::string& str) {
+    if (str == "Smooth") return editor::TerrainBrushFalloff::Smooth;
+    if (str == "Linear") return editor::TerrainBrushFalloff::Linear;
+    if (str == "Constant") return editor::TerrainBrushFalloff::Constant;
+    return editor::TerrainBrushFalloff::Smooth;
+}
+
+} // namespace
 
 std::string editor::Stream::containerTypeToString(ContainerType type) {
     switch (type) {
@@ -1371,9 +1542,9 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
     {
         const TerrainEditorSettings& ts = project->getTerrainEditorSettings();
         YAML::Node terrainNode;
-        terrainNode["brushMode"] = ts.brushMode;
-        terrainNode["brushShape"] = ts.brushShape;
-        terrainNode["brushFalloff"] = ts.brushFalloff;
+        terrainNode["brushMode"] = terrainBrushModeToString(static_cast<TerrainBrushMode>(ts.brushMode));
+        terrainNode["brushShape"] = terrainBrushShapeToString(static_cast<TerrainBrushShape>(ts.brushShape));
+        terrainNode["brushFalloff"] = terrainBrushFalloffToString(static_cast<TerrainBrushFalloff>(ts.brushFalloff));
         encodePositiveFinite(terrainNode, "brushSize", ts.brushSize);
         encodeFinite(terrainNode, "brushStrength", ts.brushStrength);
         encodeFinite(terrainNode, "flattenHeight", ts.flattenHeight);
@@ -1545,9 +1716,9 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
     if (node["terrainEditor"] && node["terrainEditor"].IsMap()) {
         const auto& tn = node["terrainEditor"];
         TerrainEditorSettings ts;
-        if (tn["brushMode"].IsDefined())          ts.brushMode          = tn["brushMode"].as<int>();
-        if (tn["brushShape"].IsDefined())         ts.brushShape         = tn["brushShape"].as<int>();
-        if (tn["brushFalloff"].IsDefined())       ts.brushFalloff       = tn["brushFalloff"].as<int>();
+        if (tn["brushMode"].IsDefined())          ts.brushMode          = static_cast<int>(stringToTerrainBrushMode(tn["brushMode"].as<std::string>()));
+        if (tn["brushShape"].IsDefined())         ts.brushShape         = static_cast<int>(stringToTerrainBrushShape(tn["brushShape"].as<std::string>()));
+        if (tn["brushFalloff"].IsDefined())       ts.brushFalloff       = static_cast<int>(stringToTerrainBrushFalloff(tn["brushFalloff"].as<std::string>()));
         if (tn["brushSize"].IsDefined())          ts.brushSize          = decodePositiveFinite(tn["brushSize"], ts.brushSize);
         if (tn["brushStrength"].IsDefined())      ts.brushStrength      = decodeFinite(tn["brushStrength"], ts.brushStrength);
         if (tn["flattenHeight"].IsDefined())      ts.flattenHeight      = decodeFinite(tn["flattenHeight"], ts.flattenHeight);
@@ -2403,7 +2574,7 @@ YAML::Node editor::Stream::encodeScriptProperty(const ScriptProperty& prop) {
     YAML::Node node;
     node["name"] = prop.name;
     node["displayName"] = prop.displayName;
-    node["type"] = static_cast<int>(prop.type);
+    node["type"] = scriptPropertyTypeToString(prop.type);
 
     // Store ptrTypeName if it's a pointer type
     if (prop.type == ScriptPropertyType::EntityReference && !prop.ptrTypeName.empty()) {
@@ -2460,7 +2631,7 @@ ScriptProperty editor::Stream::decodeScriptProperty(const YAML::Node& node) {
 
     if (node["name"]) prop.name = node["name"].as<std::string>();
     if (node["displayName"]) prop.displayName = node["displayName"].as<std::string>();
-    if (node["type"]) prop.type = static_cast<ScriptPropertyType>(node["type"].as<int>());
+    if (node["type"]) prop.type = stringToScriptPropertyType(node["type"].as<std::string>());
 
     // Restore ptrTypeName if it exists
     if (node["ptrTypeName"]) {
@@ -2597,7 +2768,7 @@ YAML::Node editor::Stream::encodeMaterial(const Material& material, bool embedTe
     node["metallicFactor"] = material.metallicFactor;
     node["roughnessFactor"] = material.roughnessFactor;
     node["alphaCutoff"] = material.alphaCutoff;
-    node["alphaMode"] = static_cast<int>(material.alphaMode);
+    node["alphaMode"] = materialAlphaModeToString(material.alphaMode);
     node["emissiveFactor"] = encodeVector3(material.emissiveFactor);
 
     // Encode textures using the helper method
@@ -2642,11 +2813,7 @@ Material editor::Stream::decodeMaterial(const YAML::Node& node) {
     material.roughnessFactor = node["roughnessFactor"].as<float>();
     if (node["alphaCutoff"]) material.alphaCutoff = node["alphaCutoff"].as<float>();
     if (node["alphaMode"]) {
-        int alphaMode = node["alphaMode"].as<int>();
-        if (alphaMode >= static_cast<int>(MaterialAlphaMode::AUTO) &&
-            alphaMode <= static_cast<int>(MaterialAlphaMode::BLEND)) {
-            material.alphaMode = static_cast<MaterialAlphaMode>(alphaMode);
-        }
+        material.alphaMode = stringToMaterialAlphaMode(node["alphaMode"].as<std::string>());
     }
     material.emissiveFactor = decodeVector3(node["emissiveFactor"]);
 
@@ -4119,7 +4286,7 @@ YAML::Node editor::Stream::encodePanelComponent(const PanelComponent& panel) {
     node["headerimage"] = panel.headerimage;
     node["headercontainer"] = panel.headercontainer;
     node["headertext"] = panel.headertext;
-    node["titleAnchorPreset"] = static_cast<int>(panel.titleAnchorPreset);
+    node["titleAnchorPreset"] = anchorPresetToString(panel.titleAnchorPreset);
     node["minWidth"] = panel.minWidth;
     node["minHeight"] = panel.minHeight;
     node["headerMarginLeft"] = panel.headerMarginLeft;
@@ -4144,7 +4311,7 @@ PanelComponent editor::Stream::decodePanelComponent(const YAML::Node& node, cons
     if (node["headerimage"]) panel.headerimage = node["headerimage"].as<Entity>();
     if (node["headercontainer"]) panel.headercontainer = node["headercontainer"].as<Entity>();
     if (node["headertext"]) panel.headertext = node["headertext"].as<Entity>();
-    if (node["titleAnchorPreset"]) panel.titleAnchorPreset = static_cast<AnchorPreset>(node["titleAnchorPreset"].as<int>());
+    if (node["titleAnchorPreset"]) panel.titleAnchorPreset = stringToAnchorPreset(node["titleAnchorPreset"].as<std::string>());
     if (node["minWidth"]) panel.minWidth = node["minWidth"].as<unsigned int>();
     if (node["minHeight"]) panel.minHeight = node["minHeight"].as<unsigned int>();
     if (node["headerMarginLeft"]) panel.headerMarginLeft = node["headerMarginLeft"].as<int>();
@@ -4175,7 +4342,7 @@ YAML::Node editor::Stream::encodeUILayoutComponent(const UILayoutComponent& layo
     node["anchorOffsetRight"] = layout.anchorOffsetRight;
     node["anchorOffsetBottom"] = layout.anchorOffsetBottom;
     node["positionOffset"] = encodeVector2(layout.positionOffset);
-    node["anchorPreset"] = static_cast<int>(layout.anchorPreset);
+    node["anchorPreset"] = anchorPresetToString(layout.anchorPreset);
     node["usingAnchors"] = layout.usingAnchors;
     node["panel"] = layout.panel;
     node["containerBoxIndex"] = layout.containerBoxIndex;
@@ -4207,7 +4374,7 @@ UILayoutComponent editor::Stream::decodeUILayoutComponent(const YAML::Node& node
     if (node["anchorOffsetRight"]) layout.anchorOffsetRight = node["anchorOffsetRight"].as<int>();
     if (node["anchorOffsetBottom"]) layout.anchorOffsetBottom = node["anchorOffsetBottom"].as<int>();
     if (node["positionOffset"]) layout.positionOffset = decodeVector2(node["positionOffset"]);
-    if (node["anchorPreset"]) layout.anchorPreset = static_cast<AnchorPreset>(node["anchorPreset"].as<int>());
+    if (node["anchorPreset"]) layout.anchorPreset = stringToAnchorPreset(node["anchorPreset"].as<std::string>());
     if (node["usingAnchors"]) layout.usingAnchors = node["usingAnchors"].as<bool>();
     if (node["panel"]) layout.panel = node["panel"].as<Entity>();
     if (node["containerBoxIndex"]) layout.containerBoxIndex = node["containerBoxIndex"].as<int>();
@@ -6199,7 +6366,7 @@ YAML::Node editor::Stream::encodeParticlesComponent(const ParticlesComponent& pa
     node["lifeInitializer"] = lifeInit;
 
     YAML::Node posInit;
-    posInit["shape"] = (int)particles.positionInitializer.shape;
+    posInit["shape"] = particleEmitterShapeToString(particles.positionInitializer.shape);
     posInit["minPosition"] = encodeVector3(particles.positionInitializer.minPosition);
     posInit["maxPosition"] = encodeVector3(particles.positionInitializer.maxPosition);
     posInit["radius"] = particles.positionInitializer.radius;
@@ -6371,7 +6538,7 @@ ParticlesComponent editor::Stream::decodeParticlesComponent(const YAML::Node& no
     }
     if (node["positionInitializer"]) {
         const YAML::Node& n = node["positionInitializer"];
-        if (n["shape"]) particles.positionInitializer.shape = (ParticleEmitterShape)n["shape"].as<int>();
+        if (n["shape"]) particles.positionInitializer.shape = stringToParticleEmitterShape(n["shape"].as<std::string>());
         if (n["minPosition"]) particles.positionInitializer.minPosition = decodeVector3(n["minPosition"]);
         if (n["maxPosition"]) particles.positionInitializer.maxPosition = decodeVector3(n["maxPosition"]);
         if (n["radius"]) particles.positionInitializer.radius = n["radius"].as<float>();

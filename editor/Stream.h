@@ -68,6 +68,18 @@ namespace doriax::editor {
         static std::string pivotPresetToString(PivotPreset preset);
         static PivotPreset stringToPivotPreset(const std::string& str);
 
+        static std::string anchorPresetToString(AnchorPreset preset);
+        static AnchorPreset stringToAnchorPreset(const std::string& str);
+
+        static std::string materialAlphaModeToString(MaterialAlphaMode mode);
+        static MaterialAlphaMode stringToMaterialAlphaMode(const std::string& str);
+
+        static std::string scriptPropertyTypeToString(ScriptPropertyType type);
+        static ScriptPropertyType stringToScriptPropertyType(const std::string& str);
+
+        static std::string particleEmitterShapeToString(ParticleEmitterShape shape);
+        static ParticleEmitterShape stringToParticleEmitterShape(const std::string& str);
+
         static std::string scriptTypeToString(ScriptType type);
         static ScriptType stringToScriptType(const std::string& str);
 
