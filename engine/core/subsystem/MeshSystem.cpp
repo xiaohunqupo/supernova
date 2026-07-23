@@ -315,6 +315,14 @@ bool MeshSystem::createMeshPolygon(MeshPolygonComponent& polygon, MeshComponent&
 bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
     // Pre-check all tile textures BEFORE clearing the buffer to avoid leaving
     // the mesh with an empty vertex buffer when textures are still loading.
+    //
+    // Only force a CPU load while the texture dimensions are still unknown: tile
+    // meshes only need the texture width/height (for UV normalization), never the
+    // pixel data. Those dimensions survive releaseDataAfterLoad, so once a texture
+    // has loaded once getWidth() keeps returning them without touching the pool.
+    // Calling load() unconditionally would instead re-read every already-uploaded
+    // (and released) tile texture from disk on each rebuild, spinning an endless
+    // load loop.
     unsigned int preReserveTiles = tilemap.reserveTiles;
     for (int i = 0; i < (int)tilemap.numTiles; i++){
         if (tilemap.tiles[i].width == 0 && tilemap.tiles[i].height == 0 && preReserveTiles == 0){
@@ -332,13 +340,9 @@ bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
         }
         Texture& texture = mesh.submeshes[rectData.submeshId].material.baseColorTexture;
         Texture& mainTexture = mesh.submeshes[0].material.baseColorTexture;
-        if (!texture.empty()){
-            TextureLoadResult texResult = texture.load();
-            if (texResult.state == ResourceLoadState::Loading){
-                return false;
-            }
-        }else if (!mainTexture.empty()){
-            TextureLoadResult texResult = mainTexture.load();
+        Texture* tileTexture = !texture.empty() ? &texture : (!mainTexture.empty() ? &mainTexture : nullptr);
+        if (tileTexture && tileTexture->getWidth() == 0){
+            TextureLoadResult texResult = tileTexture->load();
             if (texResult.state == ResourceLoadState::Loading){
                 return false;
             }
@@ -403,22 +407,17 @@ bool MeshSystem::createTilemap(TilemapComponent& tilemap, MeshComponent& mesh){
 
         Texture& texture = mesh.submeshes[submeshId].material.baseColorTexture;
         Texture& mainTexture = mesh.submeshes[0].material.baseColorTexture;
+        Texture* tileTexture = !texture.empty() ? &texture : (!mainTexture.empty() ? &mainTexture : nullptr);
 
         unsigned int texWidth = 0;
         unsigned int texHeight = 0;
-        if (!texture.empty()){
-            TextureLoadResult texResult = texture.load();
-            if (texResult.state == ResourceLoadState::Finished){
-                tileRect = normalizeTileRect(tileRect, texture.getWidth(), texture.getHeight());
-                texWidth = texture.getWidth();
-                texHeight = texture.getHeight();
-            }
-        }else if (!mainTexture.empty()){
-            TextureLoadResult texResult = mainTexture.load();
-            if (texResult.state == ResourceLoadState::Finished){
-                tileRect = normalizeTileRect(tileRect, mainTexture.getWidth(), mainTexture.getHeight());
-                texWidth = mainTexture.getWidth();
-                texHeight = mainTexture.getHeight();
+        if (tileTexture){
+            // Dimensions are retained even after releaseDataAfterLoad frees the
+            // pixel buffer, so read them directly instead of forcing a reload.
+            texWidth = tileTexture->getWidth();
+            texHeight = tileTexture->getHeight();
+            if (texWidth != 0 && texHeight != 0){
+                tileRect = normalizeTileRect(tileRect, texWidth, texHeight);
             }
         }
 
