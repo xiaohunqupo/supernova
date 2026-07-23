@@ -654,20 +654,30 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
 
     totalSelBB.setHalfExtents(totalSelBB.getHalfExtents() + Vector3(selectionOffset));
 
+    // Gizmo screen-size is distance-based in perspective, so it must be computed
+    // from the gizmo's actual world position. Sub-selections (instance, tile,
+    // point) place the gizmo away from the entity origin, so recompute per
+    // position instead of reusing the entity-derived scale (otherwise the gizmo
+    // is sized for the entity's distance and looks wrong).
+    auto computeGizmoScale = [&](const Vector3& worldPos) -> float {
+        float s = gizmoScale * zoom;
+        if (cameracomp.type == CameraType::CAMERA_PERSPECTIVE){
+            float dist = (worldPos - camera->getWorldPosition()).length();
+            s = std::tan(cameracomp.yfov) * dist * (gizmoScale / (float)framebuffer.getHeight());
+            if (!std::isfinite(s) || s <= 0.0f) {
+                s = 1.0f;
+            }
+        }
+        return s;
+    };
+
     bool selectionVisibility = false;
     if (numTEntities > 0){
         gizmoPosition /= numTEntities;
 
         selectionVisibility = true;
 
-        float scale = gizmoScale * zoom;
-        if (cameracomp.type == CameraType::CAMERA_PERSPECTIVE){
-            float dist = (gizmoPosition - camera->getWorldPosition()).length();
-            scale = std::tan(cameracomp.yfov) * dist * (gizmoScale / (float)framebuffer.getHeight());
-            if (!std::isfinite(scale) || scale <= 0.0f) {
-                scale = 1.0f;
-            }
-        }
+        float scale = computeGizmoScale(gizmoPosition);
 
         toolslayer.updateGizmo(camera, gizmoPosition, gizmoRotation, scale, totalSelBB, mouseRay, mouseClicked, anchorData, anchorArea);
 
@@ -677,7 +687,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             OBB tileOBB = getTileOBB(selectedTileEntity, selectedTileIndex, true);
             if (!tileOBB.isNull()){
                 Vector3 tileCenter = tileOBB.getCenter();
-                toolslayer.updateGizmo(camera, tileCenter, gizmoRotation, scale, tileOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+                toolslayer.updateGizmo(camera, tileCenter, gizmoRotation, computeGizmoScale(tileCenter), tileOBB, mouseRay, mouseClicked, anchorData, anchorArea);
             }
         }
 
@@ -691,7 +701,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
                     const InstanceData& inst = instmesh->instances[selectedInstanceIndex];
                     Quaternion instWorldRotation = getInstanceWorldRotation(*instTransform, *instmesh, inst);
                     Vector3 instCenter = instOBB.getCenter();
-                    toolslayer.updateGizmo(camera, instCenter, instWorldRotation, scale, instOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+                    toolslayer.updateGizmo(camera, instCenter, instWorldRotation, computeGizmoScale(instCenter), instOBB, mouseRay, mouseClicked, anchorData, anchorArea);
                     // Replace selection outline with the instance OBB
                     selBB.clear();
                     selBB.push_back(instOBB);
@@ -705,7 +715,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             OBB pointOBB = getOccluderPointOBB(selectedOccluderPointEntity, selectedOccluderPointIndex);
             if (!pointOBB.isNull()){
                 Vector3 pointCenter = pointOBB.getCenter();
-                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, scale, pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, computeGizmoScale(pointCenter), pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
             }else{
                 // point removed or shape changed: drop the stale sub-selection
                 clearOccluderPointSelection();
@@ -718,7 +728,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             OBB pointOBB = getLinePointOBB(selectedLinePointEntity, selectedLinePointIndex);
             if (!pointOBB.isNull()){
                 Vector3 pointCenter = pointOBB.getCenter();
-                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, scale, pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, computeGizmoScale(pointCenter), pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
             }else{
                 // line removed: drop the stale sub-selection
                 clearLinePointSelection();
@@ -731,7 +741,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
             OBB pointOBB = getPolygonPointOBB(selectedPolygonPointEntity, selectedPolygonPointIsMesh, selectedPolygonPointIndex);
             if (!pointOBB.isNull()){
                 Vector3 pointCenter = pointOBB.getCenter();
-                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, scale, pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+                toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, computeGizmoScale(pointCenter), pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
             }else{
                 // vertex removed: drop the stale sub-selection
                 clearPolygonPointSelection();
@@ -751,16 +761,7 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
         if (!pointOBB.isNull()){
             Vector3 pointCenter = pointOBB.getCenter();
 
-            float trackScale = gizmoScale * zoom;
-            if (cameracomp.type == CameraType::CAMERA_PERSPECTIVE){
-                float dist = (pointCenter - camera->getWorldPosition()).length();
-                trackScale = std::tan(cameracomp.yfov) * dist * (gizmoScale / (float)framebuffer.getHeight());
-                if (!std::isfinite(trackScale) || trackScale <= 0.0f){
-                    trackScale = 1.0f;
-                }
-            }
-
-            toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, trackScale, pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
+            toolslayer.updateGizmo(camera, pointCenter, gizmoRotation, computeGizmoScale(pointCenter), pointOBB, mouseRay, mouseClicked, anchorData, anchorArea);
             selectionVisibility = true;
         }else{
             // point removed or values changed: drop the stale sub-selection
