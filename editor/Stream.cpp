@@ -1590,6 +1590,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
             encodePositiveFinite(sceneNode, "gridSpacing2D", sceneProject.displaySettings.gridSpacing2D);
             encodePositiveFinite(sceneNode, "gridSpacing3D", sceneProject.displaySettings.gridSpacing3D);
             sceneNode["snapToGrid"]           = sceneProject.displaySettings.snapToGrid;
+            sceneNode["snapTile"]             = sceneProject.displaySettings.snapTile;
             sceneNode["snapRotation"]         = sceneProject.displaySettings.snapRotation;
             encodePositiveFinite(sceneNode, "rotationSnapDegrees", sceneProject.displaySettings.rotationSnapDegrees);
 
@@ -1789,6 +1790,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node) {
                         if (sceneNode["gridSpacing2D"])        ds.gridSpacing2D        = decodePositiveFinite(sceneNode["gridSpacing2D"], ds.gridSpacing2D);
                         if (sceneNode["gridSpacing3D"])        ds.gridSpacing3D        = decodePositiveFinite(sceneNode["gridSpacing3D"], ds.gridSpacing3D);
                         if (sceneNode["snapToGrid"])           ds.snapToGrid           = sceneNode["snapToGrid"].as<bool>();
+                        if (sceneNode["snapTile"])             ds.snapTile             = sceneNode["snapTile"].as<bool>();
                         if (sceneNode["snapRotation"])         ds.snapRotation         = sceneNode["snapRotation"].as<bool>();
                         if (sceneNode["rotationSnapDegrees"])  ds.rotationSnapDegrees  = decodePositiveFinite(sceneNode["rotationSnapDegrees"], ds.rotationSnapDegrees);
 

@@ -1452,7 +1452,39 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                                 newTilePos.y = gizmo2DSideUsesNegativeY(side) ? (tileMaxY - newTileH) : tileStartPosition.y;
                             }
 
-                            if (displaySettings.snapToGrid) {
+                            if (displaySettings.snapTile) {
+                                // Snap in local tilemap space to the tile's own size so
+                                // neighboring tiles pack edge-to-edge when grouping.
+                                float spacingX = tileStartWidth;
+                                float spacingY = tileStartHeight;
+                                if (spacingX > 0.0f && spacingY > 0.0f) {
+                                    auto snapX = [&](float lx) {
+                                        return std::round(lx / spacingX) * spacingX;
+                                    };
+                                    auto snapY = [&](float ly) {
+                                        return std::round(ly / spacingY) * spacingY;
+                                    };
+
+                                    if (side == Gizmo2DSideSelected::CENTER ||
+                                        side == Gizmo2DSideSelected::NX ||
+                                        side == Gizmo2DSideSelected::NX_NY ||
+                                        side == Gizmo2DSideSelected::NX_PY) {
+                                        newTilePos.x = snapX(newTilePos.x);
+                                    } else {
+                                        float snappedFarX = snapX(newTilePos.x + newTileW);
+                                        newTileW = snappedFarX - newTilePos.x;
+                                    }
+                                    if (side == Gizmo2DSideSelected::CENTER ||
+                                        side == Gizmo2DSideSelected::NY ||
+                                        side == Gizmo2DSideSelected::NX_NY ||
+                                        side == Gizmo2DSideSelected::PX_NY) {
+                                        newTilePos.y = snapY(newTilePos.y);
+                                    } else {
+                                        float snappedFarY = snapY(newTilePos.y + newTileH);
+                                        newTileH = snappedFarY - newTilePos.y;
+                                    }
+                                }
+                            } else if (displaySettings.snapToGrid) {
                                 float spacing = displaySettings.gridSpacing2D;
                                 if (spacing > 0.0f) {
                                     // Snap in world space so tiles align to the global grid

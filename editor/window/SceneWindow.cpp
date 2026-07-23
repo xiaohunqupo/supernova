@@ -618,6 +618,12 @@ void editor::SceneWindow::handleTileRectDragDrop(SceneProject* sceneProject) {
                             float posX = std::max(0.0f, localHit.x - tileW * 0.5f);
                             float posY = std::max(0.0f, localHit.y - tileH * 0.5f);
 
+                            // Snap to tile size so dropped tiles pack edge-to-edge
+                            if (sceneProject->displaySettings.snapTile && tileW > 0.0f && tileH > 0.0f) {
+                                posX = std::max(0.0f, std::round(posX / tileW) * tileW);
+                                posY = std::max(0.0f, std::round(posY / tileH) * tileH);
+                            }
+
                             int freeSlot = (int)tilemap->numTiles;
                             if (freeSlot < (int)tilemap->tiles.size()) {
                                 std::string tilePrefix = "tiles[" + std::to_string(freeSlot) + "]";
@@ -1862,6 +1868,7 @@ void editor::SceneWindow::show() {
                             ImGui::SetNextItemWidth(-1);
                             ImGui::DragFloat("##GridSpacing3D", &sceneProject.displaySettings.gridSpacing3D, 0.1f, 0.1f, 1000.0f, "%.1f");
                         } else {
+                            drawSettingRow(ICON_FA_BORDER_ALL " Snap tile", sceneProject.displaySettings.snapTile);
                             drawSettingRow(ICON_FA_TABLE_CELLS " Show grid", sceneProject.displaySettings.showGrid2D);
                             if (sceneProject.displaySettings.showGrid2D) {
                                 ImGui::TableNextRow();

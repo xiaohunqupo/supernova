@@ -28,6 +28,7 @@ namespace doriax::editor{
         float gridSpacing2D      = 50.0f;
         float gridSpacing3D      = 1.0f;
         bool snapToGrid          = false;
+        bool snapTile            = false;
         bool snapRotation        = false;
         float rotationSnapDegrees = 15.0f;
     };
