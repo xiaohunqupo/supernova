@@ -5539,12 +5539,15 @@ void RenderSystem::update(double dt){
                 }
 
                 if (instancesNeedUpdate || ((mainCamera.needUpdate || transform.needUpdate) && sortTransparentInstances)){
-                    if (!hasMultipleCameras || !sortTransparentInstances){
-                        if (instmesh->instancedBillboard){
-                            updateInstancedMesh(*instmesh, mesh, transform, mainCamera, mainCameraTransform);
-                        }
-                        sortInstancedMesh(*instmesh, mesh, transform, mainCamera, mainCameraTransform);
+                    // Sort/upload transparent instances once here for the main camera.
+                    // The instance buffer is shared by every camera and sokol only allows
+                    // one sg_update_buffer per buffer per frame (VALIDATE_UPDATEBUF_ONCE),
+                    // so render-to-texture cameras reuse this ordering instead of
+                    // re-sorting per camera (which would upload the buffer again).
+                    if (instmesh->instancedBillboard){
+                        updateInstancedMesh(*instmesh, mesh, transform, mainCamera, mainCameraTransform);
                     }
+                    sortInstancedMesh(*instmesh, mesh, transform, mainCamera, mainCameraTransform);
                 }
 
                 instmesh->needUpdateInstances = false;
@@ -5713,10 +5716,12 @@ void RenderSystem::update(double dt){
                 updatePoints(points, transform, mainCamera, mainCameraTransform);
             }
 
+            // Sort/upload transparent points once here for the main camera. The points
+            // buffer is shared by every camera and sokol only allows one sg_update_buffer
+            // per buffer per frame (VALIDATE_UPDATEBUF_ONCE), so render-to-texture cameras
+            // reuse this ordering instead of re-sorting per camera.
             if (sortTransparentPoints && (points.needUpdate || mainCamera.needUpdate || transform.needUpdate)){
-                if (!hasMultipleCameras || !sortTransparentPoints){
-                    sortPoints(points, transform, mainCamera, mainCameraTransform);
-                }
+                sortPoints(points, transform, mainCamera, mainCameraTransform);
             }
 
             if (points.loaded){
@@ -6208,17 +6213,14 @@ void RenderSystem::draw(){
 
                 if (transform.visible && !samplesCameraTarget(camera, mesh)){
 
+                    // Per-camera transparent-instance sorting is intentionally NOT done
+                    // here: the instance buffer is shared across all cameras and sokol
+                    // only allows one sg_update_buffer per buffer per frame
+                    // (VALIDATE_UPDATEBUF_ONCE). Re-sorting per camera re-flags
+                    // needUpdateBuffer and uploads the buffer again, which panics the
+                    // validation layer when a render-to-texture camera is present. Every
+                    // camera reuses the main camera's ordering computed in update().
                     InstancedMeshComponent* instmesh = scene->findComponent<InstancedMeshComponent>(entity);
-                    if (instmesh){
-                        bool sortTransparentInstances = mesh.transparent && camera.type != CameraType::CAMERA_UI;
-
-                        if (hasMultipleCameras && sortTransparentInstances){
-                            if (instmesh->instancedBillboard){
-                                updateInstancedMesh(*instmesh, mesh, transform, camera, cameraTransform);
-                            }
-                            sortInstancedMesh(*instmesh, mesh, transform, camera, cameraTransform);
-                        }
-                    }
 
                     // Per-view CDLOD: the main camera's selection (view 0) is done in
                     // update(); each render-to-texture camera (mirror/RTT) selects its
@@ -6250,12 +6252,10 @@ void RenderSystem::draw(){
             }else if (signature.test(scene->getComponentId<PointsComponent>())){
                 PointsComponent& points = scene->getComponent<PointsComponent>(entity);
 
-                bool sortTransparentPoints = points.transparent && camera.type != CameraType::CAMERA_UI;
-
-                if (hasMultipleCameras && sortTransparentPoints){
-                    sortPoints(points, transform, camera, cameraTransform);
-                }
-
+                // Per-camera sorting is intentionally NOT done here: the points buffer is
+                // shared across all cameras and sokol only allows one sg_update_buffer per
+                // buffer per frame (VALIDATE_UPDATEBUF_ONCE). Every camera reuses the main
+                // camera's ordering computed in update().
                 if (transform.visible && !samplesCameraTarget(camera, points.texture)){
                     if (!points.transparent || !camera.transparentSort){
                         drawPoints(points, transform, camera, cameraTransform, offscreenTarget);
