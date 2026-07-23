@@ -109,7 +109,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
     luabridge::getGlobalNamespace(L)
         .beginNamespace("MaterialAlphaMode")
         .addVariable("AUTO", MaterialAlphaMode::AUTO)
-        .addVariable("OPAQUE", MaterialAlphaMode::OPAQUE)
+        .addVariable("ALPHA_OPAQUE", MaterialAlphaMode::ALPHA_OPAQUE)
         .addVariable("MASK", MaterialAlphaMode::MASK)
         .addVariable("BLEND", MaterialAlphaMode::BLEND)
         .endNamespace();

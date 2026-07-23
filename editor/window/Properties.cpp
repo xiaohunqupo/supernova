@@ -84,7 +84,7 @@ static std::vector<editor::EnumEntry> entriesPrimitiveType = {
 
 static std::vector<editor::EnumEntry> entriesMaterialAlphaMode = {
     { (int)MaterialAlphaMode::AUTO, "Auto" },
-    { (int)MaterialAlphaMode::OPAQUE, "Opaque" },
+    { (int)MaterialAlphaMode::ALPHA_OPAQUE, "Opaque" },
     { (int)MaterialAlphaMode::MASK, "Mask" },
     { (int)MaterialAlphaMode::BLEND, "Blend" }
 };

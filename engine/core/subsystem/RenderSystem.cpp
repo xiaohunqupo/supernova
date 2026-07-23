@@ -1992,7 +1992,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         // screen-space AO modulates ambient/indirect light on lit submeshes.
         bool p_ssao = scene->isSSAOEnabled() && !p_unlit && (p_punctual || p_ibl);
         bool p_alphaMask = mesh.submeshes[i].material.alphaMode == MaterialAlphaMode::MASK;
-        bool p_alphaOpaque = mesh.submeshes[i].material.alphaMode == MaterialAlphaMode::OPAQUE;
+        bool p_alphaOpaque = mesh.submeshes[i].material.alphaMode == MaterialAlphaMode::ALPHA_OPAQUE;
         // AUTO + textureShadow preserves the legacy opt-in for editor-created
         // materials; explicit glTF modes derive the depth behavior from alphaMode.
         bool p_depthAlphaMask = usesAlphaMask(mesh.submeshes[i].material, mesh.submeshes[i].textureShadow);
@@ -5580,7 +5580,7 @@ void RenderSystem::update(double dt){
                 const bool shaderAlphaMask = (mesh.submeshes[s].shaderProperties & (1u << 24)) != 0;
                 const bool shaderAlphaOpaque = (mesh.submeshes[s].shaderProperties & (1u << 25)) != 0;
                 if (shaderAlphaMask != (alphaMode == MaterialAlphaMode::MASK) ||
-                    shaderAlphaOpaque != (alphaMode == MaterialAlphaMode::OPAQUE)) {
+                    shaderAlphaOpaque != (alphaMode == MaterialAlphaMode::ALPHA_OPAQUE)) {
                     mesh.needReload = true;
                 }
 

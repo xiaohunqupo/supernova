@@ -16,7 +16,7 @@ namespace doriax{
     // the engine's other editable enums.
     enum class MaterialAlphaMode {
         AUTO,
-        OPAQUE,
+        ALPHA_OPAQUE,
         MASK,
         BLEND
     };

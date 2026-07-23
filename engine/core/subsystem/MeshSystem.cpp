@@ -3413,7 +3413,7 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 } else if (mat->alphaMode == "BLEND") {
                     mesh.submeshes[i].material.alphaMode = MaterialAlphaMode::BLEND;
                 } else {
-                    mesh.submeshes[i].material.alphaMode = MaterialAlphaMode::OPAQUE;
+                    mesh.submeshes[i].material.alphaMode = MaterialAlphaMode::ALPHA_OPAQUE;
                 }
 
                 mesh.submeshes[i].material.emissiveFactor = Vector3(
