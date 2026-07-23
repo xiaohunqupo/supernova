@@ -21,8 +21,6 @@ namespace doriax::editor{
         std::vector<Entity> lastSelected;
         bool wasModified;
 
-        static void stripEntityIds(YAML::Node node);
-
     public:
         DuplicateEntityCmd(Project* project, uint32_t sceneId, const std::vector<Entity>& entities);
 

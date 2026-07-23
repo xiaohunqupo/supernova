@@ -1918,6 +1918,12 @@ namespace {
             for (auto& [boneName, boneEntity] : comp->bonesNameMapping) {
                 ps["bonesNameMapping[" + boneName + "]"] = {PropertyType::Entity, UpdateFlags_None, (void*)&defEntity, (void*)&boneEntity};
             }
+            // The per-node child mesh entities are entity references too: they must be remapped
+            // when the model is duplicated so the copy points at its own generated children
+            // rather than sharing (and reloading into) the source model's meshes.
+            for (auto& [nodeIdx, nodeEntity] : comp->meshNodesMapping) {
+                ps["meshNodesMapping[" + std::to_string(nodeIdx) + "]"] = {PropertyType::Entity, UpdateFlags_None, (void*)&defEntity, (void*)&nodeEntity};
+            }
         }
     }
 

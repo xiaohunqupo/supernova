@@ -2063,7 +2063,7 @@ YAML::Node editor::Stream::encodeEntitySelection(const std::vector<Entity>& enti
     return bundleNode;
 }
 
-std::vector<Entity> editor::Stream::decodeEntitySelection(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities, Project* project, SceneProject* sceneProject, Entity parent, bool createNewIfExists) {
+std::vector<Entity> editor::Stream::decodeEntitySelection(const YAML::Node& entityNode, EntityRegistry* registry, std::vector<Entity>* entities, Project* project, SceneProject* sceneProject, Entity parent, bool createNewIfExists, std::unordered_map<Entity, Entity>* entityRemap) {
     if (!entityNode || !entityNode.IsMap()) {
         return {};
     }
@@ -2071,13 +2071,13 @@ std::vector<Entity> editor::Stream::decodeEntitySelection(const YAML::Node& enti
     if (entityNode["members"] && entityNode["members"].IsSequence()) {
         std::vector<Entity> allEntities;
         for (const auto& memberNode : entityNode["members"]) {
-            std::vector<Entity> memberEntities = decodeEntitySelection(memberNode, registry, entities, project, sceneProject, parent, createNewIfExists);
+            std::vector<Entity> memberEntities = decodeEntitySelection(memberNode, registry, entities, project, sceneProject, parent, createNewIfExists, entityRemap);
             allEntities.insert(allEntities.end(), memberEntities.begin(), memberEntities.end());
         }
         return allEntities;
     }
 
-    return decodeEntity(entityNode, registry, entities, project, sceneProject, parent, createNewIfExists);
+    return decodeEntity(entityNode, registry, entities, project, sceneProject, parent, createNewIfExists, entityRemap);
 }
 
 YAML::Node editor::Stream::encodeEntity(const Entity entity, const EntityRegistry* registry,

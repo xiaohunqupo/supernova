@@ -7,6 +7,7 @@
 #include "util/ProjectUtils.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 
 using namespace doriax;
@@ -16,34 +17,6 @@ editor::DuplicateEntityCmd::DuplicateEntityCmd(Project* project, uint32_t sceneI
     this->sceneId = sceneId;
     this->sourceEntities = entities;
     this->wasModified = project->getScene(sceneId)->isModified;
-}
-
-void editor::DuplicateEntityCmd::stripEntityIds(YAML::Node node){
-    if (!node || !node.IsMap())
-        return;
-
-    if (node["members"] && node["members"].IsSequence()) {
-        for (auto member : node["members"]) {
-            stripEntityIds(member);
-        }
-        return;
-    }
-
-    node.remove("entity");
-
-    if (node["children"] && node["children"].IsSequence()) {
-        for (auto child : node["children"]) {
-            stripEntityIds(child);
-        }
-    }
-
-    // bundleOverrides: keep registryEntity (references bundle registry, not scene entities)
-    // bundleLocalEntities: strip scene entity IDs from local entities
-    if (node["bundleLocalEntities"] && node["bundleLocalEntities"].IsSequence()) {
-        for (auto entry : node["bundleLocalEntities"]) {
-            stripEntityIds(entry);
-        }
-    }
 }
 
 bool editor::DuplicateEntityCmd::execute(){
@@ -67,7 +40,7 @@ bool editor::DuplicateEntityCmd::execute(){
         sourceParents.push_back(transform ? transform->parent : NULL_ENTITY);
     }
 
-    // Encode, strip IDs, decode to create duplicates
+    // Encode then decode to create duplicates.
     // Bundle members (non-root) are skipped by the encoder when project context is set,
     // so encode them without project context to treat as plain entities.
     // They become bundle local entities automatically at save time.
@@ -88,12 +61,24 @@ bool editor::DuplicateEntityCmd::execute(){
         }
         encoded["members"] = membersNode;
     }
-    stripEntityIds(encoded);
 
-    createdEntities = Stream::decodeEntitySelection(encoded, scene, &sceneProject->entities, project, sceneProject, NULL_ENTITY, true);
+    // Decode keeping the source entity IDs: every source entity is still alive, so recreateEntity
+    // fails and a fresh ID is allocated, recording old->new in entityRemap. Stripping the IDs
+    // instead (the previous approach) also produced fresh entities but discarded that mapping,
+    // leaving internal entity references (e.g. a model's meshNodesMapping/skeleton/bones, joint
+    // bodies, script targets) pointing at the source entities. For multi-node models that meant
+    // the copy's ModelComponent kept mapping to the source's child meshes, so on reload it
+    // reused/reloaded those instead of populating its own children and the duplicate rendered
+    // empty (and saving the broken state could hang).
+    std::unordered_map<Entity, Entity> entityRemap;
+    createdEntities = Stream::decodeEntitySelection(encoded, scene, &sceneProject->entities, project, sceneProject, NULL_ENTITY, true, &entityRemap);
     if (createdEntities.empty()){
         return false;
     }
+
+    // Repoint internal references from the source entities to their duplicates. clearUnmapped is
+    // false so references outside the duplicated set keep pointing at their original target.
+    Project::remapEntityProperties(scene, createdEntities, entityRemap, false);
 
     // bind framebuffers of duplicated camera-linked textures
     CameraTextureLink::resolve(scene);
