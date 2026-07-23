@@ -11,6 +11,7 @@
 
 #include "Jolt/Jolt.h"
 #include "Jolt/Physics/Body/Body.h"
+#include "Jolt/Physics/Body/AllowedDOFs.h"
 
 namespace doriax{
 
@@ -80,6 +81,8 @@ namespace doriax{
         
         BodyType type = BodyType::STATIC;
         Body3DMotionQuality motionQuality = Body3DMotionQuality::DISCRETE;
+        float gravityFactor = 1.0f;
+        JPH::EAllowedDOFs allowedDOFs = JPH::EAllowedDOFs::All;
         bool newBody = true;
         Vector3 loadedScale = Vector3::UNIT_SCALE;
     };

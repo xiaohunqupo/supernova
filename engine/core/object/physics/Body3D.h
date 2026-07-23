@@ -21,6 +21,8 @@ namespace doriax{
     protected:
         void checkBody(const Body3DComponent& body) const;
 
+        void applyAllowedDOFs(JPH::EAllowedDOFs allowedDOFs);
+
         const JPH::BodyLockInterface& getBodyLockInterface() const;
         JPH::BodyInterface& getBodyInterface() const;
 

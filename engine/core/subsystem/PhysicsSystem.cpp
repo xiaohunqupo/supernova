@@ -1008,6 +1008,8 @@ void PhysicsSystem::createGenericJoltBody(Entity entity, Body3DComponent& body, 
 
     JPH::BodyCreationSettings settings(shape, JPH::Vec3(0.0, 0.0, 0.0), JPH::Quat::sIdentity(), joltType, layer);
     settings.mMotionQuality = getBody3DMotionQualityToJolt(body.motionQuality);
+    settings.mGravityFactor = body.gravityFactor;
+    settings.mAllowedDOFs = body.allowedDOFs;
 
     JPH::BodyInterface &body_interface = world3D.GetBodyInterface();
 

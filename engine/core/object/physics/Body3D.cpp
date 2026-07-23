@@ -463,18 +463,34 @@ void Body3D::setCollideKinematicVsNonDynamic(bool collideKinematicVsNonDynamic){
     getJoltBodyWrite().SetCollideKinematicVsNonDynamic(collideKinematicVsNonDynamic);
 }
 
+void Body3D::applyAllowedDOFs(JPH::EAllowedDOFs allowedDOFs){
+    if (allowedDOFs == JPH::EAllowedDOFs::None){
+        Log::error("Body3D allowed DOFs cannot be empty (Jolt forbids it). Use a static or kinematic body, or lock movement with setGravityFactor(0).");
+        return;
+    }
+
+    Body3DComponent& body = getComponent<Body3DComponent>();
+    body.allowedDOFs = allowedDOFs;
+
+    if (!body.body.IsInvalid()){
+        JPH::Body& jbody = getJoltBodyWrite();
+        JPH::MotionProperties* motionProperties = jbody.GetMotionPropertiesUnchecked();
+        if (motionProperties){
+            motionProperties->SetMassProperties(allowedDOFs, jbody.GetShape()->GetMassProperties());
+        }
+    }
+}
+
 void Body3D::setAllowedDOFsAll(){
-    JPH::Body& jbody = getJoltBodyWrite();
-    jbody.GetMotionProperties()->SetMassProperties(JPH::EAllowedDOFs::All, jbody.GetShape()->GetMassProperties());
+    applyAllowedDOFs(JPH::EAllowedDOFs::All);
 }
 
 void Body3D::setAllowedDOFs2DPlane(){
-    JPH::Body& jbody = getJoltBodyWrite();
-    jbody.GetMotionProperties()->SetMassProperties(JPH::EAllowedDOFs::Plane2D, jbody.GetShape()->GetMassProperties());
+    applyAllowedDOFs(JPH::EAllowedDOFs::Plane2D);
 }
 
 void Body3D::setAllowedDOFs(bool translationX, bool translationY, bool translationZ, bool rotationX, bool rotationY, bool rotationZ){
-    JPH::EAllowedDOFs allowedDOFs;
+    JPH::EAllowedDOFs allowedDOFs = JPH::EAllowedDOFs::None;
 
     if (translationX){
         allowedDOFs |= JPH::EAllowedDOFs::TranslationX;
@@ -495,8 +511,7 @@ void Body3D::setAllowedDOFs(bool translationX, bool translationY, bool translati
         allowedDOFs |= JPH::EAllowedDOFs::RotationZ;
     }
 
-    JPH::Body& jbody = getJoltBodyWrite();
-    jbody.GetMotionProperties()->SetMassProperties(allowedDOFs, jbody.GetShape()->GetMassProperties());
+    applyAllowedDOFs(allowedDOFs);
 }
 
 float Body3D::getMass() const{
@@ -526,11 +541,19 @@ void Body3D::setOverrideMassAndInertia(Vector3 solidBoxSize, float solidBoxDensi
 }
 
 float Body3D::getGravityFactor() const{
-    return getJoltBody().GetMotionProperties()->GetGravityFactor();
+    return getComponent<Body3DComponent>().gravityFactor;
 }
 
 void Body3D::setGravityFactor(float gravityFactor){
-    getJoltBodyWrite().GetMotionProperties()->SetGravityFactor(gravityFactor);
+    Body3DComponent& body = getComponent<Body3DComponent>();
+    body.gravityFactor = gravityFactor;
+
+    if (!body.body.IsInvalid()){
+        JPH::MotionProperties* motionProperties = getJoltBodyWrite().GetMotionPropertiesUnchecked();
+        if (motionProperties){
+            motionProperties->SetGravityFactor(gravityFactor);
+        }
+    }
 }
 
 void Body3D::setBitsFilter(uint16_t category, uint16_t mask){
