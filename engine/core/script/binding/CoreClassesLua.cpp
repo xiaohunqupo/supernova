@@ -107,6 +107,14 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
+        .beginNamespace("MaterialAlphaMode")
+        .addVariable("AUTO", MaterialAlphaMode::AUTO)
+        .addVariable("OPAQUE", MaterialAlphaMode::OPAQUE)
+        .addVariable("MASK", MaterialAlphaMode::MASK)
+        .addVariable("BLEND", MaterialAlphaMode::BLEND)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
         .beginNamespace("TextureFilter")
         .addVariable("NEAREST", TextureFilter::NEAREST)
         .addVariable("LINEAR", TextureFilter::LINEAR)
@@ -529,6 +537,8 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addProperty("baseColorFactor", &Material::baseColorFactor)
         .addProperty("metallicFactor", &Material::metallicFactor)
         .addProperty("roughnessFactor", &Material::roughnessFactor)
+        .addProperty("alphaMode", &Material::alphaMode)
+        .addProperty("alphaCutoff", &Material::alphaCutoff)
         .addProperty("emissiveFactor", &Material::emissiveFactor)
         .addProperty("baseColorTexture", &Material::baseColorTexture)
         .addProperty("emissiveTexture", &Material::emissiveTexture)

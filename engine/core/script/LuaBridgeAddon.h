@@ -9,6 +9,7 @@
 #include "Input.h"
 #include "FileData.h"
 #include "thread/ResourceProgress.h"
+#include "texture/Material.h"
 
 using namespace doriax;
 
@@ -48,6 +49,7 @@ namespace luabridge
     template<> struct Stack<PrimitiveType> : EnumWrapper<PrimitiveType>{};
     template<> struct Stack<CullingMode> : EnumWrapper<CullingMode>{};
     template<> struct Stack<WindingOrder> : EnumWrapper<WindingOrder>{};
+    template<> struct Stack<MaterialAlphaMode> : EnumWrapper<MaterialAlphaMode>{};
     template<> struct Stack<TextureFilter> : EnumWrapper<TextureFilter>{};
     template<> struct Stack<TextureWrap> : EnumWrapper<TextureWrap>{};
     template<> struct Stack<AdMobRating> : EnumWrapper<AdMobRating>{};
