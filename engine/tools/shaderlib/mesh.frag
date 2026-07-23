@@ -62,6 +62,15 @@ uniform u_fs_pbrParams {
     #ifndef MATERIAL_UNLIT
         float metallicFactor;
         float roughnessFactor;
+    #elif defined(ALPHA_MASK)
+        // Preserve the CPU Material prefix offsets used by the lit block.
+        float alphaMaskMetallicPadding;
+        float alphaMaskRoughnessPadding;
+    #endif
+    #ifdef ALPHA_MASK
+        float alphaCutoff;
+    #endif
+    #ifndef MATERIAL_UNLIT
         vec3 emissiveFactor;
     #endif
 } pbrParams;
@@ -210,6 +219,16 @@ void main() {
 
     #ifdef HAS_TERRAIN
         baseColor = getTerrainColor(baseColor);
+    #endif
+
+    #ifdef ALPHA_MASK
+        if (baseColor.a < pbrParams.alphaCutoff) {
+            discard;
+        }
+    #endif
+    #if defined(ALPHA_MASK) || defined(ALPHA_OPAQUE)
+        // glTF MASK and OPAQUE both render surviving fragments fully opaque.
+        baseColor.a = 1.0;
     #endif
 
     #ifdef MATERIAL_UNLIT

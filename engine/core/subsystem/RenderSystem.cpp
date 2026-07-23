@@ -26,6 +26,13 @@
 
 using namespace doriax;
 
+namespace {
+    bool usesAlphaMask(const Material& material, bool textureShadow){
+        return material.alphaMode == MaterialAlphaMode::MASK ||
+            (material.alphaMode == MaterialAlphaMode::AUTO && textureShadow);
+    }
+}
+
 uint32_t RenderSystem::pixelsWhite[64];
 uint32_t RenderSystem::pixelsBlack[64];
 uint32_t RenderSystem::pixelsNormal[64];
@@ -1739,6 +1746,12 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         Log::warn("Terrain cannot be an InstancedMesh");
     }
 
+    if (mesh.autoTransparency){
+        // Recompute from every current submesh below. This also clears a stale
+        // transparent flag when a model is reloaded with OPAQUE/MASK materials.
+        mesh.transparent = false;
+    }
+
     std::map<std::string, Buffer*> buffers;
     std::map<std::string, BufferRender*> bufferNameToRender;
     bool allBuffersEmpty = true;
@@ -1978,13 +1991,21 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
 
         // screen-space AO modulates ambient/indirect light on lit submeshes.
         bool p_ssao = scene->isSSAOEnabled() && !p_unlit && (p_punctual || p_ibl);
+        bool p_alphaMask = mesh.submeshes[i].material.alphaMode == MaterialAlphaMode::MASK;
+        bool p_alphaOpaque = mesh.submeshes[i].material.alphaMode == MaterialAlphaMode::OPAQUE;
+        // AUTO + textureShadow preserves the legacy opt-in for editor-created
+        // materials; explicit glTF modes derive the depth behavior from alphaMode.
+        bool p_depthAlphaMask = usesAlphaMask(mesh.submeshes[i].material, mesh.submeshes[i].textureShadow);
+        bool p_depthTexture = p_depthAlphaMask && mesh.submeshes[i].hasTexCoord1 &&
+            !mesh.submeshes[i].material.baseColorTexture.empty();
 
         mesh.submeshes[i].shaderProperties = ShaderPool::getMeshProperties(
                         p_unlit, p_hasTexture1, p_hasTexture2, p_punctual,
                         p_receiveShadows, p_hasNormal, p_hasNormalMap,
                         p_hasTangent, false, mesh.submeshes[i].hasVertexColor4, mesh.submeshes[i].hasTextureRect,
                         hasFog, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget, mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent,
-                        (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao, p_light2d, p_shadows2d);
+                        (terrain)?true:false, (instmesh)?true:false, p_ibl, p_mirror, p_ssao, p_light2d, p_shadows2d,
+                        p_alphaMask, p_alphaOpaque);
         // a user-forked main shader overrides the built-in Mesh shader; the variant
         // (#define) system, depth/gbuffer passes and bind-slots are unchanged.
         // Priority: component customShader > scene default shader > built-in (empty)
@@ -1995,8 +2016,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         // (SSR uses its own G-buffer shader, built below)
         if ((hasShadows && mesh.castShadows) || scene->isSSAOEnabled()){
             mesh.submeshes[i].depthShaderProperties = ShaderPool::getDepthMeshProperties(
-                mesh.submeshes[i].textureShadow, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget,
-                mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent, (terrain)?true:false, (instmesh)?true:false);
+                p_depthTexture, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget,
+                mesh.submeshes[i].hasMorphNormal, mesh.submeshes[i].hasMorphTangent, (terrain)?true:false, (instmesh)?true:false,
+                p_depthAlphaMask);
             mesh.submeshes[i].depthShader = ShaderPool::get(ShaderType::DEPTH, mesh.submeshes[i].depthShaderProperties);
             if (!mesh.submeshes[i].depthShader->isCreated())
                 return false;
@@ -2110,7 +2132,11 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
         mesh.submeshes[i].needUpdateGBufferTexture = false;
 
         if (mesh.autoTransparency && !mesh.transparent){
-            if (mesh.submeshes[i].material.baseColorTexture.isTransparent() || mesh.submeshes[i].material.baseColorFactor.w != 1.0){
+            const Material& material = mesh.submeshes[i].material;
+            const bool explicitBlend = material.alphaMode == MaterialAlphaMode::BLEND;
+            const bool autoBlend = material.alphaMode == MaterialAlphaMode::AUTO &&
+                (material.baseColorTexture.isTransparent() || material.baseColorFactor.w != 1.0f);
+            if (explicitBlend || autoBlend){
                 mesh.transparent = true;
             }
         }
@@ -2171,6 +2197,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
             ShaderData& depthShaderData = mesh.submeshes[i].depthShader.get()->shaderData;
 
             mesh.submeshes[i].slotVSDepthParams = depthShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_VS_PARAMS);
+            if (p_depthAlphaMask){
+                mesh.submeshes[i].slotFSDepthMaterial = depthShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_FS_MATERIAL);
+            }
 
             if (mesh.submeshes[i].hasSkinning){
                 mesh.submeshes[i].slotVSDepthSkinning = depthShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_VS_SKINNING);
@@ -2179,7 +2208,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                 mesh.submeshes[i].slotVSDepthMorphTarget = depthShaderData.getUniformBlockIndex(UniformBlockType::DEPTH_VS_MORPHTARGET);
             }
 
-            if (mesh.submeshes[i].textureShadow){
+            if (p_depthTexture){
                 if (!loadDepthTexture(mesh.submeshes[i].material, depthShaderData, depthRender)){
                     return false;
                 }
@@ -2218,7 +2247,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                             if (mesh.submeshes[i].hasMorphTarget){
                                 if (attr.first == AttributeType::MORPHTARGET0 || attr.first == AttributeType::MORPHTARGET1 ||
                                     attr.first == AttributeType::MORPHTARGET2 || attr.first == AttributeType::MORPHTARGET3 ||
-                                    attr.first == AttributeType::MORPHTARGET0 || attr.first == AttributeType::MORPHTARGET4 ||
+                                    attr.first == AttributeType::MORPHTARGET4 || attr.first == AttributeType::MORPHTARGET5 ||
                                     attr.first == AttributeType::MORPHTARGET6 || attr.first == AttributeType::MORPHTARGET7 ||
                                     attr.first == AttributeType::MORPHNORMAL0 || attr.first == AttributeType::MORPHNORMAL1 ||
                                     attr.first == AttributeType::MORPHNORMAL2 || attr.first == AttributeType::MORPHNORMAL3 ||
@@ -2235,7 +2264,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                 if (bufferNameToRender.count(attr.second.getBufferName())){
                     if (attr.first == AttributeType::INDEX){
                         depthRender.setIndex(bufferNameToRender[attr.second.getBufferName()], attr.second.getDataType(), attr.second.getOffset());
-                    }else if (attr.first == AttributeType::POSITION){
+                    }else if (attr.first == AttributeType::POSITION || attr.first == AttributeType::TEXCOORD1){
                         depthRender.addAttribute(depthShaderData.getAttrIndex(attr.first), bufferNameToRender[attr.second.getBufferName()], attr.second.getElements(), attr.second.getDataType(), bufferStride[attr.second.getBufferName()], attr.second.getOffset(), attr.second.getNormalized(), attr.second.getPerInstance());
                     }
                     if (mesh.submeshes[i].hasSkinning){
@@ -2246,7 +2275,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint8_t pipeline
                     if (mesh.submeshes[i].hasMorphTarget){
                         if (attr.first == AttributeType::MORPHTARGET0 || attr.first == AttributeType::MORPHTARGET1 ||
                             attr.first == AttributeType::MORPHTARGET2 || attr.first == AttributeType::MORPHTARGET3 ||
-                            attr.first == AttributeType::MORPHTARGET0 || attr.first == AttributeType::MORPHTARGET4 ||
+                            attr.first == AttributeType::MORPHTARGET4 || attr.first == AttributeType::MORPHTARGET5 ||
                             attr.first == AttributeType::MORPHTARGET6 || attr.first == AttributeType::MORPHTARGET7 ||
                             attr.first == AttributeType::MORPHNORMAL0 || attr.first == AttributeType::MORPHNORMAL1 ||
                             attr.first == AttributeType::MORPHNORMAL2 || attr.first == AttributeType::MORPHNORMAL3 ||
@@ -2545,6 +2574,10 @@ bool RenderSystem::drawMesh(MeshComponent& mesh, Transform& transform, CameraCom
 
             if (submeshLit){
                 render.applyUniformBlock(mesh.submeshes[i].slotFSParams, sizeof(float) * 12, &mesh.submeshes[i].material);
+            }else if (mesh.submeshes[i].shaderProperties & (1u << 24)){
+                // Unlit alpha-mask variants include the metallic/roughness padding
+                // and alphaCutoff from the shared CPU material prefix.
+                render.applyUniformBlock(mesh.submeshes[i].slotFSParams, sizeof(float) * 8, &mesh.submeshes[i].material);
             }else{
                 render.applyUniformBlock(mesh.submeshes[i].slotFSParams, sizeof(float) * 4, &mesh.submeshes[i].material);
             }
@@ -2591,11 +2624,14 @@ bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, con
         for (int i = 0; i < mesh.numSubmeshes; i++){
             ObjectRender& depthRender = mesh.submeshes[i].depthRender;
 
-            if (mesh.submeshes[i].needUpdateDepthTexture){
+            if (mesh.submeshes[i].needUpdateDepthTexture &&
+                (mesh.submeshes[i].depthShaderProperties & (1u << 0))){
                 ShaderData& depthShaderData = mesh.submeshes[i].depthShader.get()->shaderData;
                 if (loadDepthTexture(mesh.submeshes[i].material, depthShaderData, mesh.submeshes[i].depthRender)){
                     mesh.submeshes[i].needUpdateDepthTexture = false;
                 }
+            }else if (mesh.submeshes[i].needUpdateDepthTexture){
+                mesh.submeshes[i].needUpdateDepthTexture = false;
             }
 
             if (!depthRender.beginDraw(PIP_DEPTH)){
@@ -2614,6 +2650,12 @@ bool RenderSystem::drawMeshDepth(MeshComponent& mesh, const float cameraFar, con
 
             //model, mvp matrix
             depthRender.applyUniformBlock(mesh.submeshes[i].slotVSDepthParams, sizeof(float) * 32, &vsDepthParams);
+
+            if (mesh.submeshes[i].slotFSDepthMaterial != -1){
+                const Material& material = mesh.submeshes[i].material;
+                Vector4 alphaParams(material.baseColorFactor.w, material.alphaCutoff, 0.0f, 0.0f);
+                depthRender.applyUniformBlock(mesh.submeshes[i].slotFSDepthMaterial, sizeof(Vector4), &alphaParams);
+            }
 
             if (mesh.submeshes[i].hasSkinning){
                 depthRender.applyUniformBlock(mesh.submeshes[i].slotVSDepthSkinning, sizeof(float) * 16 * MAX_BONES + (sizeof(float) * 4), &mesh.bonesMatrix);
@@ -2935,7 +2977,11 @@ bool RenderSystem::drawMeshGBuffer(MeshComponent& mesh, const float cameraFar, c
         // composite can exactly replace sky IBL; local probes need a deferred
         // cubemap array to be reconstructed per pixel, so they use additive SSR.
         float iblSource = mesh.submeshes[i].hasIBL ? (hasLocalProbe ? 1.0f : 0.5f) : 0.0f;
-        mat.params = Vector4(mesh.submeshes[i].material.roughnessFactor, mesh.submeshes[i].material.metallicFactor, iblSource, mesh.submeshes[i].textureShadow ? 1.0f : 0.0f);
+        const Material& material = mesh.submeshes[i].material;
+        const float alphaCutoff = usesAlphaMask(material, mesh.submeshes[i].textureShadow)
+            ? material.alphaCutoff
+            : -1.0f;
+        mat.params = Vector4(material.roughnessFactor, material.metallicFactor, iblSource, alphaCutoff);
         mat.baseColorFactor = mesh.submeshes[i].material.baseColorFactor;
         gbufferRender.applyUniformBlock(mesh.submeshes[i].slotFSGBufferMaterial, sizeof(fs_gbuffer_material_t), &mat);
 
@@ -3405,6 +3451,7 @@ void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh, bool clearAss
         submesh.slotVSTerrain = -1;
 
         submesh.slotVSDepthParams = -1;
+        submesh.slotFSDepthMaterial = -1;
         submesh.slotVSDepthSkinning = -1;
         submesh.slotVSDepthMorphTarget = -1;
         submesh.slotVSDepthTerrain = -1;
@@ -5516,6 +5563,27 @@ void RenderSystem::update(double dt){
             }
 
             for (int s = 0; s < mesh.numSubmeshes; s++){
+                const MaterialAlphaMode alphaMode = mesh.submeshes[s].material.alphaMode;
+
+                // Explicit alpha modes own the derived shadow-cutout state. AUTO
+                // remains the compatibility path for setCastShadowsWithTexture().
+                if (alphaMode != MaterialAlphaMode::AUTO){
+                    const bool expectedTextureShadow = alphaMode == MaterialAlphaMode::MASK;
+                    if (mesh.submeshes[s].textureShadow != expectedTextureShadow){
+                        mesh.submeshes[s].textureShadow = expectedTextureShadow;
+                        mesh.needReload = true;
+                    }
+                }
+
+                // Alpha mode can be changed directly by scripts/generated code, so
+                // shader variant reconciliation must not depend on a texture update.
+                const bool shaderAlphaMask = (mesh.submeshes[s].shaderProperties & (1u << 24)) != 0;
+                const bool shaderAlphaOpaque = (mesh.submeshes[s].shaderProperties & (1u << 25)) != 0;
+                if (shaderAlphaMask != (alphaMode == MaterialAlphaMode::MASK) ||
+                    shaderAlphaOpaque != (alphaMode == MaterialAlphaMode::OPAQUE)) {
+                    mesh.needReload = true;
+                }
+
                 if (mesh.submeshes[s].needUpdateTexture){
                     if (terrain){
                         transform.needUpdate = true;
@@ -5544,6 +5612,20 @@ void RenderSystem::update(double dt){
                             mesh.needReload = true;
                         }
                     }
+
+                }
+            }
+
+            if (mesh.autoTransparency){
+                bool expectedTransparent = false;
+                for (int s = 0; s < mesh.numSubmeshes && !expectedTransparent; s++){
+                    const Material& material = mesh.submeshes[s].material;
+                    expectedTransparent = material.alphaMode == MaterialAlphaMode::BLEND ||
+                        (material.alphaMode == MaterialAlphaMode::AUTO &&
+                         (material.baseColorTexture.isTransparent() || material.baseColorFactor.w != 1.0f));
+                }
+                if (mesh.transparent != expectedTransparent){
+                    mesh.needReload = true;
                 }
             }
 

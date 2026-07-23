@@ -120,6 +120,7 @@ namespace doriax{
         SKY_VS_PARAMS,
         SKY_FS_PARAMS,
         DEPTH_VS_PARAMS,
+        DEPTH_FS_MATERIAL,
         GBUFFER_VS_PARAMS,
         GBUFFER_FS_MATERIAL,
         SPRITE_VS_PARAMS,

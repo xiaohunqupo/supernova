@@ -1112,6 +1112,138 @@ int MeshSystem::convertGLTFByteIndicesToShort(const tinygltf::Accessor& indexAcc
     return static_cast<int>(model.gltfModel->bufferViews.size()) - 1;
 }
 
+int MeshSystem::materializeGLTFSparseAccessor(tinygltf::Accessor& accessor, ModelComponent& model){
+    // A sparse accessor may omit bufferView entirely; in that case its dense base is all zeroes.
+    // GPU vertex buffers cannot consume the sparse index/value representation directly, so expand
+    // it once into a tightly packed synthetic buffer and update the cached tinygltf accessor. The
+    // updated accessor is then reused by later instances of the same pooled model.
+    if (!model.gltfModel || !accessor.sparse.isSparse) {
+        return accessor.bufferView;
+    }
+
+    const int componentSize = tinygltf::GetComponentSizeInBytes(static_cast<uint32_t>(accessor.componentType));
+    const int componentCount = tinygltf::GetNumComponentsInType(static_cast<uint32_t>(accessor.type));
+    if (componentSize <= 0 || componentCount <= 0 || accessor.count == 0 ||
+            accessor.count > std::numeric_limits<size_t>::max() / static_cast<size_t>(componentSize * componentCount)) {
+        Log::warn("Cannot materialize invalid sparse GLTF accessor");
+        return -1;
+    }
+
+    const size_t elementSize = static_cast<size_t>(componentSize) * static_cast<size_t>(componentCount);
+    const size_t denseSize = accessor.count * elementSize;
+    tinygltf::Buffer denseBuffer;
+    denseBuffer.data.assign(denseSize, 0);
+
+    auto validViewRange = [&](const tinygltf::BufferView& view, size_t relativeOffset, size_t bytes) -> bool {
+        if (!isValidGLTFIndex(view.buffer, model.gltfModel->buffers) ||
+                relativeOffset > view.byteLength || bytes > view.byteLength - relativeOffset) {
+            return false;
+        }
+        const std::vector<unsigned char>& data = model.gltfModel->buffers[view.buffer].data;
+        return view.byteOffset <= data.size() && relativeOffset <= data.size() - view.byteOffset &&
+               bytes <= data.size() - view.byteOffset - relativeOffset;
+    };
+
+    // Copy the optional dense base while removing any source byte stride.
+    if (accessor.bufferView >= 0) {
+        if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
+            Log::warn("Sparse GLTF accessor has invalid base buffer view %i", accessor.bufferView);
+            return -1;
+        }
+        const tinygltf::BufferView& baseView = model.gltfModel->bufferViews[accessor.bufferView];
+        const int baseStride = accessor.ByteStride(baseView);
+        if (baseStride < static_cast<int>(elementSize) ||
+                accessor.count - 1 > (std::numeric_limits<size_t>::max() - elementSize) / static_cast<size_t>(baseStride)) {
+            Log::warn("Sparse GLTF accessor has invalid base stride");
+            return -1;
+        }
+        const size_t baseBytes = (accessor.count - 1) * static_cast<size_t>(baseStride) + elementSize;
+        if (!validViewRange(baseView, accessor.byteOffset, baseBytes)) {
+            Log::warn("Sparse GLTF accessor base range is out of bounds");
+            return -1;
+        }
+        const std::vector<unsigned char>& baseData = model.gltfModel->buffers[baseView.buffer].data;
+        const unsigned char* base = baseData.data() + baseView.byteOffset + accessor.byteOffset;
+        for (size_t i = 0; i < accessor.count; i++) {
+            std::memcpy(denseBuffer.data.data() + i * elementSize,
+                        base + i * static_cast<size_t>(baseStride), elementSize);
+        }
+    } else if (accessor.bufferView != -1) {
+        Log::warn("Sparse GLTF accessor has invalid base buffer view %i", accessor.bufferView);
+        return -1;
+    }
+
+    const tinygltf::Accessor::Sparse& sparse = accessor.sparse;
+    if (sparse.count <= 0 || static_cast<size_t>(sparse.count) > accessor.count ||
+            !isValidGLTFIndex(sparse.indices.bufferView, model.gltfModel->bufferViews) ||
+            !isValidGLTFIndex(sparse.values.bufferView, model.gltfModel->bufferViews)) {
+        Log::warn("Sparse GLTF accessor has invalid sparse metadata");
+        return -1;
+    }
+
+    size_t indexSize = 0;
+    if (sparse.indices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+        indexSize = sizeof(uint8_t);
+    } else if (sparse.indices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+        indexSize = sizeof(uint16_t);
+    } else if (sparse.indices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+        indexSize = sizeof(uint32_t);
+    } else {
+        Log::warn("Sparse GLTF accessor has invalid index component type %i", sparse.indices.componentType);
+        return -1;
+    }
+
+    const size_t sparseCount = static_cast<size_t>(sparse.count);
+    if (sparseCount > std::numeric_limits<size_t>::max() / elementSize ||
+            sparseCount > std::numeric_limits<size_t>::max() / indexSize) {
+        Log::warn("Sparse GLTF accessor size overflows");
+        return -1;
+    }
+
+    const tinygltf::BufferView& indexView = model.gltfModel->bufferViews[sparse.indices.bufferView];
+    const tinygltf::BufferView& valueView = model.gltfModel->bufferViews[sparse.values.bufferView];
+    if (!validViewRange(indexView, sparse.indices.byteOffset, sparseCount * indexSize) ||
+            !validViewRange(valueView, sparse.values.byteOffset, sparseCount * elementSize)) {
+        Log::warn("Sparse GLTF accessor index/value range is out of bounds");
+        return -1;
+    }
+
+    const std::vector<unsigned char>& indexData = model.gltfModel->buffers[indexView.buffer].data;
+    const std::vector<unsigned char>& valueData = model.gltfModel->buffers[valueView.buffer].data;
+    const unsigned char* indices = indexData.data() + indexView.byteOffset + sparse.indices.byteOffset;
+    const unsigned char* values = valueData.data() + valueView.byteOffset + sparse.values.byteOffset;
+
+    for (size_t i = 0; i < sparseCount; i++) {
+        uint32_t denseIndex = 0;
+        std::memcpy(&denseIndex, indices + i * indexSize, indexSize);
+        if (denseIndex >= accessor.count) {
+            Log::warn("Sparse GLTF accessor index %u is out of bounds", denseIndex);
+            return -1;
+        }
+        std::memcpy(denseBuffer.data.data() + static_cast<size_t>(denseIndex) * elementSize,
+                    values + i * elementSize, elementSize);
+    }
+
+    model.gltfModel->buffers.push_back(std::move(denseBuffer));
+    const int denseBufferIndex = static_cast<int>(model.gltfModel->buffers.size()) - 1;
+
+    tinygltf::BufferView denseView;
+    denseView.buffer = denseBufferIndex;
+    denseView.byteOffset = 0;
+    denseView.byteLength = denseSize;
+    denseView.byteStride = 0;
+    denseView.target = 34962; // GL_ARRAY_BUFFER
+    denseView.name = "sparse_accessor_synth";
+    model.gltfModel->bufferViews.push_back(std::move(denseView));
+    const int denseViewIndex = static_cast<int>(model.gltfModel->bufferViews.size()) - 1;
+
+    accessor.bufferView = denseViewIndex;
+    accessor.byteOffset = 0;
+    accessor.sparse.isSparse = false;
+    accessor.sparse.count = 0;
+    return denseViewIndex;
+}
+
 int MeshSystem::bakeGLTFTransformedAttribute(const tinygltf::Accessor& accessor, const Matrix4& matrix, const Matrix3& normalMatrix, bool isNormal, ModelComponent& model){
     // Bakes a node's world transform into a copy of a POSITION/NORMAL attribute, into a synthetic
     // tightly-packed FLOAT VEC3 buffer/view. Used by flattened previews and static merged models.
@@ -3060,10 +3192,10 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
         }
         loadedBuffers.clear();
         if (model.gltfModel) {
-            // One synthetic view per primitive for byte-index expansion, plus three more (position,
-            // normal, tangent) when baking node transforms. Reserve so appends never reallocate and
-            // invalidate the non-owning external-buffer pointers.
-            const size_t synthPerSubmesh = bakingFlatten ? 4 : 1;
+            // One synthetic view per primitive for byte-index expansion, up to three more (position,
+            // normal, tangent) when baking node transforms, and up to eight supported sparse morph
+            // attributes. Reserve so appends never invalidate non-owning external-buffer pointers.
+            const size_t synthPerSubmesh = (bakingFlatten ? 4 : 1) + MAX_MORPHTARGETS;
             model.gltfModel->buffers.reserve(model.gltfModel->buffers.size() + mesh.numSubmeshes * synthPerSubmesh);
             model.gltfModel->bufferViews.reserve(model.gltfModel->bufferViews.size() + mesh.numSubmeshes * synthPerSubmesh);
         }
@@ -3166,11 +3298,12 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                                     : getGLTFMeshGlobalMatrix(nodeIdx, model, nodesParent).determinant();
             mesh.windingOrder = (windingDet < 0.0) ? WindingOrder::CW : WindingOrder::CCW;
 
-            // 8-bit indices expand to 16-bit synthetic buffers/views (one per primitive at most).
-            // Reserve up-front so appends never reallocate and invalidate external-buffer pointers.
+            // Reserve one synthetic byte-index view plus up to eight supported sparse morph views
+            // per primitive so appends never invalidate non-owning external-buffer pointers.
             if (model.gltfModel) {
-                model.gltfModel->buffers.reserve(model.gltfModel->buffers.size() + mesh.numSubmeshes);
-                model.gltfModel->bufferViews.reserve(model.gltfModel->bufferViews.size() + mesh.numSubmeshes);
+                const size_t synthPerSubmesh = 1 + MAX_MORPHTARGETS;
+                model.gltfModel->buffers.reserve(model.gltfModel->buffers.size() + mesh.numSubmeshes * synthPerSubmesh);
+                model.gltfModel->bufferViews.reserve(model.gltfModel->bufferViews.size() + mesh.numSubmeshes * synthPerSubmesh);
             }
         }
 
@@ -3274,11 +3407,24 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                 mesh.submeshes[i].material.metallicFactor  = mat->pbrMetallicRoughness.metallicFactor;
                 mesh.submeshes[i].material.roughnessFactor = mat->pbrMetallicRoughness.roughnessFactor;
 
+                if (mat->alphaMode == "MASK") {
+                    mesh.submeshes[i].material.alphaMode = MaterialAlphaMode::MASK;
+                    mesh.submeshes[i].material.alphaCutoff = static_cast<float>(mat->alphaCutoff);
+                } else if (mat->alphaMode == "BLEND") {
+                    mesh.submeshes[i].material.alphaMode = MaterialAlphaMode::BLEND;
+                } else {
+                    mesh.submeshes[i].material.alphaMode = MaterialAlphaMode::OPAQUE;
+                }
+
                 mesh.submeshes[i].material.emissiveFactor = Vector3(
                     mat->emissiveFactor[0],
                     mat->emissiveFactor[1],
                     mat->emissiveFactor[2]);
             }
+
+            // Alpha-masked glTF materials need the base-color alpha in the depth
+            // pass as well, otherwise their invisible texels cast solid shadows.
+            mesh.submeshes[i].textureShadow = mat && mat->alphaMode == "MASK";
 
             int indexStride = (indexType == AttributeDataType::UNSIGNED_SHORT) ? sizeof(uint16_t) : sizeof(uint32_t);
 
@@ -3431,6 +3577,14 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             int  morphIndex    = 0;
 
             for (auto& morphs : primitive.targets) {
+                // Capacity must follow semantics in the prefix actually loaded. A later,
+                // truncated target must not reduce the shader's attribute capacity.
+                const int supportedMorphTargets = (morphNormals && morphTangents) ? 2
+                                                : (morphNormals || morphTangents) ? 4
+                                                : MAX_MORPHTARGETS;
+                if (morphIndex >= supportedMorphTargets) {
+                    break;
+                }
                 for (auto& attribMorph : morphs) {
                     morphTargets = true;
 
@@ -3439,7 +3593,10 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                         continue;
                     }
 
-                    const tinygltf::Accessor& accessor = model.gltfModel->accessors[attribMorph.second];
+                    tinygltf::Accessor& accessor = model.gltfModel->accessors[attribMorph.second];
+                    if (accessor.sparse.isSparse && materializeGLTFSparseAccessor(accessor, model) < 0) {
+                        continue;
+                    }
                     if (!isValidGLTFIndex(accessor.bufferView, model.gltfModel->bufferViews)) {
                         Log::warn("Invalid GLTF buffer view index %i for morph target %s", accessor.bufferView, attribMorph.first.c_str());
                         continue;
@@ -3476,15 +3633,16 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
                     if (attribMorph.first == "POSITION") {
                         if      (morphIndex == 0) { attType = AttributeType::MORPHTARGET0; foundMorph = true; }
                         else if (morphIndex == 1) { attType = AttributeType::MORPHTARGET1; foundMorph = true; }
-                        if ((!morphNormals && morphTangents) || (morphNormals && !morphTangents)) {
+                        else if ((!morphNormals && morphTangents) || (morphNormals && !morphTangents)) {
                             if      (morphIndex == 2) { attType = AttributeType::MORPHTARGET2; foundMorph = true; }
                             else if (morphIndex == 3) { attType = AttributeType::MORPHTARGET3; foundMorph = true; }
-                            if (!morphNormals && !morphTangents) {
-                                if      (morphIndex == 4) { attType = AttributeType::MORPHTARGET4; foundMorph = true; }
-                                else if (morphIndex == 5) { attType = AttributeType::MORPHTARGET5; foundMorph = true; }
-                                else if (morphIndex == 6) { attType = AttributeType::MORPHTARGET6; foundMorph = true; }
-                                else if (morphIndex == 7) { attType = AttributeType::MORPHTARGET7; foundMorph = true; }
-                            }
+                        } else if (!morphNormals && !morphTangents) {
+                            if      (morphIndex == 2) { attType = AttributeType::MORPHTARGET2; foundMorph = true; }
+                            else if (morphIndex == 3) { attType = AttributeType::MORPHTARGET3; foundMorph = true; }
+                            else if (morphIndex == 4) { attType = AttributeType::MORPHTARGET4; foundMorph = true; }
+                            else if (morphIndex == 5) { attType = AttributeType::MORPHTARGET5; foundMorph = true; }
+                            else if (morphIndex == 6) { attType = AttributeType::MORPHTARGET6; foundMorph = true; }
+                            else if (morphIndex == 7) { attType = AttributeType::MORPHTARGET7; foundMorph = true; }
                         }
                     }
                     if (attribMorph.first == "NORMAL") {

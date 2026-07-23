@@ -10,12 +10,24 @@
 
 namespace doriax{
 
+    // AUTO preserves Doriax's historical texture-alpha detection for materials
+    // created in the editor. The other values map directly to glTF alphaMode.
+    // The editor's generic enum property path stores enum values as int, matching
+    // the engine's other editable enums.
+    enum class MaterialAlphaMode {
+        AUTO,
+        OPAQUE,
+        MASK,
+        BLEND
+    };
+
     struct DORIAX_API Material{
         // --- start shader part
         Vector4 baseColorFactor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);  // linear color
         float metallicFactor = 1.0f;
         float roughnessFactor = 1.0f;
-        uint8_t _pad_24[8];
+        float alphaCutoff = 0.5f;
+        uint8_t _pad_28[4];
         Vector3 emissiveFactor = Vector3(0.0f, 0.0f, 0.0f);  // linear color
         uint8_t _pad_44[4];
         // --- end shader part
@@ -25,6 +37,8 @@ namespace doriax{
         Texture metallicRoughnessTexture;
         Texture occlusionTexture;
         Texture normalTexture;
+
+        MaterialAlphaMode alphaMode = MaterialAlphaMode::AUTO;
 
         // glTF texCoord index (UV set) each texture samples: 0 = primary (a_texcoord1),
         // 1 = secondary (a_texcoord2). Only two sets are supported; higher indices are
@@ -42,12 +56,14 @@ namespace doriax{
             return baseColorFactor == other.baseColorFactor &&
                    metallicFactor == other.metallicFactor &&
                    roughnessFactor == other.roughnessFactor &&
+                   alphaCutoff == other.alphaCutoff &&
                    emissiveFactor == other.emissiveFactor &&
                    baseColorTexture == other.baseColorTexture &&
                    emissiveTexture == other.emissiveTexture &&
                    metallicRoughnessTexture == other.metallicRoughnessTexture &&
                    occlusionTexture == other.occlusionTexture &&
                    normalTexture == other.normalTexture &&
+                   alphaMode == other.alphaMode &&
                    baseColorTexCoord == other.baseColorTexCoord &&
                    metallicRoughnessTexCoord == other.metallicRoughnessTexCoord &&
                    occlusionTexCoord == other.occlusionTexCoord &&

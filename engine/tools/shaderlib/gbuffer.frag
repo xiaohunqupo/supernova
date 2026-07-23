@@ -14,7 +14,7 @@ in vec2 v_projZW;
 in vec3 v_normal;
 
 uniform u_fs_gbufferMaterial {
-    vec4 params;        // x = roughness, y = metallic, z = IBL source, w = alpha-cutout
+    vec4 params;        // x = roughness, y = metallic, z = IBL source, w = alpha cutoff (-1 = disabled)
     vec4 baseColorFactor;
 } gbufferMaterial;
 
@@ -38,12 +38,11 @@ void main() {
     vec4 baseColor = gbufferMaterial.baseColorFactor;
     #if defined(HAS_BASECOLOR_TEXTURE)
         vec4 texColor = texture(sampler2D(u_baseColorTexture, u_baseColor_smp), v_uv1);
-        // alpha cutout (only for cutout materials, matching the depth/shadow pass)
-        if (gbufferMaterial.params.w > 0.5 && texColor.a < 0.5) {
-            discard;
-        }
         baseColor *= sRGBToLinear(texColor);
     #endif
+    if (gbufferMaterial.params.w >= 0.0 && baseColor.a < gbufferMaterial.params.w) {
+        discard;
+    }
 
     float roughness = gbufferMaterial.params.x;
     float metallic  = gbufferMaterial.params.y;

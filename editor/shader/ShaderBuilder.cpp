@@ -264,6 +264,8 @@ void editor::ShaderBuilder::addMeshPropertyDefinitions(std::vector<shadercompile
     if (prop & (1 << 21)) defs.push_back({"USE_SSAO", "1"});                  // 'Sao'
     if (prop & (1 << 22)) defs.push_back({"USE_LIGHT2D", "1"});               // 'L2d'
     if (prop & (1 << 23)) defs.push_back({"USE_SHADOWS_2D", "1"});            // 'S2d'
+    if (prop & (1 << 24)) defs.push_back({"ALPHA_MASK", "1"});                 // 'Ams'
+    if (prop & (1 << 25)) defs.push_back({"ALPHA_OPAQUE", "1"});               // 'Aop'
 }
 
 void editor::ShaderBuilder::addDepthMeshPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {
@@ -274,6 +276,7 @@ void editor::ShaderBuilder::addDepthMeshPropertyDefinitions(std::vector<shaderco
     if (prop & (1 << 4))  defs.push_back({"HAS_MORPHTANGENT", "1"});  // 'Mtg'
     if (prop & (1 << 5))  defs.push_back({"HAS_TERRAIN", "1"});       // 'Ter'
     if (prop & (1 << 6))  defs.push_back({"HAS_INSTANCING", "1"});    // 'Ist'
+    if (prop & (1 << 7))  defs.push_back({"ALPHA_MASK", "1"});         // 'Ams'
 }
 
 void editor::ShaderBuilder::addGBufferMeshPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {
@@ -466,13 +469,13 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
         args.defines.push_back({"MAX_SHADOW_ATLAS_SLOTS", std::to_string(MAX_SHADOW_ATLAS_SLOTS)});
         args.defines.push_back({"MAX_POINT_SHADOW_ATLAS_SLOTS", std::to_string(MAX_POINT_SHADOW_ATLAS_SLOTS)});
         args.defines.push_back({"MAX_SHADOWCASCADES", std::to_string(MAX_SHADOWCASCADES)});
-        args.defines.push_back({"MAX_BONES", "70"});
+        args.defines.push_back({"MAX_BONES", std::to_string(MAX_BONES)});
     }
     if (shaderType == ShaderType::DEPTH){
-        args.defines.push_back({"MAX_BONES", "70"});
+        args.defines.push_back({"MAX_BONES", std::to_string(MAX_BONES)});
     }
     if (shaderType == ShaderType::GBUFFER){
-        args.defines.push_back({"MAX_BONES", "70"});
+        args.defines.push_back({"MAX_BONES", std::to_string(MAX_BONES)});
         // suppresses the terrain texture-coordinate varyings in the shared includes
         // (the G-buffer fragment does not consume them); mirrors depth.vert
         args.defines.push_back({"DEPTH_SHADER", "1"});

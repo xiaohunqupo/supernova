@@ -346,8 +346,8 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
 
 int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
     switch (shaderType) {
-        case ShaderType::MESH:   return 24;
-        case ShaderType::DEPTH:  return 7;
+        case ShaderType::MESH:   return 26;
+        case ShaderType::DEPTH:  return 8;
         case ShaderType::GBUFFER: return 9;
         case ShaderType::UI:     return 4;
         case ShaderType::POINTS: return 4;
@@ -391,6 +391,8 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 21: return shortName ? "Sao" : "SSAO";
             case 22: return shortName ? "L2d" : "Light 2D";
             case 23: return shortName ? "S2d" : "Shadow 2D";
+            case 24: return shortName ? "Ams" : "Alpha Mask";
+            case 25: return shortName ? "Aop" : "Alpha Opaque";
         }
     } else if (shaderType == ShaderType::DEPTH) {
         switch (bit) {
@@ -401,6 +403,7 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 4: return shortName ? "Mtg" : "Morph Tangent";
             case 5: return shortName ? "Ter" : "Terrain";
             case 6: return shortName ? "Ist" : "Instancing";
+            case 7: return shortName ? "Ams" : "Alpha Mask";
         }
     } else if (shaderType == ShaderType::GBUFFER) {
         switch (bit) {
@@ -609,7 +612,8 @@ uint32_t ShaderPool::getMeshProperties(
     bool punctual, bool shadows, bool normals, bool normalMap,
     bool tangents, bool vertexColorVec3, bool vertexColorVec4, bool textureRect,
     bool fog, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent,
-    bool terrain, bool instanced, bool ibl, bool mirror, bool ssao, bool light2d, bool shadows2d){
+    bool terrain, bool instanced, bool ibl, bool mirror, bool ssao, bool light2d, bool shadows2d,
+    bool alphaMask, bool alphaOpaque){
     uint32_t prop = 0;
 
     prop |= unlit            ? (1 <<  0) : 0;
@@ -637,11 +641,13 @@ uint32_t ShaderPool::getMeshProperties(
     prop |= ssao             ? (1 << 21) : 0;
     prop |= light2d          ? (1 << 22) : 0;
     prop |= shadows2d        ? (1 << 23) : 0;
+    prop |= alphaMask        ? (1 << 24) : 0;
+    prop |= alphaOpaque      ? (1 << 25) : 0;
 
     return prop;
 }
 
-uint32_t ShaderPool::getDepthMeshProperties(bool texture, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent, bool terrain, bool instanced){
+uint32_t ShaderPool::getDepthMeshProperties(bool texture, bool skinning, bool morphTarget, bool morphNormal, bool morphTangent, bool terrain, bool instanced, bool alphaMask){
     uint32_t prop = 0;
 
     prop |= texture          ? (1 <<  0) : 0;
@@ -651,6 +657,7 @@ uint32_t ShaderPool::getDepthMeshProperties(bool texture, bool skinning, bool mo
     prop |= morphTangent     ? (1 <<  4) : 0;
     prop |= terrain          ? (1 <<  5) : 0;
     prop |= instanced        ? (1 <<  6) : 0;
+    prop |= alphaMask        ? (1 <<  7) : 0;
 
     return prop;
 }

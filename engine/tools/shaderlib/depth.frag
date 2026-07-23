@@ -9,14 +9,27 @@ in vec2 v_projZW;
     in vec2 v_uv1;
 #endif
 
+#if defined(ALPHA_MASK)
+    uniform u_fs_depthMaterial {
+        vec4 alphaParams; // x = baseColorFactor.a, y = alphaCutoff
+    } depthMaterial;
+#endif
+
 #include "includes/depth_util.glsl"
 
 void main() {
+    #if defined(ALPHA_MASK)
+        float alpha = depthMaterial.alphaParams.x;
+    #endif
     #if defined(HAS_TEXTURE)
         vec4 texColor = texture(sampler2D(u_depthTexture, u_depth_smp), v_uv1);
 
-        // Check the alpha value; discard the fragment if the alpha is below a threshold
-        if (texColor.a < 0.5) {
+        #if defined(ALPHA_MASK)
+            alpha *= texColor.a;
+        #endif
+    #endif
+    #if defined(ALPHA_MASK)
+        if (alpha < depthMaterial.alphaParams.y) {
             discard;
         }
     #endif

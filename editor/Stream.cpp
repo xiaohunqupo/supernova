@@ -2596,6 +2596,8 @@ YAML::Node editor::Stream::encodeMaterial(const Material& material, bool embedTe
     node["baseColorFactor"] = encodeVector4(material.baseColorFactor);
     node["metallicFactor"] = material.metallicFactor;
     node["roughnessFactor"] = material.roughnessFactor;
+    node["alphaCutoff"] = material.alphaCutoff;
+    node["alphaMode"] = static_cast<int>(material.alphaMode);
     node["emissiveFactor"] = encodeVector3(material.emissiveFactor);
 
     // Encode textures using the helper method
@@ -2638,6 +2640,14 @@ Material editor::Stream::decodeMaterial(const YAML::Node& node) {
     material.baseColorFactor = decodeVector4(node["baseColorFactor"]);
     material.metallicFactor = node["metallicFactor"].as<float>();
     material.roughnessFactor = node["roughnessFactor"].as<float>();
+    if (node["alphaCutoff"]) material.alphaCutoff = node["alphaCutoff"].as<float>();
+    if (node["alphaMode"]) {
+        int alphaMode = node["alphaMode"].as<int>();
+        if (alphaMode >= static_cast<int>(MaterialAlphaMode::AUTO) &&
+            alphaMode <= static_cast<int>(MaterialAlphaMode::BLEND)) {
+            material.alphaMode = static_cast<MaterialAlphaMode>(alphaMode);
+        }
+    }
     material.emissiveFactor = decodeVector3(node["emissiveFactor"]);
 
     if (node["baseColorTexture"]) {

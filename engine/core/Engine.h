@@ -81,7 +81,7 @@
 #endif
 
 #ifndef MAX_BONES
-#define MAX_BONES 70
+#define MAX_BONES 128
 #endif
 
 #ifndef MAX_MORPHTARGETS

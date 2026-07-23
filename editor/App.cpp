@@ -1782,7 +1782,8 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     // v14: G-buffer (SSR) terrain fix — gbuffer.vert no longer declares a_texcoord1
     //      for terrain (generates the base-tile UV in-shader), so the terrain G-buffer
     //      pipeline's vertex layout is continuous and passes sokol validation.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v14";
+    // v15: skinning capacity increased to 128 bones; every skinned shader uniform block changed.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v15";
 }
 
 void editor::App::pushTabNotificationStyle(){

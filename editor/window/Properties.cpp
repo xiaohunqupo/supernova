@@ -82,6 +82,13 @@ static std::vector<editor::EnumEntry> entriesPrimitiveType = {
     { (int)PrimitiveType::LINES, "Lines" }
 };
 
+static std::vector<editor::EnumEntry> entriesMaterialAlphaMode = {
+    { (int)MaterialAlphaMode::AUTO, "Auto" },
+    { (int)MaterialAlphaMode::OPAQUE, "Opaque" },
+    { (int)MaterialAlphaMode::MASK, "Mask" },
+    { (int)MaterialAlphaMode::BLEND, "Blend" }
+};
+
 static std::vector<editor::EnumEntry> entriesPivotPreset = {
     { (int)PivotPreset::CENTER, "Center" },
     { (int)PivotPreset::TOP_CENTER, "Top Center" },
@@ -5500,9 +5507,14 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
 
             settingsFactor.onValueChanged = settingsMaterial.onValueChanged;
 
+            RowSettings settingsAlphaMode = settingsMaterial;
+            settingsAlphaMode.enumEntries = &entriesMaterialAlphaMode;
+
             beginTable(cpType, getLabelSize("Met. Roug. Texture"), "submeshes_material_options");
             propertyRow(RowPropertyType::Color4L, cpType, "submeshes["+std::to_string(s)+"].material.baseColorFactor", "Base Color", sceneProject, entities, settingsMaterial);
             propertyRow(RowPropertyType::Texture, cpType, "submeshes["+std::to_string(s)+"].material.baseColorTexture", "Base Texture", sceneProject, entities,settingsMaterial);
+            propertyRow(RowPropertyType::Enum, cpType, "submeshes["+std::to_string(s)+"].material.alphaMode", "Alpha Mode", sceneProject, entities, settingsAlphaMode);
+            propertyRow(RowPropertyType::Float_0_1, cpType, "submeshes["+std::to_string(s)+"].material.alphaCutoff", "Alpha Cutoff", sceneProject, entities, settingsFactor);
             propertyRow(RowPropertyType::Float_0_1, cpType, "submeshes["+std::to_string(s)+"].material.metallicFactor", "Metallic Factor", sceneProject, entities, settingsFactor);
             propertyRow(RowPropertyType::Float_0_1, cpType, "submeshes["+std::to_string(s)+"].material.roughnessFactor", "Roughness Factor", sceneProject, entities, settingsFactor);
             propertyRow(RowPropertyType::Texture, cpType, "submeshes["+std::to_string(s)+"].material.metallicRoughnessTexture", "Met. Roug. Texture", sceneProject, entities, settingsMaterial);

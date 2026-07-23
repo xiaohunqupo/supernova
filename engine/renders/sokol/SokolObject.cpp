@@ -13,7 +13,6 @@
 
 using namespace doriax;
 
-
 SokolObject::SokolObject(){
     pip.id = SG_INVALID_ID;
     depth_pip.id = SG_INVALID_ID;
@@ -375,36 +374,26 @@ bool SokolObject::endLoad(uint8_t pipelines, bool enableFaceCulling, CullingMode
 }
 
 bool SokolObject::beginDraw(PipelineType pipType){
+    sg_pipeline selectedPipeline = pip;
     if (pipType == PipelineType::PIP_DEPTH){
-        if (depth_pip.id == SG_INVALID_ID){
-            return false;
-        }
-        //SokolCmdQueue::add_command_apply_pipeline(depth_pip);
-        sg_apply_pipeline(depth_pip);
+        selectedPipeline = depth_pip;
     }else if (pipType == PipelineType::PIP_GBUFFER){
-        if (gbuffer_pip.id == SG_INVALID_ID){
-            return false;
-        }
-        sg_apply_pipeline(gbuffer_pip);
+        selectedPipeline = gbuffer_pip;
     }else if (pipType == PipelineType::PIP_RTT){
-        if (rtt_pip.id == SG_INVALID_ID){
-            return false;
-        }
-        //SokolCmdQueue::add_command_apply_pipeline(rtt_pip);
-        sg_apply_pipeline(rtt_pip);
+        selectedPipeline = rtt_pip;
     }else if (pipType == PipelineType::PIP_RTT_INVERT){
-        if (rtt_invert_pip.id == SG_INVALID_ID){
-            return false;
-        }
-        sg_apply_pipeline(rtt_invert_pip);
-    }else{
-        if (pip.id == SG_INVALID_ID){
-            return false;
-        }
-        //SokolCmdQueue::add_command_apply_pipeline(pip);
-        sg_apply_pipeline(pip);
+        selectedPipeline = rtt_invert_pip;
     }
 
+    // Deferred resource creation can leave an allocated handle in FAILED state.
+    // Never apply it: doing so would turn one creation error into a cascade of
+    // invalid pipeline, uniform, binding, and draw validation failures.
+    if (selectedPipeline.id == SG_INVALID_ID ||
+        sg_query_pipeline_state(selectedPipeline) != SG_RESOURCESTATE_VALID){
+        return false;
+    }
+
+    sg_apply_pipeline(selectedPipeline);
     return true;
 }
 

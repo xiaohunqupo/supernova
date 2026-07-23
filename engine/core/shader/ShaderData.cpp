@@ -176,6 +176,8 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_fs_skyParams";
     }else if (type == UniformBlockType::DEPTH_VS_PARAMS){
         ustr = "u_vs_depthParams";
+    }else if (type == UniformBlockType::DEPTH_FS_MATERIAL){
+        ustr = "u_fs_depthMaterial";
     }else if (type == UniformBlockType::GBUFFER_VS_PARAMS){
         ustr = "u_vs_gbufferParams";
     }else if (type == UniformBlockType::GBUFFER_FS_MATERIAL){
