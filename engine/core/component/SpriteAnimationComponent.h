@@ -11,8 +11,6 @@
 namespace doriax{
 
     struct DORIAX_API SpriteAnimationComponent{
-        std::string name;
-
         bool loop = true;
 
         unsigned int framesTimeSize = 0;

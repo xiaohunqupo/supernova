@@ -336,7 +336,6 @@ namespace {
     };
 
     static const FastPropertyDescriptor kSpriteAnimationProperties[] = {
-        makeFastProperty<SpriteAnimationComponent, std::string, &SpriteAnimationComponent::name>("name", PropertyType::String, UpdateFlags_None),
         makeFastProperty<SpriteAnimationComponent, bool, &SpriteAnimationComponent::loop>("loop", PropertyType::Bool, UpdateFlags_None),
         makeFastPropertyNoDefault<SpriteAnimationComponent, unsigned int, &SpriteAnimationComponent::framesSize>("framesSize", PropertyType::UInt, UpdateFlags_None),
         makeFastPropertyNoDefault<SpriteAnimationComponent, unsigned int, &SpriteAnimationComponent::framesTimeSize>("framesTimeSize", PropertyType::UInt, UpdateFlags_None),

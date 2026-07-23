@@ -11350,7 +11350,6 @@ void editor::Properties::drawAlphaActionComponent(ComponentType cpType, ScenePro
 
 void editor::Properties::drawSpriteAnimationComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     beginTable(cpType, getLabelSize("Interval index"));
-    propertyRow(RowPropertyType::String, cpType, "name", "Name", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
     propertyRow(RowPropertyType::Label, cpType, "frameIndex", "Frame index", sceneProject, entities);
     propertyRow(RowPropertyType::Label, cpType, "frameTimeIndex", "Interval index", sceneProject, entities);

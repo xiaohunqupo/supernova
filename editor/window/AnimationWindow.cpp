@@ -156,8 +156,6 @@ std::string editor::AnimationWindow::getActionLabel(Entity actionEntity, Scene* 
     Signature sig = scene->getSignature(actionEntity);
 
     if (sig.test(scene->getComponentId<SpriteAnimationComponent>())) {
-        SpriteAnimationComponent& sa = scene->getComponent<SpriteAnimationComponent>(actionEntity);
-        if (!sa.name.empty()) return sa.name;
         return "SpriteAnimation";
     }
 

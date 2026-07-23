@@ -1821,7 +1821,6 @@ std::string editor::Factory::createSpriteAnimationComponent(int indentSpaces, En
     std::ostringstream code;
     const std::string ind = indentation(indentSpaces);
     code << ind << "SpriteAnimationComponent spriteanim;\n";
-    code << ind << "spriteanim.name = " << formatString(spriteanim.name) << ";\n";
     code << ind << "spriteanim.loop = " << formatBool(spriteanim.loop) << ";\n";
     code << ind << "spriteanim.frameIndex = 0;\n";
     code << ind << "spriteanim.frameTimeIndex = 0;\n";

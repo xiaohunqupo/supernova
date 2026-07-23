@@ -6026,7 +6026,6 @@ AlphaActionComponent editor::Stream::decodeAlphaActionComponent(const YAML::Node
 YAML::Node editor::Stream::encodeSpriteAnimationComponent(const SpriteAnimationComponent& spriteanim) {
     YAML::Node node;
 
-    node["name"] = spriteanim.name;
     node["loop"] = spriteanim.loop;
 
     YAML::Node framesNode;
@@ -6055,7 +6054,6 @@ SpriteAnimationComponent editor::Stream::decodeSpriteAnimationComponent(const YA
     spriteanim.frameTimeIndex = 0;
     spriteanim.spriteFrameCount = 0;
 
-    if (node["name"]) spriteanim.name = node["name"].as<std::string>();
     if (node["loop"]) spriteanim.loop = node["loop"].as<bool>();
 
     if (node["frames"]) {
